@@ -93,3 +93,24 @@ describe("revisiting a known state vs not moving at all", () => {
     expect(g.transitions[1].from).toBe(g.transitions[1].to);
   });
 });
+
+/**
+ * API 端点不是界面。
+ *
+ * PetClinic 的兽医列表页链到 `/vets.xml` 与 `/vets.json`——同一份数据的 API 表示，不是一屏。
+ * 跟过去，图里就多两个「状态」，规格里就多两条关于 XML 的规则，而它们对界面测试毫无意义。
+ * 判据用扩展名是因为它**查得出来**：一个 `.json` 结尾的地址不会是给人看的页面。
+ */
+describe("addresses that are not screens", () => {
+  const NOT_A_SCREEN = /\.(json|xml|csv|pdf|zip|png|jpe?g|gif|svg|ico|txt|rss|atom)(\?|$)/i;
+
+  it("认出数据端点", () => {
+    for (const p of ["/vets.xml", "/vets.json", "/report.pdf", "/data.csv?page=2"])
+      expect(NOT_A_SCREEN.test(p)).toBe(true);
+  });
+
+  it("不误伤正常页面", () => {
+    for (const p of ["/owners/1/edit", "/vets", "/owners/find", "/inventory.html", "/checkout-step-one.html"])
+      expect(NOT_A_SCREEN.test(p)).toBe(false);
+  });
+});

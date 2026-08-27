@@ -343,6 +343,15 @@ export async function runObserve(
 
     /** 点了会把这次探索本身毁掉的（退出登录）或不可逆的，不点。 */
     const OFF_LIMITS = /log\s*out|sign\s*out|logout|退出|注销|delete|remove|reset|清空|删除/i;
+    /**
+     * 不是界面的地址。
+     *
+     * PetClinic 的兽医列表页链到 `/vets.xml` 和 `/vets.json`——那是同一份数据的 API 表示，
+     * 不是一屏。跟过去，图里就多两个"状态"，规格里就多两条关于 XML 的规则，
+     * 而它们对**界面**测试毫无意义。判据用扩展名，是因为它查得出来：
+     * 一个 `.json` 结尾的地址不会是给人看的页面。
+     */
+    const NOT_A_SCREEN = /\.(json|xml|csv|pdf|zip|png|jpe?g|gif|svg|ico|txt|rss|atom)(\?|$)/i;
 
     const first = await snapshot("入口页");
     const screens: string[] = [first.text];
@@ -459,7 +468,7 @@ export async function runObserve(
          * 「不用去」的规则，比没有规则更糟，因为它看起来是在正常工作。
          */
         if (c.href && c.href !== here) {
-          if (triedGoto.has(c.href)) continue;
+          if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           return { key: c.href, kind: "goto", href: c.href };
         }
         const key = `${here}::${c.selector}`;

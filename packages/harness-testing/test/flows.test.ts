@@ -40,8 +40,30 @@ const shop: StateFlowGraph = {
 describe("computeFlows", () => {
   const { flows } = computeFlows(shop);
 
-  it("从入口枚举到每一个终点", () => {
-    expect(flows.map((f) => f.endsAt).sort()).toEqual(["/checkout-step-one.html", "/inventory-item.html"]);
+  /**
+   * 契约在 2026-08-27 换过一次，换的理由值得记在这里。
+   *
+   * 第一版是深度优先、**只在走不下去时才记一条流程**，于是每条流程都是一条最长链。
+   * SauceDemo 那种近似线性的应用上看不出问题；PetClinic 立刻现形——它每页都有全局导航栏，
+   * 图几乎全连通，DFS 产出的是**遍历顺序**而不是流程：
+   * 「从入口经多屏跳转至编辑主人信息：/owners/find → /vets → /oups → /vets.xml → …」
+   * 那串路径每一段都真实存在，但它不是任何人会走的路。
+   *
+   * 现在是广度优先：**每个可达状态都是一个终点，路径取最短**。一条流程要回答的是
+   * 「怎么最快到这里」。
+   */
+  it("每个可达状态都是一个终点", () => {
+    expect(flows.map((f) => f.endsAt).sort()).toEqual([
+      "/cart.html",
+      "/checkout-step-one.html",
+      "/inventory-item.html",
+      "/inventory.html",
+    ]);
+  });
+
+  it("每条路径都是最短的那条", () => {
+    const checkout = flows.find((f) => f.endsAt === "/checkout-step-one.html")!;
+    expect(checkout.steps).toHaveLength(3);
   });
 
   it("每条流程带着走过去的动作序列——**那就是用例的步骤**", () => {
@@ -139,11 +161,17 @@ describe("collapsing near-duplicate paths", () => {
     transitions: [...shop.transitions, edge("/inventory-item.html", "/cart.html", "购物车")],
   };
 
-  it("同一个终点只出一条主流程，其余记为变体", () => {
+  it("同一个终点只出一条流程", () => {
     const { flows } = computeFlows(twoWays);
-    const toCheckout = flows.filter((f) => f.endsAt === "/checkout-step-one.html");
-    expect(toCheckout).toHaveLength(1);
-    expect(toCheckout[0].variants).toBeGreaterThan(0);
+    expect(flows.filter((f) => f.endsAt === "/checkout-step-one.html")).toHaveLength(1);
+  });
+
+  it("到同一个地方还有别的走法时，记个数而不是再列一条", () => {
+    // 全都列出来，骨架上就是一堆只差几步的近似重复，人读不下去；全丢掉，
+    // 又等于说这个产品只有一条路。
+    const { flows } = computeFlows(twoWays);
+    // 商品详情页也能进购物车 —— 购物车因此有第二条走法。
+    expect(flows.find((f) => f.endsAt === "/cart.html")!.variants).toBeGreaterThan(0);
   });
 
   it("主流程取最短的那条", () => {

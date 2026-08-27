@@ -78,54 +78,62 @@ export function computeFlows(
   const entry = graph.entry || graph.states[0]?.id;
   if (!entry) return { flows: [], truncated: false };
 
-  type Raw = Omit<Flow, "id" | "variants" | "inPage">;
-  const raw: Raw[] = [];
+  /**
+   * **广度优先，每个可达状态取一条最短路径。**
+   *
+   * 第一版是深度优先、只在走不下去时才记一条流程，于是每条流程都是一条最长链。
+   * 在 SauceDemo 那种近似线性的应用上看不出问题；换到 PetClinic 立刻现形——它每页都有
+   * 全局导航栏，图几乎全连通，DFS 在上面产出的是**遍历顺序**而不是流程：
+   *
+   *   「从入口经多屏跳转至编辑主人信息：/owners/find → /vets → /oups → /vets.xml → …」
+   *
+   * 那串路径每一段都真实存在，但它不是任何人会走的路。一条流程该回答的是
+   * 「怎么最快到这里」，而最短路径正是这个问题的答案。
+   */
+  type Node = { id: string; path: string[]; steps: Flow["steps"] };
+  const seen = new Set([entry]);
+  const queue: Node[] = [{ id: entry, path: [entry], steps: [] }];
+  const raw: Array<Omit<Flow, "id" | "variants" | "inPage">> = [];
   let truncated = false;
+  /** 到同一个终点的其他最短路径有几条——信息不丢，但列表只列一条。 */
+  const alt = new Map<string, number>();
 
-  const walk = (at: string, path: string[], steps: Flow["steps"], seen: Set<string>): void => {
-    if (raw.length >= maxFlows) {
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (cur.path.length > maxDepth) {
       truncated = true;
-      return;
+      continue;
     }
-    const next = (out.get(at) ?? []).filter((t) => !seen.has(t.to!));
-    // 走不下去了 —— 这是一条流程的终点。深度用尽也算终点，但它是被截断的那种。
-    if (!next.length || path.length > maxDepth) {
-      if (steps.length)
-        raw.push({
-          path: [...path],
-          steps: [...steps],
-          endsAt: at,
-          routes: [...new Set(path.map((p) => p.split("#")[0]))],
-        });
-      if (path.length > maxDepth) truncated = true;
-      return;
+    for (const t of out.get(cur.id) ?? []) {
+      const to = t.to!;
+      if (seen.has(to)) {
+        // 已经有更短或等长的路到过它了，只记一笔「还有别的走法」。
+        alt.set(to, (alt.get(to) ?? 0) + 1);
+        continue;
+      }
+      seen.add(to);
+      const steps = [...cur.steps, { from: t.from, to, how: howOf(t), kind: t.action.kind }];
+      const path = [...cur.path, to];
+      if (raw.length >= maxFlows) {
+        truncated = true;
+        break;
+      }
+      raw.push({ path, steps, endsAt: to, routes: [...new Set(path.map((p) => p.split("#")[0]))] });
+      queue.push({ id: to, path, steps });
     }
-    for (const t of next) {
-      seen.add(t.to!);
-      walk(t.to!, [...path, t.to!], [...steps, { from: t.from, to: t.to!, how: howOf(t), kind: t.action.kind }], seen);
-      seen.delete(t.to!);
-    }
-  };
+  }
 
-  walk(entry, [entry], [], new Set([entry]));
-
-  // 同终点收敛：最短的一条为主，其余只记个数。
-  const byEnd = new Map<string, Raw[]>();
-  for (const r of raw) byEnd.set(r.endsAt, [...(byEnd.get(r.endsAt) ?? []), r]);
-  const flows: Flow[] = [...byEnd.entries()]
-    .map(([endsAt, group]) => {
-      const sorted = [...group].sort((a, b) => a.steps.length - b.steps.length);
-      const primary = sorted[0];
-      const last = primary.steps.at(-1);
+  const flows: Flow[] = raw
+    .map((r) => {
+      const last = r.steps.at(-1);
       return {
-        ...primary,
-        endsAt,
-        variants: group.length - 1,
+        ...r,
+        variants: alt.get(r.endsAt) ?? 0,
         // 终点与它的前一个状态同路由 → 这一步只换了页内状态。
         inPage: !!last && last.from.split("#")[0] === last.to.split("#")[0],
       };
     })
-    // 换了路由的排前面：它们是「做完了一件事」，页内状态变化不是。
+    // 换了路由的排前面：它们是「做完了一件事」，页内状态变化不是。同深度的短路径在前。
     .sort((a, b) => Number(a.inPage) - Number(b.inPage) || a.steps.length - b.steps.length)
     .map((f, i) => ({ ...f, id: `F-${i + 1}` }));
 
