@@ -1151,10 +1151,12 @@ function observeLaunch(projectId: string): {
  * 换一套观察方式不该重写提示词，改一句提示词也不该重开浏览器。
  */
 setAgentObserver(async (input) => {
-  const { url, deep, settleMs, projectId } = (input ?? {}) as {
+  const { url, deep, settleMs, maxScreens, dryRounds, projectId } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
     settleMs?: number;
+    maxScreens?: number;
+    dryRounds?: number;
     projectId?: string;
   };
   const project = projectId ? getProject(projectId) : undefined;
@@ -1169,11 +1171,20 @@ setAgentObserver(async (input) => {
       url: target,
       deep,
       settleMs,
+      maxScreens,
+      dryRounds,
       launch: { cacheId: `observe-${projectId ?? "adhoc"}`, ...(projectId ? observeLaunch(projectId) : {}) },
     },
     ARTIFACT_DIR,
   );
-  return { notes: result.notes.slice(0, 24000), url: result.url };
+  // 上限跟着屏数走：探索改成循环之后，24000 字会在第四五屏上把后面的界面**整段切掉**，
+  // 而被切掉的部分在下游看不出来——材料看起来是完整的，只是短。
+  return {
+    notes: result.notes.slice(0, 60000),
+    url: result.url,
+    screens: result.screens,
+    stoppedBecause: result.stoppedBecause,
+  };
 });
 
 /*

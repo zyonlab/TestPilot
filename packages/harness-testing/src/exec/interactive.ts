@@ -69,9 +69,22 @@ export interface ObserveSpec {
   execId: string;
   url: string;
   artifactDir: string;
-  /** 多走一屏：登录之后的界面从入口页上看不见。 */
+  /** 往前走，而不是只看入口页。关掉就退回单屏采集。 */
   deep?: boolean;
   settleMs?: number;
+  /**
+   * 最多采到几屏。
+   *
+   * 这是探索的**成本**闸：每往前一屏要花一次模型调用，本地模型一次几十秒。
+   */
+  maxScreens?: number;
+  /**
+   * 连续几轮没发现新界面就停。
+   *
+   * 不用「走满 N 轮」而用「连着 N 轮没有新东西」：一个产品有几屏事先不知道，
+   * 走满固定轮数要么半途而废，要么在最后一屏上原地打转还要接着花钱。
+   */
+  dryRounds?: number;
   launch: LaunchOpts;
 }
 
@@ -81,6 +94,9 @@ export interface ObserveResult {
   url: string;
   log: string[];
   shotRef?: string;
+  /** 走到过几屏，以及为什么停下来——一份材料薄不薄，得能看出是产品小还是探索停早了。 */
+  screens?: number;
+  stoppedBecause?: string;
 }
 
 /**
@@ -107,7 +123,7 @@ export async function runObserve(
   let session: Session | undefined;
 
   /** 一屏的事实：地址、标题、正文、可交互控件的可见文案。 */
-  const snapshot = async (label: string): Promise<string> => {
+  const snapshot = async (label: string): Promise<{ text: string; url: string; controls: string[] }> => {
     const page = session!.page as unknown as {
       url(): string;
       title(): Promise<string>;
@@ -135,20 +151,33 @@ export async function runObserve(
       )
       .catch(() => [] as string[]);
 
-    return [
-      `===== ${label} =====`,
-      `URL: ${page.url()}`,
-      title ? `TITLE: ${title}` : "",
-      "",
-      "TEXT:",
-      body,
-      "",
-      "CONTROLS:",
-      ...controls.map((c) => `- ${c}`),
-    ]
-      .filter((x) => x !== "")
-      .join("\n");
+    return {
+      url: page.url(),
+      controls,
+      text: [
+        `===== ${label} =====`,
+        `URL: ${page.url()}`,
+        title ? `TITLE: ${title}` : "",
+        "",
+        "TEXT:",
+        body,
+        "",
+        "CONTROLS:",
+        ...controls.map((c) => `- ${c}`),
+      ]
+        .filter((x) => x !== "")
+        .join("\n"),
+    };
   };
+
+  /**
+   * 这一屏是不是没见过的。
+   *
+   * 只看地址会把同一个列表页的两次分页当成两屏；只看正文会把加载态和加载完当成两屏。
+   * 取「地址 + 控件集合」：控件是这一屏**能做什么**，而探索问的正是这个。
+   */
+  const signatureOf = (screen: { url: string; controls: string[] }): string =>
+    `${screen.url.split("?")[0]}|${[...screen.controls].sort().join("|")}`;
 
   try {
     emit({ type: "start", url: spec.url });
@@ -156,34 +185,94 @@ export async function runObserve(
     emit({ type: "navigated", shotRef: await shot(session) });
     if (spec.settleMs) await new Promise((r) => setTimeout(r, spec.settleMs));
 
-    const screens = [await snapshot("入口页")];
-    note(`入口页：${screens[0].length} 字`);
+    /**
+     * 探索是一个循环，不是「看两眼」。
+     *
+     * 此前这里只往前走一屏就收工：对任何一个登录页之后还有几屏的产品，材料里都缺着大半，
+     * 而缺的那部分在下游看不出来——规格照样整理得出来，用例照样生成得出来，只是**系统性地
+     * 少了那几屏对应的一切**，最后表现为一个没有解释的覆盖率数字。
+     *
+     * 停止条件用「连着 N 轮没有新东西」而不是「走满 N 轮」：一个产品有几屏事先不知道。
+     */
+    const maxScreens = Math.max(1, spec.maxScreens ?? 6);
+    const dryLimit = Math.max(1, spec.dryRounds ?? 2);
 
-    if (spec.deep && !token.cancelled) {
+    const first = await snapshot("入口页");
+    const screens: string[] = [first.text];
+    const seen = new Set([signatureOf(first)]);
+    const visited: string[] = [first.url];
+    const missed: string[] = [];
+    let stoppedBecause = spec.deep === false ? "只采入口页（deep 关闭）" : "";
+    let dry = 0;
+    note(`入口页：${first.text.length} 字，${first.controls.length} 个控件`);
+
+    while (spec.deep !== false && !token.cancelled && screens.length < maxScreens && dry < dryLimit) {
       try {
-        note("往前走一屏…");
+        note(`往前走（第 ${screens.length} 屏 → 第 ${screens.length + 1} 屏）…`);
         await withModel(() =>
           session!.agent.aiAction(
-            "If a login form is present, log in using any test/demo credentials shown on " +
-              "this page; otherwise click the primary button to enter the application.",
+            // 已经去过的地方明说出来。不说，它会在同一个主按钮上来回点，
+            // 每一轮都花掉一次模型调用而什么也没多看到。
+            "You are exploring this application to see every screen it has. " +
+              "If a login form is present, log in using any test/demo credentials shown on this page. " +
+              "Otherwise take ONE action that reaches a part of the application not yet visited — " +
+              "open a menu item, a list row, the cart, the next step of a flow. " +
+              `Already visited: ${visited.slice(-6).join(" , ")}. ` +
+              "Do not log out, do not delete anything, and do not submit anything irreversible.",
           ),
         );
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
         emit({ type: "navigated", shotRef: await shot(session) });
-        screens.push(await snapshot("前进一屏后"));
-        note(`第二屏：${screens[1].length} 字`);
+
+        const next = await snapshot(`第 ${screens.length + 1} 屏`);
+        const sig = signatureOf(next);
+        if (seen.has(sig)) {
+          // 原地打转也要记一笔：它是「这个产品就这么大」和「探索走不动了」之间的区别。
+          dry += 1;
+          note(`没有新界面（连续 ${dry}/${dryLimit} 次）`, "warn");
+          continue;
+        }
+        seen.add(sig);
+        visited.push(next.url);
+        screens.push(next.text);
+        dry = 0;
+        note(`第 ${screens.length} 屏：${next.url}，${next.controls.length} 个控件`);
       } catch (e) {
         // 走不进去本身就是观察结果的一部分：下游会把它记成「没看到的」。
-        note(`没能往前走：${(e as Error).message.slice(0, 70)}`, "warn");
-        screens.push(`===== 前进一屏 =====\n没能进入：${(e as Error).message.slice(0, 200)}`);
+        const why = (e as Error).message.slice(0, 200);
+        note(`没能往前走：${why.slice(0, 70)}`, "warn");
+        missed.push(why);
+        dry += 1;
       }
     }
+    if (!stoppedBecause)
+      stoppedBecause = token.cancelled
+        ? "被取消"
+        : screens.length >= maxScreens
+          ? `采满 ${maxScreens} 屏的上限`
+          : `连续 ${dryLimit} 轮没有发现新界面`;
+    note(`探索结束：${screens.length} 屏，${stoppedBecause}`);
+
+    /**
+     * 走到过什么、以及**没走到什么**，一起交出去。
+     *
+     * 后半句是这份材料唯一能自证薄不薄的地方：`spec.compose` 被要求把材料没说的记进
+     * 「没有答案的地方」，而它只有在材料自己说了「这里我没看到」的时候才做得到。
+     */
+    const coverage = [
+      "===== 这次探索走到哪为止 =====",
+      `采到 ${screens.length} 屏（上限 ${maxScreens}），停止原因：${stoppedBecause}`,
+      ...(missed.length ? ["没能走进去的地方：", ...missed.map((m) => `- ${m}`)] : []),
+      "这份材料只覆盖上面列出的界面。没有出现在这里的功能，是没有被看到，不是不存在。",
+    ].join("\n");
 
     return {
-      notes: screens.join("\n\n"),
+      notes: [...screens, coverage].join("\n\n"),
       url: spec.url,
       log,
       shotRef: await shot(session),
+      screens: screens.length,
+      stoppedBecause,
     };
   } finally {
     await session?.cleanup();

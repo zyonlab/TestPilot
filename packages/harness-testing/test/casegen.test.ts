@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeModel } from "@testpilot/harness-core";
-import { designCasesNode, parseJson, planStoriesNode } from "../src/casegen/nodes.js";
+import { designCasesNode, parseJson, planStoriesNode, sourceExploreNode } from "../src/casegen/nodes.js";
 
 /**
  * A model reply that stops mid-array is indistinguishable from a badly formatted one once
@@ -266,5 +266,64 @@ describe("the graph definition", () => {
     const { g1Graph } = await import("../src/casegen/graph.js");
     const design = g1Graph({ spec: { text: "规格全文" } }).nodes.find((n) => n.id === "design");
     expect((design?.params as { specText?: string })?.specText).toBe("规格全文");
+  });
+});
+
+/**
+ * 探索走到几屏，以及它有没有说出自己走到哪为止。
+ *
+ * 这一层此前恒等于两屏（入口页 + 往前一屏）。对任何一个登录页之后还有几屏的产品，
+ * 材料里都缺着大半，而**缺的部分在下游完全看不出来**：规格照样整理得出来、用例照样
+ * 生成得出来，只是系统性地少了那几屏对应的一切，最后表现为一个没有解释的覆盖率数字。
+ *
+ * 循环本身要有浏览器和模型才跑得起来，所以这里钉住的是接线与自陈：参数有没有传下去、
+ * 走到几屏有没有报出来、只采到一屏时有没有明说。
+ */
+describe("how far the exploration got", () => {
+  const observerSpy = () => {
+    const seen: Array<Record<string, unknown>> = [];
+    return {
+      seen,
+      observer: {
+        observe: async (input: Record<string, unknown>) => {
+          seen.push(input);
+          return { notes: "===== 入口页 =====\nURL: http://x", url: "http://x", screens: 4, stoppedBecause: "连续 2 轮没有发现新界面" };
+        },
+      },
+    };
+  };
+  const ctx = (events: Array<Record<string, unknown>>) => ({
+    nodeId: "explore",
+    ablated: new Set(),
+    spend: () => {},
+    emit: (kind: string, payload: Record<string, unknown>) => events.push({ kind, ...payload }),
+    signal: new AbortController().signal,
+  });
+
+  it("passes the exploration budget down to whoever has the browser", async () => {
+    const { seen, observer } = observerSpy();
+    const node = sourceExploreNode({ model: new FakeModel(() => "{}"), observer } as never);
+    await node.run(undefined, { deep: true, maxScreens: 8, dryRounds: 3, maxTokens: 2400 } as never, ctx([]) as never);
+    expect(seen[0]).toMatchObject({ deep: true, maxScreens: 8, dryRounds: 3 });
+  });
+
+  it("reports how many screens it reached and why it stopped", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const { observer } = observerSpy();
+    const node = sourceExploreNode({ model: new FakeModel(() => "{}"), observer } as never);
+    await node.run(undefined, { deep: true, maxScreens: 6, dryRounds: 2, maxTokens: 2400 } as never, ctx(events) as never);
+    const out = events.find((e) => e.kind === "wf.node.output");
+    // 一屏和六屏产出的规格看起来一样规整，差别只在它没写的那部分——所以屏数必须报出来。
+    expect(out).toMatchObject({ screens: 4, stoppedBecause: "连续 2 轮没有发现新界面" });
+  });
+
+  it("says so out loud when it only ever saw the entry screen", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const observer = {
+      observe: async () => ({ notes: "===== 入口页 =====", url: "http://x", screens: 1, stoppedBecause: "连续 2 轮没有发现新界面" }),
+    };
+    const node = sourceExploreNode({ model: new FakeModel(() => "{}"), observer } as never);
+    await node.run(undefined, { deep: true, maxScreens: 6, dryRounds: 2, maxTokens: 2400 } as never, ctx(events) as never);
+    expect(events.some((e) => String(e.text ?? "").includes("只覆盖入口页"))).toBe(true);
   });
 });

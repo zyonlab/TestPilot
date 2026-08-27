@@ -82,11 +82,20 @@ const slug = (s: string): string =>
  * 等于把「产品现在这样」直接写成「产品应该这样」，中间那步判断被跳过了。
  */
 export interface ProductObserver {
-  observe(input: { url?: string; deep?: boolean; settleMs?: number }): Promise<{
+  observe(input: {
+    url?: string;
+    deep?: boolean;
+    settleMs?: number;
+    maxScreens?: number;
+    dryRounds?: number;
+  }): Promise<{
     /** 观察到的界面材料：页面文本、可见控件、走过的路径。 */
     notes: string;
     /** 实际访问到的地址，用于追溯。 */
     url: string;
+    /** 走到过几屏，以及为什么停下来。一份薄材料要能说出自己为什么薄。 */
+    screens?: number;
+    stoppedBecause?: string;
   }>;
 }
 
@@ -152,7 +161,15 @@ export function sourceSpecNode(
 export function sourceExploreNode(
   opts: CaseGenNodeOptions,
 ): NodeDef<
-  { url?: string; deep: boolean; settleMs?: number; lang?: string; maxTokens?: number },
+  {
+    url?: string;
+    deep: boolean;
+    settleMs?: number;
+    maxScreens: number;
+    dryRounds: number;
+    lang?: string;
+    maxTokens?: number;
+  },
   unknown,
   z.infer<typeof SpecMaterialSchema>
 > {
@@ -165,9 +182,18 @@ export function sourceExploreNode(
     params: z.object({
       /** 留空则用这次运行的目标端地址。 */
       url: z.string().optional(),
-      /** 多走一屏：登录之后的界面从入口页上看不见。 */
+      /** 往前走，而不是只看入口页。 */
       deep: z.boolean().default(true),
       settleMs: z.number().int().min(0).max(20000).optional(),
+      /**
+       * 最多采到几屏。探索的成本闸：每往前一屏一次模型调用，本地模型一次几十秒。
+       *
+       * 默认 6 是个折中。此前这个数**恒等于 2**（入口页 + 往前一屏），对任何一个登录页
+       * 之后还有几屏的产品，材料里都缺着大半，而缺的部分在下游看不出来。
+       */
+      maxScreens: z.number().int().min(1).max(30).default(6),
+      /** 连续几轮没发现新界面就停。产品有几屏事先不知道，所以不按固定轮数走。 */
+      dryRounds: z.number().int().min(1).max(5).default(2),
       lang: z.string().optional(),
       maxTokens: z.number().int().min(400).max(16000).default(2400),
     }),
@@ -179,9 +205,23 @@ export function sourceExploreNode(
         url: params.url,
         deep: params.deep,
         settleMs: params.settleMs,
+        maxScreens: params.maxScreens,
+        dryRounds: params.dryRounds,
       });
       if (!seen.notes.trim()) throw new Error("source.explore saw nothing it could describe");
-      ctx.emit("wf.node.output", { nodeId: ctx.nodeId, observed: seen.url });
+      // 走到几屏、为什么停，是判断这份材料薄不薄的唯一依据——一屏和六屏产出的规格
+      // 看起来一样规整，差别只在它没写的那部分。
+      ctx.emit("wf.node.output", {
+        nodeId: ctx.nodeId,
+        observed: seen.url,
+        screens: seen.screens,
+        stoppedBecause: seen.stoppedBecause,
+      });
+      if (seen.screens !== undefined && seen.screens <= 1)
+        ctx.emit("log", {
+          stream: "source.explore",
+          text: `只采到 ${seen.screens} 屏（${seen.stoppedBecause ?? "原因不明"}）——这份材料只覆盖入口页`,
+        });
 
       // 观察记录原样往下走。把它整理成规格是 `spec.compose` 的事——观察与解读分开，
       // 三种来源才可能整理成同一个形状。
