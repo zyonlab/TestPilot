@@ -8,6 +8,9 @@ server/dist/
 # runtime data — DB, encrypted secrets vault, settings, LLM-debug captures (SENSITIVE)
 .data/
 server/.data/
+# 清库时旧数据是**移走**而不是删掉的（lineage 补不回来），备份目录同样带着密钥与整个库。
+.data.bak-*/
+server/.data.bak-*/
 
 # Midscene run artifacts / caches / screenshots
 midscene_run/
