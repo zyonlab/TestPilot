@@ -10,7 +10,7 @@
       "why": "这套基准里最完整的一个：增删改查、表单校验、搜索、分页、跨实体关联。单容器自带界面，不需要另起前端——第一个要跑通的就是它。",
       "url": "http://localhost:8080",
       "image": "springcommunity/spring-framework-petclinic:6.1.2",
-      "start": "docker run --rm -p 8080:8080 springcommunity/spring-framework-petclinic:6.1.2",
+      "start": "docker run -p 8080:8080 springcommunity/spring-framework-petclinic:6.1.2",
       "health": {
         "kind": "http",
         "url": "http://localhost:8080/"
@@ -19,7 +19,7 @@
       "startedOnce": "2026-08-27",
       "observed": {
         "digest": "sha256:2766c68b03afd64d154339a2574cdf18db1a1b92b3013a4d6a3dfb9be1bac6cd",
-        "note": "HTTP 200，首屏 63ms。入口页链接：/owners/find（按姓氏搜索）、/vets（列表+分页）、/oups（故意抛异常的错误页）。"
+        "note": "HTTP 200，首屏 63ms。入口页链接：/owners/find（按姓氏搜索）、/vets（列表+分页）、/oups（故意抛异常的错误页）。 不要用 --rm：实测它中途退出过一次，容器连同日志一起被删掉，为什么退出就再也查不到了。"
       }
     },
     {
@@ -45,7 +45,7 @@
       "why": "研究基准里的 Vue 代表。有后台管理、内容编辑、权限。",
       "url": "http://localhost:8082",
       "image": "pagekit/pagekit:sqlite",
-      "start": "docker run --rm -p 8082:80 pagekit/pagekit:sqlite",
+      "start": "docker run -p 8082:80 pagekit/pagekit:sqlite",
       "health": {
         "kind": "http",
         "url": "http://localhost:8082/"

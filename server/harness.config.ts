@@ -78,15 +78,15 @@ export default defineHarnessConfig({
         "Spring PetClinic（服务端渲染版）：增删改查、表单校验、搜索、分页、跨实体关联。" +
         "单容器自带界面，是这套基准里第一个要跑通的",
       command: "docker",
-      args: [
-        "run",
-        "--rm",
-        "--name",
-        "tp-bench-petclinic",
-        "-p",
-        "8080:8080",
-        "springcommunity/spring-framework-petclinic:6.1.2",
-      ],
+      /**
+       * **不带 `--rm`。**
+       *
+       * 实测：第一次用 `--rm` 起的 PetClinic 中途退出了，容器连同日志一起被删掉——
+       * 下一次运行报 `ERR_CONNECTION_REFUSED`，而为什么退出的证据已经没了。
+       * 基准容器死的时候正是最需要日志的时候；留着它，`docker logs` 还能回答问题。
+       * 代价是要手动清理，那个代价比丢证据小得多。
+       */
+      args: ["run", "--name", "tp-bench-petclinic", "-p", "8080:8080", "springcommunity/spring-framework-petclinic:6.1.2"],
       autostart: false,
       healthcheck: { kind: "http", url: "http://localhost:8080/" },
     },
@@ -95,7 +95,7 @@ export default defineHarnessConfig({
       kind: "app",
       description: "Pagekit（Vue + PHP）：后台管理、内容编辑、权限。sqlite 变体免去外部数据库",
       command: "docker",
-      args: ["run", "--rm", "--name", "tp-bench-pagekit", "-p", "8082:80", "pagekit/pagekit:sqlite"],
+      args: ["run", "--name", "tp-bench-pagekit", "-p", "8082:80", "pagekit/pagekit:sqlite"],
       autostart: false,
       healthcheck: { kind: "http", url: "http://localhost:8082/" },
     },
