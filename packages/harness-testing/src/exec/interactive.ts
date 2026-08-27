@@ -11,7 +11,7 @@ import { isInfraError } from "../failure.js";
 import {
   abstractionOf,
   describeGraph,
-  routeOf,
+  pathOf,
   type SfgState,
   type SfgTransition,
   type StateFlowGraph,
@@ -414,9 +414,11 @@ export async function runObserve(
       const sig = signatureOf(screen);
       const known = idBySig.get(sig);
       if (known) return known;
-      const route = routeOf(screen.url).split("?")[0];
+      const route = pathOf(screen.url);
       const nth = sfgStates.filter((st) => st.route === route).length;
-      const id = nth === 0 ? route : `${route}#${nth}`;
+      // 消歧符是 `~` 不是 `#`：单页应用的路由本身就带 `#`（`/#/search`），
+      // 再用 `#` 分隔会让 `split("#")[0]` 拿到空串——同一路由的第二个状态从此没有路由。
+      const id = nth === 0 ? route : `${route}~${nth}`;
       idBySig.set(sig, id);
       sfgStates.push({
         id,
@@ -437,14 +439,9 @@ export async function runObserve(
     const triedClick = new Set<string>();
     /** 去过的地址。同一个地址走第二次对发现新界面没有任何帮助。 */
     const triedGoto = new Set<string>();
-    const pathOf = (u: string): string => {
-      try {
-        const x = new URL(u);
-        return x.pathname + x.search;
-      } catch {
-        return u;
-      }
-    };
+    // 去重和状态 id 必须用**同一把尺子**量地址。此前这里另写了一个丢哈希的
+    // `pathOf`，于是在哈希路由的单页应用上，访问过 `/#/search` 之后 `/#/basket`
+    // 和 `/#/login` 全被判成「去过了」——探索在第一屏就停了，而图看起来是满的。
     let current = first;
     triedGoto.add(pathOf(first.url));
     let stoppedBecause = spec.deep === false ? "只采入口页（deep 关闭）" : "";

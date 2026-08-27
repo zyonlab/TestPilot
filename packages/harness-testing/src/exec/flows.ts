@@ -120,7 +120,7 @@ export function computeFlows(
         truncated = true;
         break;
       }
-      raw.push({ path, steps, endsAt: to, routes: [...new Set(path.map((p) => p.split("#")[0]))] });
+      raw.push({ path, steps, endsAt: to, routes: [...new Set(path.map((p) => p.split("~")[0]))] });
       queue.push({ id: to, path, steps });
     }
   }
@@ -132,7 +132,7 @@ export function computeFlows(
         ...r,
         variants: alt.get(r.endsAt) ?? 0,
         // 终点与它的前一个状态同路由 → 这一步只换了页内状态。
-        inPage: !!last && last.from.split("#")[0] === last.to.split("#")[0],
+        inPage: !!last && last.from.split("~")[0] === last.to.split("~")[0],
       };
     })
     // 换了路由的排前面：它们是「做完了一件事」，页内状态变化不是。同深度的短路径在前。
@@ -149,8 +149,10 @@ export function computeFlows(
  * 同一段的归一组。**不问模型**——模块划分是路由结构的事实，命名才是判断。
  */
 export function computeModules(graph: StateFlowGraph, flows: Flow[]): Module[] {
+  // 模块名取路由的第一段。哈希路由（`/#/search`）的第一段在 `#/` 之后——
+  // 不剥掉它，整个单页应用会聚成一个叫 `#` 的模块。
   const seg = (route: string): string => {
-    const s = route.replace(/^\//, "").split(/[/.\-]/)[0];
+    const s = route.replace(/^\/?#\//, "").replace(/^\//, "").split(/[/.\-]/)[0];
     return s || "/";
   };
   const byId = new Map<string, Module>();
@@ -162,7 +164,7 @@ export function computeModules(graph: StateFlowGraph, flows: Flow[]): Module[] {
   }
   for (const f of flows) {
     // 一条流程可能横跨模块——它归到**终点**所在的模块：流程是以「做完了什么」命名的。
-    const id = seg(f.endsAt.split("#")[0]);
+    const id = seg(f.endsAt.split("~")[0]);
     const m = byId.get(id);
     if (m && !m.flowIds.includes(f.id)) m.flowIds.push(f.id);
   }

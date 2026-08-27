@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ABSTRACTIONS, abstractionOf, describeGraph, type StateFlowGraph } from "../src/exec/sfg.js";
+import { ABSTRACTIONS, abstractionOf, describeGraph, type StateFlowGraph, pathOf } from "../src/exec/sfg.js";
 
 /**
  * 状态抽象是这一层的关键变量：过松会把没探索过的当成已探索（漏测），过紧会把探索过的
@@ -189,5 +189,32 @@ describe("probing a form on purpose", () => {
     // 这正是 `route+controls` 这把尺子该抓住的：地址一样，屏幕不一样。
     expect(g.states[0].route).toBe(g.states[1].route);
     expect(g.states[0].id).not.toBe(g.states[1].id);
+  });
+});
+
+describe("哈希路由（单页应用）", () => {
+  it("`#/` 开头的哈希是路由的一部分", () => {
+    const a = ABSTRACTIONS["route+controls"];
+    const s = (url: string) => a({ url, controls: ["搜索"] });
+    expect(s("http://x/#/search")).not.toBe(s("http://x/#/basket"));
+    expect(s("http://x/#/search")).toBe(s("http://x/#/search"));
+  });
+  it("纯锚点不是路由——否则同页目录跳转会炸出假状态", () => {
+    const a = ABSTRACTIONS["route+controls"];
+    const s = (url: string) => a({ url, controls: ["搜索"] });
+    expect(s("http://x/docs#intro")).toBe(s("http://x/docs#usage"));
+  });
+  it("整个购物站不会被压成一个路由", () => {
+    const a = ABSTRACTIONS.route;
+    const seen = new Set(
+      ["/#/", "/#/search", "/#/basket", "/#/login", "/#/register"].map((p) =>
+        a({ url: `http://x${p}`, controls: [] }),
+      ),
+    );
+    expect(seen.size).toBe(5);
+  });
+  it("pathOf 去查询串但留哈希路由", () => {
+    expect(pathOf("http://x/p?a=1#/x?b=2")).toBe("/p#/x");
+    expect(pathOf("http://x/p?a=1")).toBe("/p");
   });
 });

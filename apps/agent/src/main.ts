@@ -148,11 +148,19 @@ function buildRegistry(target: unknown, wfRunId: string): NodeRegistry {
   };
   // 同样的道理：看一眼跑着的产品需要浏览器，这个进程没有。
   const observer: ProductObserver = {
-    observe: async (input) =>
-      (await child.parent.observeProduct({
+    observe: async (input) => {
+      // 目标端说的是哪个环境、哪个地址，探索就得去那里。此前这里只转发 projectId，
+      // `envRef` 和 `url` 一个都没带过去——网关于是回落到项目的**默认**环境：
+      // 一次声明「跑在 bench-juiceshop」的运行，浏览器打开的是 local 的地址、
+      // 带的是 local 的请求头和凭证。而产出物看不出任何异常。
+      const t = target as { projectId?: string; envRef?: string; url?: string } | undefined;
+      return (await child.parent.observeProduct({
+        url: t?.url,
         ...input,
-        projectId: (target as { projectId?: string } | undefined)?.projectId,
-      } as never)) as unknown as Awaited<ReturnType<ProductObserver["observe"]>>,
+        projectId: t?.projectId,
+        envRef: t?.envRef,
+      } as never)) as unknown as Awaited<ReturnType<ProductObserver["observe"]>>;
+    },
   };
   const registry = new NodeRegistry();
   registerPack(registry, testingPack({ model, executor, observer, baseDir: REPO_ROOT }));

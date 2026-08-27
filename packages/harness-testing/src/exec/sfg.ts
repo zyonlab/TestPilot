@@ -97,23 +97,42 @@ export type StateFlowGraph = z.infer<typeof StateFlowGraphSchema>;
  */
 export type Abstraction = (screen: { url: string; controls: string[]; title?: string }) => string;
 
+/**
+ * 路由。**包含 `#/` 开头的哈希。**
+ *
+ * 单页应用普遍用哈希路由：`#/search`、`#/basket`、`#/login` 是三个不同的界面。
+ * 早先这里返回 `pathname + search`，把哈希整个丢掉——于是 OWASP Juice Shop 的
+ * 20 个状态**全部**抽象成同一个 `/`，一个购物网站被压成了一个路由。而这在下游
+ * 完全看不出来：图是满的、规格是齐的，只是它描述的是「一屏」。
+ *
+ * `#section` 这种纯锚点不是路由，不算——否则同一页的目录跳转会炸出一堆假状态。
+ * 区分标准就是那个 `/`，也正是所有哈希路由库的约定。
+ */
 const routeOf = (u: string): string => {
   try {
     const x = new URL(u);
-    return x.pathname + x.search;
+    return x.pathname + x.search + (x.hash.startsWith("#/") ? x.hash : "");
   } catch {
     return u;
   }
 };
 
+/** 去掉查询串、保留哈希路由。`/p?a=1#/x?b=2` → `/p#/x`。 */
+const pathOf = (u: string): string => {
+  const r = routeOf(u);
+  const i = r.indexOf("#");
+  if (i < 0) return r.split("?")[0];
+  return r.slice(0, i).split("?")[0] + r.slice(i).split("?")[0];
+};
+
 export const ABSTRACTIONS: Record<string, Abstraction> = {
   /** 只看路由。最紧凑：同一页面的任何状态变化都看不见。 */
-  route: (s) => routeOf(s.url).split("?")[0],
+  route: (s) => pathOf(s.url),
   /** 路由 + 可见控件集合。默认：控件是「这一屏能做什么」，而探索问的正是这个。 */
-  "route+controls": (s) => `${routeOf(s.url).split("?")[0]}|${[...s.controls].sort().join("|")}`,
+  "route+controls": (s) => `${pathOf(s.url)}|${[...s.controls].sort().join("|")}`,
   /** 路由 + 控件 + 标题。更严：标题变了就算另一个状态。 */
   "route+controls+title": (s) =>
-    `${routeOf(s.url).split("?")[0]}|${s.title ?? ""}|${[...s.controls].sort().join("|")}`,
+    `${pathOf(s.url)}|${s.title ?? ""}|${[...s.controls].sort().join("|")}`,
   /** 连查询串一起算。最严：分页、筛选各算一个状态。 */
   "url+controls": (s) => `${routeOf(s.url)}|${[...s.controls].sort().join("|")}`,
 };
@@ -121,7 +140,7 @@ export const ABSTRACTIONS: Record<string, Abstraction> = {
 export const abstractionOf = (name?: string): Abstraction =>
   ABSTRACTIONS[name ?? ""] ?? ABSTRACTIONS["route+controls"];
 
-export { routeOf };
+export { routeOf, pathOf };
 
 /** 图的一段人类可读摘要，跟着材料一起交给下游——LLM 吃结构，不吃原始屏幕转储。 */
 export function describeGraph(g: StateFlowGraph): string {

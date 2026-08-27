@@ -1129,8 +1129,8 @@ function explorePrompts(deep: boolean, web3: boolean, lang?: string) {
  * 一本正经地宣称这个产品只有一个登录界面。
  */
 /** 这个项目的登录步骤与占位符解析上下文。执行用例走的是同一套。 */
-function observeLogin(projectId: string): { login?: string[]; resolve?: ResolveContext } {
-  const env = resolveEnvironment(projectId);
+function observeLogin(projectId: string, envRef?: string): { login?: string[]; resolve?: ResolveContext } {
+  const env = resolveEnvironment(projectId, envRef);
   const steps = env?.login?.steps ?? [];
   if (!steps.length) return {};
   return {
@@ -1139,12 +1139,12 @@ function observeLogin(projectId: string): { login?: string[]; resolve?: ResolveC
   };
 }
 
-function observeLaunch(projectId: string): {
+function observeLaunch(projectId: string, envRef?: string): {
   extraHeaders: Record<string, string>;
   query: Record<string, string>;
   storageState: StorageState | null;
 } {
-  const env = resolveEnvironment(projectId);
+  const env = resolveEnvironment(projectId, envRef);
   const ctx: ResolveContext = { env: env?.vars ?? {}, secrets: getSecretValues(projectId) };
   const session = env?.login?.session ?? null;
   return {
@@ -1162,7 +1162,7 @@ function observeLaunch(projectId: string): {
  * 换一套观察方式不该重写提示词，改一句提示词也不该重开浏览器。
  */
 setAgentObserver(async (input) => {
-  const { url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId } = (input ?? {}) as {
+  const { url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId, envRef } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
     settleMs?: number;
@@ -1170,9 +1170,13 @@ setAgentObserver(async (input) => {
     dryRounds?: number;
     stateAbstraction?: string;
     projectId?: string;
+    envRef?: string;
   };
   const project = projectId ? getProject(projectId) : undefined;
-  const target = url || project?.targetUrl;
+  // 地址的来源按「越具体越优先」：节点参数 → 运行声明的环境 → 项目的目标端。
+  // 中间那一层此前是缺的，所以指定了环境也白指定。
+  const env = projectId ? resolveEnvironment(projectId, envRef) : undefined;
+  const target = url || env?.baseUrl || project?.targetUrl;
   if (!target) throw new Error("source.explore has no address to open: give it a url, or bind the run to a project");
 
   const live = interactiveSession(`observe-${projectId ?? "adhoc"}`);
@@ -1192,8 +1196,11 @@ setAgentObserver(async (input) => {
        * 此前探索只能猜「用页面上显示的凭证登录」——那是 SauceDemo 的做法，绝大多数应用
        * 不会把密码印在登录页上。而凭证一直在环境里，执行用例时也一直在用。
        */
-      ...(projectId ? observeLogin(projectId) : {}),
-      launch: { cacheId: `observe-${projectId ?? "adhoc"}`, ...(projectId ? observeLaunch(projectId) : {}) },
+      ...(projectId ? observeLogin(projectId, envRef) : {}),
+      launch: {
+        cacheId: `observe-${projectId ?? "adhoc"}`,
+        ...(projectId ? observeLaunch(projectId, envRef) : {}),
+      },
     },
     ARTIFACT_DIR,
   );

@@ -186,11 +186,11 @@ describe("collapsing near-duplicate paths", () => {
     // 打开一个抽屉不是「做完了一件事」。不过滤掉——它仍是可达状态、仍要算覆盖——只是标出来。
     const withDrawer: StateFlowGraph = {
       ...shop,
-      states: [...shop.states, { id: "/cart.html#1", route: "/cart.html", title: "", controls: [] }],
-      transitions: [...shop.transitions, edge("/cart.html", "/cart.html#1", "Open Menu")],
+      states: [...shop.states, { id: "/cart.html~1", route: "/cart.html", title: "", controls: [] }],
+      transitions: [...shop.transitions, edge("/cart.html", "/cart.html~1", "Open Menu")],
     };
     const { flows } = computeFlows(withDrawer);
-    const drawer = flows.find((f) => f.endsAt === "/cart.html#1")!;
+    const drawer = flows.find((f) => f.endsAt === "/cart.html~1")!;
     expect(drawer.inPage).toBe(true);
     const checkout = flows.find((f) => f.endsAt === "/checkout-step-one.html")!;
     // 换了路由的排前面。
