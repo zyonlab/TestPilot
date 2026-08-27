@@ -410,9 +410,9 @@ export function composeSpecNode(
        * 它只补名字和目的——那才是图上看不出来的东西。
        */
       const computed = material.graph ? computeFlows(material.graph) : { flows: [], truncated: false };
+      const computedModules = material.graph ? computeModules(material.graph, computed.flows) : [];
       const flowText = material.graph
-        ? "\n\n" +
-          describeFlows(computed.flows, computeModules(material.graph, computed.flows), computed.truncated)
+        ? "\n\n" + describeFlows(computed.flows, computedModules, computed.truncated)
         : "";
       if (computed.truncated)
         ctx.emit("log", {
@@ -438,6 +438,7 @@ export function composeSpecNode(
           flows: z
             .array(z.object({ id: z.string(), name: z.string().default(""), purpose: z.string().default("") }))
             .default([]),
+          modules: z.array(z.object({ id: z.string(), name: z.string().default("") })).default([]),
           unknowns: z.array(z.string()).default([]),
         }),
         "spec.compose",
@@ -493,6 +494,14 @@ export function composeSpecNode(
         transitions: f.steps.map((s) => `${s.from}->${s.to}`),
         endsAt: f.endsAt,
       }));
+      /** 模块同理：聚类是事实，名字是判断。模型只贡献名字。 */
+      const namedMod = new Map(parsed.modules.map((m) => [m.id, m.name]));
+      const modules = computedModules.map((m) => ({
+        id: m.id,
+        name: namedMod.get(m.id) || m.id,
+        flowIds: m.flowIds,
+        routes: m.routes,
+      }));
       const invented = parsed.flows.filter((f) => !computed.flows.some((c) => c.id === f.id)).length;
       if (invented)
         ctx.emit("log", {
@@ -520,6 +529,22 @@ export function composeSpecNode(
             `${r.evidence ? `\n  > ${r.evidence}` : ""}`,
         ),
         "",
+        ...(modules.length
+          ? [
+              "",
+              "## 模块",
+              /**
+               * 模块要写进正文，理由和海拔那次一模一样：它算出来了、也喂给了这一层的模型，
+               * 却**没写进下游读的正文**。于是 `plan.stories` 只能拿流程名当活动，而流程与
+               * 故事近乎一一对应——故事图七列里六列只有一个故事，骨架和躯干塌在了一起。
+               */
+              ...modules.map(
+                (m) =>
+                  `- **${m.id}** ${m.name}${m.routes.length ? `　（${m.routes.slice(0, 6).join("、")}）` : ""}` +
+                  `${m.flowIds.length ? `\n  > 包含流程：${m.flowIds.join("、")}` : ""}`,
+              ),
+            ]
+          : []),
         ...(flows.length
           ? [
               "",
@@ -567,6 +592,7 @@ export function composeSpecNode(
         text,
         rules: located,
         flows,
+        modules,
         unknowns: parsed.unknowns,
         origin: material.origin,
         derivedFrom: material.derivedFrom,
@@ -649,7 +675,32 @@ export function planStoriesNode(
           ? { ...st, source: known, sourceBy: "claimed" as const }
           : { ...st, source: undefined, sourceBy: undefined };
       };
-      const stories = raw.map(attribute);
+      /**
+       * **活动按模块确定性回填。**
+       *
+       * 与流程同一条道理：属于哪个模块是算出来的（流程 → 模块的归属由 `computeModules`
+       * 决定），模型只负责给模块起个人话名字。让模型自己填 `activity`，它会给几乎每条
+       * 故事编一个独有的活动——实测七列里六列只有一个故事，故事图退化成横过来的列表。
+       *
+       * 骨架必须比躯干粗，这一点不能指望提示词说服模型，要由数据结构保证。
+       */
+      const moduleOfFlow = new Map<string, string>();
+      for (const m of spec.modules ?? []) for (const fid of m.flowIds) moduleOfFlow.set(fid, m.name || m.id);
+      const stories = raw.map(attribute).map((st) => {
+        const byFlow = st.flowId ? moduleOfFlow.get(st.flowId) : undefined;
+        return byFlow ? { ...st, activity: byFlow } : st;
+      });
+      const activities = new Set(stories.map((s) => s.activity).filter(Boolean));
+      /**
+       * 骨架和躯干一样粗，就等于没有骨架。报出来——故事图看起来正常，只是它不是图。
+       */
+      if (stories.length >= 4 && activities.size >= stories.length * 0.8)
+        ctx.emit("log", {
+          stream: "plan.stories",
+          text:
+            `${stories.length} 条故事分在 ${activities.size} 个活动里——故事图的横轴和故事几乎一一对应，` +
+            `那不是图，是横过来的列表。多半是故事都挂在了各自独立的流程上，或者规格里没有模块。`,
+        });
 
       // A document that produced no story is a silent hole: everything downstream looks
       // healthy, and the miss only surfaces much later as a coverage number with no
@@ -691,6 +742,8 @@ export function planStoriesNode(
         specText: spec.text,
         // 流程同理：用例要引用它的转移 id，门禁要拿它校验那些 id 真的存在。
         flows: spec.flows ?? [],
+        // 模块也要带下去：故事的 `activity` 靠它确定性回填，不能只信模型抄对了名字。
+        modules: spec.modules ?? [],
         stories,
       };
     },

@@ -174,6 +174,22 @@ export const SpecFlowSchema = z.object({
 });
 export type SpecFlow = z.infer<typeof SpecFlowSchema>;
 
+/**
+ * **模块**：故事图的骨架。
+ *
+ * 路由的聚类是算出来的事实（`computeModules`），名字是判断——和流程同一个分工。
+ * 它存在的理由只有一个：故事图的横轴必须比故事**粗**。此前活动直接取流程名，而流程
+ * 和故事近乎一一对应，于是七列里六列只有一个故事——那不是图，是把列表横过来排了一行。
+ */
+export const SpecModuleSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default(""),
+  /** 属于这个模块的流程 id。由 `computeModules` 填，模型改不动。 */
+  flowIds: z.array(z.string()).default([]),
+  routes: z.array(z.string()).default([]),
+});
+export type SpecModule = z.infer<typeof SpecModuleSchema>;
+
 export const SpecRuleSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -217,6 +233,8 @@ export const SpecDocSchema = z.object({
   rules: z.array(SpecRuleSchema).default([]),
   /** 这个产品有哪些流程。路径算出来，名字模型给。 */
   flows: z.array(SpecFlowSchema).default([]),
+  /** 这个产品分几块。聚类算出来，名字模型给。故事图的横轴就是它。 */
+  modules: z.array(SpecModuleSchema).default([]),
   /** 材料里没有答案的地方：够不到的界面、缺凭证、没提到的规则。 */
   unknowns: z.array(z.string()).default([]),
   /** 材料从哪来，逐份列出。 */
@@ -229,6 +247,8 @@ export const StoryBundleSchema = z.object({
   origin: z.string().default("inline"),
   /** 规格里的流程。故事挂在它上面，用例引用它的转移 id——一路带下去。 */
   flows: z.array(SpecFlowSchema).default([]),
+  /** 规格里的模块。故事的 `activity` 按它确定性回填，所以要一路带下去。 */
+  modules: z.array(SpecModuleSchema).default([]),
   /** 这批故事背后的规格是怎么来的——一路带到用例上，因为它改变断言的含义。 */
   derivedFrom: SpecProvenance.optional(),
   /**

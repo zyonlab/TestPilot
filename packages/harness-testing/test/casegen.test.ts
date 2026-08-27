@@ -38,7 +38,7 @@ describe("a specification that is several documents", () => {
     const logs: Array<Record<string, unknown>> = [];
     const node = planStoriesNode({ model: new FakeModel(() => JSON.stringify(reply)) });
     const out = await node.run(
-      { text: twoDocs, origin, title: "", rules: [], unknowns: [], flows: [] },
+      { text: twoDocs, origin, title: "", rules: [], unknowns: [], flows: [], modules: [] },
       { maxStories: 12 },
       {
         nodeId: "stories",
@@ -102,7 +102,7 @@ describe("when the stories do not say where they came from", () => {
       model: new FakeModel(() => JSON.stringify({ stories: [{ id: "US-01", title: "a", acceptance: [] }] })),
     });
     await node.run(
-      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules: [], unknowns: [], flows: [] },
+      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules: [], unknowns: [], flows: [], modules: [] },
       { maxStories: 12 },
       {
         nodeId: "stories",
@@ -135,7 +135,7 @@ describe("the case budget", () => {
     );
     const node = designCasesNode({ model });
     const out = await node.run(
-      { origin: "t", derivedFrom: "document" as const, flows: [], stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
+      { origin: "t", derivedFrom: "document" as const, flows: [], modules: [], stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
       { contextTokens: 2000, perStoryMaxTokens: 2000, maxCasesPerStory: 4, specText: "spec", oracleGuidance: "default" as const },
       {
         nodeId: "design",
@@ -162,7 +162,7 @@ describe("the stricter oracle guidance", () => {
       );
       const node = designCasesNode({ model });
       await node.run(
-        { origin: "t", derivedFrom: "document" as const, flows: [], stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
+        { origin: "t", derivedFrom: "document" as const, flows: [], modules: [], stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
         { contextTokens: 2000, perStoryMaxTokens: 2000, maxCasesPerStory: 4, specText: "spec", oracleGuidance },
         { nodeId: "design", ablated: new Set(), spend: () => {}, emit: () => {}, signal: new AbortController().signal } as never,
       );
@@ -538,5 +538,59 @@ describe("a reply that came back as a bare array", () => {
     // 该套哪个键说不准，套错了会产出一份看起来正常、其实张冠李戴的产物。
     const two = z.object({ a: z.array(z.string()), b: z.array(z.string()) });
     expect(() => parseJson('["x"]', two, "n")).toThrow();
+  });
+});
+
+describe("故事图的骨架必须比躯干粗", () => {
+  const flows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `F-${i + 1}`, name: `流程${i + 1}`, purpose: "", steps: [], transitions: [], endsAt: "/x",
+    }));
+  const spec = (n: number, mods: Array<{ id: string; name: string; flowIds: string[] }>) => ({
+    text: "x", title: "", origin: "explore", rules: [], unknowns: [],
+    flows: flows(n), modules: mods.map((m) => ({ ...m, routes: [] })),
+  });
+  const reply = (n: number) => ({
+    stories: Array.from({ length: n }, (_, i) => ({
+      // 模型给每条故事编了一个独有的活动——这正是要被覆盖掉的东西
+      id: `S-0${i + 1}`, title: `故事${i + 1}`, flowId: `F-${i + 1}`,
+      activity: `活动${i + 1}`, acceptance: ["Given a / When b / Then c"],
+    })),
+  });
+  const run = async (n: number, mods: Array<{ id: string; name: string; flowIds: string[] }>) => {
+    const logs: Array<Record<string, unknown>> = [];
+    const node = planStoriesNode({ model: new FakeModel(() => JSON.stringify(reply(n))) });
+    const out = await node.run(spec(n, mods), { maxStories: 12 }, {
+      nodeId: "stories",
+      ablated: new Set(),
+      spend: () => {},
+      emit: (kind: string, payload: Record<string, unknown>) => logs.push({ kind, ...payload }),
+      signal: new AbortController().signal,
+    } as never);
+    return { out, logs };
+  };
+
+  it("活动按模块回填，模型自己编的那个不算数", async () => {
+    const { out } = await run(4, [
+      { id: "owners", name: "查找与管理主人", flowIds: ["F-1", "F-2", "F-3"] },
+      { id: "vets", name: "查看兽医", flowIds: ["F-4"] },
+    ]);
+    expect(out.stories.map((s) => s.activity)).toEqual([
+      "查找与管理主人", "查找与管理主人", "查找与管理主人", "查看兽医",
+    ]);
+  });
+
+  it("每条故事各自一个活动时报出来——那不是图，是横过来的列表", async () => {
+    const { logs } = await run(5, [
+      { id: "a", name: "甲", flowIds: ["F-1"] }, { id: "b", name: "乙", flowIds: ["F-2"] },
+      { id: "c", name: "丙", flowIds: ["F-3"] }, { id: "d", name: "丁", flowIds: ["F-4"] },
+      { id: "e", name: "戊", flowIds: ["F-5"] },
+    ]);
+    expect(logs.some((l) => String(l.text ?? "").includes("横过来的列表"))).toBe(true);
+  });
+
+  it("骨架真的更粗时不报警", async () => {
+    const { logs } = await run(5, [{ id: "a", name: "甲", flowIds: ["F-1", "F-2", "F-3", "F-4", "F-5"] }]);
+    expect(logs.some((l) => String(l.text ?? "").includes("横过来的列表"))).toBe(false);
   });
 });

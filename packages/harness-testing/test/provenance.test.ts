@@ -102,7 +102,7 @@ describe("规格的来源印记", () => {
       ),
     );
     const out = await n["design.cases"].run(
-      { origin: "explored http://x", derivedFrom: "exploration", flows: [], stories: [{ id: "S-1", title: "登录", acceptance: ["能登录"] }] },
+      { origin: "explored http://x", derivedFrom: "exploration", flows: [], modules: [], stories: [{ id: "S-1", title: "登录", acceptance: ["能登录"] }] },
       { lang: "zh", maxCasesPerStory: 2 },
       ctx(),
     );
