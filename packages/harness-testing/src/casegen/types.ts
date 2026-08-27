@@ -165,6 +165,16 @@ export const StoryBundleSchema = z.object({
   origin: z.string().default("inline"),
   /** 这批故事背后的规格是怎么来的——一路带到用例上，因为它改变断言的含义。 */
   derivedFrom: SpecProvenance.optional(),
+  /**
+   * 规格全文，跟着故事一起往下走。
+   *
+   * `design.cases` 需要它，但它的输入类型是 `stories`——所以在这个字段出现之前，规格只能靠
+   * 图上的一个参数传，而那个参数**建图时填不出来**（建图时只有文件路径，内容要等节点运行时
+   * 才读）。结果是它一直是空串：**全部 21 次历史运行里，写用例的那个节点从没见过规格**，
+   * 只看得见故事的标题和验收标准。出处（`origin` / `derivedFrom`）本来就是这样一路带下去的，
+   * 规格本身跟着走是同一个做法。
+   */
+  specText: z.string().optional(),
   stories: z.array(StorySchema).min(1),
 });
 export type StoryBundle = z.infer<typeof StoryBundleSchema>;

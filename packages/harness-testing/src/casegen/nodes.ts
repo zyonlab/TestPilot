@@ -412,6 +412,9 @@ export function planStoriesNode(
       return {
         origin: spec.origin,
         derivedFrom: spec.derivedFrom,
+        // 规格跟着故事走。`design.cases` 吃的是 `stories`，拿不到 `spec` 节点的产物，而图上
+        // 那个 `specText` 参数建图时填不出来——所以在这一行出现之前，它一直在空规格上设计用例。
+        specText: spec.text,
         stories,
       };
     },
@@ -444,7 +447,12 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
     inKind: KIND.stories,
     outKind: KIND.cases,
     params: z.object({
-      /** Context for the model; the graph usually threads it in from source.spec. */
+      /**
+       * 覆盖用：正常情况下规格由 `plan.stories` 随故事一起带下来。
+       *
+       * 别把它当成主通道——建图时只有规格的**路径**，内容要等节点运行时才读得到，
+       * 所以图里的这个参数填不出真正的规格。
+       */
       specText: z.string().optional(),
       lang: z.string().optional(),
       /** Context this node may spend on material. The spec is what grows without bound. */
@@ -465,6 +473,21 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
       const cases: TextCase[] = [];
       const failures: Array<{ story: string; message: string }> = [];
 
+      /**
+       * 明确给了的参数覆盖，**空的忽略**，其余取上游带下来的那份。
+       *
+       * 后半句是这个洞的修法本身：参数作为覆盖是对的，但一个**空**参数不该压掉真正的规格。
+       * 此前图里无条件存着一个空 `specText`，于是它每次都「覆盖」成了没有规格。
+       */
+      const specText = params.specText?.trim() ? params.specText : (bundle.specText ?? "");
+      if (!specText.trim())
+        // 空规格不再是一件悄无声息的事：这个节点会照常产出用例，只是它只看得见故事，
+        // 而那正是它此前一直在做的事，没有任何一处说出来。
+        ctx.emit("log", {
+          stream: "design.cases",
+          text: "这一批用例是在没有规格的情况下设计的——模型只看得见故事的标题与验收标准",
+        });
+
       for (const story of bundle.stories) {
         if (ctx.signal.aborted) break;
         try {
@@ -473,7 +496,7 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
           const budget = fitToBudget(
             [
               { name: "story", text: JSON.stringify(story), share: 1, fixed: true },
-              { name: "spec", text: params.specText ?? "", share: 1 },
+              { name: "spec", text: specText, share: 1 },
             ],
             params.contextTokens,
           );

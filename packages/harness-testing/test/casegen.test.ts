@@ -176,3 +176,95 @@ describe("the stricter oracle guidance", () => {
     expect(strict.variable).not.toContain("WHAT COUNTS AS AN OBSERVABLE PHENOMENON");
   });
 });
+
+/**
+ * 规格有没有真的到达写用例的那个节点。
+ *
+ * 这一组存在的理由是一个跑了 21 次都没人发现的洞：`design.cases` 的规格靠图上一个
+ * `specText` 参数传，而**建图时只有规格的路径、没有内容**，所以那个参数一直是空串。
+ * 全部历史运行里，写每一条用例的那次调用都只看得见故事的标题与验收标准。
+ *
+ * 没被发现是因为没有任何一处检查过「规格进没进提示词」——产出看起来完全正常，
+ * 只是系统性地薄。所以这里断言的不是「有这个字段」，而是**那段文字出现在请求里**。
+ */
+describe("the specification reaching the node that writes the cases", () => {
+  const SPEC = "AC-02.1 密码不正确时显示「Epic sadface: 用户名与密码不匹配」";
+  const bundle = {
+    origin: "docs/a.md",
+    specText: SPEC,
+    stories: [{ id: "US-02", title: "凭证错误时被拒绝", acceptance: ["AC-02.1 …"] }],
+  };
+  const reply = JSON.stringify({
+    cases: [
+      {
+        title: "密码错误被拒绝",
+        designMethod: "negative",
+        steps: ["输入错误密码", "点击登录"],
+        expected: "显示「Epic sadface: 用户名与密码不匹配」",
+        tier: 1,
+        oracle: { kind: "text", value: "Epic sadface" },
+        key: "login|wrong-password|error",
+      },
+    ],
+  });
+  const ctx = { nodeId: "design", ablated: new Set(), spend: () => {}, emit: () => {}, signal: new AbortController().signal };
+
+  it("carries it down from the stories bundle, not from a graph parameter", async () => {
+    const model = new FakeModel(() => reply);
+    await designCasesNode({ model }).run(bundle as never, { contextTokens: 8000, perStoryMaxTokens: 6000, maxCasesPerStory: 8, oracleGuidance: "default" } as never, ctx as never);
+    expect(model.calls[0].variable).toContain(SPEC);
+  });
+
+  it("still lets a non-empty parameter override what came down the graph", async () => {
+    const model = new FakeModel(() => reply);
+    await designCasesNode({ model }).run(
+      bundle as never,
+      { specText: "另一份规格", contextTokens: 8000, perStoryMaxTokens: 6000, maxCasesPerStory: 8, oracleGuidance: "default" } as never,
+      ctx as never,
+    );
+    expect(model.calls[0].variable).toContain("另一份规格");
+    expect(model.calls[0].variable).not.toContain(SPEC);
+  });
+
+  it("ignores an EMPTY parameter instead of letting it wipe the specification", async () => {
+    // 这正是那个洞：图里存着一个空 specText，它每次都「覆盖」成了没有规格。
+    const model = new FakeModel(() => reply);
+    await designCasesNode({ model }).run(
+      bundle as never,
+      { specText: "", contextTokens: 8000, perStoryMaxTokens: 6000, maxCasesPerStory: 8, oracleGuidance: "default" } as never,
+      ctx as never,
+    );
+    expect(model.calls[0].variable).toContain(SPEC);
+  });
+
+  it("says out loud when it is designing against no specification at all", async () => {
+    const logs: string[] = [];
+    const model = new FakeModel(() => reply);
+    await designCasesNode({ model }).run(
+      { ...bundle, specText: undefined } as never,
+      { contextTokens: 8000, perStoryMaxTokens: 6000, maxCasesPerStory: 8, oracleGuidance: "default" } as never,
+      { ...ctx, emit: (_k: string, p: Record<string, unknown>) => logs.push(String(p.text ?? "")) } as never,
+    );
+    expect(logs.some((l) => l.includes("没有规格"))).toBe(true);
+  });
+});
+
+/**
+ * 图不该假装自己接好了线。
+ *
+ * 按路径给规格时，图里存下一个空的 `specText` 看起来像「已接线」——那个空串正是这个洞
+ * 藏了这么久的原因。没有内容就不该有这个键。
+ */
+describe("the graph definition", () => {
+  it("omits specText entirely when the specification was given as a path", async () => {
+    const { g1Graph } = await import("../src/casegen/graph.js");
+    const design = g1Graph({ spec: { path: "fixtures/mock-spec/acme-portal.md" } }).nodes.find((n) => n.id === "design");
+    expect(design?.params).not.toHaveProperty("specText");
+  });
+
+  it("keeps it when the specification was given inline", async () => {
+    const { g1Graph } = await import("../src/casegen/graph.js");
+    const design = g1Graph({ spec: { text: "规格全文" } }).nodes.find((n) => n.id === "design");
+    expect((design?.params as { specText?: string })?.specText).toBe("规格全文");
+  });
+});

@@ -38,9 +38,16 @@ export function g1Graph(params: G1Params): GraphDef {
       { id: "spec", type: "spec.compose", params: { lang: params.lang } },
       { id: "stories", type: "plan.stories", params: { maxStories: params.maxStories ?? 12, lang: params.lang } },
       {
+        // `specText` 只在调用方明确给了的时候才写进图。此前这里无条件填
+        // `params.spec.text ?? ""`，而按路径给规格时那两个都是 undefined——于是图里存下一个
+        // 空串参数，看起来像「已接线」，实际上让这个节点在没有规格的情况下设计用例。
+        // 规格现在跟着故事从上游带下来（`StoryBundle.specText`），这个参数只是覆盖用。
         id: "design",
         type: "design.cases",
-        params: { specText: params.specText ?? params.spec.text ?? "", lang: params.lang },
+        params: {
+          ...(params.specText ?? params.spec.text ? { specText: params.specText ?? params.spec.text } : {}),
+          lang: params.lang,
+        },
       },
       {
         id: "gate",
