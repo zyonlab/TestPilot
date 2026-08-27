@@ -437,6 +437,20 @@ export async function runObserve(
      * 签名的用途是「这算不算一屏新的」，不是「我做过什么」；后者跟着地址走才稳。
      */
     const triedClick = new Set<string>();
+    /**
+     * **结构同类**：把 selector 里的 `:nth-of-type(n)` 抹掉，剩下的就是这个控件在
+     * DOM 里的形状。12 张商品卡片、一张表的 30 行、一个网格的每个格子——形状是同一个。
+     */
+    const shapeOf = (sel: string): string => sel.replace(/:nth-of-type\(\d+\)/g, "");
+    /**
+     * 形状试过、且**没换来新界面**的，它的结构同类就不用再试了。
+     *
+     * 不能一上来就按形状去重：导航栏里 `nav > a:nth-of-type(1)` 和 `(2)` 形状相同，
+     * 却是「首页」和「关于」两个不同的页面——那样会把整块导航判成一个控件。
+     * 所以是自适应的：**先试代表，代表没走出去，才跳过它的同类**。
+     * 12 张商品卡片因此只花 1 轮而不是 12 轮；而两个导航链接谁也不挡谁。
+     */
+    const shapeDry = new Set<string>();
     /** 去过的地址。同一个地址走第二次对发现新界面没有任何帮助。 */
     const triedGoto = new Set<string>();
     // 去重和状态 id 必须用**同一把尺子**量地址。此前这里另写了一个丢哈希的
@@ -466,7 +480,7 @@ export async function runObserve(
      */
     type Step =
       | { key: string; kind: "login"; instruction: string }
-      | { key: string; kind: "click"; selector: string; label: string }
+      | { key: string; kind: "click"; selector: string; label: string; shape: string }
       | { key: string; kind: "goto"; href: string }
       /**
        * **做实验**：故意把表单空着提交，看产品说什么。
@@ -556,7 +570,8 @@ export async function runObserve(
           : c.label.replace(/\d+/g, "#");
         const key = `${here}::${cls}`;
         if (triedClick.has(key)) continue;
-        return { key, kind: "click", selector: c.selector, label: c.label };
+        if (shapeDry.has(`${currentId}::${shapeOf(c.selector)}`)) continue;
+        return { key, kind: "click", selector: c.selector, label: c.label, shape: shapeOf(c.selector) };
       }
       return undefined;
     };
@@ -670,6 +685,7 @@ export async function runObserve(
         await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
         emit({ type: "navigated", shotRef: await shot(session) });
 
+        const cameFrom = currentId;
         const after = await snapshot(`第 ${screens.length + 1} 屏`);
         const sig = signatureOf(after);
         const wasNew = !seen.has(sig);
@@ -703,6 +719,9 @@ export async function runObserve(
         currentId = toId;
         current = after;
         if (seen.has(sig)) {
+          // 代表没走出去 → 它的结构同类一并跳过。这一条直接把「12 张商品卡片吃掉
+          // 11 个干轮」变成 1 个。
+          if (next.kind === "click") shapeDry.add(`${cameFrom}::${next.shape}`);
           // 原地打转也要记一笔：它是「这个产品就这么大」和「探索走不动了」之间的区别。
           dry += 1;
           note(`没有新界面（连续 ${dry}/${dryLimit} 次）`, "warn");
