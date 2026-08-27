@@ -125,6 +125,18 @@ const pathOf = (u: string): string => {
   return r.slice(0, i).split("?")[0] + r.slice(i).split("?")[0];
 };
 
+/**
+ * 控件文案里的数字是**数据**，不是结构。
+ *
+ * 购物车角标（`Your Basket 0 → 1 → 5`）、未读数、结果条数——每变一次，控件集合就变一次，
+ * 于是同一个搜索页在 Juice Shop 上裂成 11 个「新状态」，探索把预算全花在原地。这正是
+ * 抽象过紧的那一头：不是漏测，是冗余。
+ *
+ * 反过来说，如果某个数字真的决定了界面（分页第 2 页、筛选结果），它会出现在路由或
+ * 查询串里——`url+controls` 那把尺子照样量得到。所以归一化数字丢掉的是角标，不是分页。
+ */
+const numless = (c: string): string => c.replace(/\d+/g, "#");
+
 export const ABSTRACTIONS: Record<string, Abstraction> = {
   /** 只看路由。最紧凑：同一页面的任何状态变化都看不见。 */
   route: (s) => pathOf(s.url),
@@ -135,10 +147,18 @@ export const ABSTRACTIONS: Record<string, Abstraction> = {
     `${pathOf(s.url)}|${s.title ?? ""}|${[...s.controls].sort().join("|")}`,
   /** 连查询串一起算。最严：分页、筛选各算一个状态。 */
   "url+controls": (s) => `${routeOf(s.url)}|${[...s.controls].sort().join("|")}`,
+  /**
+   * 默认。路由 + 控件，但控件文案里的数字归一化——见 `numless`。
+   *
+   * 名字里带 `/norm` 是为了让**旧图仍然诚实**：一次探索用了哪把尺子会跟着图记下来，
+   * 悄悄改掉 `route+controls` 的含义，会让此前所有记着这个名字的图从此说谎。
+   */
+  "route+controls/norm": (s) =>
+    `${pathOf(s.url)}|${[...s.controls].map(numless).sort().join("|")}`,
 };
 
 export const abstractionOf = (name?: string): Abstraction =>
-  ABSTRACTIONS[name ?? ""] ?? ABSTRACTIONS["route+controls"];
+  ABSTRACTIONS[name ?? ""] ?? ABSTRACTIONS["route+controls/norm"];
 
 export { routeOf, pathOf };
 

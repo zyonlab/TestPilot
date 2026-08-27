@@ -33,8 +33,8 @@ describe("state abstraction", () => {
   });
 
   it("认不出的名字退回默认，而不是崩掉一次探索", () => {
-    expect(abstractionOf("没这个")).toBe(ABSTRACTIONS["route+controls"]);
-    expect(abstractionOf(undefined)).toBe(ABSTRACTIONS["route+controls"]);
+    expect(abstractionOf("没这个")).toBe(ABSTRACTIONS["route+controls/norm"]);
+    expect(abstractionOf(undefined)).toBe(ABSTRACTIONS["route+controls/norm"]);
   });
 });
 
@@ -216,5 +216,31 @@ describe("哈希路由（单页应用）", () => {
   it("pathOf 去查询串但留哈希路由", () => {
     expect(pathOf("http://x/p?a=1#/x?b=2")).toBe("/p#/x");
     expect(pathOf("http://x/p?a=1")).toBe("/p");
+  });
+});
+
+describe("角标数字不该炸出新状态", () => {
+  const norm = ABSTRACTIONS["route+controls/norm"];
+  const strict = ABSTRACTIONS["route+controls"];
+  const cart = (n: number) => ({
+    url: "http://x/#/search",
+    controls: ["button: 加入购物车", `button: 购物车\n${n}`],
+  });
+  it("购物车从 0 加到 5，仍是同一个状态", () => {
+    expect(new Set([0, 1, 2, 5].map((n) => norm(cart(n)))).size).toBe(1);
+  });
+  it("严格那把尺子照旧把它们算成四个——两把尺子都留着才能消融", () => {
+    expect(new Set([0, 1, 2, 5].map((n) => strict(cart(n)))).size).toBe(4);
+  });
+  it("归一化的是数字不是控件：控件变了照样算新状态", () => {
+    expect(norm(cart(0))).not.toBe(
+      norm({ url: "http://x/#/search", controls: ["button: 结算", "button: 购物车\n0"] }),
+    );
+  });
+  it("分页这种真的换了界面的，靠路由/查询串照样分得开", () => {
+    const a = ABSTRACTIONS["url+controls"];
+    expect(a({ url: "http://x/p?page=1", controls: ["下一页"] })).not.toBe(
+      a({ url: "http://x/p?page=2", controls: ["下一页"] }),
+    );
   });
 });

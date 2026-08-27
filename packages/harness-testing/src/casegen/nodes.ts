@@ -316,7 +316,7 @@ export function sourceExploreNode(
        * 它决定「这算不算一屏新的」，是探索有效性的关键变量——过松漏测，过紧冗余。
        * 做成参数是为了能消融、能和别人的结果比，而不是写死一把尺子。
        */
-      stateAbstraction: z.string().default("route+controls"),
+      stateAbstraction: z.string().default("route+controls/norm"),
       lang: z.string().optional(),
       maxTokens: z.number().int().min(400).max(16000).default(2400),
     }),
