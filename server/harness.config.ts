@@ -20,11 +20,15 @@ export default defineHarnessConfig({
   budget: { calls: 500, usd: 0, ms: 4 * 60 * 60_000 },
   ablate: [],
   guard: {
-    // www.saucedemo.com is Sauce Labs' public E2E practice target: nothing on it is real
-    // and "Reset App State" undoes everything. It has to be allowlisted because the whole
-    // point of the benchmark is the checkout flow, and "checkout"/"pay" is exactly what
-    // blockIrreversible refuses off the allowlist.
-    allowHosts: ["localhost", "127.0.0.1", "::1", "www.saucedemo.com", "saucedemo.com"],
+    /**
+     * 基准应用全部跑在本机，所以白名单回到只有 localhost。
+     *
+     * `www.saucedemo.com` 曾经在这里——那时它是基准，而基准的重头是结账，
+     * 「checkout / pay」正是 `blockIrreversible` 在白名单外要拦的东西。
+     * 2026-08-27 撤下它之后这条豁免也就没有理由了：**一条没有理由的白名单条目，
+     * 下一次有人对着生产环境跑套件时会替他放行。**
+     */
+    allowHosts: ["localhost", "127.0.0.1", "::1"],
     // Irreversible-looking steps (delete / pay / transfer …) are refused outside the
     // allowlist. This is the "someone ran the whole suite against production" guard,
     // not a security boundary.
@@ -51,6 +55,49 @@ export default defineHarnessConfig({
         "--silent",
       ],
       healthcheck: { kind: "rpc", url: "http://127.0.0.1:8545", method: "eth_chainId" },
+    },
+    /**
+     * 基准应用。
+     *
+     * 它们是**被测对象**，不是 harness 的一部分——但形态和其它能力完全一样：一个声明式的
+     * 外部服务、一个健康探针、由监工托管、在进程页起停。放进这里而不是写进 README，
+     * 是因为「怎么起这个基准」必须和「用它跑出来的数字」放在同一个可版本化的地方。
+     *
+     * `autostart: false`：它们要拉镜像、占内存，不该跟着网关一起起来。
+     * 版本全部 pin 死——`latest` 会在某天悄悄换掉被测对象，而那种变化在结果里
+     * 看起来像 harness 变了。
+     *
+     * 只登记**已核实镜像存在**的那些。其余四个（retroboard / dimeshift / splittypie /
+     * phoenix）见 `fixtures/benchmark/apps.json`：没有可公开拉取的镜像，写一条没核实过的
+     * `docker run` 进来，等于给出一个跑不起来的承诺。
+     */
+    {
+      id: "bench-petclinic",
+      kind: "app",
+      description:
+        "Spring PetClinic（服务端渲染版）：增删改查、表单校验、搜索、分页、跨实体关联。" +
+        "单容器自带界面，是这套基准里第一个要跑通的",
+      command: "docker",
+      args: [
+        "run",
+        "--rm",
+        "--name",
+        "tp-bench-petclinic",
+        "-p",
+        "8080:8080",
+        "springcommunity/spring-framework-petclinic:6.1.2",
+      ],
+      autostart: false,
+      healthcheck: { kind: "http", url: "http://localhost:8080/" },
+    },
+    {
+      id: "bench-pagekit",
+      kind: "app",
+      description: "Pagekit（Vue + PHP）：后台管理、内容编辑、权限。sqlite 变体免去外部数据库",
+      command: "docker",
+      args: ["run", "--rm", "--name", "tp-bench-pagekit", "-p", "8082:80", "pagekit/pagekit:sqlite"],
+      autostart: false,
+      healthcheck: { kind: "http", url: "http://localhost:8082/" },
     },
     {
       id: "model-proxy",

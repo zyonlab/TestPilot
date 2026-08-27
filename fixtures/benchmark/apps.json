@@ -1,0 +1,102 @@
+{
+  "note": "基准应用登记表。每一项都标明核实到什么程度——`verified` 说的是「这个镜像在 Docker Hub 上确实存在、版本可 pin」，不是「在这台机器上跑起来过」。后者要等 Docker 守护进程起来之后逐个实跑，跑通了把 `startedOnce` 改成日期。一个说自己可用、其实没人起过的基准，比没有基准更糟。",
+  "why": "SauceDemo 做不出可比结果：太小（14 屏、无表单校验、无真实后端），且是第三方托管、我们冻结不了。换成公开 AWGT 研究里用的那套主题应用，我们的数字才能对上已发表的基线——Liu/Yang/Zhang/Xie 2026 给出了 Crawljax 与 WebExplor 在六种状态抽象下、在这些应用上的代码覆盖，是最省力的可比性来源。",
+  "pinning": "全部 pin 具体版本，不用 latest。基准的意义在于两次跑的是同一个东西；latest 会在某天悄悄换掉被测对象，而那种变化在结果里看起来像 harness 变了。",
+  "apps": [
+    {
+      "id": "petclinic",
+      "name": "Spring PetClinic（服务端渲染版）",
+      "framework": "Spring MVC + JSP",
+      "why": "这套基准里最完整的一个：增删改查、表单校验、搜索、分页、跨实体关联。单容器自带界面，不需要另起前端——第一个要跑通的就是它。",
+      "url": "http://localhost:8080",
+      "image": "springcommunity/spring-framework-petclinic:6.1.2",
+      "start": "docker run --rm -p 8080:8080 springcommunity/spring-framework-petclinic:6.1.2",
+      "health": { "kind": "http", "url": "http://localhost:8080/" },
+      "verified": "镜像存在，2023-12-29，241 MB，版本可 pin",
+      "startedOnce": null
+    },
+    {
+      "id": "petclinic-rest",
+      "name": "Spring PetClinic（REST 版）",
+      "framework": "Spring Boot REST + 独立前端",
+      "why": "同一个领域的前后端分离版本。它自身只有 API，要配 Angular 前端才有界面——所以排在服务端渲染版后面。",
+      "url": "http://localhost:9966",
+      "image": "springcommunity/spring-petclinic-rest:4.0.2",
+      "start": "docker run --rm -p 9966:9966 springcommunity/spring-petclinic-rest:4.0.2",
+      "health": { "kind": "http", "url": "http://localhost:9966/petclinic/api/pettypes" },
+      "verified": "镜像存在，2026-08-01，168 MB，版本可 pin",
+      "startedOnce": null,
+      "caveat": "只有 API，没有界面。要当 GUI 基准得再配一个前端容器，前端镜像尚未核实。"
+    },
+    {
+      "id": "pagekit",
+      "name": "Pagekit",
+      "framework": "Vue.js + PHP",
+      "why": "研究基准里的 Vue 代表。有后台管理、内容编辑、权限。",
+      "url": "http://localhost:8082",
+      "image": "pagekit/pagekit:sqlite",
+      "start": "docker run --rm -p 8082:80 pagekit/pagekit:sqlite",
+      "health": { "kind": "http", "url": "http://localhost:8082/" },
+      "verified": "镜像存在，2018-06-27，109 MB（sqlite 变体免去外部数据库）",
+      "startedOnce": null,
+      "caveat": "镜像 2018 年之后没更新过。能不能起来要实跑才知道。"
+    },
+    {
+      "id": "retroboard",
+      "name": "Retro Board",
+      "framework": "React",
+      "why": "研究基准里的 React 代表，且上游仍在维护（2026-07 有推送）。",
+      "url": "http://localhost:8081",
+      "repo": "https://github.com/antoinejaussoin/retro-board",
+      "start": null,
+      "health": { "kind": "http", "url": "http://localhost:8081/" },
+      "verified": null,
+      "startedOnce": null,
+      "caveat": "**没有找到可公开拉取的镜像**：Docker Hub 上查不到，ghcr 的 tags 接口要鉴权，没有核实成功。要么自建，要么等确认镜像地址。不写一个没核实过的 `docker run` 进来。"
+    },
+    {
+      "id": "dimeshift",
+      "name": "DimeShift",
+      "framework": "Backbone.js",
+      "why": "研究基准里的 Backbone 代表。记账应用，表单与列表操作密集。",
+      "url": "http://localhost:8083",
+      "repo": "https://github.com/jeka-kiselyov/dimeshift",
+      "start": null,
+      "health": { "kind": "http", "url": "http://localhost:8083/" },
+      "verified": null,
+      "startedOnce": null,
+      "caveat": "无官方镜像；需 Node + MySQL 自行构建，且依赖较老。"
+    },
+    {
+      "id": "splittypie",
+      "name": "SplittyPie",
+      "framework": "Ember.js",
+      "why": "研究基准里的 Ember 代表。分账应用。",
+      "url": "http://localhost:8084",
+      "repo": "https://github.com/tsubik/splittypie",
+      "start": null,
+      "health": { "kind": "http", "url": "http://localhost:8084/" },
+      "verified": null,
+      "startedOnce": null,
+      "caveat": "无官方镜像；依赖 Firebase。已有研究指出它 flaky（通知层会遮住元素），做基线时要记这一笔。"
+    },
+    {
+      "id": "phoenix",
+      "name": "Phoenix Trello",
+      "framework": "Elixir + Phoenix + React",
+      "why": "研究基准里的 Elixir 代表。看板应用，拖拽与实时更新。",
+      "url": "http://localhost:8085",
+      "start": null,
+      "health": { "kind": "http", "url": "http://localhost:8085/" },
+      "verified": null,
+      "startedOnce": null,
+      "caveat": "无官方镜像；需 Elixir + Postgres。已有研究指出它的菜单不确定，做基线时要记这一笔。"
+    }
+  ],
+  "retired": [
+    {
+      "id": "saucedemo",
+      "why": "曾作为基准，2026-08-27 撤下。太小（14 屏、无表单校验、无真实后端），做不出可比结果；且第三方托管、我们冻结不了它，站点改版会让历史数字失去意义。它在这个项目里的价值已经兑现——探索循环的九个 bug 全是在它上面撞出来的。"
+    }
+  ]
+}

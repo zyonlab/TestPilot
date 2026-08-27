@@ -11,7 +11,15 @@ import { z } from "zod";
 export interface CapabilityRecipe {
   id: string;
   /** What it is, for the UI: a chain, the model proxy, a mock service, a device bridge. */
-  kind: "chain" | "model" | "mock" | "device" | "other";
+  /**
+   * 这个能力是什么。
+   *
+   * `app` 是**被测对象**——基准应用跑在这里。它和其余几种的性质不同（其余是 harness
+   * 自己要用的东西），但形态一样：声明式配方、健康探针、受监工托管、可起停。
+   * 分开一个 kind 而不是塞进 `other`，是因为「哪些进程是被测对象」是界面和报告要
+   * 区分的一件事——把被测应用和模型代理并排显示成同一类，读的人会以为它们同样属于工具链。
+   */
+  kind: "chain" | "model" | "mock" | "device" | "app" | "other";
   description?: string;
   command: string;
   args?: string[];
@@ -86,7 +94,7 @@ export const CapabilityRecipeSchema = z.object({
     .min(1)
     // Ids become process ids and appear in event scopes; keep them boring.
     .regex(/^[a-z0-9][a-z0-9-]*$/, "an id is lowercase letters, digits and dashes"),
-  kind: z.enum(["chain", "model", "mock", "device", "other"]),
+  kind: z.enum(["chain", "model", "mock", "device", "app", "other"]),
   description: z.string().optional(),
   command: z
     .string()
