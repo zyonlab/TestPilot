@@ -1,0 +1,95 @@
+{
+  "id": "juiceshop-20.2.0",
+  "app": "juice-shop-20.2.0_node22_darwin_arm64（GitHub 发行版，本机 node 直跑）",
+  "note": "人工编写的黄金清单，对应 OWASP Juice Shop。它由人写、不由模型生成——Coverage 这个数的全部意义来自这一点。标 heldOut 的条目从不参与任何调参，只在评测时使用。 每一条行为都是**在真实浏览器里**（Playwright + Accept-Language: en）实测出来的，不是凭对 Juice Shop 的印象写的：校验消息、空结果提示、弹窗里的字，都抄自屏幕上真实渲染出来的文本。这一点在 PetClinic 上买过教训——用 curl 探出来的英文和浏览器实际收到的中文对不上，清单里因此内建了一个必然漏判。 匹配是确定性关键词规则，可复现，代价是措辞差异会漏判——所以这个数是**下界**。关键词双语：被测应用界面是英文、用例是中文，产出可能落在任一侧。",
+  "bias": "清单作者读过运行中的应用，所以它量的是「harness 能不能把这个产品拆成用例」，不量「能不能补上没人告诉过它的东西」。与 PetClinic 那份同一个偏差，同一个应对：写清楚，不假装没有。 另有一层：探索循环的四个修复（哈希路由、角标归一、文案去重、结构同类去重）都是对着这个应用调出来的。所以 juiceshop 这一份**不是干净的留出应用**——它现在的角色是「第二种形状」（单页应用 vs 服务端渲染），不是「没调过的新应用」。要真正的跨应用外推，还需要第三个。",
+  "whyNoCaptcha": "`/#/contact` 上有一道算术 CAPTCHA。清单里只留「联系页展示了哪些字段」，**不含任何提交**——绕过或求解验证码不在这条流水线该做的事情里，也不该被写成一条要求 harness 达成的指标。",
+  "items": [
+    {
+      "id": "J-01", "story": "商品浏览", "title": "首页列出全部商品，含名称与价格",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["首页", "商品列表", "全部商品", "all products", "landing"],
+                 "assertAnyOf": ["Apple Juice", "All Products", "1.99", "¤"] }
+    },
+    {
+      "id": "J-02", "story": "搜索", "title": "按关键词搜索命中匹配商品",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["搜索", "search", "关键词", "查找商品"],
+                 "assertAnyOf": ["Search Results", "搜索结果", "Apple Juice"] }
+    },
+    {
+      "id": "J-03", "story": "搜索", "title": "搜索无匹配时提示 No results found",
+      "designMethod": "negative", "expectTier": 1, "heldOut": true,
+      "match": { "anyOf": ["不存在", "无匹配", "没有结果", "no result", "查不到", "找不到"],
+                 "assertAnyOf": ["No results found", "没有找到", "无结果"] }
+    },
+    {
+      "id": "J-04", "story": "商品详情", "title": "点商品卡片打开详情弹窗，含描述、价格与评价数",
+      "designMethod": "state-transition", "expectTier": 1, "heldOut": true,
+      "match": { "anyOf": ["商品详情", "详情弹窗", "product detail", "卡片", "点击商品"],
+                 "assertAnyOf": ["Reviews", "评价", "Close", "The all-time classic"] }
+    },
+    {
+      "id": "J-05", "story": "购物车", "title": "加入购物车后导航栏角标数字增加",
+      "designMethod": "state-transition", "expectTier": 2,
+      "match": { "anyOf": ["加入购物车", "add to basket", "add to cart", "角标", "购物车数量"],
+                 "assertAnyOf": ["Your Basket", "购物车", "1"] }
+    },
+    {
+      "id": "J-06", "story": "购物车", "title": "购物车页显示总价与结算入口",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["购物车页", "basket", "查看购物车", "结算"],
+                 "assertAnyOf": ["Total Price", "Checkout", "总价", "结算"] }
+    },
+    {
+      "id": "J-07", "story": "登录", "title": "登录页提供邮箱、密码与登录按钮",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["登录页", "login", "登录表单"],
+                 "assertAnyOf": ["Log in", "Email", "Password", "登录"] }
+    },
+    {
+      "id": "J-08", "story": "登录", "title": "邮箱留空时提示 Please provide an email address",
+      "designMethod": "negative", "expectTier": 1,
+      "match": { "anyOf": ["邮箱为空", "留空", "不填", "empty", "为空", "必填"],
+                 "assertAnyOf": ["Please provide an email address", "提供邮箱", "邮箱地址"] }
+    },
+    {
+      "id": "J-09", "story": "登录", "title": "凭证错误时提示 Invalid email or password",
+      "designMethod": "negative", "expectTier": 1, "heldOut": true,
+      "match": { "anyOf": ["错误凭证", "错误密码", "invalid", "wrong password", "登录失败", "不正确"],
+                 "assertAnyOf": ["Invalid email or password", "邮箱或密码", "登录失败"] }
+    },
+    {
+      "id": "J-10", "story": "注册", "title": "注册页含邮箱、密码、重复密码与安全问题",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["注册页", "register", "注册表单", "新用户"],
+                 "assertAnyOf": ["User Registration", "Security Question", "Repeat Password", "注册"] }
+    },
+    {
+      "id": "J-11", "story": "注册", "title": "密码过短时提示 Password must be 5-40 characters long",
+      "designMethod": "boundary", "expectTier": 1, "heldOut": true,
+      "match": { "anyOf": ["密码过短", "密码长度", "太短", "short", "5-40", "长度"],
+                 "assertAnyOf": ["Password must be 5-40 characters long", "5-40", "长度"] }
+    },
+    {
+      "id": "J-12", "story": "联系", "title": "联系页展示作者、评论、评分与验证码字段（不提交）",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["联系", "反馈", "contact", "feedback", "客户反馈"],
+                 "assertAnyOf": ["Customer Feedback", "Comment", "Rating", "反馈"] }
+    },
+    {
+      "id": "J-13", "story": "关于", "title": "关于页展示公司历史与政策",
+      "designMethod": "equivalence", "expectTier": 1,
+      "match": { "anyOf": ["关于", "about", "公司", "简介"],
+                 "assertAnyOf": ["About Us", "Corporate History", "关于我们"] }
+    },
+    {
+      "id": "J-14", "story": "导航", "title": "语言切换器可选择界面语言",
+      "designMethod": "state-transition", "expectTier": 1, "heldOut": true,
+      "match": { "anyOf": ["语言", "language", "切换语言", "多语言"],
+                 "assertAnyOf": ["EN", "English", "语言"] }
+    }
+  ],
+  "measuredAt": "2026-08-28",
+  "measuredHow": "Playwright（chromium-1208）实测，Accept-Language: en，逐条访问路由并填表单触发校验；原始输出见提交说明。"
+}

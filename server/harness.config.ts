@@ -96,10 +96,15 @@ export default defineHarnessConfig({
       description:
         "OWASP Juice Shop（Angular SPA）：登录、注册、搜索、购物篮、结账、带校验的投诉表单。" +
         "不在那套公开基准里，所以没有可对照的基线——它补的是**界面形态的覆盖面**",
-      command: "docker",
-      args: ["run", "--name", "tp-bench-juiceshop", "-p", "8081:3000", "bkimminich/juice-shop:v20.2.0"],
+      // 不走 docker：Docker Hub 的 blob CDN 在这台机器上反复超时（四次都在最后几层断），
+      // 而 GitHub 发行版通、本机 node 正好是 v22.17.0 arm64、发行版正好有
+      // node22_darwin_arm64——原生直跑，还省掉一层 amd64 模拟。md5 校验过。
+      command: "node",
+      args: ["build/app.js"],
+      cwd: "/Users/admin/bench/juice-shop_20.2.0",
+      env: { PORT: "8084" },
       autostart: false,
-      healthcheck: { kind: "http", url: "http://localhost:8081/" },
+      healthcheck: { kind: "http", url: "http://localhost:8084/" },
     },
     {
       id: "bench-pagekit",
