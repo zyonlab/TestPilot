@@ -15,6 +15,7 @@ const edge = (from: string, to: string | undefined, target: string, ok = true) =
   ...(to ? { to } : {}),
   action: { kind: "click" as const, target, selector: "" },
   ok,
+  walked: true,
 });
 
 /** 一张缩小版的 SauceDemo：登录 → 列表 →（详情｜购物车 → 结账）。 */
@@ -30,7 +31,7 @@ const shop: StateFlowGraph = {
     { id: "/checkout-step-one.html", route: "/checkout-step-one.html", title: "结账", controls: [] },
   ],
   transitions: [
-    { from: "/", to: "/inventory.html", action: { kind: "login", target: "登录表单", selector: "" }, ok: true },
+    { from: "/", to: "/inventory.html", action: { kind: "login", target: "登录表单", selector: "" }, ok: true, walked: true },
     edge("/inventory.html", "/inventory-item.html", "商品名"),
     edge("/inventory.html", "/cart.html", "购物车"),
     edge("/cart.html", "/checkout-step-one.html", "Checkout"),

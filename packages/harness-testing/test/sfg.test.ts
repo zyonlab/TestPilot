@@ -48,8 +48,8 @@ describe("the graph handed downstream", () => {
       { id: "/cart.html", route: "/cart.html", title: "Your Cart", controls: ["Checkout"] },
     ],
     transitions: [
-      { from: "/", to: "/cart.html", action: { kind: "click", target: "购物车", selector: '[data-test="cart"]' }, ok: true },
-      { from: "/cart.html", action: { kind: "click", target: "Checkout", selector: "#co" }, ok: false, note: "点不动" },
+      { from: "/", to: "/cart.html", action: { kind: "click", target: "购物车", selector: '[data-test="cart"]' }, ok: true, walked: true },
+      { from: "/cart.html", action: { kind: "click", target: "Checkout", selector: "#co" }, ok: false, walked: true, note: "点不动" },
     ],
   };
 
@@ -82,8 +82,8 @@ describe("revisiting a known state vs not moving at all", () => {
       stoppedBecause: "",
       states: [],
       transitions: [
-        { from: "/cart.html", to: "/inventory.html", action: { kind: "click", target: "Continue Shopping", selector: "" }, ok: true, note: "回到已知状态" },
-        { from: "/cart.html", to: "/cart.html", action: { kind: "click", target: "购物车", selector: "" }, ok: true, note: "状态未变" },
+        { from: "/cart.html", to: "/inventory.html", action: { kind: "click", target: "Continue Shopping", selector: "" }, ok: true, walked: true, note: "回到已知状态" },
+        { from: "/cart.html", to: "/cart.html", action: { kind: "click", target: "购物车", selector: "" }, ok: true, walked: true, note: "状态未变" },
       ],
     };
     const text = describeGraph(g);
@@ -112,5 +112,41 @@ describe("addresses that are not screens", () => {
   it("不误伤正常页面", () => {
     for (const p of ["/owners/1/edit", "/vets", "/owners/find", "/inventory.html", "/checkout-step-one.html"])
       expect(NOT_A_SCREEN.test(p)).toBe(false);
+  });
+});
+
+/**
+ * 走过的边与只看见的边，图里要分得开。
+ *
+ * 探索按地址全局记「去过没去过」，所以一个页面只会被从某一处进入一次——图里因此只留下
+ * 遍历实际走的那条边，**退化成一棵生成树**。PetClinic 每页都有全局导航栏，最短路径在
+ * 生成树上算出来还是遍历顺序：「访问错误演示页：/owners/find → /vets → /oups」。
+ *
+ * 所以每一屏上看得见的链接都补成边。但要标出来：**确认了链接存在，没有确认它真的跳到
+ * 那里**。两者混作一谈，图就在声称一些没验证过的事。
+ */
+describe("edges we walked vs edges we only saw", () => {
+  const g: StateFlowGraph = {
+    abstraction: "route+controls",
+    entry: "/",
+    stoppedBecause: "",
+    states: [
+      { id: "/", route: "/", title: "首页", controls: [] },
+      { id: "/vets", route: "/vets", title: "兽医", controls: [] },
+    ],
+    transitions: [
+      { from: "/", to: "/vets", action: { kind: "goto", target: "/vets", selector: "" }, ok: true, walked: true },
+      { from: "/vets", to: "/", action: { kind: "goto", target: "/", selector: "" }, ok: true, walked: false },
+    ],
+  };
+
+  it("只看见的边在摘要里标出来", () => {
+    const text = describeGraph(g);
+    expect(text).toContain("（未走过·仅见链接）");
+  });
+
+  it("走过的边不带那个标记", () => {
+    const walked = describeGraph(g).split("\n").find((l) => l.includes("/ --[") && l.includes("/vets"))!;
+    expect(walked).not.toContain("未走过");
   });
 });

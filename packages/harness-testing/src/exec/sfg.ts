@@ -40,6 +40,17 @@ export const SfgTransitionSchema = z.object({
   ok: z.boolean(),
   /** 没走通的原因，或走通了但没换状态。 */
   note: z.string().optional(),
+  /**
+   * 这条边是**走过**的，还是只是**看见**的。
+   *
+   * 探索按地址全局记「去过没去过」，所以一个页面只会被从某一处进入一次——图里因此只留下
+   * 遍历实际走的那条边，退化成一棵生成树。而 PetClinic 每页都有全局导航栏：那些没被走过的
+   * 链接是真实存在的导航选项，丢掉它们，最短路径算出来的就还是遍历顺序。
+   *
+   * 看见的边照记，但标出来：**我们确认了这个链接存在，没有确认它真的跳到那里**。
+   * 两者混作一谈，图就在声称一些没验证过的事。
+   */
+  walked: z.boolean().default(true),
 });
 export type SfgTransition = z.infer<typeof SfgTransitionSchema>;
 
@@ -124,8 +135,9 @@ export function describeGraph(g: StateFlowGraph): string {
           : t.action.kind === "login"
             ? "登录"
             : `点「${t.action.target}」`;
+      const mark = t.walked === false ? "（未走过·仅见链接）" : "";
       return t.ok && t.to
-        ? `- ${t.from} --[${how}]--> ${t.to}`
+        ? `- ${t.from} --[${how}]${mark}--> ${t.to}`
         : `- ${t.from} --[${how}]--> ✗ ${t.note ?? "没走通"}`;
     }),
   ];

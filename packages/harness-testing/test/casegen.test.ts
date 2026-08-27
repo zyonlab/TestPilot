@@ -349,7 +349,7 @@ describe("the specification's altitudes", () => {
         { id: "/home", route: "/home", title: "首页", controls: [] },
       ],
       transitions: [
-        { from: "/", to: "/home", action: { kind: "login" as const, target: "登录表单", selector: "" }, ok: true },
+        { from: "/", to: "/home", action: { kind: "login" as const, target: "登录表单", selector: "" }, ok: true, walked: true },
       ],
     },
   };

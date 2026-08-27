@@ -353,6 +353,25 @@ export async function runObserve(
      */
     const NOT_A_SCREEN = /\.(json|xml|csv|pdf|zip|png|jpe?g|gif|svg|ico|txt|rss|atom)(\?|$)/i;
 
+    /**
+     * 每一屏上看得见的同源链接。
+     *
+     * 探索按地址全局记「去过没去过」，所以一个页面只会被从某一处进入一次——图里因此只留下
+     * 遍历实际走的那条边，**退化成一棵生成树**。PetClinic 每页都有全局导航栏，最短路径
+     * 在生成树上算出来还是遍历顺序：「访问错误演示页：/owners/find → /vets → /oups」。
+     *
+     * 这里把每一屏上的链接都记下来，最后补成边。零额外导航——信息本来就在快照里。
+     */
+    const linksSeen = new Map<string, Set<string>>();
+    const noteLinks = (screen: { url: string; elements: Control[] }, id: string): void => {
+      const here = pathOf(screen.url);
+      const set = linksSeen.get(id) ?? new Set<string>();
+      for (const c of screen.elements)
+        if (c.href && c.href !== here && !c.external && !NOT_A_SCREEN.test(c.href) && !OFF_LIMITS.test(c.display))
+          set.add(c.href);
+      linksSeen.set(id, set);
+    };
+
     const first = await snapshot("入口页");
     const screens: string[] = [first.text];
     const seen = new Set([signatureOf(first)]);
@@ -570,6 +589,7 @@ export async function runObserve(
                 ? { kind: "login", target: "登录表单", selector: "", input: "${env.*} / ${secret.*}" }
                 : { kind: "click", target: next.label, selector: next.selector },
           ok: true,
+          walked: true,
           /**
            * 「回到已知状态」和「状态没变」是两件事，标错了下游会以为什么都没发生。
            *
@@ -592,6 +612,7 @@ export async function runObserve(
           continue;
         }
         seen.add(sig);
+        noteLinks(after, toId);
         triedGoto.add(pathOf(after.url));
         visited.push(after.url);
         screens.push(after.text);
@@ -616,6 +637,7 @@ export async function runObserve(
                 ? { kind: "login", target: "登录表单", selector: "" }
                 : { kind: "click", target: next.label, selector: next.selector },
           ok: false,
+          walked: true,
           note: why,
         });
         consecutiveFailures += 1;
@@ -639,6 +661,32 @@ export async function runObserve(
      * 后半句是这份材料唯一能自证薄不薄的地方：`spec.compose` 被要求把材料没说的记进
      * 「没有答案的地方」，而它只有在材料自己说了「这里我没看到」的时候才做得到。
      */
+    /**
+     * 把「看见但没走过」的链接补成边。
+     *
+     * 只在目标路由确实是我们到过的某个状态时才补——补一条指向未知地方的边，等于凭空
+     * 声称那里有一屏。标 `walked: false`：**确认了链接存在，没有确认它真的跳到那里**。
+     */
+    const byRoute = new Map<string, string>();
+    for (const st of sfgStates) if (!byRoute.has(st.route)) byRoute.set(st.route, st.id);
+    const already = new Set(sfgEdges.map((e) => `${e.from}->${e.to ?? ""}`));
+    let inferred = 0;
+    for (const [from, hrefs] of linksSeen)
+      for (const href of hrefs) {
+        const to = byRoute.get(href.split("?")[0]);
+        if (!to || to === from || already.has(`${from}->${to}`)) continue;
+        already.add(`${from}->${to}`);
+        inferred += 1;
+        sfgEdges.push({
+          from,
+          to,
+          action: { kind: "goto", target: href, selector: "" },
+          ok: true,
+          walked: false,
+        });
+      }
+    if (inferred) note(`补上 ${inferred} 条看见但没走过的链接`);
+
     const graph: StateFlowGraph = {
       abstraction: spec.stateAbstraction ?? "route+controls",
       entry: sfgStates[0]?.id ?? "",
