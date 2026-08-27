@@ -12,6 +12,8 @@ import {
   methodMix,
   parseAblation,
   scoreCoverage,
+  scoreStructural,
+  type StructuralModel,
   adjudicateMisses,
   digestDiff,
   type TextDigest,
@@ -251,6 +253,18 @@ export async function scoreRun(req: {
 
   const coverage = scoreCoverage(gold, cases);
 
+  /**
+   * 结构覆盖率：分母来自产品本身，不是来自人写的清单。
+   *
+   * 语义覆盖问「测的是不是该测的东西」，它永远回答不了「够不够」——清单有多全没人说得清。
+   * 转移图给的分母是走出来的。两个数并排，谁也不取代谁；再加上缺陷检出，才是三维。
+   * 只有探索来的材料才有图，文档来的没有——所以它是可选项，不是必填。
+   */
+  const material = outputs["explore"] as { graph?: StructuralModel } | undefined;
+  const structural = material?.graph
+    ? scoreStructural(material.graph, cases.map((c) => ({ id: c.id, title: c.title, covers: (c as { covers?: string[] }).covers })))
+    : undefined;
+
   // The keyword rules are a lower bound by construction: a case that checks the right thing
   // in words the checklist did not anticipate reads as a miss. Asking the model about the
   // misses says which of them are real gaps — a second number, deliberately not the main
@@ -265,6 +279,7 @@ export async function scoreRun(req: {
     gold: path,
     nodeId,
     coverage: coverage.coverage,
+    structural,
     heldOut: coverage.heldOut,
     cases: cases.length,
     hits: coverage.hits.map((h) => h.goldId),

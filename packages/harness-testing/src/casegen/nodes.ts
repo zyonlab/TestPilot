@@ -279,7 +279,13 @@ export function composeSpecNode(
     outKind: KIND.spec,
     params: z.object({
       lang: z.string().optional(),
-      maxTokens: z.number().int().min(600).max(16000).default(3000),
+      /**
+       * 6000 而不是 3000：加上 `flows`、`altitude`、`about` 之后，同一份材料的规格输出
+       * 大了一截，3000 会把回复腰斩——而被腰斩的回复解析出来是「JSON 格式错误」，
+       * 看起来像提示词的问题，其实是预算的问题。截断本身有专门的报错说这件事，
+       * 但更好的做法是不要撞上它。
+       */
+      maxTokens: z.number().int().min(600).max(16000).default(6000),
       maxRules: z.number().int().min(1).max(200).default(60),
     }),
     input: SpecMaterialSchema,
