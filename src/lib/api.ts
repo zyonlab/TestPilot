@@ -2,6 +2,7 @@ import type {
   ApiLoginConfig,
   ModelConfig,
   Project,
+  TargetPlatform,
   TestCase,
   RunRecord,
   Environment,
@@ -13,8 +14,9 @@ import type {
 } from "./types";
 
 import { usePrefs } from "./prefs";
+import { API_BASE } from "./base";
 
-const BASE = "http://localhost:5301";
+const BASE = API_BASE;
 
 // The current UI language, read outside React — attached to AI requests so the backend
 // can force the model's output language to match (when the global toggle is on).
@@ -169,23 +171,16 @@ export const api = {
       failureReason?: string;
     }>("/api/run", payload),
 
-  explore: (url: string) =>
-    post<{
-      flows: Array<{
-        title: string;
-        priority: "P0" | "P1" | "P2";
-        reason: string;
-        steps: string[];
-      }>;
-    }>("/api/explore", { url }),
 
   generateCode: (payload: { title: string; steps: string[]; expected: string }) =>
     post<{ code: string }>("/api/generate-code", payload, 30000),
 
   // ---- persistence (backend is the source of truth) ----
   getProjects: () => get<{ projects: Project[] }>("/api/projects"),
-  createProject: (name: string, targetUrl: string) =>
-    post<{ project: Project }>("/api/projects", { name, targetUrl }, 8000),
+  createProject: (name: string, targetUrl: string, targetPlatform: TargetPlatform = "web") =>
+    post<{ project: Project }>("/api/projects", { name, targetUrl, targetPlatform }, 8000),
+  updateProject: (id: string, body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>) =>
+    patch<{ project: Project }>(`/api/projects/${id}`, body),
   deleteProject: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
   getCases: (projectId?: string) =>
     get<{ cases: TestCase[] }>(`/api/cases${projectId ? `?projectId=${projectId}` : ""}`),
@@ -221,12 +216,6 @@ export const api = {
     id: string,
     opts: { url?: string; provider?: string; wallet?: boolean; rpcUrl?: string; chainId?: number } = {},
   ) => post<{ case: TestCase; run: RunRecord }>(`/api/cases/${id}/run`, opts, 600000),
-  exploreProject: (projectId: string, url?: string, deep?: boolean) =>
-    post<{ created: TestCase[]; count: number; log?: string[]; screenshot?: string }>(
-      `/api/projects/${projectId}/explore`,
-      { url, deep, lang: uiLang() },
-      600000,
-    ),
 
   // ---- environments (per project) ----
   getEnvironments: (projectId: string) =>

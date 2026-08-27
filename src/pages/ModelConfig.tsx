@@ -261,24 +261,9 @@ export function ModelConfigPage() {
             </pre>
           </div>
 
-          <div className="pt-2">
-            <h2 className="font-display text-base font-medium text-foreground">
-              {t("model.envsSecrets")}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("model.envsSecretsHelp")}
-            </p>
-          </div>
-
-          <EnvironmentsCard />
-          <SecretsCard />
-
-          <div className="pt-2">
-            <h2 className="font-display text-base font-medium text-foreground">
-              {t("model.aiSection")}
-            </h2>
-          </div>
-          <DebugPromptsCards />
+          {/* 环境、密钥、提示词模板与偏好过去都长在这一页里。它们和模型端点没有关系——
+              环境属于项目，提示词属于 harness，语言属于这个人——所以现在各自是「设置」下
+              的一节，由 Settings.tsx 组合。这一页只剩下它名字所说的那件事。 */}
         </div>
       </div>
     </>
@@ -288,7 +273,7 @@ export function ModelConfigPage() {
 // Global LLM-debug toggle + prompt-template editors. Both read/write the backend's
 // app settings (/api/settings); the debug card also lists the most recent capture
 // files (/api/llm-debug) when logging is on. Degrades gracefully when offline.
-function DebugPromptsCards() {
+export function DebugPromptsCards({ show = "all" }: { show?: "all" | "prompts" | "prefs" }) {
   const t = useT();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [defaults, setDefaults] = useState<PromptTemplates | null>(null);
@@ -334,19 +319,26 @@ function DebugPromptsCards() {
     );
   }
 
+  // Which of these cards is on screen is the caller's decision: "语言与调试" is a personal
+  // preference and "提示词模板" changes what every future run is told — filed together only
+  // because they happened to share one fetch. The fetch is still shared; the page is not.
+  const prefs = show === "all" || show === "prefs";
+  const tpl = show === "all" || show === "prompts";
   return (
     <>
-      <LanguageCard settings={settings} setSettings={setSettings} />
-      <DebugCard settings={settings} setSettings={setSettings} />
-      <PromptsCard
-        defaults={defaults}
-        prompts={prompts}
-        setPrompts={setPrompts}
-        onReset={(next) => {
-          setPrompts(next.prompts);
-          setSettings(next);
-        }}
-      />
+      {prefs && <LanguageCard settings={settings} setSettings={setSettings} />}
+      {prefs && <DebugCard settings={settings} setSettings={setSettings} />}
+      {tpl && (
+        <PromptsCard
+          defaults={defaults}
+          prompts={prompts}
+          setPrompts={setPrompts}
+          onReset={(next) => {
+            setPrompts(next.prompts);
+            setSettings(next);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -868,7 +860,7 @@ function formFromEnv(env: Environment) {
 }
 
 // Per-project environments: base URL, non-secret vars, optional login flow, default toggle.
-function EnvironmentsCard() {
+export function EnvironmentsCard() {
   const t = useT();
   const projectId = useStore((s) => s.activeProjectId);
   const [envs, setEnvs] = useState<Environment[]>([]);
@@ -1504,7 +1496,7 @@ function EnvironmentsCard() {
 
 // Per-project secrets. Values are write-only: the backend never returns them,
 // so we only ever list keys + updatedAt.
-function SecretsCard() {
+export function SecretsCard() {
   const t = useT();
   const projectId = useStore((s) => s.activeProjectId);
   const [secrets, setSecrets] = useState<SecretMeta[]>([]);

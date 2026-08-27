@@ -1,24 +1,18 @@
 import { create } from "zustand";
 import type {
   ConnectionState,
-  ExploreLog,
   Flakiness,
   ModelConfig,
   Priority,
   Project,
   RunRecord,
+  TargetPlatform,
   TestCase,
 } from "./types";
 import { api } from "./api";
-import { usePrefs } from "./prefs";
 
-const API_BASE = "http://localhost:5301";
-// The live-explore SSE connection (module-scoped so stopExplore can close it).
-let exploreES: EventSource | null = null;
 
-let idSeq = 100;
-const nextId = () => `x-${++idSeq}`;
-const clock = () => new Date().toLocaleTimeString("en-GB", { hour12: false });
+
 
 interface StoreState {
   cases: TestCase[];
@@ -30,11 +24,6 @@ interface StoreState {
   model: ModelConfig;
   connection: ConnectionState;
   connectionDetail: string;
-  exploring: boolean;
-  exploreLogs: ExploreLog[];
-  exploreUrl: string;
-  exploreDeep: boolean;
-  exploreWeb3: boolean;
   exploreScreenshot: string;
   exploreLastCount: number;
   flakiness: Flakiness[];
@@ -42,20 +31,17 @@ interface StoreState {
   loadData: () => Promise<void>;
   loadFlakiness: () => Promise<void>;
   setQuarantine: (id: string, quarantined: boolean) => Promise<void>;
-  setExploreDeep: (v: boolean) => void;
-  setExploreWeb3: (v: boolean) => void;
   selectProject: (id: string) => Promise<void>;
   exitProject: () => void;
-  createProject: (name: string, targetUrl: string) => Promise<void>;
+  createProject: (name: string, targetUrl: string, targetPlatform?: TargetPlatform) => Promise<void>;
+  /** Rename / re-point / switch ends. */
+  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>) => Promise<void>;
   select: (id: string) => void;
   patchCase: (id: string, patch: Partial<TestCase>) => Promise<void>;
   setPriority: (id: string, p: Priority) => Promise<void>;
   generateCode: (id: string) => Promise<void>;
   runCase: (id: string) => Promise<void>;
   runAllP0: () => void;
-  setExploreUrl: (url: string) => void;
-  startExplore: () => Promise<void>;
-  stopExplore: () => void;
   setModel: (patch: Partial<ModelConfig>) => void;
   testConnection: () => Promise<void>;
 }
@@ -68,21 +54,16 @@ export const useStore = create<StoreState>((set, get) => ({
   activeProjectId: "",
   backendUp: false,
   model: {
-    // The no-think proxy (:8010), not the raw model (:8000). The proxy injects
-    // enable_thinking:false so vision requests return fast/clean — the raw endpoint
-    // runs in thinking mode and times out the connection probe. Matches server/.env.
-    baseUrl: "http://127.0.0.1:8010/v1",
+    // The model endpoint itself. The no-think proxy (:8010) is a capability you can start
+    // from the Processes page when you want prompts/responses captured for tuning; it is
+    // not on the default path. Matches server/.env.
+    baseUrl: "http://127.0.0.1:8000/v1",
     apiKey: "1234",
-    modelName: "Qwen3.6-35B-A3B-4bit",
+    modelName: "Qwen3.8-27B-4bit",
     modelFamily: "qwen-vl",
   },
   connection: "idle",
   connectionDetail: "",
-  exploring: false,
-  exploreLogs: [],
-  exploreUrl: "",
-  exploreDeep: false,
-  exploreWeb3: false,
   exploreScreenshot: "",
   exploreLastCount: 0,
   flakiness: [],
@@ -104,10 +85,8 @@ export const useStore = create<StoreState>((set, get) => ({
           runs: [],
           flakiness: [],
           selectedId: "",
-          exploreUrl: "",
           exploreLastCount: 0,
           exploreScreenshot: "",
-          exploreLogs: [],
         });
         return;
       }
@@ -161,7 +140,6 @@ export const useStore = create<StoreState>((set, get) => ({
         activeProjectId: id,
         cases,
         runs, // project-scoped: Runs page now follows the active project
-        exploreUrl: proj.targetUrl,
         selectedId: cases[0]?.id ?? "",
       });
       void get().loadFlakiness();
@@ -178,16 +156,27 @@ export const useStore = create<StoreState>((set, get) => ({
       runs: [],
       flakiness: [],
       selectedId: "",
-      exploreUrl: "",
     }),
 
-  createProject: async (name, targetUrl) => {
+  createProject: async (name, targetUrl, targetPlatform = "web") => {
     try {
-      const { project } = await api.createProject(name, targetUrl);
+      const { project } = await api.createProject(name, targetUrl, targetPlatform);
       set((s) => ({ projects: [...s.projects, project] }));
       await get().selectProject(project.id);
     } catch {
       /* backend offline */
+    }
+  },
+
+  updateProject: async (id, patch) => {
+    // Optimistic, then reconciled: the end switch changes what the rest of the UI offers,
+    // and a dropdown that snaps back while a request is in flight reads as a rejection.
+    set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+    try {
+      const { project } = await api.updateProject(id, patch);
+      set((s) => ({ projects: s.projects.map((p) => (p.id === id ? project : p)) }));
+    } catch {
+      await get().loadData();
     }
   },
 
@@ -246,89 +235,12 @@ export const useStore = create<StoreState>((set, get) => ({
     p0.forEach((c, i) => window.setTimeout(() => void get().runCase(c.id), i * 300));
   },
 
-  setExploreUrl: (url) => set({ exploreUrl: url }),
-  setExploreDeep: (v) => set({ exploreDeep: v }),
-  setExploreWeb3: (v) => set({ exploreWeb3: v }),
 
-  startExplore: async () => {
-    if (get().exploring) return;
-    const url = get().exploreUrl;
-    const pid = get().activeProjectId;
-    const pushLog = (message: string, kind: ExploreLog["kind"]) =>
-      set((s) => ({ exploreLogs: [...s.exploreLogs, { id: nextId(), ts: clock(), message, kind }] }));
-
-    if (!get().backendUp || !pid) {
-      pushLog(pid ? "Backend offline — cannot explore" : "Enter a project first", "warn");
-      return;
-    }
-
-    set({ exploring: true, exploreLogs: [], exploreScreenshot: "", exploreLastCount: 0 });
-    const deep = get().exploreDeep;
-    const web3 = get().exploreWeb3;
-    pushLog(
-      `Exploring ${url} with Midscene${deep ? " (deep crawl)" : ""}${web3 ? " (dapp mode)" : ""}…`,
-      "info",
-    );
-
-    const qs = new URLSearchParams({
-      url,
-      deep: deep ? "1" : "0",
-      web3: web3 ? "1" : "0",
-      lang: usePrefs.getState().lang,
-    }).toString();
-    const es = new EventSource(`${API_BASE}/api/projects/${pid}/explore/stream?${qs}`);
-    exploreES = es;
-    const finish = () => {
-      es.close();
-      if (exploreES === es) exploreES = null;
-      set({ exploring: false });
-    };
-
-    es.onmessage = (e) => {
-      let ev: Record<string, unknown>;
-      try {
-        ev = JSON.parse(e.data);
-      } catch {
-        return;
-      }
-      switch (ev.type) {
-        case "navigated":
-          if (ev.screenshot) set({ exploreScreenshot: ev.screenshot as string });
-          break;
-        case "log":
-          pushLog(ev.message as string, (ev.kind as ExploreLog["kind"]) || "info");
-          break;
-        case "flow": {
-          const c = ev.case as TestCase;
-          set((s) => ({ cases: [...s.cases, c] }));
-          pushLog(`Found flow: ${c.title} → ${c.priority}`, "found");
-          break;
-        }
-        case "done":
-          if (ev.screenshot) set({ exploreScreenshot: ev.screenshot as string });
-          if (!(ev.count as number)) pushLog("No new flows returned by the model", "warn");
-          set({ exploreLastCount: (ev.count as number) || 0 });
-          pushLog("Exploration complete", "info");
-          finish();
-          break;
-        case "error":
-          pushLog(`Explore failed: ${ev.message as string}`, "warn");
-          finish();
-          break;
-      }
-    };
-    // A terminal close also fires onerror; only surface it if we're still exploring.
-    es.onerror = () => {
-      if (get().exploring) pushLog("Exploration stream ended / connection lost", "warn");
-      finish();
-    };
-  },
-
-  stopExplore: () => {
-    exploreES?.close();
-    exploreES = null;
-    set({ exploring: false });
-  },
+  /*
+   * 「探索直接产用例」已经下掉（2026-08-21）：观察现在是**材料**，和用户文档一样先经
+   * `spec.compose` 整理成标准规格，再推出故事与用例。观察本身仍然做，在画布上的
+   * `source.explore` 节点里。
+   */
 
   setModel: (patch) =>
     set((s) => ({ model: { ...s.model, ...patch }, connection: "idle", connectionDetail: "" })),

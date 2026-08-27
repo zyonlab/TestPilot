@@ -134,8 +134,11 @@ export function Button({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "outline" | "primary" | "success";
 }) {
+  // A disabled button drops its fill rather than merely fading: a half-transparent blue
+  // still reads as "the thing to press", both to a person glancing at it and — as the
+  // self-test demonstrated — to a model looking at a screenshot of it.
   const base =
-    "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+    "inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:hover:bg-muted";
   const variants = {
     outline: "border border-border hover:bg-muted",
     primary: "bg-primary text-primary-foreground hover:opacity-90",

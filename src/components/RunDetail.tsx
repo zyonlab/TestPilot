@@ -15,8 +15,9 @@ import { PriorityBadge, RunStatusPill } from "@/components/ui";
 import { useT } from "@/lib/prefs";
 import { cn } from "@/lib/cn";
 import type { RunRecord, VisualDiff } from "@/lib/types";
+import { API_BASE } from "@/lib/base";
 
-const API = "http://localhost:5301";
+const API = API_BASE;
 
 export function fmtDuration(ms: number): string {
   return (Math.round(ms / 100) / 10).toFixed(1) + "s";
@@ -61,7 +62,14 @@ function OracleSection({ run }: { run: RunRecord }) {
             )}
             <span>
               {o.assertion}
-              {o.status === "fail" && o.detail ? ` — ${o.detail}` : ""}
+              {o.detail ? ` — ${o.detail}` : ""}
+              {/* "Passed" means two different things depending on who decided, and a
+                  report that hides which one cannot be argued with. */}
+              {o.decidedBy && (
+                <span className="ml-1.5 rounded bg-black/5 px-1 py-0.5 font-mono text-[10px] dark:bg-white/10">
+                  {t(`runs.decidedBy.${o.decidedBy}`)}
+                </span>
+              )}
             </span>
           </div>
         ))}
@@ -289,9 +297,26 @@ export function RunDetail({ run }: { run: RunRecord }) {
       <VisualSection run={run} />
 
       {run.failureReason && (
-        <div className="mt-3 flex items-start gap-1.5 rounded-md bg-red-50 p-2.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
+        // An infra failure is coloured differently on purpose: it means "no verdict", not
+        // "the product is broken", and treating the two alike is how a report loses trust.
+        <div
+          className={cn(
+            "mt-3 flex items-start gap-1.5 rounded-md p-2.5 text-xs",
+            run.failKind === "infra"
+              ? "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+              : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+          )}
+        >
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{run.failureReason}</span>
+          <span>
+            {run.failKind && (
+              <span className="mr-1.5 rounded bg-black/5 px-1 py-0.5 font-mono text-[10px] dark:bg-white/10">
+                {run.failCode ?? run.failKind}
+              </span>
+            )}
+            {run.failKind === "infra" && <span className="mr-1">{t("runs.infraFailure")}</span>}
+            {run.failureReason}
+          </span>
         </div>
       )}
 

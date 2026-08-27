@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -32,31 +32,78 @@ function useEscapeToClose(active: boolean, onClose: () => void) {
 }
 
 /**
+ * How wide the reader last dragged a drawer, kept per drawer kind.
+ *
+ * A drawer holding a specification and a drawer holding one run's detail want different
+ * widths, and re-dragging on every open is the kind of small tax that makes a reader stop
+ * opening things. Held in memory rather than storage: it is a working preference, not a
+ * setting, and it should not outlive the session in a way nobody asked for.
+ */
+const widths = new Map<string, number>();
+
+/**
  * Right-side slide-over. Header row with an optional title + close (X) button;
  * the content area scrolls. Backdrop dims and closes on click. Escape closes,
  * body scroll is locked while open, and the panel is focused on open. The
  * translate-x transition is skipped when the user prefers reduced motion.
+ *
+ * **Width is the reader's call.** These drawers hold specifications, tables and code
+ * diffs — material whose comfortable width depends on what is in it, not on what looked
+ * balanced when the component was written. Drag the left edge; `resizeKey` decides what
+ * that width is remembered against.
  */
 export function Drawer({
   open,
   onClose,
   title,
   widthClass = "w-[620px] max-w-[92vw]",
+  resizeKey,
+  defaultWidth = 880,
+  tabs,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title?: React.ReactNode;
   widthClass?: string;
+  /** Enables dragging, and names the bucket the chosen width is remembered in. */
+  resizeKey?: string;
+  defaultWidth?: number;
+  /** Sibling views of the same object, shown as tabs beside the title. */
+  tabs?: Array<{ id: string; label: string; active: boolean; onSelect: () => void }>;
   children: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(() => (resizeKey ? widths.get(resizeKey) ?? defaultWidth : 0));
+  const drag = useRef<{ x: number; w: number } | null>(null);
   useBodyScrollLock(open);
   useEscapeToClose(open, onClose);
 
   useEffect(() => {
     if (open) panelRef.current?.focus();
   }, [open]);
+
+  useEffect(() => {
+    if (!resizeKey) return;
+    const move = (e: MouseEvent) => {
+      if (!drag.current) return;
+      // Clamped so the drawer can never be dragged past being unusable in either direction:
+      // a 40px sliver and a drawer that hides the canvas it came from are both dead ends.
+      const next = Math.max(420, Math.min(window.innerWidth - 80, drag.current.w + (drag.current.x - e.clientX)));
+      setWidth(next);
+      widths.set(resizeKey, next);
+    };
+    const up = () => {
+      drag.current = null;
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, [resizeKey]);
 
   if (!open) return null;
 
@@ -74,17 +121,45 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
+        style={resizeKey ? { width } : undefined}
         className={cn(
           "absolute right-0 top-0 flex h-full flex-col border-l border-border bg-card shadow-xl outline-none",
           "motion-safe:translate-x-0 motion-safe:transition-transform motion-safe:duration-300",
-          widthClass,
+          !resizeKey && widthClass,
         )}
       >
+        {resizeKey && (
+          <div
+            onMouseDown={(e) => {
+              drag.current = { x: e.clientX, w: panelRef.current?.getBoundingClientRect().width ?? width };
+              document.body.style.userSelect = "none";
+              e.preventDefault();
+            }}
+            title="拖动改变宽度"
+            className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize hover:bg-primary/30"
+          />
+        )}
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           {title != null && (
-            <h2 className="min-w-0 flex-1 truncate font-display text-sm font-medium text-foreground">
+            <h2 className="min-w-0 truncate font-display text-sm font-medium text-foreground">
               {title}
             </h2>
+          )}
+          {tabs && (
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+              {tabs.map((tb) => (
+                <button
+                  key={tb.id}
+                  onClick={tb.onSelect}
+                  className={cn(
+                    "flex-none cursor-pointer rounded-md px-2.5 py-1 text-[12.5px] transition-colors",
+                    tb.active ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {tb.label}
+                </button>
+              ))}
+            </div>
           )}
           <button
             onClick={onClose}
@@ -97,7 +172,7 @@ export function Drawer({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
       </div>
     </div>,
     document.body,

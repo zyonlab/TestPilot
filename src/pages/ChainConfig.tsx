@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Blocks,
   Server,
@@ -17,6 +16,7 @@ import {
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui";
 import { useT } from "@/lib/prefs";
+import { openCard } from "@/lib/open";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -56,7 +56,6 @@ export function ChainConfigPage() {
 // the team brings the dapp URL + a chain RPC (their fork / Tenderly / testnet).
 function GuideCard() {
   const t = useT();
-  const navigate = useNavigate();
   const loadData = useStore((s) => s.loadData);
   const selectProject = useStore((s) => s.selectProject);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
@@ -70,7 +69,7 @@ function GuideCard() {
       await loadData();
       await selectProject(project.id);
       setMsg(reused ? t("chain.exampleReused") : t("chain.exampleLoaded"));
-      navigate("/cases");
+      openCard("cases");
     } catch (e) {
       setState("error");
       setMsg((e as Error).message);
