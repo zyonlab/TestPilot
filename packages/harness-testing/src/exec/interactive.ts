@@ -198,12 +198,17 @@ export async function runObserve(
               external = false;
             }
             /**
-             * 没有文案的图标链接，用它的 data-test / title 兜底。
+             * 没有可见文案的控件，用 title / data-test / href 兜底——但**必须标明它不是文案**。
              *
-             * SauceDemo 的购物车就是这样一个纯图标 `<a>`：`innerText` 是空的，于是它被
-             * 整条过滤掉——而它是通往购物车与结账三步的**唯一**入口。
+             * SauceDemo 的购物车是个纯图标 `<a>`：`innerText` 为空，不兜底它就整条丢失，
+             * 而它是通往购物车与结账三步的唯一入口。但兜底来的名字不能冒充界面文案：
+             * 实测里 `data-test="login-button"` 就这样一路漏进材料 → 规格 → 断言，
+             * 产出了一条「页面显示 'login-button'」的用例——它执行时必然失败，而且失败得
+             * 毫无道理，因为屏幕上从来没有这几个字。整个下游的设计基础是「逐字引用界面文案」，
+             * 材料把内部标识符冒充成文案，后面每一层都会当真。
              */
-            const shown = label || e.getAttribute("title") || e.getAttribute("data-test") || path;
+            const fallback = e.getAttribute("title") || e.getAttribute("data-test") || path;
+            const shown = label || (fallback ? `（无可见文案·${fallback}）` : "");
             const tag = el.tagName.toLowerCase();
 
             // 这个元素怎么再找回来：data-test → id → 一条 nth-of-type 路径。内联，见上面那段。
