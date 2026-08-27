@@ -20,8 +20,10 @@ server/.wallets/
 # env files (may contain model keys / RPC secrets)
 .env
 .env.*
+!.env.example
 server/.env
 server/.env.*
+!server/.env.example
 
 # logs
 *.log
@@ -29,3 +31,6 @@ npm-debug.log*
 
 # OS
 .DS_Store
+
+# A self-test runs a second instance of the product; its state is not this repo's.
+.data-selftest/

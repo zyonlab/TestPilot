@@ -18,7 +18,8 @@
     "test:fork-swap": "node scripts/test-fork-swap.mjs",
     "test:fork-router": "node scripts/test-fork-router-swap.mjs",
     "test:uniswap": "node scripts/test-uniswap.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@midscene/web": "^0.30.0",
@@ -29,7 +30,12 @@
     "express": "^4.21.1",
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",
-    "puppeteer": "^23.9.0"
+    "puppeteer": "^23.9.0",
+    "@testpilot/harness-core": "workspace:*",
+    "ws": "^8.18.0",
+    "@testpilot/harness-testing": "workspace:*",
+    "@testpilot/runner": "workspace:*",
+    "p-queue": "^8.0.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -39,13 +45,8 @@
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "puppeteer",
-      "esbuild",
-      "better-sqlite3"
-    ]
+    "typescript": "^5.6.3",
+    "@types/ws": "^8.5.13",
+    "vitest": "^2.1.9"
   }
 }
