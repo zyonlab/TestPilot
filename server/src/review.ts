@@ -80,6 +80,17 @@ export interface ReviewItem {
   editedFindings?: Array<{ rule: string; severity: string; message: string }>;
 }
 
+/** 复核界面画故事地图需要的那一份故事。 */
+export interface ReviewStory {
+  id: string;
+  title: string;
+  activity?: string;
+  flowId?: string;
+  role?: string;
+  benefit?: string;
+  acceptance: string[];
+}
+
 export interface ReviewBatch {
   wfRunId: string;
   projectId?: string;
@@ -88,6 +99,13 @@ export interface ReviewBatch {
   editedGateScore?: number;
   edited: number;
   stats?: Record<string, unknown>;
+  /**
+   * 这批用例背后的故事。
+   *
+   * 复核 80 条扁平条目，人只能一条条看——那是**粒度**问题，不只是界面问题。
+   * 有了故事与它们的骨架位置，复核单位才能从「一条断言」变成「一条流程」。
+   */
+  stories: ReviewStory[];
   items: ReviewItem[];
   pending: number;
 }
@@ -101,7 +119,16 @@ const METHOD_TO_TYPE: Record<string, CaseType> = {
 };
 
 interface GatedBundleShape {
-  stories?: Array<{ id: string; title: string; acceptance?: string[] }>;
+  stories?: Array<{
+    id: string;
+    title: string;
+    acceptance?: string[];
+    /** 骨架位置、流程归属、角色与价值——故事地图的横轴与「凭什么值得测」都靠它们。 */
+    activity?: string;
+    flowId?: string;
+    role?: string;
+    benefit?: string;
+  }>;
   cases?: Array<{
     oracle?: MachineOracle;
     id: string;
@@ -220,6 +247,15 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
   const target = (run.detail as { target?: { projectId?: string } } | undefined)?.target;
   return {
     wfRunId,
+    stories: (gated?.stories ?? []).map((st) => ({
+      id: st.id,
+      title: st.title,
+      activity: st.activity,
+      flowId: st.flowId,
+      role: st.role,
+      benefit: st.benefit,
+      acceptance: st.acceptance ?? [],
+    })),
     projectId: target?.projectId,
     gateScore: gated?.gate?.score,
     editedGateScore: rescored?.score,

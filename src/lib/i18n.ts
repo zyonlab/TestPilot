@@ -701,6 +701,17 @@ export const dict: Record<string, Entry> = {
   },
   "review.pending": { zh: "待复核", en: "pending", ja: "未レビュー" },
   "review.approve": { zh: "批准入库", en: "Approve", ja: "承認" },
+  // 故事地图：横轴是用户活动（骨架），纵轴是活动下的故事，故事下面挂它的用例。
+  // 复核单位因此从「一条断言」变成「一条流程」。
+  "review.viewMap": { zh: "地图", en: "Map", ja: "マップ" },
+  "review.viewList": { zh: "列表", en: "List", ja: "リスト" },
+  "review.storiesUnit": { zh: "故事", en: "stories", ja: "ストーリー" },
+  "review.casesUnit": { zh: "用例", en: "cases", ja: "ケース" },
+  "review.selectStory": { zh: "选中这条故事的全部待复核用例", en: "Select this story's pending cases", ja: "このストーリーの未処理ケースを選択" },
+  "review.noActivity": { zh: "没有骨架位置", en: "No activity", ja: "アクティビティなし" },
+  "review.noStory": { zh: "挂不到已知故事", en: "No known story", ja: "既知のストーリーなし" },
+  "review.noFlow": { zh: "没有流程可挂 —— 它可能只是一条界面事实", en: "No flow behind it — may just be a fact about a screen", ja: "背後にフローがない" },
+  "review.noCases": { zh: "这条故事没有用例", en: "No cases for this story", ja: "ケースなし" },
   "review.reject": { zh: "拒绝", en: "Reject", ja: "却下" },
   "review.selectAll": { zh: "全选待复核", en: "Select pending", ja: "未処理を全選択" },
   "review.hasCode": { zh: "已生成代码", en: "code ready", ja: "コード生成済み" },

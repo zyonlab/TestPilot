@@ -58,12 +58,23 @@ interface ReviewItem {
   editedFindings?: Finding[];
 }
 
+interface Story {
+  id: string;
+  title: string;
+  activity?: string;
+  flowId?: string;
+  role?: string;
+  benefit?: string;
+  acceptance: string[];
+}
+
 interface Batch {
   wfRunId: string;
   projectId?: string;
   gateScore?: number;
   editedGateScore?: number;
   edited: number;
+  stories?: Story[];
   items: ReviewItem[];
   pending: number;
 }
@@ -184,6 +195,146 @@ function EditForm({
   );
 }
 
+/**
+ * 故事地图。
+ *
+ * 复核 80 条扁平条目，人只能一条条看——那是**粒度**问题，不只是界面问题。
+ * 地图把复核单位从「一条断言」变成「一条流程」：横轴是用户活动（骨架），
+ * 纵轴是活动下的故事，故事下面挂着它的用例。
+ *
+ * 横轴来自数据，不是界面硬凑的分类：`activity` 由 `plan.stories` 填，
+ * 而它的值来自规格里**算出来**的流程。没有那一步，这张图只能是假的。
+ */
+function StoryMap({
+  batch,
+  selected,
+  onToggleCase,
+  onSelectStory,
+  onOpenCase,
+}: {
+  batch: Batch;
+  selected: Set<string>;
+  onToggleCase: (caseId: string) => void;
+  onSelectStory: (caseIds: string[], on: boolean) => void;
+  onOpenCase: (caseId: string) => void;
+}) {
+  const t = useT();
+  const stories = batch.stories ?? [];
+  const byStory = new Map<string, ReviewItem[]>();
+  for (const it of batch.items) byStory.set(it.storyId, [...(byStory.get(it.storyId) ?? []), it]);
+
+  // 活动按它第一条故事出现的顺序排——那个顺序来自流程，也就是叙事顺序。
+  const columns: Array<{ activity: string; stories: Story[] }> = [];
+  for (const st of stories) {
+    const key = st.activity?.trim() || t("review.noActivity");
+    const col = columns.find((c) => c.activity === key);
+    if (col) col.stories.push(st);
+    else columns.push({ activity: key, stories: [st] });
+  }
+  // 用例挂不到任何已知故事上的，单独一列——不藏起来。
+  const orphanIds = new Set(batch.items.filter((i) => !stories.some((s) => s.id === i.storyId)).map((i) => i.storyId));
+  if (orphanIds.size)
+    columns.push({
+      activity: t("review.noStory"),
+      stories: [...orphanIds].map((id) => ({ id, title: id, acceptance: [] })),
+    });
+
+  const tierTone = (item: ReviewItem): string =>
+    item.decision === "approved"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+      : item.codeBlocked
+        ? "border-rose-300 bg-rose-50 text-rose-800"
+        : item.findings.some((f) => f.severity === "warn")
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-border bg-card";
+
+  return (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex min-w-max gap-3">
+        {columns.map((col) => (
+          <div key={col.activity} className="w-[280px] flex-none">
+            {/* 横轴的一格：一个用户活动。它是骨架，不是分类。 */}
+            <div className="mb-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <div className="text-[12px] font-semibold leading-snug">{col.activity}</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">
+                {col.stories.length} {t("review.storiesUnit")} ·{" "}
+                {col.stories.reduce((n, st) => n + (byStory.get(st.id)?.length ?? 0), 0)} {t("review.casesUnit")}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {col.stories.map((st) => {
+                const cases = byStory.get(st.id) ?? [];
+                const ids = cases.filter((c) => !c.decision).map((c) => c.caseId);
+                const allOn = ids.length > 0 && ids.every((id) => selected.has(id));
+                return (
+                  <div key={st.id} className="rounded-lg border border-border bg-card p-2.5">
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={allOn}
+                        disabled={!ids.length}
+                        onChange={(e) => onSelectStory(ids, e.target.checked)}
+                        title={t("review.selectStory")}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-[10px] text-muted-foreground">{st.id}</div>
+                        <div className="text-[12.5px] font-medium leading-snug">{st.title}</div>
+                        {/* 谁想要、能得到什么。说不出这两样的条目不是用户故事，是界面事实。 */}
+                        {(st.role || st.benefit) && (
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            {st.role || "—"} · {st.benefit || "—"}
+                          </div>
+                        )}
+                        {!st.flowId && (
+                          <div className="mt-1 text-[10.5px] text-amber-700">{t("review.noFlow")}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {cases.map((c) => (
+                        <button
+                          key={c.caseId}
+                          onClick={() => onOpenCase(c.caseId)}
+                          className={cn(
+                            "flex w-full items-center gap-1.5 rounded border px-1.5 py-1 text-left text-[11px] hover:brightness-95",
+                            tierTone(c),
+                            selected.has(c.caseId) && "ring-1 ring-primary",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="flex-none"
+                            checked={selected.has(c.caseId)}
+                            disabled={!!c.decision}
+                            onChange={() => onToggleCase(c.caseId)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          {/* tier 与它兑不兑现得了，一眼可见：声称不能印得像属性。 */}
+                          <span className="flex-none font-mono text-[10px] opacity-70">t{c.tier}</span>
+                          <span className="truncate">{c.title}</span>
+                          {c.findings.length > 0 && (
+                            <span className="ml-auto flex-none font-mono text-[10px] opacity-60">
+                              {c.findings.length}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                      {!cases.length && (
+                        <div className="px-1.5 py-1 text-[11px] text-muted-foreground">{t("review.noCases")}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
   const t = useT();
   const loadData = useStore((s) => s.loadData);
@@ -206,6 +357,8 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
   // Asked for explicitly rather than defaulted: which board these land in is a decision,
   // and a silent default would put generated cases somewhere nobody chose.
   const [intoProject, setIntoProject] = useState("");
+  /** 地图还是列表。默认地图——总览先于逐条，这是这一页存在的理由。 */
+  const [view, setView] = useState<"map" | "list">("map");
 
   const loadRuns = async () => {
     try {
@@ -404,6 +557,22 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                     ))}
                   </select>
                 )}
+                {/* 地图与列表。默认地图——**总览先于逐条**，那是这一页存在的理由：
+                    80 条扁平条目人只能一条条看，而那是粒度问题，不只是界面问题。 */}
+                <div className="flex overflow-hidden rounded-md border border-border">
+                  {(["map", "list"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setView(v)}
+                      className={cn(
+                        "px-2 py-1 text-[12px]",
+                        view === v ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted",
+                      )}
+                    >
+                      {v === "map" ? t("review.viewMap") : t("review.viewList")}
+                    </button>
+                  ))}
+                </div>
                 <span className="ml-auto" />
                 <Button onClick={() => setSelected(new Set(pending.map((i) => i.caseId)))}>
                   {t("review.selectAll")}
@@ -499,6 +668,32 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                 </Button>
               </div>
 
+              {view === "map" ? (
+                <StoryMap
+                  batch={batch}
+                  selected={selected}
+                  onToggleCase={(id) =>
+                    setSelected((s) => {
+                      const n = new Set(s);
+                      n.has(id) ? n.delete(id) : n.add(id);
+                      return n;
+                    })
+                  }
+                  onSelectStory={(ids, on) =>
+                    setSelected((s) => {
+                      const n = new Set(s);
+                      for (const id of ids) (on ? n.add(id) : n.delete(id));
+                      return n;
+                    })
+                  }
+                  onOpenCase={(id) => {
+                    setView("list");
+                    setOpen((o) => new Set(o).add(id));
+                    // 切回列表之后要看得见它——地图上点一条用例，是想看它的细节。
+                    setTimeout(() => document.getElementById(`case-${id}`)?.scrollIntoView({ block: "center" }), 0);
+                  }}
+                />
+              ) : (
               <div className="space-y-2">
                 {batch.items.map((item) => {
                   const expanded = open.has(item.caseId);
@@ -506,6 +701,7 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                   return (
                     <div
                       key={item.caseId}
+                      id={`case-${item.caseId}`}
                       className={cn(
                         "rounded-xl border bg-card p-3",
                         item.decision === "approved"
@@ -630,6 +826,7 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                   );
                 })}
               </div>
+              )}
             </>
           )}
         </div>
