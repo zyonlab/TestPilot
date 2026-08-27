@@ -73,3 +73,31 @@ describe("structural coverage", () => {
     expect(transitionId({ from: "/a", to: "/b" })).toBe("/a->/b");
   });
 });
+
+/**
+ * 分母只收够得到的边。
+ *
+ * 流程枚举刻意跳过自环（否则同一条流程会出现无数个只差几次空点击的变体），所以自环的 id
+ * 从来不会出现在规格的流程里，用例引用不到它。把它算进分母，就是一个永远够不到的目标——
+ * 和「走不通的边进分母」是同一类错。分母必须等于「能被声称的东西」。
+ */
+describe("what the denominator is allowed to contain", () => {
+  const withSelfLoop: StructuralModel = {
+    states: [{ id: "/a" }, { id: "/b" }],
+    transitions: [
+      { from: "/a", to: "/b", ok: true, action: { kind: "click", target: "去 b" } },
+      { from: "/b", to: "/b", ok: true, action: { kind: "click", target: "刷新" } },
+    ],
+  };
+
+  it("自环不进分母", () => {
+    const r = scoreStructural(withSelfLoop, [{ covers: ["/a->/b"] }]);
+    expect(r.totals.transitions).toBe(1);
+    expect(r.transitionCoverage).toBe(1);
+  });
+
+  it("它也不会被算成没覆盖的洞", () => {
+    // 报一个够不到的洞，等于叫人去补一个补不了的东西。
+    expect(scoreStructural(withSelfLoop, [{ covers: ["/a->/b"] }]).uncovered).toEqual([]);
+  });
+});

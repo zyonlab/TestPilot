@@ -44,9 +44,20 @@ export interface StructuralCoverage {
 export const transitionId = (t: { from: string; to?: string }): string => `${t.from}->${t.to ?? "✗"}`;
 
 export function scoreStructural(model: StructuralModel, cases: CoveringCase[]): StructuralCoverage {
-  // 只算走得通的边：走不通的那些记在图里是为了说明「这条路走不过去」，
-  // 拿它们当分母会让覆盖率永远到不了 1，而那个缺口说明不了用例的任何事。
-  const walkable = model.transitions.filter((t) => t.ok && t.to);
+  /**
+   * 分母只收**够得到**的边。
+   *
+   * 两类被排除，理由相同——它们进了分母就永远差在那里，而那个缺口说明不了用例的任何事：
+   *
+   * ① 走不通的边。它们记在图里是为了说明「这条路走不过去」。
+   * ② **自环**（`from === to`）。流程枚举刻意跳过原地不动的边（否则同一条流程会出现无数个
+   *    只差几次空点击的变体），所以自环的 id 从来不会出现在规格的流程里——用例引用不到它。
+   *    一条谁也引用不了的分母项，是一个永远够不到的目标。
+   *
+   * 这两条必须和 `computeFlows` 的取舍保持一致：**分母要等于「能被声称的东西」**，
+   * 否则覆盖率量的是两套不同的口径。
+   */
+  const walkable = model.transitions.filter((t) => t.ok && t.to && t.to !== t.from);
   const allT = new Set(walkable.map(transitionId));
 
   const pairs = new Set<string>();
