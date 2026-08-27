@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { OpenAIModel } from "../src/model/openai.js";
 import {
   FakeModel,
   RecordedModel,
@@ -84,5 +85,56 @@ describe("gated", () => {
     expect(inner.calls).toHaveLength(2);
     expect(gate.stats()).toMatchObject({ active: 0, waiting: 0 });
     setModelLease((fn) => fn());
+  });
+});
+
+/**
+ * 网络层失败重试，别的一概不重试。
+ *
+ * 界线跟着失败分档走：**infra 可重试，判决不可**。一次 `fetch failed` 说明这一刻网络不通，
+ * 重来多半就好；一个格式不对的回复重来多半还是不对——重试它只是把同一个问题再问一遍，
+ * 还掩盖了它。实测：一次五分钟的运行死在 `plan.stories: fetch failed`，而端点本身好好的。
+ */
+describe("transient failures reaching the model", () => {
+  const reply = { choices: [{ message: { content: "ok" }, finish_reason: "stop" }], usage: { total_tokens: 3 } };
+  const okResponse = () => ({ ok: true, status: 200, json: async () => reply, text: async () => "" }) as never;
+
+  it("网络抖动之后重试成功", async () => {
+    let calls = 0;
+    const fake = { post: async () => { calls++; if (calls < 3) throw new Error("fetch failed"); return okResponse(); } };
+    const m = new OpenAIModel({ baseUrl: "http://x/v1", apiKey: "k", model: "m", retryBackoffMs: 0 });
+    (m as unknown as typeof fake).post = fake.post;
+    expect((await m.chat({ stable: "s", variable: "v" })).text).toBe("ok");
+    expect(calls).toBe(3);
+  });
+
+  it("一直不通就报「联系不上」，而不是报格式问题", async () => {
+    const m = new OpenAIModel({ baseUrl: "http://x/v1", apiKey: "k", model: "m", retryBackoffMs: 0 });
+    (m as unknown as { post: () => Promise<never> }).post = async () => { throw new Error("fetch failed"); };
+    await expect(m.chat({ stable: "s", variable: "v", label: "plan.stories" })).rejects.toThrow(
+      /unreachable on plan\.stories after 3 retries/,
+    );
+  });
+
+  it("5xx 也重试——那是「这一刻不行」，不是「这个请求不对」", async () => {
+    let calls = 0;
+    const m = new OpenAIModel({ baseUrl: "http://x/v1", apiKey: "k", model: "m", retryBackoffMs: 0 });
+    (m as unknown as { post: () => Promise<unknown> }).post = async () => {
+      calls++;
+      return calls < 2 ? ({ ok: false, status: 503, text: async () => "busy" } as never) : okResponse();
+    };
+    expect((await m.chat({ stable: "s", variable: "v" })).text).toBe("ok");
+    expect(calls).toBe(2);
+  });
+
+  it("4xx 不重试——请求本身不对，重来一次还是不对", async () => {
+    let calls = 0;
+    const m = new OpenAIModel({ baseUrl: "http://x/v1", apiKey: "k", model: "m", retryBackoffMs: 0 });
+    (m as unknown as { post: () => Promise<unknown> }).post = async () => {
+      calls++;
+      return { ok: false, status: 400, text: async () => "bad request" } as never;
+    };
+    await expect(m.chat({ stable: "s", variable: "v" })).rejects.toThrow(/HTTP 400/);
+    expect(calls).toBe(1);
   });
 });

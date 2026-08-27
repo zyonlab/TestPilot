@@ -18,6 +18,10 @@ export interface OpenAIModelOptions {
   noThink?: boolean;
   /** Ask the endpoint to constrain decoding to the schema. Not every server supports it. */
   guided?: boolean;
+  /** 网络层失败重试几次。默认 3。 */
+  retries?: number;
+  /** 退避基数（毫秒），第 n 次等 n×这个数。默认 2000。 */
+  retryBackoffMs?: number;
 }
 
 /**
@@ -58,17 +62,42 @@ export class OpenAIModel implements ModelClient {
 
     const timeoutMs = this.opts.timeoutMs ?? 900_000;
     let res;
-    try {
-      res = await this.post(body);
-    } catch (e) {
-      // "The operation was aborted due to timeout" names neither the call nor the limit,
-      // which leaves whoever reads it guessing at both.
-      if ((e as Error).name === "TimeoutError" || /timeout/i.test((e as Error).message))
-        throw new Error(
-          `model timed out after ${Math.round(timeoutMs / 1000)}s on ${req.label ?? "a call"} ` +
-            `(asked for up to ${body.max_tokens} tokens) — raise TP_MODEL_TIMEOUT_MS or ask for less`,
-        );
-      throw e;
+    /**
+     * 网络层失败重试，别的一概不重试。
+     *
+     * 这条界线跟着本项目的失败分档走：**infra 是可重试的，判决不是**。一次
+     * `fetch failed` 说明的是这一刻网络不通，重来一次多半就好了；而一个格式不对的回复
+     * 重来一次多半还是不对——重试它只是把同一个问题再问一遍，还掩盖了它。
+     *
+     * 实测：一次五分钟的运行死在 `plan.stories: fetch failed` 上，而端点本身好好的。
+     * 没有这几行，一次网络抖动就废掉整轮。
+     */
+    const RETRIES = this.opts.retries ?? 3;
+    // 退避可配，主要是为了测试能把它设成 0——一个只能靠等的行为，测起来只能靠等。
+    const backoff = this.opts.retryBackoffMs ?? 2000;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        res = await this.post(body);
+        // 5xx 与 429 也是「这一刻不行」，不是「这个请求不对」。
+        if ((res.status >= 500 || res.status === 429) && attempt <= RETRIES) {
+          await new Promise((r) => setTimeout(r, attempt * backoff));
+          continue;
+        }
+        break;
+      } catch (e) {
+        // "The operation was aborted due to timeout" names neither the call nor the limit,
+        // which leaves whoever reads it guessing at both.
+        if ((e as Error).name === "TimeoutError" || /timeout/i.test((e as Error).message))
+          throw new Error(
+            `model timed out after ${Math.round(timeoutMs / 1000)}s on ${req.label ?? "a call"} ` +
+              `(asked for up to ${body.max_tokens} tokens) — raise TP_MODEL_TIMEOUT_MS or ask for less`,
+          );
+        if (attempt > RETRIES)
+          throw new Error(
+            `model unreachable on ${req.label ?? "a call"} after ${RETRIES} retries — ${(e as Error).message}`,
+          );
+        await new Promise((r) => setTimeout(r, attempt * backoff));
+      }
     }
     if (!res.ok && req.schema && this.guidedSupported) {
       // Guided decoding is a nice-to-have: an endpoint that rejects it should degrade to a
