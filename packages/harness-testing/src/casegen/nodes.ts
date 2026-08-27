@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { computeFlows, computeModules, describeFlows } from "../exec/flows.js";
 import { ABLATABLE, fitToBudget, type ModelClient, type NodeDef } from "@testpilot/harness-core";
 import {
   CASES_SCHEMA,
@@ -284,9 +285,27 @@ export function composeSpecNode(
     input: SpecMaterialSchema,
     output: SpecDocSchema,
     run: async (material, params, ctx) => {
+      /**
+       * 路径先算出来，再交给模型命名。
+       *
+       * 「从入口到终点有哪些路径」是图算法。让模型从屏幕描述里"推断"流程，它会推断出
+       * 一些看起来合理、实际上走不通的流程，而且没人能查。所以这里给它的是**事实**，
+       * 它只补名字和目的——那才是图上看不出来的东西。
+       */
+      const computed = material.graph ? computeFlows(material.graph) : { flows: [], truncated: false };
+      const flowText = material.graph
+        ? "\n\n" +
+          describeFlows(computed.flows, computeModules(material.graph, computed.flows), computed.truncated)
+        : "";
+      if (computed.truncated)
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text: `图上路径过多，流程列表被截断——规格里的流程不是全部`,
+        });
+
       const res = await opts.model.chat({
         stable: COMPOSE_STABLE,
-        variable: composeVariable(material.text, material.origin ?? "inline", material.derivedFrom ?? "document", params.lang),
+        variable: composeVariable(material.text + flowText, material.origin ?? "inline", material.derivedFrom ?? "document", params.lang),
         schema: COMPOSE_SCHEMA,
         maxTokens: params.maxTokens,
         label: "spec.compose",
@@ -299,6 +318,9 @@ export function composeSpecNode(
           title: z.string().default(""),
           summary: z.string().default(""),
           rules: z.array(SpecRuleSchema).default([]),
+          flows: z
+            .array(z.object({ id: z.string(), name: z.string().default(""), purpose: z.string().default("") }))
+            .default([]),
           unknowns: z.array(z.string()).default([]),
         }),
         "spec.compose",
@@ -339,6 +361,27 @@ export function composeSpecNode(
           text: "这份规格声称材料里没有任何未决之处——这是一个很强的断言，值得人看一眼",
         });
 
+      /**
+       * 合并：**路径以算出来的为准，模型只贡献名字与目的**。
+       *
+       * 反过来（以模型的回复为准）会让它凭空多出或少掉几条流程，而那正是这一层要防的。
+       * 模型没命名的路径也留着——一条没有名字的流程仍然是一条流程。
+       */
+      const named = new Map(parsed.flows.map((f) => [f.id, f]));
+      const flows = computed.flows.map((f) => ({
+        id: f.id,
+        name: named.get(f.id)?.name ?? "",
+        purpose: named.get(f.id)?.purpose ?? "",
+        steps: f.steps.map((s) => s.how),
+        endsAt: f.endsAt,
+      }));
+      const invented = parsed.flows.filter((f) => !computed.flows.some((c) => c.id === f.id)).length;
+      if (invented)
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text: `${invented} 条流程是模型自己加的，不在算出来的路径里——已丢弃`,
+        });
+
       const text = [
         parsed.title ? `# ${parsed.title}` : "",
         parsed.summary,
@@ -346,22 +389,46 @@ export function composeSpecNode(
         "## 规则",
         ...located.map((r) => `- **${r.id}** ${r.text}${r.evidence ? `\n  > ${r.evidence}` : ""}`),
         "",
+        ...(flows.length
+          ? [
+              "",
+              "## 流程",
+              ...flows.map(
+                (f) => `- **${f.id}** ${f.name || "(未命名)"}${f.purpose ? ` —— ${f.purpose}` : ""}\n  > ${f.steps.join(" → ")}`,
+              ),
+            ]
+          : []),
+        "",
         "## 没有答案的地方",
         ...(parsed.unknowns.length ? parsed.unknowns.map((u) => `- ${u}`) : ["- （整理者认为没有）"]),
       ]
         .filter((x) => x !== "")
         .join("\n");
 
+      /**
+       * 海拔分布要报出来。一份只有 `screen` 规则的规格是屏幕清单，不是规格——
+       * 由它推出的用例只能检查「屏幕还是不是原来的样子」，而这件事从产出上看不出来。
+       */
+      const altitudes: Record<string, number> = {};
+      for (const r of located) altitudes[r.altitude ?? "unspecified"] = (altitudes[r.altitude ?? "unspecified"] ?? 0) + 1;
       ctx.emit("wf.node.output", {
         nodeId: ctx.nodeId,
         rules: located.length,
         unknowns: parsed.unknowns.length,
         grounded: located.filter((r) => r.source).length,
+        flows: flows.length,
+        altitudes,
       });
+      if (located.length && !(altitudes.flow || altitudes.domain))
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text: "这份规格全部是屏幕层规则——没有一条说「做了什么之后会怎样」，由它推出的用例只能发现屏幕变了",
+        });
       return {
         title: parsed.title,
         text,
         rules: located,
+        flows,
         unknowns: parsed.unknowns,
         origin: material.origin,
         derivedFrom: material.derivedFrom,

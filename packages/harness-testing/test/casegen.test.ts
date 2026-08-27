@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeModel } from "@testpilot/harness-core";
-import { designCasesNode, parseJson, planStoriesNode, sourceExploreNode } from "../src/casegen/nodes.js";
+import { composeSpecNode, designCasesNode, parseJson, planStoriesNode, sourceExploreNode } from "../src/casegen/nodes.js";
 
 /**
  * A model reply that stops mid-array is indistinguishable from a badly formatted one once
@@ -38,7 +38,7 @@ describe("a specification that is several documents", () => {
     const logs: Array<Record<string, unknown>> = [];
     const node = planStoriesNode({ model: new FakeModel(() => JSON.stringify(reply)) });
     const out = await node.run(
-      { text: twoDocs, origin, title: "", rules: [], unknowns: [] },
+      { text: twoDocs, origin, title: "", rules: [], unknowns: [], flows: [] },
       { maxStories: 12 },
       {
         nodeId: "stories",
@@ -102,7 +102,7 @@ describe("when the stories do not say where they came from", () => {
       model: new FakeModel(() => JSON.stringify({ stories: [{ id: "US-01", title: "a", acceptance: [] }] })),
     });
     await node.run(
-      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules: [], unknowns: [] },
+      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules: [], unknowns: [], flows: [] },
       { maxStories: 12 },
       {
         nodeId: "stories",
@@ -325,5 +325,92 @@ describe("how far the exploration got", () => {
     const node = sourceExploreNode({ model: new FakeModel(() => "{}"), observer } as never);
     await node.run(undefined, { deep: true, maxScreens: 6, dryRounds: 2, maxTokens: 2400 } as never, ctx(events) as never);
     expect(events.some((e) => String(e.text ?? "").includes("只覆盖入口页"))).toBe(true);
+  });
+});
+
+/**
+ * 规格的海拔，以及一条硬契约：**路径是事实，名字是判断**。
+ *
+ * 让模型从屏幕描述里「推断」流程，它会推断出一些看起来合理、实际走不通的流程，而且没人
+ * 能查。所以喂给它的是算出来的路径，它只补名字与目的——那才是图上看不出来的东西。
+ * 它多说的流程一律丢弃。
+ */
+describe("the specification's altitudes", () => {
+  const material = {
+    text: "===== 入口页 =====\nURL: /\n登录按钮",
+    origin: "explored http://x",
+    derivedFrom: "exploration" as const,
+    graph: {
+      abstraction: "route+controls",
+      entry: "/",
+      stoppedBecause: "",
+      states: [
+        { id: "/", route: "/", title: "登录", controls: [] },
+        { id: "/home", route: "/home", title: "首页", controls: [] },
+      ],
+      transitions: [
+        { from: "/", to: "/home", action: { kind: "login" as const, target: "登录表单", selector: "" }, ok: true },
+      ],
+    },
+  };
+  const ctx = () => {
+    const events: Array<Record<string, unknown>> = [];
+    return {
+      events,
+      ctx: {
+        nodeId: "spec",
+        ablated: new Set(),
+        spend: () => {},
+        emit: (kind: string, p: Record<string, unknown>) => events.push({ kind, ...p }),
+        signal: new AbortController().signal,
+      },
+    };
+  };
+  const reply = (extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      title: "T",
+      summary: "S",
+      rules: [{ id: "R-1", text: "登录页有登录按钮", evidence: "登录按钮", altitude: "screen", about: "/" }],
+      unknowns: ["没试过错误密码"],
+      ...extra,
+    });
+
+  it("模型给名字，路径仍然来自图", async () => {
+    const { ctx: c } = ctx();
+    const node = composeSpecNode({ model: new FakeModel(() => reply({ flows: [{ id: "F-1", name: "登录进入首页", purpose: "让用户开始使用" }] })) });
+    const out = await node.run(material as never, { maxTokens: 3000, maxRules: 60 } as never, c as never);
+    expect(out.flows).toHaveLength(1);
+    expect(out.flows[0].name).toBe("登录进入首页");
+    // 步骤是算出来的，不是模型写的
+    expect(out.flows[0].steps).toEqual(["登录"]);
+  });
+
+  it("**模型自己加的流程被丢掉**，并且说出来", async () => {
+    const { events, ctx: c } = ctx();
+    const node = composeSpecNode({
+      model: new FakeModel(() =>
+        reply({ flows: [{ id: "F-1", name: "登录" }, { id: "F-9", name: "退款流程", purpose: "凭空来的" }] }),
+      ),
+    });
+    const out = await node.run(material as never, { maxTokens: 3000, maxRules: 60 } as never, c as never);
+    expect(out.flows.map((f) => f.id)).toEqual(["F-1"]);
+    expect(events.some((e) => String(e.text ?? "").includes("模型自己加的"))).toBe(true);
+  });
+
+  it("没命名的路径也留着——一条没有名字的流程仍然是一条流程", async () => {
+    const { ctx: c } = ctx();
+    const node = composeSpecNode({ model: new FakeModel(() => reply({ flows: [] })) });
+    const out = await node.run(material as never, { maxTokens: 3000, maxRules: 60 } as never, c as never);
+    expect(out.flows).toHaveLength(1);
+    expect(out.flows[0].name).toBe("");
+  });
+
+  it("全是屏幕层规则时，说出来", async () => {
+    // 一份只有 screen 规则的规格是屏幕清单，不是规格——由它推出的用例只能检查
+    // 「屏幕还是不是原来的样子」，而这件事从产出上看不出来。
+    const { events, ctx: c } = ctx();
+    const node = composeSpecNode({ model: new FakeModel(() => reply({ flows: [] })) });
+    await node.run(material as never, { maxTokens: 3000, maxRules: 60 } as never, c as never);
+    expect(events.some((e) => String(e.text ?? "").includes("全部是屏幕层规则"))).toBe(true);
   });
 });

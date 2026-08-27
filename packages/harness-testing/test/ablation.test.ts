@@ -49,7 +49,7 @@ const casesReply = JSON.stringify({
 function g1Harness() {
   const model = new FakeModel((req) =>
     req.label === "spec.compose"
-      ? JSON.stringify({ title: "t", summary: "s", rules: [{ id: "R-1", text: "r", evidence: "e" }], unknowns: [] })
+      ? JSON.stringify({ title: "t", summary: "s", rules: [{ id: "R-1", text: "r", evidence: "e" }], unknowns: [], flows: [] })
       : req.label === "plan.stories"
         ? storyReply
         : casesReply,

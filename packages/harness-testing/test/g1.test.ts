@@ -126,7 +126,7 @@ describe("G1: specification → text cases", () => {
           title: "t",
           summary: "s",
           rules: [{ id: "R-1", text: "登录成功显示面板", evidence: "Your dashboard is ready." }],
-          unknowns: [],
+          unknowns: [], flows: [],
         });
       if (req.label === "plan.stories")
         return JSON.stringify({

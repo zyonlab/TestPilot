@@ -112,7 +112,7 @@ describe("故事的出处", () => {
     const logs: Array<Record<string, unknown>> = [];
     const node = planStoriesNode({ model: new FakeModel(() => JSON.stringify({ stories })) });
     const out = await node.run(
-      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules, unknowns: [] },
+      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules, unknowns: [], flows: [] },
       { maxStories: 12 },
       ctx(logs),
     );

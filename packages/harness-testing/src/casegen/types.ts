@@ -128,6 +128,22 @@ export type SpecMaterial = z.infer<typeof SpecMaterialSchema>;
  * 有 id，所以故事可以引用它；有 `evidence`，所以「这条规则凭什么这么写」有得查——
  * 它记的是材料里的原话。一条没有出处的规则，和模型顺手编的一句话在下游是分不清的。
  */
+/**
+ * 一条流程：路径由图算出来，名字与目的由模型给。
+ *
+ * 分开的理由是它们的性质不同——路径是**事实**（走过就有），名字与目的是**判断**
+ * （对用户意味着什么，图上看不出来）。混在一起，模型顺手编一条路径就没人拦得住。
+ */
+export const SpecFlowSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().default(""),
+  purpose: z.string().default(""),
+  /** 走完这条流程的动作序列。由 `computeFlows` 填，模型改不动。 */
+  steps: z.array(z.string()).default([]),
+  endsAt: z.string().default(""),
+});
+export type SpecFlow = z.infer<typeof SpecFlowSchema>;
+
 export const SpecRuleSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -141,6 +157,13 @@ export const SpecRuleSchema = z.object({
    * 无值但 evidence 有内容 = 那句"原话"在材料里查不到，也就是它不是原话。
    */
   source: z.string().optional(),
+  /**
+   * 海拔。只有屏幕规则的规格是一份屏幕清单，不是规格——由它推出的用例只能检查
+   * 「屏幕还是不是原来的样子」。
+   */
+  altitude: z.enum(["screen", "flow", "domain"]).optional(),
+  /** 它约束的是哪一屏或哪一条流程。 */
+  about: z.string().optional(),
 });
 export type SpecRule = z.infer<typeof SpecRuleSchema>;
 
@@ -162,6 +185,8 @@ export const SpecDocSchema = z.object({
   /** 整理后的规格全文（markdown）。下游读它，人也读它。 */
   text: z.string().min(1),
   rules: z.array(SpecRuleSchema).default([]),
+  /** 这个产品有哪些流程。路径算出来，名字模型给。 */
+  flows: z.array(SpecFlowSchema).default([]),
   /** 材料里没有答案的地方：够不到的界面、缺凭证、没提到的规则。 */
   unknowns: z.array(z.string()).default([]),
   /** 材料从哪来，逐份列出。 */
