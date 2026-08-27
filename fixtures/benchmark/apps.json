@@ -11,9 +11,16 @@
       "url": "http://localhost:8080",
       "image": "springcommunity/spring-framework-petclinic:6.1.2",
       "start": "docker run --rm -p 8080:8080 springcommunity/spring-framework-petclinic:6.1.2",
-      "health": { "kind": "http", "url": "http://localhost:8080/" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:8080/"
+      },
       "verified": "镜像存在，2023-12-29，241 MB，版本可 pin",
-      "startedOnce": null
+      "startedOnce": "2026-08-27",
+      "observed": {
+        "digest": "sha256:2766c68b03afd64d154339a2574cdf18db1a1b92b3013a4d6a3dfb9be1bac6cd",
+        "note": "HTTP 200，首屏 63ms。入口页链接：/owners/find（按姓氏搜索）、/vets（列表+分页）、/oups（故意抛异常的错误页）。"
+      }
     },
     {
       "id": "petclinic-rest",
@@ -23,7 +30,10 @@
       "url": "http://localhost:9966",
       "image": "springcommunity/spring-petclinic-rest:4.0.2",
       "start": "docker run --rm -p 9966:9966 springcommunity/spring-petclinic-rest:4.0.2",
-      "health": { "kind": "http", "url": "http://localhost:9966/petclinic/api/pettypes" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:9966/petclinic/api/pettypes"
+      },
       "verified": "镜像存在，2026-08-01，168 MB，版本可 pin",
       "startedOnce": null,
       "caveat": "只有 API，没有界面。要当 GUI 基准得再配一个前端容器，前端镜像尚未核实。"
@@ -36,7 +46,10 @@
       "url": "http://localhost:8082",
       "image": "pagekit/pagekit:sqlite",
       "start": "docker run --rm -p 8082:80 pagekit/pagekit:sqlite",
-      "health": { "kind": "http", "url": "http://localhost:8082/" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:8082/"
+      },
       "verified": "镜像存在，2018-06-27，109 MB（sqlite 变体免去外部数据库）",
       "startedOnce": null,
       "caveat": "镜像 2018 年之后没更新过。能不能起来要实跑才知道。"
@@ -49,7 +62,10 @@
       "url": "http://localhost:8081",
       "repo": "https://github.com/antoinejaussoin/retro-board",
       "start": null,
-      "health": { "kind": "http", "url": "http://localhost:8081/" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:8081/"
+      },
       "verified": null,
       "startedOnce": null,
       "caveat": "**没有找到可公开拉取的镜像**：Docker Hub 上查不到，ghcr 的 tags 接口要鉴权，没有核实成功。要么自建，要么等确认镜像地址。不写一个没核实过的 `docker run` 进来。"
@@ -62,7 +78,10 @@
       "url": "http://localhost:8083",
       "repo": "https://github.com/jeka-kiselyov/dimeshift",
       "start": null,
-      "health": { "kind": "http", "url": "http://localhost:8083/" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:8083/"
+      },
       "verified": null,
       "startedOnce": null,
       "caveat": "无官方镜像；需 Node + MySQL 自行构建，且依赖较老。"
@@ -75,7 +94,10 @@
       "url": "http://localhost:8084",
       "repo": "https://github.com/tsubik/splittypie",
       "start": null,
-      "health": { "kind": "http", "url": "http://localhost:8084/" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:8084/"
+      },
       "verified": null,
       "startedOnce": null,
       "caveat": "无官方镜像；依赖 Firebase。已有研究指出它 flaky（通知层会遮住元素），做基线时要记这一笔。"
@@ -87,7 +109,10 @@
       "why": "研究基准里的 Elixir 代表。看板应用，拖拽与实时更新。",
       "url": "http://localhost:8085",
       "start": null,
-      "health": { "kind": "http", "url": "http://localhost:8085/" },
+      "health": {
+        "kind": "http",
+        "url": "http://localhost:8085/"
+      },
       "verified": null,
       "startedOnce": null,
       "caveat": "无官方镜像；需 Elixir + Postgres。已有研究指出它的菜单不确定，做基线时要记这一笔。"

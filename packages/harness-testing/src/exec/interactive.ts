@@ -100,6 +100,17 @@ export interface ObserveSpec {
    * 而且不同探索策略配不同的抽象。写死了既不能消融，也没法和别人的结果比。
    */
   stateAbstraction?: string;
+  /**
+   * 这个环境配好的登录步骤。
+   *
+   * 没有它时，探索只能猜——第一版猜的是「用页面上显示的测试凭证登录」，因为
+   * SauceDemo 把账号密码印在登录页上。**绝大多数应用不会。** 而凭证本来就在环境里，
+   * 执行用例时一直在用，只有探索没用它。
+   *
+   * `${env.*}` / `${secret.*}` 在这里解析后执行，日志里只留模板——和执行用例同一条规矩。
+   */
+  login?: string[];
+  resolve?: ResolveContext;
   launch: LaunchOpts;
 }
 
@@ -420,7 +431,10 @@ export async function runObserve(
         return {
           key: loginKey,
           kind: "login",
-          instruction: "Log in using the test credentials shown on this page.",
+          // 环境配了登录步骤就照着做；没配才退回「用页面上写着的凭证」那种猜法。
+          instruction: spec.login?.length
+            ? spec.login.join("；然后")
+            : "Log in using the test credentials shown on this page.",
         };
       /**
        * 抽屉/菜单开关最后再试。
@@ -525,8 +539,10 @@ export async function runObserve(
            */
           await page.$eval(next.selector, (el) => (el as HTMLElement).click());
         } else {
+          // 日志里留模板，明文永不落盘——和执行用例同一条规矩。
           note(`第 ${rounds} 轮：${next.instruction}`);
-          await withModel(() => session!.agent.aiAction(next.instruction));
+          const resolved = spec.resolve ? resolveText(next.instruction, spec.resolve) : next.instruction;
+          await withModel(() => session!.agent.aiAction(resolved));
         }
         await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
         emit({ type: "navigated", shotRef: await shot(session) });

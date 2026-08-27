@@ -1128,6 +1128,17 @@ function explorePrompts(deep: boolean, web3: boolean, lang?: string) {
  * 观察一个需要登录的产品，如果不带上会话，看到的永远是登录页——那样整理出来的规格会
  * 一本正经地宣称这个产品只有一个登录界面。
  */
+/** 这个项目的登录步骤与占位符解析上下文。执行用例走的是同一套。 */
+function observeLogin(projectId: string): { login?: string[]; resolve?: ResolveContext } {
+  const env = resolveEnvironment(projectId);
+  const steps = env?.login?.steps ?? [];
+  if (!steps.length) return {};
+  return {
+    login: steps,
+    resolve: { env: env?.vars ?? {}, secrets: getSecretValues(projectId) },
+  };
+}
+
 function observeLaunch(projectId: string): {
   extraHeaders: Record<string, string>;
   query: Record<string, string>;
@@ -1175,6 +1186,13 @@ setAgentObserver(async (input) => {
       maxScreens,
       dryRounds,
       stateAbstraction,
+      /**
+       * 环境配好的登录步骤，连同解析上下文一起交给探索。
+       *
+       * 此前探索只能猜「用页面上显示的凭证登录」——那是 SauceDemo 的做法，绝大多数应用
+       * 不会把密码印在登录页上。而凭证一直在环境里，执行用例时也一直在用。
+       */
+      ...(projectId ? observeLogin(projectId) : {}),
       launch: { cacheId: `observe-${projectId ?? "adhoc"}`, ...(projectId ? observeLaunch(projectId) : {}) },
     },
     ARTIFACT_DIR,
