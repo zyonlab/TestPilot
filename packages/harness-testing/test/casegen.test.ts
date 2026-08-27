@@ -157,7 +157,7 @@ describe("the stricter oracle guidance", () => {
     const run = async (oracleGuidance: "default" | "strict") => {
       const model = new FakeModel(() =>
         JSON.stringify({
-          cases: [{ title: "a", designMethod: "equivalence", steps: ["s"], expected: "显示 X", tier: 1, key: "k" }],
+          cases: [{ title: "a", designMethod: "equivalence", steps: ["s"], expected: "显示 X", tier: 1, key: "k", covers: [] }],
         }),
       );
       const node = designCasesNode({ model });
@@ -203,7 +203,7 @@ describe("the specification reaching the node that writes the cases", () => {
         expected: "显示「Epic sadface: 用户名与密码不匹配」",
         tier: 1,
         oracle: { kind: "text", value: "Epic sadface" },
-        key: "login|wrong-password|error",
+        key: "login|wrong-password|error", covers: [],
       },
     ],
   });

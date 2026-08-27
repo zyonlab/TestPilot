@@ -55,7 +55,7 @@ function fakeModel() {
               steps: ["输入 ${env.USERNAME}", "输入 ${secret.PASSWORD}", "点击 Sign in"],
               expected: "页面显示 Welcome, ${env.USERNAME} 与 Your dashboard is ready.",
               tier: 1,
-              key: "login|valid|dashboard-shown",
+              key: "login|valid|dashboard-shown", covers: [],
             },
           ],
         }),
@@ -71,7 +71,7 @@ function fakeModel() {
             steps: ["输入 ${env.USERNAME}", "输入错误密码 wrong-pass", "点击 Sign in"],
             expected: "显示 Invalid username or password，停留在登录页",
             tier: 1,
-            key: "login|wrong-password|error-shown",
+            key: "login|wrong-password|error-shown", covers: [],
           },
           {
             title: "空用户名登录被拒绝",
@@ -80,7 +80,7 @@ function fakeModel() {
             steps: ["用户名留空", "输入 ${secret.PASSWORD}", "点击 Sign in"],
             expected: "显示 Invalid username or password",
             tier: 1,
-            key: "login|empty-username|error-shown",
+            key: "login|empty-username|error-shown", covers: [],
           },
         ],
       });
@@ -144,7 +144,7 @@ describe("G1: specification → text cases", () => {
             steps: ["点击 Sign in"],
             expected: "显示 Your dashboard is ready.",
             tier: 1,
-            key: "login|valid|dashboard",
+            key: "login|valid|dashboard", covers: [],
           },
         ],
       });
@@ -215,7 +215,7 @@ describe("gate ①", () => {
     // says so, which is the whole point of the rule.
     oracle: { kind: "text" as const, value: "Your dashboard is ready." },
     tier: 1 as const,
-    key: "login|valid|dashboard",
+    key: "login|valid|dashboard", covers: [],
   };
 
   it("marks an assertion that promises nothing checkable", () => {
@@ -234,7 +234,7 @@ describe("gate ①", () => {
   });
 
   it("calls out a suite that is all happy path", () => {
-    const g = runGate(bundle([base, { ...base, id: "c2", key: "login|valid2|dashboard" }]));
+    const g = runGate(bundle([base, { ...base, id: "c2", key: "login|valid2|dashboard", covers: [] }]));
     expect(g.findings.some((f) => f.rule === "negative-ratio")).toBe(true);
     expect(g.stats.negativeRatio).toBe(0);
   });
@@ -332,7 +332,7 @@ describe("gate ① on the stories themselves", () => {
     expected: "页面显示 Checkout: Your Information",
     tier: 1 as const,
     oracle: { kind: "text" as const, value: "Checkout: Your Information" },
-    key: "checkout|cart|step-one",
+    key: "checkout|cart|step-one", covers: [],
   };
   const withStories = (stories: unknown[]) =>
     runGate({ origin: "x", stories: stories as never, cases: [kase] as never });
@@ -363,5 +363,46 @@ describe("gate ① on the stories themselves", () => {
     ]);
     expect(r.stats.stories).toBe(2);
     expect(r.stats.storiesAnchored).toBe(1);
+  });
+});
+
+/**
+ * 用例说不说得出自己走了哪条转移。
+ *
+ * 说不出的那些多半没在验证一次变化，而是在描述一屏——「页面显示 X」。这个比例是结构
+ * 覆盖率能不能算的前提，也是「这批用例有多少在测行为」的粗略读数。
+ */
+describe("gate ① on what a case exercises", () => {
+  const mk = (over: Record<string, unknown>) => ({
+    id: "c1",
+    storyId: "US-01",
+    title: "t",
+    designMethod: "equivalence" as const,
+    precondition: [],
+    steps: ["点击"],
+    expected: "页面显示 X",
+    tier: 1 as const,
+    oracle: { kind: "text" as const, value: "X" },
+    key: "a|b|c",
+    covers: [],
+    ...over,
+  });
+  const gate = (cases: unknown[]) =>
+    runGate({ origin: "x", stories: [{ id: "US-01", title: "s", acceptance: [] }] as never, cases: cases as never });
+
+  it("报出有几条说得出转移", () => {
+    const r = gate([mk({ covers: ["/->/inv"] }), mk({ id: "c2" })]);
+    expect(r.stats.casesCovering).toBe(1);
+  });
+
+  it("声称是状态转移用例却说不出走了哪条转移，标一笔", () => {
+    const r = gate([mk({ designMethod: "state-transition" })]);
+    expect(r.findings.some((f) => f.rule === "no-transition")).toBe(true);
+  });
+
+  it("等价类用例说不出转移是正常的，不标", () => {
+    // 「登录页显示六个账号」本来就不改变任何东西。
+    const r = gate([mk({ designMethod: "equivalence" })]);
+    expect(r.findings.some((f) => f.rule === "no-transition")).toBe(false);
   });
 });

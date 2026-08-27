@@ -241,7 +241,7 @@ describe("regenerating", () => {
             steps: ["输入用户名 ${env.LOGIN_USER}", "点击 Sign in"],
             expected: "页面显示「Invalid username or password」",
             tier: 1,
-            key: "login|bad-password|error-shown",
+            key: "login|bad-password|error-shown", covers: [],
           },
         ],
       }),

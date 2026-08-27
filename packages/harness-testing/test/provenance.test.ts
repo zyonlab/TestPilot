@@ -90,7 +90,7 @@ describe("规格的来源印记", () => {
         JSON.stringify({
           cases: [
             {
-              key: "login-ok",
+              key: "login-ok", covers: [],
               title: "能登录",
               designMethod: "equivalence",
               steps: ["输入", "点击"],

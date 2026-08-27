@@ -18,7 +18,7 @@ const kase: TextCase = {
   steps: ["用户名留空", "输入密码 hunter2", "点击登录"],
   expected: "登录失败，行为正常",
   tier: 3,
-  key: "login|empty-user|rejected",
+  key: "login|empty-user|rejected", covers: [],
 };
 
 const revised = {
@@ -30,7 +30,7 @@ const revised = {
       steps: ["用户名留空", "输入密码 ${secret.LOGIN_PASSWORD}", "点击登录"],
       expected: '页面显示「用户名不能为空」，且仍停留在登录页',
       tier: 1,
-      key: "login|empty-user|rejected",
+      key: "login|empty-user|rejected", covers: [],
     },
   ],
 };

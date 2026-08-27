@@ -165,6 +165,22 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    */
   const anchored = bundle.stories.filter((s) => s.flowId?.trim()).length;
 
+  /**
+   * 有多少用例说得出自己走了哪条转移。
+   *
+   * 说不出的那些多半没在验证一次变化，而是在描述一屏——「页面显示 X」。这个比例是
+   * 结构覆盖率能不能算的前提，也是「这批用例有多少在测行为」的粗略读数。
+   */
+  const covering = cases.filter((c) => (c.covers ?? []).length > 0).length;
+  for (const c of cases)
+    if (!(c.covers ?? []).length && c.designMethod === "state-transition")
+      add(
+        "no-transition",
+        `声称是状态转移用例，却说不出它走了哪条转移`,
+        c.id,
+        "info",
+      );
+
   const tiers: Record<string, number> = {};
   for (const c of cases) tiers[String(c.tier)] = (tiers[String(c.tier)] ?? 0) + 1;
   // Two distributions, deliberately: what the batch claims, and what it can actually
@@ -188,6 +204,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       tiersBacked,
       stories: bundle.stories.length,
       storiesAnchored: anchored,
+      casesCovering: covering,
       methods,
       negativeRatio: Number(negativeRatio.toFixed(3)),
       orphans,

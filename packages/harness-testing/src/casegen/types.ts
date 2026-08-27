@@ -91,6 +91,14 @@ export const TextCaseSchema = z.object({
    * the same key are the same case wearing different words.
    */
   key: z.string().min(1),
+  /**
+   * 这条用例走了哪些转移（`from->to`）。
+   *
+   * 它把用例挂回产品模型上，于是覆盖率有了**来自产品本身**的分母：一共 M 条转移，
+   * 覆盖了几条。人写的黄金清单回答「测的是不是该测的东西」，这个数回答「够不够」。
+   * 说不出任何一条的用例单独计数——它多半没在验证一次变化，而是在描述一屏。
+   */
+  covers: z.array(z.string()).default([]),
 });
 export type TextCase = z.infer<typeof TextCaseSchema>;
 
@@ -257,6 +265,8 @@ export const GateReportSchema = z.object({
     /** 这批故事有几条、其中几条挂在流程上——故事地图能不能画的前提。 */
     stories: z.number().optional(),
     storiesAnchored: z.number().optional(),
+    /** 有多少条用例说得出自己走了哪条转移——结构覆盖率能不能算的前提。 */
+    casesCovering: z.number().optional(),
     orphans: z.number(),
     duplicates: z.number(),
   }),

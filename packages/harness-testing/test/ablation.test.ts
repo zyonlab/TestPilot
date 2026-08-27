@@ -33,7 +33,7 @@ const casesReply = JSON.stringify({
       steps: ["输入 ${env.USERNAME}", "点击 Sign in"],
       expected: "页面显示正常",
       tier: 3,
-      key: "login|valid|dashboard",
+      key: "login|valid|dashboard", covers: [],
     },
     {
       title: "同一件事换个说法",
@@ -41,7 +41,7 @@ const casesReply = JSON.stringify({
       steps: ["输入 ${env.USERNAME}", "点击 Sign in"],
       expected: "页面显示正常",
       tier: 3,
-      key: "login|valid|dashboard",
+      key: "login|valid|dashboard", covers: [],
     },
   ],
 });
@@ -165,7 +165,7 @@ describe("stage-two switches", () => {
         steps: ["输入用户名", "点击 Sign in"],
         expected: "显示面板",
         tier: 1,
-        key: "k1",
+        key: "k1", covers: [],
       },
       {
         id: "c2",
@@ -176,7 +176,7 @@ describe("stage-two switches", () => {
         steps: ["输入用户名", "点击 Sign in", "点击 Log out"],
         expected: "显示登录表单",
         tier: 1,
-        key: "k2",
+        key: "k2", covers: [],
       },
     ],
     gate: { score: 1, findings: [], stats: { cases: 2, tiers: {}, tiersBacked: {}, methods: {}, negativeRatio: 0, orphans: 0, duplicates: 0 } },
