@@ -112,6 +112,8 @@ interface GatedBundleShape {
     steps: string[];
     expected: string;
     tier: number;
+    /** 这条用例走了哪些转移。重写时要带上，否则它挂在产品模型上的那根线会断。 */
+    covers?: string[];
   }>;
   gate?: { score?: number; stats?: Record<string, unknown>; findings?: Array<{ caseId?: string; rule: string; severity: string; message: string }> };
 }
@@ -496,6 +498,9 @@ export async function regenerate(
           storyId: item.storyId,
           title: item.title,
           designMethod: item.designMethod as TextCase["designMethod"],
+          // 重写一条用例时，它原本走了哪些转移要带上——否则重写出来的版本会丢掉它挂在
+          // 产品模型上的那根线，结构覆盖率上凭空少一条。
+          covers: product?.covers ?? [],
           precondition: item.precondition,
           steps: item.steps,
           expected: item.expected,
