@@ -121,6 +121,50 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   for (const s of bundle.stories)
     if (!cases.some((c) => c.storyId === s.id)) add("story-uncovered", `story ${s.id} has no cases`);
 
+  /**
+   * 6. 这条「故事」是不是一条故事。
+   *
+   * 实测产出里出现过「页面底部显示社交链接和版权信息」——没有人想要它，它只是一条关于
+   * 屏幕的事实。由这种条目衍生出的用例，做的也只能是「屏幕还是不是原来的样子」。
+   *
+   * 只标记不拒收，理由和这个门禁的其余部分一样：判断一条故事有没有价值，最终要人来看，
+   * 门禁能做的是把该看的挑出来。
+   */
+  for (const s of bundle.stories) {
+    if (!s.role?.trim() && !s.benefit?.trim())
+      add(
+        "story-no-actor",
+        `story ${s.id} 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事`,
+        undefined,
+        "info",
+      );
+    /**
+     * Given/When/Then 里最要紧的是 When：没有触发的验收标准是一句描述，不是判据。
+     *
+     * 触发词不能只看动词——「结账页有三个**输入**框」里的「输入」是名词的一部分，
+     * 第一版就在这上面误判了。所以要求动词后面跟着「后 / 时 / 之后」，
+     * 或者出现显式的 when / 当…时 / 若 / 如果。
+     */
+    const HAS_TRIGGER =
+      /\bwhen\b|当[^，。；]{1,20}(时|后)|(点击|输入|提交|选择|勾选|访问|打开)[^，。；]{0,20}(后|时|之后)|若|如果/i;
+    const noWhen = (s.acceptance ?? []).filter((a) => !HAS_TRIGGER.test(a));
+    if (s.acceptance?.length && noWhen.length === s.acceptance.length)
+      add(
+        "acceptance-no-trigger",
+        `story ${s.id} 的验收标准里没有一条说「做了什么之后」——它们是描述，不是判据`,
+        undefined,
+        "info",
+      );
+  }
+
+  /**
+   * 有多少故事挂在流程上。
+   *
+   * 这个比例是故事地图能不能画的前提：横轴来自流程，挂不上去的故事在地图上没有位置。
+   * 它同时也是「这批故事有多少是真的能力、多少是界面事实」的粗略读数。
+   */
+  const anchored = bundle.stories.filter((s) => s.flowId?.trim()).length;
+
   const tiers: Record<string, number> = {};
   for (const c of cases) tiers[String(c.tier)] = (tiers[String(c.tier)] ?? 0) + 1;
   // Two distributions, deliberately: what the batch claims, and what it can actually
@@ -142,6 +186,8 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       cases: cases.length,
       tiers,
       tiersBacked,
+      stories: bundle.stories.length,
+      storiesAnchored: anchored,
       methods,
       negativeRatio: Number(negativeRatio.toFixed(3)),
       orphans,

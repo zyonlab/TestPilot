@@ -314,3 +314,54 @@ describe("context budget", () => {
     ).toBe(true);
   });
 });
+
+/**
+ * 门禁①认出「不是故事的故事」。
+ *
+ * 实测产出里出现过「页面底部显示社交链接和版权信息」——没有人想要它，它只是一条关于
+ * 屏幕的事实，由它衍生的用例做的也只能是「屏幕还是不是原来的样子」。
+ * 只标记不拒收：判断一条故事有没有价值最终要人来看，门禁能做的是把该看的挑出来。
+ */
+describe("gate ① on the stories themselves", () => {
+  const kase = {
+    id: "c1",
+    storyId: "US-01",
+    title: "点击 Checkout 进入结账信息页",
+    designMethod: "state-transition" as const,
+    steps: ["点击 Checkout"],
+    expected: "页面显示 Checkout: Your Information",
+    tier: 1 as const,
+    oracle: { kind: "text" as const, value: "Checkout: Your Information" },
+    key: "checkout|cart|step-one",
+  };
+  const withStories = (stories: unknown[]) =>
+    runGate({ origin: "x", stories: stories as never, cases: [kase] as never });
+
+  it("说不出谁想要、能得到什么的条目被标出来", () => {
+    const r = withStories([{ id: "US-01", title: "页面底部显示社交链接", acceptance: [] }]);
+    expect(r.findings.some((f) => f.rule === "story-no-actor")).toBe(true);
+  });
+
+  it("有角色有价值的故事不被标", () => {
+    const r = withStories([
+      { id: "US-01", title: "完成下单", role: "顾客", benefit: "买到东西", acceptance: ["当点击 Checkout 时，进入结账信息页"] },
+    ]);
+    expect(r.findings.some((f) => f.rule === "story-no-actor")).toBe(false);
+  });
+
+  it("验收标准里一条触发都没有，也标出来——那些是描述，不是判据", () => {
+    const r = withStories([
+      { id: "US-01", title: "结账", role: "顾客", benefit: "下单", acceptance: ["结账页有三个输入框", "页面标题是 Checkout"] },
+    ]);
+    expect(r.findings.some((f) => f.rule === "acceptance-no-trigger")).toBe(true);
+  });
+
+  it("报出有多少故事挂在流程上——故事地图能不能画的前提", () => {
+    const r = withStories([
+      { id: "US-01", title: "完成下单", role: "顾客", benefit: "买到东西", flowId: "F-1", acceptance: [] },
+      { id: "US-02", title: "页脚", acceptance: [] },
+    ]);
+    expect(r.stats.stories).toBe(2);
+    expect(r.stats.storiesAnchored).toBe(1);
+  });
+});

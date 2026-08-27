@@ -414,3 +414,64 @@ describe("the specification's altitudes", () => {
     expect(events.some((e) => String(e.text ?? "").includes("全部是屏幕层规则"))).toBe(true);
   });
 });
+
+/**
+ * 故事要立得起来：有人、有价值、挂在骨架上。
+ *
+ * 故事地图（Patton）的横轴是**用户活动按叙事顺序**。横轴必须来自数据——扁平数组画不出
+ * 地图，界面只能硬凑一个分类，而硬凑出来的横轴不是骨架。
+ *
+ * 实测里出现过 `US-10 页面底部显示社交链接和版权信息` 这种条目：没有人想要它，它只是
+ * 一条关于屏幕的事实。有了 flow 归属，这类条目至少能被认出来。
+ */
+describe("stories that stand up", () => {
+  const spec = {
+    text: "规格全文",
+    title: "T",
+    origin: "explored http://x",
+    derivedFrom: "exploration" as const,
+    rules: [],
+    unknowns: [],
+    flows: [
+      { id: "F-1", name: "从登录到结账信息页", purpose: "让用户下单", steps: ["登录", "点购物车", "点 Checkout"], endsAt: "/checkout-step-one.html" },
+    ],
+  };
+  const ctx = () => ({
+    nodeId: "stories",
+    ablated: new Set(),
+    spend: () => {},
+    emit: () => {},
+    signal: new AbortController().signal,
+  });
+
+  const run = async (stories: unknown[]) => {
+    const node = planStoriesNode({ model: new FakeModel(() => JSON.stringify({ stories })) });
+    return node.run(spec as never, { maxStories: 12 } as never, ctx() as never);
+  };
+
+  it("角色与价值跟着故事走下去", async () => {
+    const out = await run([
+      { id: "US-01", title: "完成下单", role: "顾客", benefit: "买到想要的东西", flowId: "F-1", activity: "从登录到结账信息页", acceptance: ["Given 购物车有一件商品 / When 点击 Checkout / Then 进入结账信息页"] },
+    ]);
+    expect(out.stories[0].role).toBe("顾客");
+    expect(out.stories[0].benefit).toBe("买到想要的东西");
+  });
+
+  it("挂在流程上的故事带着骨架位置", async () => {
+    const out = await run([{ id: "US-01", title: "完成下单", flowId: "F-1", activity: "从登录到结账信息页", acceptance: [] }]);
+    // 这两个字段就是故事地图的横轴，缺了它界面只能硬凑分类。
+    expect(out.stories[0].flowId).toBe("F-1");
+    expect(out.stories[0].activity).toBe("从登录到结账信息页");
+  });
+
+  it("没有流程可挂的条目仍然收下，但它是空的——这正是要能看出来的那一类", async () => {
+    const out = await run([{ id: "US-09", title: "页面底部显示社交链接", acceptance: [] }]);
+    expect(out.stories[0].flowId).toBeUndefined();
+    expect(out.stories[0].activity).toBeUndefined();
+  });
+
+  it("规格仍然随故事一起下行（S1 那条修复没被这次改动破坏）", async () => {
+    const out = await run([{ id: "US-01", title: "完成下单", acceptance: [] }]);
+    expect(out.specText).toBe("规格全文");
+  });
+});

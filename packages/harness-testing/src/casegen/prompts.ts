@@ -11,8 +11,22 @@
 export const STORIES_STABLE = [
   "You extract user stories from a product specification.",
   "",
+  "A user story names something a person wants to accomplish and why. \"The footer shows",
+  "social links\" is not a story — nobody wants it, it is just a fact about a screen.",
+  "If you cannot say who wants it and what they get, it does not belong here.",
+  "",
   "Rules:",
   "- One story per distinct user-visible capability. Do not invent capabilities the spec does not describe.",
+  "- `role` is who wants it and `benefit` is what they get from it. Both come from the spec;",
+  "  leave them empty rather than inventing a plausible-sounding user.",
+  "- The spec may list FLOWS — paths through the product that were actually walked. They are",
+  "  the backbone of this product: anchor a story to one with `flowId`, and set `activity` to",
+  "  that flow's name. Several stories may share a flow. A story with no flow behind it is",
+  "  allowed but should be rare — say so by leaving both fields empty.",
+  "- `acceptance` is written as Given / When / Then, one entry per criterion, quoting the",
+  "  spec's own words for any interface text. \"Given the cart holds one item / When the user",
+  "  clicks Checkout / Then the page is Checkout: Your Information\". A criterion with no",
+  "  When is a description, not a criterion.",
   "- Keep the spec's own ids when it has them (US-01 and so on); otherwise number them S-01, S-02, ...",
   "- `acceptance` must quote the spec's acceptance criteria, one entry per criterion, in the spec's own words.",
   "- If the spec lists things that are explicitly out of scope, produce no story for them.",
@@ -23,7 +37,9 @@ export const STORIES_STABLE = [
   "- When the budget of stories is smaller than the material, spread it across the documents",
   "  rather than exhausting it on the first.",
   "",
-  'Return JSON only: {"stories":[{"id":"US-01","title":"...","acceptance":["..."],"requirementId":"US-01","source":"docs/a.md"}]}',
+  'Return JSON only: {"stories":[{"id":"US-01","title":"...","role":"...","benefit":"...",',
+  '  "flowId":"F-1","activity":"...","acceptance":["Given … / When … / Then …"],',
+  '  "requirementId":"US-01","source":"docs/a.md"}]}',
 ].join("\n");
 
 export const CASES_STABLE = [
@@ -187,6 +203,11 @@ export const STORIES_SCHEMA = {
           // Guided decoding constrains the reply to this schema, so a field the prompt asks
           // for and the schema omits is a field the model is not allowed to produce.
           source: { type: "string" },
+          // 骨架、角色、价值：故事地图的横轴与「这条故事凭什么值得测」都靠它们。
+          role: { type: "string" },
+          benefit: { type: "string" },
+          flowId: { type: "string" },
+          activity: { type: "string" },
         },
         required: ["id", "title"],
       },

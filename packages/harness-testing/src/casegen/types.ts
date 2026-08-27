@@ -25,6 +25,20 @@ export const StorySchema = z.object({
    */
   source: z.string().optional(),
   /**
+   * 骨架上的位置：这条故事属于哪个用户活动。
+   *
+   * 故事地图（Patton）的横轴是**用户活动按叙事顺序**，纵轴是每个活动下的故事。横轴必须
+   * 来自数据——扁平数组画不出地图，界面只能硬凑一个分类，而硬凑出来的横轴不是骨架。
+   * 值取自规格的流程（`flowId` 指向的那条），或流程终点所在的模块。
+   */
+  activity: z.string().optional(),
+  /** 这条故事兑现的是哪条流程。没有对应流程的故事——比如「页脚显示社交链接」——留空。 */
+  flowId: z.string().optional(),
+  /** 谁在用。「作为 X」——没有角色的条目不是用户故事，是界面事实。 */
+  role: z.string().optional(),
+  /** 为了什么。「以便 Z」——它是判断这条故事值不值得测的唯一依据。 */
+  benefit: z.string().optional(),
+  /**
    * `source` 是怎么来的。
    *
    * `located` 是拿故事的验收标准回规格里定位出来的，是事实；`claimed` 是模型自己说的、
@@ -240,6 +254,9 @@ export const GateReportSchema = z.object({
     tiersBacked: z.record(z.string(), z.number()).default({}),
     methods: z.record(z.string(), z.number()),
     negativeRatio: z.number(),
+    /** 这批故事有几条、其中几条挂在流程上——故事地图能不能画的前提。 */
+    stories: z.number().optional(),
+    storiesAnchored: z.number().optional(),
     orphans: z.number(),
     duplicates: z.number(),
   }),
