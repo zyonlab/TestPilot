@@ -12,10 +12,16 @@ import { nodeOutput, outputStore } from "./graphs.js";
  *
  * These are two different objects and the UI kept showing only one of them. **The generated
  * code belongs to a run** — it is a product of that pipeline, scored by gate ② and possibly
- * rewritten a few times by the repair loop. **The runnable code belongs to a case** — it is
- * what will execute tonight, and someone may have edited it since approval. Collapsing the
- * two makes "the harness produced this" and "this is what runs" look like one fact, which is
- * exactly the confusion an audit has to be able to resolve.
+ * rewritten a few times by the repair loop. **The code on a case is the version that batch
+ * arrived with**, and someone may have edited it since approval. Collapsing the two makes
+ * "the harness produced this" and "this is what runs" look like one fact, which is exactly
+ * the confusion an audit has to be able to resolve.
+ *
+ * 一句必须说准的话：**看板执行的不是这段源码本身，而是从它解析出来的动作表**——批准时
+ * 阶段二真的跑过的那串动作被写进用例的 `steps`（`review.ts` 的 `stepsFromActions`），
+ * 执行走的是那条路。这与「保留含义而不是信任文本」是同一个决定：执行、门禁、修复三方
+ * 对同一份动作表说话。这段源码留在这里是给人读、给人 diff 的证据，不是执行体。
+ * 此前这段注释写的是「it is what will execute tonight」，而代码里没有任何一处会执行它。
  *
  * Nothing here is recomputed: every number is read back out of the run that produced it, so
  * a page cannot report a gate score the run never got.

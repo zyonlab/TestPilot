@@ -15,6 +15,7 @@ import { ABLATABLE, gated, modelFromEnv } from "@testpilot/harness-core";
 import {
   reviseCase,
   runGate,
+  type Action,
   type CaseBundle,
   type MachineOracle,
   type TextCase,
@@ -47,6 +48,12 @@ export interface ReviewItem {
   oracle?: MachineOracle;
   /** Present once stage two has run. */
   code?: string;
+  /**
+   * 阶段二真的跑过的那串动作，展开共享前置之后。
+   *
+   * 批准时它取代阶段一的 `steps`：修复循环改的就是这里，而看板此前拿的是修复之前的版本。
+   */
+  codeSteps?: string[];
   codeBlocked?: boolean;
   codeFindings?: Array<{ rule: string; severity: string; message: string }>;
   /** Set if this case only went green after its assertion was weakened. */
@@ -110,9 +117,35 @@ interface GatedBundleShape {
 }
 
 interface CodeBundleShape {
-  code?: Array<{ caseId: string; code: string }>;
+  code?: Array<{ caseId: string; code: string; uses?: string[]; actions?: Action[] }>;
+  fragments?: Array<{ name: string; actions: Action[] }>;
   gate?: { findings?: Array<{ caseId?: string; rule: string; severity: string; message: string }> };
   repair?: { degraded?: string[] };
+}
+
+/**
+ * 阶段二真的跑过的那串动作，写成看板认得的步骤。
+ *
+ * 这是「修复循环的成果到不了看板」的修法。此前批准写进看板的 `steps` 一律取自**阶段一**的
+ * 文本用例，于是修复循环加的等待、改的措辞一条都传不下去——看板今晚仍然按原始步骤跑，
+ * 而且可能因为修复循环**已经修好的那个理由**而挂。
+ *
+ * 共享前置在这里展开：看板没有片段这个概念，一条用例要能独立跑起来。
+ * 断言不进步骤——它是判决，看板用 `expected` 与 `oracle` 表达。
+ */
+function stepsFromActions(
+  kase: { uses?: string[]; actions?: Action[] },
+  fragments: Array<{ name: string; actions: Action[] }>,
+): string[] | undefined {
+  if (!kase.actions?.length) return undefined;
+  const prologue = (kase.uses ?? []).flatMap((n) => fragments.find((f) => f.name === n)?.actions ?? []);
+  const steps = [...prologue, ...kase.actions]
+    .filter((a) => a.kind !== "assert")
+    .map((a) =>
+      a.kind === "input" && a.field ? `在「${a.field}」输入 ${a.text}` : a.text,
+    )
+    .filter((t) => t.trim());
+  return steps.length ? steps : undefined;
 }
 
 /** Read a run's products and pair them with the decisions already made. */
@@ -140,6 +173,7 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
 
   const items: ReviewItem[] = (gated?.cases ?? []).map((c) => {
     const mine = codeFindings.filter((f) => f.caseId === c.id);
+    const mineCode = coded?.code?.find((x) => x.caseId === c.id);
     const edit = edits[c.id];
     const shown = applyEdit(c, edit);
     return {
@@ -153,7 +187,8 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       expected: shown.expected,
       oracle: c.oracle,
       findings: gateFindings.filter((f) => f.caseId === c.id).map(({ rule, severity, message }) => ({ rule, severity, message })),
-      code: coded?.code?.find((x) => x.caseId === c.id)?.code,
+      code: mineCode?.code,
+      codeSteps: mineCode ? stepsFromActions(mineCode, coded?.fragments ?? []) : undefined,
       codeBlocked: mine.some((f) => f.severity === "block"),
       codeFindings: mine.map(({ rule, severity, message }) => ({ rule, severity, message })),
       degraded: degraded.has(c.id),
@@ -287,7 +322,14 @@ export async function approve(input: ApproveInput): Promise<TestCase[]> {
       expected: edit.expected ?? item.expected,
       precondition: item.precondition.join("; "),
       type: METHOD_TO_TYPE[item.designMethod] ?? "functional",
-      steps: (edit.steps ?? item.steps).map((text, i) => ({ order: i + 1, text })),
+      /**
+       * 步骤的来源，按优先级：人在队列里的编辑 → **阶段二真的跑过的动作** → 阶段一的文本。
+       *
+       * 中间那一档是补上的。此前它不存在，于是修复循环加的等待、改的措辞一条都到不了看板，
+       * 而看板正是这条用例今晚要跑的地方——它会带着修复循环已经修好的那个毛病重跑一遍。
+       * 人的编辑仍然排在最前：那是唯一一次有人看过这条用例并且表过态。
+       */
+      steps: (edit.steps ?? item.codeSteps ?? item.steps).map((text, i) => ({ order: i + 1, text })),
       // Stage-two code rides along when it exists, so an approved case is runnable at once.
       code: item.code,
       hasCode: !!item.code,

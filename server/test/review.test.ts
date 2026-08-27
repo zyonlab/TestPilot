@@ -341,3 +341,61 @@ describe("the queue itself", () => {
     expect(list.map((r) => r.wfRunId)).toEqual(["wf-1"]);
   });
 });
+
+/**
+ * 修复循环改过的东西，能不能跟着批准走到看板上。
+ *
+ * 这一组存在的理由是一个实测出来的断链：批准写进看板的 `steps` 一律取自**阶段一**的文本用例，
+ * 而修复循环改的是阶段二的动作。于是它加的等待、改的措辞一条都传不下去——看板今晚仍然按
+ * 原始步骤跑，而且可能因为修复循环**已经修好的那个理由**而挂。
+ */
+describe("what the board ends up running", () => {
+  const withStageTwo = (over: Record<string, unknown> = {}) => {
+    outputs["wf-1:repair"] = {
+      fragments: [{ name: "sharedSetup", actions: [{ kind: "action", text: "打开登录页" }] }],
+      code: [
+        {
+          caseId: "c1",
+          code: "await agent.aiAction('…');",
+          uses: ["sharedSetup"],
+          actions: [
+            { kind: "input", text: "${secret.PASSWORD}", field: "密码" },
+            { kind: "action", text: "等待错误提示出现后点击 Sign in" },
+            { kind: "assert", text: "显示 Invalid username or password" },
+          ],
+        },
+      ],
+      repair: { degraded: [] },
+      ...over,
+    };
+  };
+
+  it("takes the steps the repair loop actually ran, not stage one's", async () => {
+    withStageTwo();
+    await approve({ wfRunId: "wf-1", caseIds: ["c1"] });
+    const steps = (created[0].steps as Array<{ text: string }>).map((s) => s.text);
+    // 共享前置被展开：看板没有片段这个概念，一条用例要能独立跑起来。
+    expect(steps[0]).toBe("打开登录页");
+    expect(steps[1]).toBe("在「密码」输入 ${secret.PASSWORD}");
+    // 修复循环加的等待到位了——这正是此前丢掉的东西。
+    expect(steps[2]).toContain("等待错误提示出现");
+    // 断言不进步骤：它是判决，看板用 expected 与 oracle 表达。
+    expect(steps.some((t) => t.includes("Invalid username or password"))).toBe(false);
+    expect(created[0].expected).toBe("显示 Invalid username or password");
+    expect((created[0].oracle as { value: string }).value).toBe("Invalid username or password");
+  });
+
+  it("still prefers a person's edit over the machine's version", async () => {
+    withStageTwo();
+    await editCase("wf-1", "c1", { steps: ["人改过的一步"] });
+    await approve({ wfRunId: "wf-1", caseIds: ["c1"] });
+    const steps = (created[0].steps as Array<{ text: string }>).map((s) => s.text);
+    expect(steps).toEqual(["人改过的一步"]);
+  });
+
+  it("falls back to stage one when the run never generated code", async () => {
+    await approve({ wfRunId: "wf-1", caseIds: ["c1"] });
+    const steps = (created[0].steps as Array<{ text: string }>).map((s) => s.text);
+    expect(steps).toEqual(["输入错误密码", "点击 Sign in"]);
+  });
+});
