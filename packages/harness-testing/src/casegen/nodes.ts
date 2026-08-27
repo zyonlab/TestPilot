@@ -505,7 +505,20 @@ export function composeSpecNode(
         parsed.summary,
         "",
         "## 规则",
-        ...located.map((r) => `- **${r.id}** ${r.text}${r.evidence ? `\n  > ${r.evidence}` : ""}`),
+        /**
+         * 海拔要写进正文。
+         *
+         * 我强制模型给每条规则标了 `altitude`，然后把它留在结构化字段里没写出来——
+         * 而 `plan.stories` 读的是**正文**。于是下一层看到的还是一片没有层次的规则列表，
+         * 8 条故事全是「X 页展示 Y」，没有一条讲校验，尽管规格里明明白白写着两条。
+         *
+         * 要求写了、数据没往下传，这是这条流水线上反复出现的同一个形状。
+         */
+        ...located.map(
+          (r) =>
+            `- **${r.id}** \`[${r.altitude ?? "?"}]\` ${r.text}${r.about ? `（关于 ${r.about}）` : ""}` +
+            `${r.evidence ? `\n  > ${r.evidence}` : ""}`,
+        ),
         "",
         ...(flows.length
           ? [
