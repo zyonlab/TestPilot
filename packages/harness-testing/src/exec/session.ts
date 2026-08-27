@@ -11,9 +11,9 @@ import {
   getExtensionId,
   unlockWallet,
 } from "./wallet.js";
-import { resolveChainConfig, resolveViewport } from "./config.js";
+import { resolveChainConfig, resolveViewport } from "../env.js";
 import { setupInjectedWallet } from "./injectedWallet.js";
-import type { StorageState } from "./db.js";
+import type { StorageState } from "../types.js";
 
 // Apply the fixed query params to EVERY navigation (not just the entry URL) via request
 // interception: each document/navigation request's URL is rewritten to carry the params, so

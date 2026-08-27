@@ -42,7 +42,7 @@ export function captureMidsceneReport(opts: {
     copyFileSync(newest.path, opts.destPath);
 
     const result: CapturedReport = { reportPath: opts.destPath };
-    const tokens = parseTokens(opts.midsceneDir);
+    const tokens = parseTokens(opts.midsceneDir, opts.sinceMs);
     if (tokens !== undefined) result.tokens = tokens;
     return result;
   } catch {
@@ -50,47 +50,56 @@ export function captureMidsceneReport(opts: {
   }
 }
 
-// Best-effort token total: scan the log files and sum token-ish integers.
-// Prefers omitting (returns undefined) over guessing a wrong number.
-function parseTokens(midsceneDir: string): number | undefined {
-  const logDir = `${midsceneDir}/log`;
-  const files = ["ai-profile-stats.log", "ai-call.log"];
+/**
+ * Tokens spent during ONE run.
+ *
+ * Two things this has to get right, both learned the hard way:
+ *   * the log format is `total-tokens, 2707` — comma separated, not `total_tokens: 2707`.
+ *     A parser that only knew the colon form silently returned undefined for every run
+ *     since the beginning, which is why nothing ever had a token count.
+ *   * these log files are append-only across ALL runs, so the lines must be filtered by
+ *     the run window. Summing the file would report the project's lifetime spend as if it
+ *     belonged to the last run.
+ */
+export function parseTokens(midsceneDir: string, sinceMs: number): number | undefined {
+  const path = `${midsceneDir}/log/ai-profile-stats.log`;
+  if (!existsSync(path)) return undefined;
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return undefined;
+  }
+  return sumTokens(text, sinceMs);
+}
+
+/** Exported for testing: the format is Midscene's, so it deserves pinning down. */
+export function sumTokens(text: string, sinceMs: number): number | undefined {
   let total = 0;
   let found = false;
-
-  for (const file of files) {
-    const path = `${logDir}/${file}`;
-    if (!existsSync(path)) continue;
-    let text: string;
-    try {
-      text = readFileSync(path, "utf8");
-    } catch {
+  for (const line of text.split("\n")) {
+    const at = line.match(/^\[([^\]]+)\]/);
+    if (at) {
+      const ts = Date.parse(at[1]);
+      // A line without a parseable timestamp is kept: dropping it would under-report,
+      // and under-reporting cost is the direction that hides problems.
+      if (Number.isFinite(ts) && ts < sinceMs) continue;
+    }
+    const m =
+      line.match(/total[_-]?tokens["']?\s*[,:=]\s*(\d+)/i) ??
+      line.match(/["']?total[_-]?tokens["']?\s*[:=]\s*(\d+)/i);
+    if (m) {
+      total += Number(m[1]);
+      found = true;
       continue;
     }
-
-    try {
-      // Prefer an explicit total_tokens / totalTokens field when present.
-      const totalRe = /["']?total[_-]?tokens["']?\s*[:=]\s*(\d+)/gi;
-      let m: RegExpExecArray | null;
-      let sawTotal = false;
-      while ((m = totalRe.exec(text)) !== null) {
-        total += Number(m[1]);
-        sawTotal = true;
-        found = true;
-      }
-      if (sawTotal) continue;
-
-      // Otherwise sum prompt + completion token fields.
-      const partRe = /["']?(?:prompt|completion)[_-]?tokens["']?\s*[:=]\s*(\d+)/gi;
-      while ((m = partRe.exec(text)) !== null) {
-        total += Number(m[1]);
-        found = true;
-      }
-    } catch {
-      // Ignore this file; degrade to whatever we already have.
+    // No total on this line: fall back to prompt + completion.
+    const parts = [...line.matchAll(/(?:prompt|completion)[_-]?tokens["']?\s*[,:=]\s*(\d+)/gi)];
+    if (parts.length) {
+      for (const p of parts) total += Number(p[1]);
+      found = true;
     }
   }
-
   if (!found || !Number.isFinite(total) || total <= 0) return undefined;
   return total;
 }

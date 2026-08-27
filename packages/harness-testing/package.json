@@ -1,0 +1,35 @@
+{
+  "name": "@testpilot/harness-testing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./exec": "./src/exec/index.ts",
+    "./baselines": "./src/baselines/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "g1": "tsx scripts/run-g1.ts",
+    "new:node": "tsx scripts/new-node.ts"
+  },
+  "dependencies": {
+    "@midscene/web": "^0.30.0",
+    "@testpilot/harness-core": "workspace:*",
+    "ethers": "^6.17.0",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
+    "puppeteer": "^23.9.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pixelmatch": "^5.2.6",
+    "@types/pngjs": "^6.0.5",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9",
+    "tsx": "^4.19.2",
+    "dotenv": "^16.4.5"
+  }
+}

@@ -1,18 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { Browser, Page } from "puppeteer";
+import { walletsDir } from "../env.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
+// These used to be resolved from __dirname inside the gateway. The executor moved into a
+// package that runs in the runner process, so they now come from the working directory
+// (the supervisor starts the runner with the gateway's cwd) or TP_WALLET_DIR.
 // Unpacked MetaMask lives in server/.wallets/metamask (see scripts/setup-wallet.mjs).
-export const WALLET_DIR = resolve(__dirname, "..", ".wallets", "metamask");
+export const WALLET_DIR = resolve(walletsDir(), "metamask");
 // Onboarded profile (test seed already imported) — see scripts/onboard-wallet.mjs.
-export const PROFILE_DIR = resolve(__dirname, "..", ".wallets", "profile");
+export const PROFILE_DIR = resolve(walletsDir(), "profile");
 
 // Our freshly-generated controllable account (scripts/gen-wallet.mjs writes account.txt);
 // falls back to the public Hardhat account only if no private wallet was generated.
-const accountFile = resolve(__dirname, "..", ".wallets", "account.txt");
+const accountFile = resolve(walletsDir(), "account.txt");
 export const TEST_ACCOUNT = existsSync(accountFile)
   ? readFileSync(accountFile, "utf8").trim()
   : "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";

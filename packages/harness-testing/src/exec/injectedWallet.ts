@@ -1,15 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { Page } from "puppeteer";
 import { Wallet, JsonRpcProvider, getBytes } from "ethers";
-import type { ChainConfig } from "./config.js";
+import type { ChainConfig } from "../types.js";
+import { walletsDir } from "../env.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
+// Same story as wallet.ts: this used to be resolved from __dirname inside the gateway.
+// The executor lives in a package now, so the seed comes from the working directory
+// (the runner is started with the gateway's cwd) or TP_WALLET_DIR.
 function readSeed(): string {
-  const p = resolve(__dirname, "..", ".wallets", "seed.txt");
-  if (!existsSync(p)) throw new Error("No wallet seed. Run: pnpm gen:wallet");
+  const p = resolve(walletsDir(), "seed.txt");
+  if (!existsSync(p)) throw new Error(`No wallet seed at ${p}. Run: pnpm gen:wallet`);
   return readFileSync(p, "utf8").trim();
 }
 

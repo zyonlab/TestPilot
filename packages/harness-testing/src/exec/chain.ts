@@ -1,7 +1,7 @@
 // On-chain assertions: verify real chain state (balances) after a dapp case's steps run,
 // not just the UI. Balance ops (increased/decreased/changed) snapshot BEFORE the steps and
 // compare AFTER; threshold ops (gte/lte/eq) compare the after value to a human-unit value.
-import type { ChainAssertion } from "./db.js";
+import type { ChainAssertion } from "../types.js";
 
 async function rpcCall(rpcUrl: string, method: string, params: unknown[]): Promise<unknown> {
   const r = await fetch(rpcUrl, {
