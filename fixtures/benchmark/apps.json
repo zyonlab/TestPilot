@@ -23,20 +23,20 @@
       }
     },
     {
-      "id": "petclinic-rest",
-      "name": "Spring PetClinic（REST 版）",
-      "framework": "Spring Boot REST + 独立前端",
-      "why": "同一个领域的前后端分离版本。它自身只有 API，要配 Angular 前端才有界面——所以排在服务端渲染版后面。",
-      "url": "http://localhost:9966",
-      "image": "springcommunity/spring-petclinic-rest:4.0.2",
-      "start": "docker run --rm -p 9966:9966 springcommunity/spring-petclinic-rest:4.0.2",
+      "id": "juice-shop",
+      "name": "OWASP Juice Shop",
+      "framework": "Angular SPA + Node",
+      "why": "不属于那套公开基准，因此**没有可对照的已发表基线**——加它是为了另一件事：一个活跃维护、单容器、界面丰富的现代 SPA。登录、注册、搜索、购物篮、结账、投诉表单（带校验）、用户资料，都是那套 2016 年的应用给不了的形态。基准套件的可比性由 PetClinic 承担，覆盖面由它补。",
+      "url": "http://localhost:8081",
+      "image": "bkimminich/juice-shop:v20.2.0",
+      "start": "docker run --name tp-bench-juiceshop -p 8081:3000 bkimminich/juice-shop:v20.2.0",
       "health": {
         "kind": "http",
-        "url": "http://localhost:9966/petclinic/api/pettypes"
+        "url": "http://localhost:8081/"
       },
-      "verified": "镜像存在，2026-08-01，168 MB，版本可 pin",
+      "verified": "镜像存在：8686 万次拉取、2026-08-21 更新、109 MB、版本可 pin",
       "startedOnce": null,
-      "caveat": "只有 API，没有界面。要当 GUI 基准得再配一个前端容器，前端镜像尚未核实。"
+      "caveat": "**这台机器现在拉不动**：Docker Hub 的认证与 blob 接口反复 TLS 超时（PetClinic 是早先网络好时拉下来的）。等网络好转再试。"
     },
     {
       "id": "pagekit",
@@ -66,7 +66,7 @@
         "kind": "http",
         "url": "http://localhost:8081/"
       },
-      "verified": null,
+      "verified": "**ghcr 镜像不公开**：`docker pull ghcr.io/antoinejaussoin/retro-board` 返回 denied。Docker Hub 上也查不到。要用它只能自建。",
       "startedOnce": null,
       "caveat": "**没有找到可公开拉取的镜像**：Docker Hub 上查不到，ghcr 的 tags 接口要鉴权，没有核实成功。要么自建，要么等确认镜像地址。不写一个没核实过的 `docker run` 进来。"
     },
@@ -123,5 +123,14 @@
       "id": "saucedemo",
       "why": "曾作为基准，2026-08-27 撤下。太小（14 屏、无表单校验、无真实后端），做不出可比结果；且第三方托管、我们冻结不了它，站点改版会让历史数字失去意义。它在这个项目里的价值已经兑现——探索循环的九个 bug 全是在它上面撞出来的。"
     }
-  ]
+  ],
+  "notSuitable": [
+    {
+      "id": "petclinic-rest",
+      "why": "**只有 API，没有界面。** 我们测的是 GUI——探索靠采集可见控件、判据靠页面文本、用例靠点击与填写。一个没有界面的应用在这条流水线上什么都跑不出来。曾经登记它是因为它属于那套公开基准，但属于基准不等于对我们有用。",
+      "image": "springcommunity/spring-petclinic-rest:4.0.2",
+      "note": "要用它当 GUI 基准，得再配一个前端容器；`springcommunity/spring-petclinic-angular` 查无此镜像。"
+    }
+  ],
+  "uiOnly": "**基准应用必须有界面。** 这条流水线的每一层都建立在界面上：探索采集可见控件、判据比对页面文本、用例靠点击与填写。一个只有 API 的应用在这里什么都跑不出来——属于公开基准不等于对我们有用。"
 }

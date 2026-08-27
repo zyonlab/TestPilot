@@ -91,6 +91,17 @@ export default defineHarnessConfig({
       healthcheck: { kind: "http", url: "http://localhost:8080/" },
     },
     {
+      id: "bench-juiceshop",
+      kind: "app",
+      description:
+        "OWASP Juice Shop（Angular SPA）：登录、注册、搜索、购物篮、结账、带校验的投诉表单。" +
+        "不在那套公开基准里，所以没有可对照的基线——它补的是**界面形态的覆盖面**",
+      command: "docker",
+      args: ["run", "--name", "tp-bench-juiceshop", "-p", "8081:3000", "bkimminich/juice-shop:v20.2.0"],
+      autostart: false,
+      healthcheck: { kind: "http", url: "http://localhost:8081/" },
+    },
+    {
       id: "bench-pagekit",
       kind: "app",
       description: "Pagekit（Vue + PHP）：后台管理、内容编辑、权限。sqlite 变体免去外部数据库",
