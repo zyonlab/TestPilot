@@ -38,3 +38,30 @@ describe("classifyFailure", () => {
     expect(f.retryable).toBe(false);
   });
 });
+
+/**
+ * 规划失败不是断言失败。
+ *
+ * 实测：`Navigate to the product list page` —— 一个目标，不是一个动作 —— 让驱动模型
+ * replan 十次后放弃，而这条消息掉进兜底档变成 `EXEC_ASSERT`。于是一次**由用例措辞造成**
+ * 的失败，被记成「产品没通过断言」。分档机制存在的全部理由就是不让这种事发生。
+ */
+describe("a driver that could not plan the instruction", () => {
+  const msg = "Replanning 10 times, which is more than the limit, please split the task into multiple steps";
+
+  it("is not filed as a failed assertion", () => {
+    const f = classifyFailure(msg);
+    expect(f.attribution).not.toBe("assert");
+    expect(f.code).toBe("EXEC_PLAN");
+  });
+
+  it("is retryable, because rewording the step can fix it", () => {
+    expect(classifyFailure(msg).retryable).toBe(true);
+    // 和「找不到元素」同一档：修复循环该去改用例的措辞，而不是走「这是产品缺陷」的出口。
+    expect(classifyFailure(msg).attribution).toBe("locate");
+  });
+
+  it("still calls a real assertion failure an assertion failure", () => {
+    expect(classifyFailure('expected the page to show "$7.99" but it showed "$8.99"').attribution).toBe("assert");
+  });
+});

@@ -29,6 +29,9 @@ const ENV =
 const TIMEOUT = /timeout|ETIMEDOUT|Navigation timeout|timed out/i;
 const INFRA = new RegExp(`${MODEL.source}|${ENV.source}|${TIMEOUT.source}`, "i");
 
+/** 驱动模型拆不动这句指令：它是一个目标，不是一个动作。 */
+const PLAN = /replanning \d+ times|more than the limit|split the task into multiple steps/i;
+
 // The model could not ground the instruction in the page: element/target not found.
 const LOCATE =
   /cannot find|could not find|not found on the page|no element|element not located|failed to locate|unable to locate|no matching element/i;
@@ -47,6 +50,20 @@ export function classifyFailure(message: string): Failure {
     return { code: "EXEC_ENV", attribution: "infra", retryable: true, message: msg };
   if (TIMEOUT.test(msg))
     return { code: "EXEC_TIMEOUT", attribution: "infra", retryable: true, message: msg };
+  if (PLAN.test(msg)) {
+    /**
+     * 规划失败：指令太抽象，驱动模型拆不成动作。
+     *
+     * 这**不是**产品没通过断言。实测里 `Navigate to the product list page` 这样一句
+     * ——一个目标，不是一个动作——让 Midscene replan 十次后放弃，而它掉进兜底档变成了
+     * `EXEC_ASSERT`：一次由用例措辞造成的失败，被记成「产品是坏的」。分档机制存在的
+     * 全部理由就是不让这种事发生，而这一类正好漏在网外。
+     *
+     * 归到 `locate`：跟「找不到元素」一样，是可以靠改措辞解决的，修复循环该去改用例，
+     * 而不是走「这是产品缺陷」的出口。
+     */
+    return { code: "EXEC_PLAN", attribution: "locate", retryable: true, message: msg };
+  }
   if (LOCATE.test(msg)) {
     // A replan can succeed where a cached plan failed — this is what self-heal retries.
     return { code: "EXEC_LOCATE", attribution: "locate", retryable: true, message: msg };
