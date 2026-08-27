@@ -19,7 +19,13 @@ import { z } from "zod";
 
 /** 一次动作。`goto` 与 `click` 不花模型调用，`login` 是探索里唯一必须问模型的一步。 */
 export const SfgActionSchema = z.object({
-  kind: z.enum(["goto", "click", "login"]),
+  /**
+   * `probe` 是**做实验**：故意把表单空着提交，看产品说什么。
+   *
+   * 它和其余三种性质不同——那三种是「走到某处」，它是「故意造一个坏输入」。
+   * 遍历永远走不到校验状态，因为通往它们的边需要有人故意去踩。
+   */
+  kind: z.enum(["goto", "click", "login", "probe"]),
   /** 人能看懂的目标：控件的可见文案，或它指向的地址。 */
   target: z.string().default(""),
   /** 怎么再找到它。可复现的关键：`data-test` / `#id` / 一条 nth-of-type 路径。 */
@@ -134,7 +140,9 @@ export function describeGraph(g: StateFlowGraph): string {
           ? `走到 ${t.action.target}`
           : t.action.kind === "login"
             ? "登录"
-            : `点「${t.action.target}」`;
+            : t.action.kind === "probe"
+              ? `空着提交「${t.action.target.replace("（空表单）", "")}」`
+              : `点「${t.action.target}」`;
       const mark = t.walked === false ? "（未走过·仅见链接）" : "";
       return t.ok && t.to
         ? `- ${t.from} --[${how}]${mark}--> ${t.to}`

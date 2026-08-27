@@ -150,3 +150,44 @@ describe("edges we walked vs edges we only saw", () => {
     expect(walked).not.toContain("未走过");
   });
 });
+
+/**
+ * 做实验：故意把表单空着提交。
+ *
+ * 遍历永远走不到校验状态——通往它们的边需要有人**故意**造一个坏输入。实测在 PetClinic 上，
+ * 13 条黄金清单未覆盖的 7 条里有 5 条是这一类（必填校验、格式校验、搜不到的提示）。
+ * 那不是「覆盖还不够高」，是黑盒遍历的**结构性缺口**。
+ *
+ * 只做最保守的一种：**空着提交**。它不需要知道任何字段该填什么，而绝大多数表单对空提交
+ * 都有话说。填坏值（电话填字母、日期填昨天）需要知道字段语义，那是下一步的事。
+ */
+describe("probing a form on purpose", () => {
+  const g: StateFlowGraph = {
+    abstraction: "route+controls",
+    entry: "/owners/new",
+    stoppedBecause: "",
+    states: [
+      { id: "/owners/new", route: "/owners/new", title: "New Owner", controls: [] },
+      { id: "/owners/new#1", route: "/owners/new", title: "New Owner", controls: [] },
+    ],
+    transitions: [
+      {
+        from: "/owners/new",
+        to: "/owners/new#1",
+        action: { kind: "probe", target: "Add Owner（空表单）", selector: "#submit", input: "" },
+        ok: true,
+        walked: true,
+      },
+    ],
+  };
+
+  it("在图里读得出这是一次实验，而不是一次普通点击", () => {
+    expect(describeGraph(g)).toContain("空着提交「Add Owner」");
+  });
+
+  it("校验态是同一路由的另一个状态——路由没变，能做的事变了", () => {
+    // 这正是 `route+controls` 这把尺子该抓住的：地址一样，屏幕不一样。
+    expect(g.states[0].route).toBe(g.states[1].route);
+    expect(g.states[0].id).not.toBe(g.states[1].id);
+  });
+});

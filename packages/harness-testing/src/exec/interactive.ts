@@ -164,6 +164,12 @@ export async function runObserve(
     href: string;
     external: boolean;
     clickable: boolean;
+    /** 这是个可填的输入框吗——做实验那一步要靠它。 */
+    fillable: boolean;
+    /** 它属于哪个表单（表单元素的选择器）。同一个表单的字段要一起提交才有意义。 */
+    form: string;
+    /** 提交按钮。有它才提交得了。 */
+    submit: boolean;
   }
 
   /** 一屏的事实：地址、标题、正文、可交互控件的可见文案。 */
@@ -258,12 +264,27 @@ export async function runObserve(
               selector = parts.length ? `body ${parts.join(" > ")}` : tag;
             }
 
+            const type = (e.type || "").toLowerCase();
+            const form = el.closest("form");
+            let formSel = "";
+            if (form) {
+              const fdt = form.getAttribute("data-test");
+              const fid = form.id;
+              formSel = fdt ? `[data-test="${fdt}"]` : fid ? `#${CSS.escape(fid)}` : "form";
+            }
             return {
               display: `${tag}${e.type ? `[${e.type}]` : ""}${external ? "[外站]" : ""}: ${shown.slice(0, 60)}${path ? ` -> ${path}` : ""}`,
               label: shown.slice(0, 60),
               selector,
               href: path,
               external,
+              // 能填的：文本类 input、textarea、select。checkbox/radio 这一版先不管——
+              // 它们的「坏值」不是空字符串，需要另一套判断。
+              fillable:
+                (tag === "input" && !["submit", "button", "reset", "hidden", "checkbox", "radio", "file"].includes(type)) ||
+                tag === "textarea",
+              form: formSel,
+              submit: type === "submit" || (tag === "button" && (el.getAttribute("type") || "submit") === "submit"),
               clickable:
                 /^(button|a)$/.test(tag) ||
                 e.type === "submit" ||
@@ -449,7 +470,19 @@ export async function runObserve(
     type Step =
       | { key: string; kind: "login"; instruction: string }
       | { key: string; kind: "click"; selector: string; label: string }
-      | { key: string; kind: "goto"; href: string };
+      | { key: string; kind: "goto"; href: string }
+      /**
+       * **做实验**：故意把表单空着提交，看产品说什么。
+       *
+       * 遍历走不到校验状态——通往它们的边需要有人**故意**造一个坏输入。实测在 PetClinic 上，
+       * 13 条黄金清单未覆盖的 7 条里有 5 条是这一类（必填校验、格式校验、搜不到的提示）。
+       * 那不是「覆盖还不够高」，是黑盒遍历的**结构性缺口**。
+       *
+       * 这一步只做最保守的一种实验：**空着提交**。它不需要知道任何字段该填什么，
+       * 而绝大多数表单对空提交都有话说。填坏值（电话填字母、日期填昨天）需要知道字段语义，
+       * 那是下一步的事。
+       */
+      | { key: string; kind: "probe"; form: string; submit: string; label: string };
     const nextAction = (screen: { url: string; elements: Control[] }): Step | undefined => {
       const here = pathOf(screen.url);
       // 有密码框就先登录：凭证写在页面上（演示站的常见做法），那一句需要看着页面判断，
@@ -476,6 +509,25 @@ export async function runObserve(
         ...screen.elements.filter((c) => !drawer.test(c.label)),
         ...screen.elements.filter((c) => drawer.test(c.label)),
       ];
+      /**
+       * 这一屏有表单就先做一次实验——空着提交。
+       *
+       * 排在点击之前：校验状态是这一屏最值得看的东西，而点走了就回不来了
+       * （多数导航会离开这一页）。一个表单只做一次，做过就记下。
+       */
+      const submitBtn = screen.elements.find((e) => e.submit && e.form);
+      if (submitBtn) {
+        const probeKey = `${here}::__probe__::${submitBtn.form}`;
+        if (!triedClick.has(probeKey))
+          return {
+            key: probeKey,
+            kind: "probe",
+            form: submitBtn.form,
+            submit: submitBtn.selector,
+            label: submitBtn.label,
+          };
+      }
+
       for (const c of ordered) {
         // 外站不点：探索的对象是这个产品，不是它页脚链到的地方。
         if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
@@ -562,6 +614,23 @@ export async function runObserve(
         if (next.kind === "goto") {
           note(`第 ${rounds} 轮：走到 ${next.href}`);
           await page.goto(new URL(next.href, current.url).toString());
+        } else if (next.kind === "probe") {
+          /**
+           * 清空这个表单的所有可填字段，然后提交。
+           *
+           * 清空而不是随便填：**空提交是唯一不需要知道字段语义就能做的实验**，
+           * 而它恰好触发绝大多数产品的必填校验——那正是遍历永远走不到的那类状态。
+           */
+          note(`第 ${rounds} 轮：空着提交表单（${next.label}）`);
+          await page.$eval(next.form, (f) => {
+            for (const el of (f as HTMLElement).querySelectorAll("input, textarea")) {
+              const i = el as HTMLInputElement;
+              if (["submit", "button", "reset", "hidden", "checkbox", "radio", "file"].includes(i.type)) continue;
+              i.value = "";
+              i.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+          });
+          await page.$eval(next.submit, (el) => (el as HTMLElement).click());
         } else if (next.kind === "click") {
           /**
            * **按选择器点，不问模型。**
@@ -601,7 +670,9 @@ export async function runObserve(
               ? { kind: "goto", target: next.href, selector: "" }
               : next.kind === "login"
                 ? { kind: "login", target: "登录表单", selector: "", input: "${env.*} / ${secret.*}" }
-                : { kind: "click", target: next.label, selector: next.selector },
+                : next.kind === "probe"
+                  ? { kind: "probe", target: `${next.label}（空表单）`, selector: next.submit, input: "" }
+                  : { kind: "click", target: next.label, selector: next.selector },
           ok: true,
           walked: true,
           /**
@@ -638,7 +709,13 @@ export async function runObserve(
         const why = (e as Error).message.split("\n")[0].slice(0, 160);
         note(`没能往前走：${why.slice(0, 70)}`, "warn");
         const what =
-          next.kind === "goto" ? `走到 ${next.href}` : next.kind === "click" ? `点 ${next.label}` : next.instruction;
+          next.kind === "goto"
+            ? `走到 ${next.href}`
+            : next.kind === "click"
+              ? `点 ${next.label}`
+              : next.kind === "probe"
+                ? `空着提交 ${next.label}`
+                : next.instruction;
         missed.push(`${what} —— ${why}`);
         // 走不通也是一条边：它记的是「这条路走不过去」，而那正是下游「没有答案的地方」
         // 的来源之一。丢掉它，材料就只剩成功路径，看起来像这个产品没有走不通的地方。
@@ -649,7 +726,9 @@ export async function runObserve(
               ? { kind: "goto", target: next.href, selector: "" }
               : next.kind === "login"
                 ? { kind: "login", target: "登录表单", selector: "" }
-                : { kind: "click", target: next.label, selector: next.selector },
+                : next.kind === "probe"
+                  ? { kind: "probe", target: `${next.label}（空表单）`, selector: next.submit, input: "" }
+                  : { kind: "click", target: next.label, selector: next.selector },
           ok: false,
           walked: true,
           note: why,

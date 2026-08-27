@@ -51,7 +51,9 @@ const howOf = (t: SfgTransition): string =>
     ? `走到 ${t.action.target}`
     : t.action.kind === "login"
       ? "登录"
-      : `点「${t.action.target}」`;
+      : t.action.kind === "probe"
+        ? `空着提交「${t.action.target.replace("（空表单）", "")}」`
+        : `点「${t.action.target}」`;
 
 /**
  * 枚举入口到各终点的路径。
