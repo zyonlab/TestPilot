@@ -13,7 +13,11 @@ export default defineHarnessConfig({
   budget: { calls: 500, usd: 0, ms: 4 * 60 * 60_000 },
   ablate: [],
   guard: {
-    allowHosts: ["localhost", "127.0.0.1", "::1"],
+    // www.saucedemo.com is Sauce Labs' public E2E practice target: nothing on it is real
+    // and "Reset App State" undoes everything. It has to be allowlisted because the whole
+    // point of the benchmark is the checkout flow, and "checkout"/"pay" is exactly what
+    // blockIrreversible refuses off the allowlist.
+    allowHosts: ["localhost", "127.0.0.1", "::1", "www.saucedemo.com", "saucedemo.com"],
     // Irreversible-looking steps (delete / pay / transfer …) are refused outside the
     // allowlist. This is the "someone ran the whole suite against production" guard,
     // not a security boundary.
