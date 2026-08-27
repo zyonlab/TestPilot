@@ -122,8 +122,26 @@ export async function runObserve(
   };
   let session: Session | undefined;
 
+  /**
+   * 一屏上的一个控件。
+   *
+   * `selector` 是关键：**我们已经精确知道要点哪个元素了**，把它翻译成一句自然语言、
+   * 再让一个看截图的模型去屏幕上找回来，是纯损失——而且它找不到 `data-test` 这种
+   * 屏幕上根本不显示的名字时，不会报错，只会什么都不做。
+   */
+  interface Control {
+    display: string;
+    label: string;
+    selector: string;
+    href: string;
+    external: boolean;
+    clickable: boolean;
+  }
+
   /** 一屏的事实：地址、标题、正文、可交互控件的可见文案。 */
-  const snapshot = async (label: string): Promise<{ text: string; url: string; controls: string[] }> => {
+  const snapshot = async (
+    label: string,
+  ): Promise<{ text: string; url: string; controls: string[]; elements: Control[] }> => {
     const page = session!.page as unknown as {
       url(): string;
       title(): Promise<string>;
@@ -133,27 +151,107 @@ export async function runObserve(
     const body = await page
       .evaluate(() => (document.body?.innerText ?? "").replace(/\n{3,}/g, "\n\n").slice(0, 4000))
       .catch(() => "");
-    const controls = await page
+    /**
+     * 控件采集。
+     *
+     * **这里面一个具名的内部函数都不能有。** esbuild 的 keepNames 会把
+     * `const f = (x) => …` 包成 `__name(f, "f")`，而 `__name` 只存在于打包产物里；
+     * `page.evaluate` 传过去的是函数源码，到了页面里就是 `ReferenceError: __name is not defined`。
+     * 一次实测里它表现为「0 个控件」，静悄悄的——所以下面的错误也不再吞掉。
+     */
+    const elements: Control[] = await page
       .evaluate(() =>
-        [...document.querySelectorAll("button, a[href], input, select, textarea, [role=button]")]
+        [...document.querySelectorAll("button, a, input, select, textarea, [role=button]")]
+          /**
+           * **只算看得见的。**
+           *
+           * 抽屉式菜单里的项一直在 DOM 里——把它们算进来有两个后果，都很坏：
+           * ① 判重看不见「菜单打开了」这件事（控件集合前后一模一样），于是一次成功的点击
+           *    被记成「没有新界面」；② 探索会去点一个屏幕上根本不存在的东西。
+           * 采集这一层的契约是「这一屏上有什么」，隐藏的东西不在这一屏上。
+           */
+          .filter((el) => {
+            const e = el as HTMLElement;
+            if (typeof e.checkVisibility === "function" && !e.checkVisibility()) return false;
+            const r = e.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          })
           .slice(0, 60)
           .map((el) => {
-            const e = el as HTMLElement & { placeholder?: string; value?: string; type?: string };
+            const e = el as HTMLElement & { placeholder?: string; type?: string; href?: string };
             const label =
               (e.innerText || "").trim() ||
               e.getAttribute("aria-label") ||
               e.placeholder ||
               e.getAttribute("name") ||
               "";
-            return `${el.tagName.toLowerCase()}${e.type ? `[${e.type}]` : ""}: ${label.slice(0, 60)}`;
+            // 站外链接标出来。不标，探索会顺着页脚的社交链接走出这个产品。
+            let external = false;
+            let path = "";
+            try {
+              if (e.href) {
+                const u = new URL(e.href, location.href);
+                external = u.origin !== location.origin;
+                if (!external) path = u.pathname + u.search;
+              }
+            } catch {
+              external = false;
+            }
+            /**
+             * 没有文案的图标链接，用它的 data-test / title 兜底。
+             *
+             * SauceDemo 的购物车就是这样一个纯图标 `<a>`：`innerText` 是空的，于是它被
+             * 整条过滤掉——而它是通往购物车与结账三步的**唯一**入口。
+             */
+            const shown = label || e.getAttribute("title") || e.getAttribute("data-test") || path;
+            const tag = el.tagName.toLowerCase();
+
+            // 这个元素怎么再找回来：data-test → id → 一条 nth-of-type 路径。内联，见上面那段。
+            let selector = "";
+            const dt = el.getAttribute("data-test");
+            if (dt) selector = `[data-test="${dt}"]`;
+            else if (el.id) selector = `#${CSS.escape(el.id)}`;
+            else {
+              const parts: string[] = [];
+              let node: Element | null = el;
+              while (node && node !== document.body && parts.length < 6) {
+                const parent: Element | null = node.parentElement;
+                if (!parent) break;
+                const t = node.tagName.toLowerCase();
+                const same = [...parent.children].filter((c) => c.tagName === node!.tagName);
+                parts.unshift(`${t}:nth-of-type(${same.indexOf(node) + 1})`);
+                node = parent;
+              }
+              selector = parts.length ? `body ${parts.join(" > ")}` : tag;
+            }
+
+            return {
+              display: `${tag}${e.type ? `[${e.type}]` : ""}${external ? "[外站]" : ""}: ${shown.slice(0, 60)}${path ? ` -> ${path}` : ""}`,
+              label: shown.slice(0, 60),
+              selector,
+              href: path,
+              external,
+              clickable:
+                /^(button|a)$/.test(tag) ||
+                e.type === "submit" ||
+                e.type === "button" ||
+                el.getAttribute("role") === "button",
+            };
           })
-          .filter((x) => x.split(": ")[1]),
+          .filter((c) => c.label.trim()),
       )
-      .catch(() => [] as string[]);
+      .catch((err: Error) => {
+        // 采不到控件不是「这一屏没有控件」。不说出来，它会变成一份看起来正常、
+        // 只是什么都探索不动的材料。
+        note(`控件采集失败：${String(err).slice(0, 120)}`, "warn");
+        return [] as Control[];
+      });
+    const controls = elements.map((e) => e.display);
 
     return {
       url: page.url(),
       controls,
+      elements,
       text: [
         `===== ${label} =====`,
         `URL: ${page.url()}`,
@@ -192,40 +290,196 @@ export async function runObserve(
      * 而缺的那部分在下游看不出来——规格照样整理得出来，用例照样生成得出来，只是**系统性地
      * 少了那几屏对应的一切**，最后表现为一个没有解释的覆盖率数字。
      *
-     * 停止条件用「连着 N 轮没有新东西」而不是「走满 N 轮」：一个产品有几屏事先不知道。
+     * **去哪由代码决定，`aiAction` 只收一个具体动作。**
+     * 第一版把目标、策略和禁令写进一次 `aiAction`，Midscene 拆不动，replan 十次就放弃，
+     * 一轮白烧七分钟——`Replanning 10 times, which is more than the limit`。它要的是
+     * 「点某个按钮」这种一句话能说完的事，不是「你去把这个应用看一遍」。
+     * 下一步点什么，从**已经确定性采到的控件表**里挑，不用再问一次模型：
+     * 「这一屏还有哪个没点过」是个查得出来的事实。
      */
     const maxScreens = Math.max(1, spec.maxScreens ?? 6);
-    const dryLimit = Math.max(1, spec.dryRounds ?? 2);
+    const dryLimit = Math.max(1, spec.dryRounds ?? 3);
+    /**
+     * 一轮走一个控件，所以动作预算比屏数宽——有些点击不会换屏。
+     * 同源链接走 `goto`，一次几乎不花时间，所以这个预算可以给得比屏数宽得多。
+     */
+    const maxRounds = maxScreens * 5;
+
+    /** 点了会把这次探索本身毁掉的（退出登录）或不可逆的，不点。 */
+    const OFF_LIMITS = /log\s*out|sign\s*out|logout|退出|注销|delete|remove|reset|清空|删除/i;
 
     const first = await snapshot("入口页");
     const screens: string[] = [first.text];
     const seen = new Set([signatureOf(first)]);
     const visited: string[] = [first.url];
     const missed: string[] = [];
+    /**
+     * 试过什么，按**地址**记，不按屏幕签名记。
+     *
+     * 第一版按签名记，于是菜单一打开签名就变，同一个「Open Menu」在新签名下又成了没试过的
+     * ——菜单开↔关来回抖，每一轮都把对方的控件当成新的，探索原地转圈直到 dry 用尽。
+     * 签名的用途是「这算不算一屏新的」，不是「我做过什么」；后者跟着地址走才稳。
+     */
+    const triedClick = new Set<string>();
+    /** 去过的地址。同一个地址走第二次对发现新界面没有任何帮助。 */
+    const triedGoto = new Set<string>();
+    const pathOf = (u: string): string => {
+      try {
+        const x = new URL(u);
+        return x.pathname + x.search;
+      } catch {
+        return u;
+      }
+    };
+    let current = first;
+    triedGoto.add(pathOf(first.url));
     let stoppedBecause = spec.deep === false ? "只采入口页（deep 关闭）" : "";
     let dry = 0;
+    let rounds = 0;
+    /**
+     * 连续失败单独计。
+     *
+     * 一次点不动说明的是「那条路走不通」，不是「这个产品看完了」——拿它去吃 dry 的预算，
+     * 会因为一个点不动的控件就宣告探索结束。但它也不能白试到天荒地老，所以自己有个上限。
+     */
+    let consecutiveFailures = 0;
     note(`入口页：${first.text.length} 字，${first.controls.length} 个控件`);
 
-    while (spec.deep !== false && !token.cancelled && screens.length < maxScreens && dry < dryLimit) {
+    /**
+     * 这一屏接下来做什么。
+     *
+     * 两种动作，分得很清楚：
+     *   `goto` —— **同源链接不需要模型**。点一个 `<a>` 就是走到它的 href，这是查得出来的
+     *             事实，不是需要判断的事。省下的不只是一次调用，还有它可能点错的那一次。
+     *   `click` —— 按钮才需要模型：它做什么只有看着页面才知道。
+     */
+    type Step =
+      | { key: string; kind: "login"; instruction: string }
+      | { key: string; kind: "click"; selector: string; label: string }
+      | { key: string; kind: "goto"; href: string };
+    const nextAction = (screen: { url: string; elements: Control[] }): Step | undefined => {
+      const here = pathOf(screen.url);
+      // 有密码框就先登录：凭证写在页面上（演示站的常见做法），那一句需要看着页面判断，
+      // 是这条循环里**唯一**必须交给模型的一步。
+      const loginKey = `${here}::__login__`;
+      if (screen.elements.some((e) => e.display.startsWith("input[password]")) && !triedClick.has(loginKey))
+        return {
+          key: loginKey,
+          kind: "login",
+          instruction: "Log in using the test credentials shown on this page.",
+        };
+      /**
+       * 抽屉/菜单开关最后再试。
+       *
+       * 导航抽屉是「离开这一屏」的方式，而它在 DOM 里往往排在最前面。实测里这一条让探索
+       * 每到一个新页面就先开菜单、再点「All Items」退回列表——**抽屉把探索一次次拉回起点**，
+       * 7 屏里有 3 屏只是「某页 + 菜单打开」。先把这一屏自己的东西走完，再看抽屉里有什么。
+       */
+      const drawer = /open\s*menu|close\s*menu|menu|导航|菜单|汉堡/i;
+      const ordered = [
+        ...screen.elements.filter((c) => !drawer.test(c.label)),
+        ...screen.elements.filter((c) => drawer.test(c.label)),
+      ];
+      for (const c of ordered) {
+        // 外站不点：探索的对象是这个产品，不是它页脚链到的地方。
+        if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
+        /**
+         * 指向别处的链接直接走过去；**指向当前地址的不是「没地方去」，是 JS 驱动的链接**。
+         *
+         * SauceDemo 的商品链接全是 `href="#"`，解析出来等于当前地址。把它们当成
+         * 「已经在这儿了」全部跳过，商品详情就一个都进不去——一个把整块功能判成
+         * 「不用去」的规则，比没有规则更糟，因为它看起来是在正常工作。
+         */
+        if (c.href && c.href !== here) {
+          if (triedGoto.has(c.href)) continue;
+          return { key: c.href, kind: "goto", href: c.href };
+        }
+        const key = `${here}::${c.selector}`;
+        if (triedClick.has(key)) continue;
+        return { key, kind: "click", selector: c.selector, label: c.label };
+      }
+      return undefined;
+    };
+
+    while (
+      spec.deep !== false &&
+      !token.cancelled &&
+      screens.length < maxScreens &&
+      dry < dryLimit &&
+      consecutiveFailures < 3 &&
+      rounds < maxRounds
+    ) {
+      rounds += 1;
+      const next = nextAction(current);
+      if (!next) {
+        // 这一屏能点的都点过了。退回上一屏接着找——不退，探索会卡在最深的那一屏上。
+        const page = session!.page as unknown as { goBack?: () => Promise<unknown> };
+        if (!page.goBack) {
+          stoppedBecause = "这一屏能点的都点过了，而且退不回去";
+          break;
+        }
+        note("这一屏能点的都点过了，退回上一屏");
+        try {
+          const before = signatureOf(current);
+          await page.goBack();
+          await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+          current = await snapshot(`回退后`);
+          /**
+           * 退不动就停。
+           *
+           * 走到历史开头之后 `goBack()` 什么也不做，而这一轮又没试任何控件——于是它会
+           * 一直「退」到预算烧光。实测一次 40 轮里有 32 轮就是这么没的。
+           * 退了一步却回到同一屏，说明这条路已经走到头了。
+           */
+          if (signatureOf(current) === before) {
+            stoppedBecause = "能点的都点过了，也退不动了";
+            break;
+          }
+          continue;
+        } catch {
+          stoppedBecause = "这一屏能点的都点过了，而且退不回去";
+          break;
+        }
+      }
+      if (next.kind === "goto") triedGoto.add(next.href);
+      else triedClick.add(next.key);
+
       try {
-        note(`往前走（第 ${screens.length} 屏 → 第 ${screens.length + 1} 屏）…`);
-        await withModel(() =>
-          session!.agent.aiAction(
-            // 已经去过的地方明说出来。不说，它会在同一个主按钮上来回点，
-            // 每一轮都花掉一次模型调用而什么也没多看到。
-            "You are exploring this application to see every screen it has. " +
-              "If a login form is present, log in using any test/demo credentials shown on this page. " +
-              "Otherwise take ONE action that reaches a part of the application not yet visited — " +
-              "open a menu item, a list row, the cart, the next step of a flow. " +
-              `Already visited: ${visited.slice(-6).join(" , ")}. ` +
-              "Do not log out, do not delete anything, and do not submit anything irreversible.",
-          ),
-        );
+        const page = session!.page as unknown as {
+          goto: (u: string) => Promise<unknown>;
+          $eval: (sel: string, fn: (el: unknown) => unknown) => Promise<unknown>;
+        };
+        if (next.kind === "goto") {
+          note(`第 ${rounds} 轮：走到 ${next.href}`);
+          await page.goto(new URL(next.href, current.url).toString());
+        } else if (next.kind === "click") {
+          /**
+           * **按选择器点，不问模型。**
+           *
+           * 这个元素是我们自己刚采下来的，选择器也是自己生成的。把它翻译成
+           * 「Click "shopping-cart-link"」再让一个看截图的模型去屏幕上找回来，是纯损失：
+           * `data-test` 这种名字屏幕上根本不显示，模型找不到，而且**不报错，只是什么都不做**
+           * ——一次实测里连着四轮都是这样，每一轮都被记成「没有新界面」。
+           */
+          note(`第 ${rounds} 轮：点 ${next.label}（${next.selector}）`);
+          /**
+           * **页内 DOM 点击，不是真实鼠标点击。**
+           *
+           * 实测：`page.click`（真实鼠标）点 SauceDemo 的商品链接**不换屏**，而页内
+           * `el.click()` 换。这类链接靠 JS 处理，真实鼠标的落点到不了它的处理器上。
+           * 探索要的是覆盖，不是交互保真——保真是执行用例那一层的事。
+           */
+          await page.$eval(next.selector, (el) => (el as HTMLElement).click());
+        } else {
+          note(`第 ${rounds} 轮：${next.instruction}`);
+          await withModel(() => session!.agent.aiAction(next.instruction));
+        }
         await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
         emit({ type: "navigated", shotRef: await shot(session) });
 
-        const next = await snapshot(`第 ${screens.length + 1} 屏`);
-        const sig = signatureOf(next);
+        const after = await snapshot(`第 ${screens.length + 1} 屏`);
+        const sig = signatureOf(after);
+        current = after;
         if (seen.has(sig)) {
           // 原地打转也要记一笔：它是「这个产品就这么大」和「探索走不动了」之间的区别。
           dry += 1;
@@ -233,16 +487,20 @@ export async function runObserve(
           continue;
         }
         seen.add(sig);
-        visited.push(next.url);
-        screens.push(next.text);
+        triedGoto.add(pathOf(after.url));
+        visited.push(after.url);
+        screens.push(after.text);
         dry = 0;
-        note(`第 ${screens.length} 屏：${next.url}，${next.controls.length} 个控件`);
+        consecutiveFailures = 0;
+        note(`第 ${screens.length} 屏：${after.url}，${after.controls.length} 个控件`);
       } catch (e) {
         // 走不进去本身就是观察结果的一部分：下游会把它记成「没看到的」。
-        const why = (e as Error).message.slice(0, 200);
+        const why = (e as Error).message.split("\n")[0].slice(0, 160);
         note(`没能往前走：${why.slice(0, 70)}`, "warn");
-        missed.push(why);
-        dry += 1;
+        const what =
+          next.kind === "goto" ? `走到 ${next.href}` : next.kind === "click" ? `点 ${next.label}` : next.instruction;
+        missed.push(`${what} —— ${why}`);
+        consecutiveFailures += 1;
       }
     }
     if (!stoppedBecause)
@@ -250,8 +508,12 @@ export async function runObserve(
         ? "被取消"
         : screens.length >= maxScreens
           ? `采满 ${maxScreens} 屏的上限`
-          : `连续 ${dryLimit} 轮没有发现新界面`;
-    note(`探索结束：${screens.length} 屏，${stoppedBecause}`);
+          : rounds >= maxRounds
+            ? `用完 ${maxRounds} 次动作预算`
+            : consecutiveFailures >= 3
+              ? "连续 3 次点不动"
+              : `连续 ${dryLimit} 轮没有发现新界面`;
+    note(`探索结束：${screens.length} 屏 / ${rounds} 轮，${stoppedBecause}`);
 
     /**
      * 走到过什么、以及**没走到什么**，一起交出去。
@@ -261,7 +523,8 @@ export async function runObserve(
      */
     const coverage = [
       "===== 这次探索走到哪为止 =====",
-      `采到 ${screens.length} 屏（上限 ${maxScreens}），停止原因：${stoppedBecause}`,
+      `采到 ${screens.length} 屏（上限 ${maxScreens}），走了 ${rounds} 轮，停止原因：${stoppedBecause}`,
+      `走过的地址：${visited.join(" , ")}`,
       ...(missed.length ? ["没能走进去的地方：", ...missed.map((m) => `- ${m}`)] : []),
       "这份材料只覆盖上面列出的界面。没有出现在这里的功能，是没有被看到，不是不存在。",
     ].join("\n");

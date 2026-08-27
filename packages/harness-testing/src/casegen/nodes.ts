@@ -193,7 +193,7 @@ export function sourceExploreNode(
        */
       maxScreens: z.number().int().min(1).max(30).default(6),
       /** 连续几轮没发现新界面就停。产品有几屏事先不知道，所以不按固定轮数走。 */
-      dryRounds: z.number().int().min(1).max(5).default(2),
+      dryRounds: z.number().int().min(1).max(8).default(3),
       lang: z.string().optional(),
       maxTokens: z.number().int().min(400).max(16000).default(2400),
     }),
