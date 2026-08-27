@@ -1,0 +1,133 @@
+import { z } from "zod";
+
+/**
+ * 状态转移图（state-flow graph）。
+ *
+ * 探索本来就在走这张图——每一轮都清楚「在 A 屏做了 X，到了 B 屏」——此前只把走到的**点**
+ * 留下来，走过的**边**全部丢掉。于是产出的材料里只有一张张屏幕的静态清单，下游整理出的
+ * 规格也就只有「X 页显示 Y」，一条转移、一条守卫、一条领域规则都没有。
+ *
+ * 这个产物不是新发明：Crawljax（Mesbah 等，ICWE 2008 / TWEB 2012）把它叫
+ * **state-flow graph**，是自动化 Web GUI 测试（AWGT）领域十五年来的标准中间产物。
+ * 典型循环是「检查页面 → 状态抽象 → 并入状态转移图 → 选下一个动作 → 派发」，
+ * 我们的探索循环就是它。
+ *
+ * 边记到什么粒度，参照 ScenGen（ASE 2026）：每次交互记成一条语义完整的条目——
+ * 动作类型、目标控件、输入数据、结果。只记 (from, to) 的三元组在下游写不出用例，
+ * 因为「怎么走过去的」正是用例的步骤。
+ */
+
+/** 一次动作。`goto` 与 `click` 不花模型调用，`login` 是探索里唯一必须问模型的一步。 */
+export const SfgActionSchema = z.object({
+  kind: z.enum(["goto", "click", "login"]),
+  /** 人能看懂的目标：控件的可见文案，或它指向的地址。 */
+  target: z.string().default(""),
+  /** 怎么再找到它。可复现的关键：`data-test` / `#id` / 一条 nth-of-type 路径。 */
+  selector: z.string().default(""),
+  /** 输入了什么（登录这类步骤）。占位符原样保留，明文永不落盘。 */
+  input: z.string().optional(),
+});
+export type SfgAction = z.infer<typeof SfgActionSchema>;
+
+export const SfgTransitionSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().optional(),
+  action: SfgActionSchema,
+  /**
+   * 走通了没有。**走不通也是一条边**——它记的是「这条路走不过去」，
+   * 而那正是下游「没有答案的地方」的来源之一。
+   */
+  ok: z.boolean(),
+  /** 没走通的原因，或走通了但没换状态。 */
+  note: z.string().optional(),
+});
+export type SfgTransition = z.infer<typeof SfgTransitionSchema>;
+
+export const SfgStateSchema = z.object({
+  /** 稳定标识：`<路由>#<抽象出来的状态序号>`。 */
+  id: z.string().min(1),
+  /** 路由。同一路由的不同可见状态是它的子节点，不是另一条路由。 */
+  route: z.string().default(""),
+  title: z.string().default(""),
+  /** 这一屏上能做什么——控件的可见文案。状态抽象多数就建立在它上面。 */
+  controls: z.array(z.string()).default([]),
+});
+export type SfgState = z.infer<typeof SfgStateSchema>;
+
+export const StateFlowGraphSchema = z.object({
+  /**
+   * 用的是哪一种状态抽象。
+   *
+   * **必须记下来**：横比六种抽象的实证研究把它认定为测试有效性的关键变量——
+   * 抽象过松会把没探索过的当成已探索（漏测），过紧会把探索过的当成新的（冗余）。
+   * 一次探索的结果如果说不出自己用的哪把尺子，它就没法和另一次比较。
+   */
+  abstraction: z.string().default("route+controls"),
+  entry: z.string().default(""),
+  states: z.array(SfgStateSchema).default([]),
+  transitions: z.array(SfgTransitionSchema).default([]),
+  /** 为什么停下来。一份薄图要能说出自己为什么薄。 */
+  stoppedBecause: z.string().default(""),
+});
+export type StateFlowGraph = z.infer<typeof StateFlowGraphSchema>;
+
+/**
+ * 状态抽象：把一屏映射成一个可比较的键。
+ *
+ * 做成一族可替换的函数而不是写死一个，是因为实证研究的核心结论就是**这是关键变量**，
+ * 而且不同探索策略适配不同的抽象——严格细粒度的利于 model-based（我们这一类），
+ * 紧凑的利于 RL-based。写死了就没法参与消融，也没法和别人的结果比。
+ */
+export type Abstraction = (screen: { url: string; controls: string[]; title?: string }) => string;
+
+const routeOf = (u: string): string => {
+  try {
+    const x = new URL(u);
+    return x.pathname + x.search;
+  } catch {
+    return u;
+  }
+};
+
+export const ABSTRACTIONS: Record<string, Abstraction> = {
+  /** 只看路由。最紧凑：同一页面的任何状态变化都看不见。 */
+  route: (s) => routeOf(s.url).split("?")[0],
+  /** 路由 + 可见控件集合。默认：控件是「这一屏能做什么」，而探索问的正是这个。 */
+  "route+controls": (s) => `${routeOf(s.url).split("?")[0]}|${[...s.controls].sort().join("|")}`,
+  /** 路由 + 控件 + 标题。更严：标题变了就算另一个状态。 */
+  "route+controls+title": (s) =>
+    `${routeOf(s.url).split("?")[0]}|${s.title ?? ""}|${[...s.controls].sort().join("|")}`,
+  /** 连查询串一起算。最严：分页、筛选各算一个状态。 */
+  "url+controls": (s) => `${routeOf(s.url)}|${[...s.controls].sort().join("|")}`,
+};
+
+export const abstractionOf = (name?: string): Abstraction =>
+  ABSTRACTIONS[name ?? ""] ?? ABSTRACTIONS["route+controls"];
+
+export { routeOf };
+
+/** 图的一段人类可读摘要，跟着材料一起交给下游——LLM 吃结构，不吃原始屏幕转储。 */
+export function describeGraph(g: StateFlowGraph): string {
+  const lines = [
+    "===== 状态转移图 =====",
+    `状态抽象：${g.abstraction}　入口：${g.entry}`,
+    `${g.states.length} 个状态，${g.transitions.length} 条转移；停止原因：${g.stoppedBecause}`,
+    "",
+    "状态：",
+    ...g.states.map((s) => `- ${s.id}　${s.title || "(无标题)"}　${s.controls.length} 个控件`),
+    "",
+    "转移：",
+    ...g.transitions.map((t) => {
+      const how =
+        t.action.kind === "goto"
+          ? `走到 ${t.action.target}`
+          : t.action.kind === "login"
+            ? "登录"
+            : `点「${t.action.target}」`;
+      return t.ok && t.to
+        ? `- ${t.from} --[${how}]--> ${t.to}`
+        : `- ${t.from} --[${how}]--> ✗ ${t.note ?? "没走通"}`;
+    }),
+  ];
+  return lines.join("\n");
+}

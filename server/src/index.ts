@@ -1151,12 +1151,13 @@ function observeLaunch(projectId: string): {
  * 换一套观察方式不该重写提示词，改一句提示词也不该重开浏览器。
  */
 setAgentObserver(async (input) => {
-  const { url, deep, settleMs, maxScreens, dryRounds, projectId } = (input ?? {}) as {
+  const { url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
     settleMs?: number;
     maxScreens?: number;
     dryRounds?: number;
+    stateAbstraction?: string;
     projectId?: string;
   };
   const project = projectId ? getProject(projectId) : undefined;
@@ -1173,6 +1174,7 @@ setAgentObserver(async (input) => {
       settleMs,
       maxScreens,
       dryRounds,
+      stateAbstraction,
       launch: { cacheId: `observe-${projectId ?? "adhoc"}`, ...(projectId ? observeLaunch(projectId) : {}) },
     },
     ARTIFACT_DIR,
@@ -1184,6 +1186,7 @@ setAgentObserver(async (input) => {
     url: result.url,
     screens: result.screens,
     stoppedBecause: result.stoppedBecause,
+    graph: result.graph,
   };
 });
 

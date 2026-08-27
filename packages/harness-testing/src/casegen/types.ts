@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { StateFlowGraphSchema } from "../exec/sfg.js";
 import { MachineOracleSchema } from "../exec/oracle.js";
 
 /**
@@ -110,6 +111,14 @@ export const SpecMaterialSchema = z.object({
   // 可选而不是给默认值：这个字段是后加的，此前的每一份材料都没有它。让读的人写一次
   // `?? "document"`，比让 zod 悄悄替他决定要好——那正是需要他想一下的地方。
   derivedFrom: SpecProvenance.optional(),
+  /**
+   * 探索来的材料带着它走过的那张状态转移图。
+   *
+   * 文档来的材料没有这一项——图是「看产品」才有的东西。下游据此可以做原文做不到的事：
+   * 按路径推流程、按转移算结构覆盖率。放在 schema 里而不是塞进正文，是因为它是**结构**，
+   * 而结构一旦拍成文本，下游就只能再解析一次，且解析得对不对没人检查。
+   */
+  graph: StateFlowGraphSchema.optional(),
 });
 export type SpecMaterial = z.infer<typeof SpecMaterialSchema>;
 

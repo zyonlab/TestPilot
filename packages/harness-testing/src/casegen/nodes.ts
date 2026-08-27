@@ -88,6 +88,7 @@ export interface ProductObserver {
     settleMs?: number;
     maxScreens?: number;
     dryRounds?: number;
+    stateAbstraction?: string;
   }): Promise<{
     /** 观察到的界面材料：页面文本、可见控件、走过的路径。 */
     notes: string;
@@ -96,6 +97,8 @@ export interface ProductObserver {
     /** 走到过几屏，以及为什么停下来。一份薄材料要能说出自己为什么薄。 */
     screens?: number;
     stoppedBecause?: string;
+    /** 走过的状态转移图：点和边。 */
+    graph?: unknown;
   }>;
 }
 
@@ -167,6 +170,7 @@ export function sourceExploreNode(
     settleMs?: number;
     maxScreens: number;
     dryRounds: number;
+    stateAbstraction: string;
     lang?: string;
     maxTokens?: number;
   },
@@ -194,6 +198,13 @@ export function sourceExploreNode(
       maxScreens: z.number().int().min(1).max(30).default(6),
       /** 连续几轮没发现新界面就停。产品有几屏事先不知道，所以不按固定轮数走。 */
       dryRounds: z.number().int().min(1).max(8).default(3),
+      /**
+       * 状态抽象：`route` / `route+controls` / `route+controls+title` / `url+controls`。
+       *
+       * 它决定「这算不算一屏新的」，是探索有效性的关键变量——过松漏测，过紧冗余。
+       * 做成参数是为了能消融、能和别人的结果比，而不是写死一把尺子。
+       */
+      stateAbstraction: z.string().default("route+controls"),
       lang: z.string().optional(),
       maxTokens: z.number().int().min(400).max(16000).default(2400),
     }),
@@ -207,6 +218,7 @@ export function sourceExploreNode(
         settleMs: params.settleMs,
         maxScreens: params.maxScreens,
         dryRounds: params.dryRounds,
+        stateAbstraction: params.stateAbstraction,
       });
       if (!seen.notes.trim()) throw new Error("source.explore saw nothing it could describe");
       // 走到几屏、为什么停，是判断这份材料薄不薄的唯一依据——一屏和六屏产出的规格
@@ -225,10 +237,18 @@ export function sourceExploreNode(
 
       // 观察记录原样往下走。把它整理成规格是 `spec.compose` 的事——观察与解读分开，
       // 三种来源才可能整理成同一个形状。
+      const g = seen.graph as { states?: unknown[]; transitions?: unknown[] } | undefined;
+      if (g)
+        ctx.emit("log", {
+          stream: "source.explore",
+          text: `状态转移图：${g.states?.length ?? 0} 个状态，${g.transitions?.length ?? 0} 条转移（抽象 ${params.stateAbstraction}）`,
+        });
       return {
         text: seen.notes,
         origin: `explored ${seen.url}`,
         derivedFrom: "exploration" as const,
+        // 图跟着材料走。结构留在结构里，不拍成文本让下游再解析一次。
+        ...(seen.graph ? { graph: seen.graph as never } : {}),
       };
     },
   };

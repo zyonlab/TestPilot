@@ -6,3 +6,4 @@ export * from "./run.js";
 export * from "./interactive.js";
 export * from "./diagnostics.js";
 export * from "./oracle.js";
+export * from "./sfg.js";

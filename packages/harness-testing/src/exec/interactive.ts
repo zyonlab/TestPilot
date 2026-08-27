@@ -8,6 +8,14 @@ import { resolve } from "node:path";
 import { resolveText, redact, withModel, type ResolveContext } from "@testpilot/harness-core";
 import { launchSession, type LaunchOpts, type Session } from "./session.js";
 import { isInfraError } from "../failure.js";
+import {
+  abstractionOf,
+  describeGraph,
+  routeOf,
+  type SfgState,
+  type SfgTransition,
+  type StateFlowGraph,
+} from "./sfg.js";
 
 export type Emit = (evt: Record<string, unknown>) => void;
 
@@ -85,6 +93,13 @@ export interface ObserveSpec {
    * 走满固定轮数要么半途而废，要么在最后一屏上原地打转还要接着花钱。
    */
   dryRounds?: number;
+  /**
+   * 状态抽象的名字。见 `sfg.ts` 的 ABSTRACTIONS。
+   *
+   * 之所以是参数而不是写死：横比六种抽象的实证研究把它认定为测试有效性的**关键变量**，
+   * 而且不同探索策略配不同的抽象。写死了既不能消融，也没法和别人的结果比。
+   */
+  stateAbstraction?: string;
   launch: LaunchOpts;
 }
 
@@ -97,6 +112,8 @@ export interface ObserveResult {
   /** 走到过几屏，以及为什么停下来——一份材料薄不薄，得能看出是产品小还是探索停早了。 */
   screens?: number;
   stoppedBecause?: string;
+  /** 走过的那张图。点和**边**都在——边此前是被丢掉的那一半。 */
+  graph?: StateFlowGraph;
 }
 
 /**
@@ -141,7 +158,7 @@ export async function runObserve(
   /** 一屏的事实：地址、标题、正文、可交互控件的可见文案。 */
   const snapshot = async (
     label: string,
-  ): Promise<{ text: string; url: string; controls: string[]; elements: Control[] }> => {
+  ): Promise<{ text: string; url: string; title: string; controls: string[]; elements: Control[] }> => {
     const page = session!.page as unknown as {
       url(): string;
       title(): Promise<string>;
@@ -255,6 +272,7 @@ export async function runObserve(
 
     return {
       url: page.url(),
+      title,
       controls,
       elements,
       text: [
@@ -274,13 +292,15 @@ export async function runObserve(
   };
 
   /**
-   * 这一屏是不是没见过的。
+   * 这一屏是不是没见过的——由**状态抽象**决定。
    *
-   * 只看地址会把同一个列表页的两次分页当成两屏；只看正文会把加载态和加载完当成两屏。
-   * 取「地址 + 控件集合」：控件是这一屏**能做什么**，而探索问的正是这个。
+   * 这把尺子松紧直接决定探索的成败：过松会把没探索过的当成已探索（漏测），
+   * 过紧会把探索过的当成新的（冗余，原地打转）。今天这两种我都撞过一次。
+   * 所以它是可替换的一族函数，名字随图一起记下来。
    */
-  const signatureOf = (screen: { url: string; controls: string[] }): string =>
-    `${screen.url.split("?")[0]}|${[...screen.controls].sort().join("|")}`;
+  const abstract = abstractionOf(spec.stateAbstraction);
+  const signatureOf = (screen: { url: string; controls: string[]; title?: string }): string =>
+    abstract(screen);
 
   try {
     emit({ type: "start", url: spec.url });
@@ -318,6 +338,35 @@ export async function runObserve(
     const seen = new Set([signatureOf(first)]);
     const visited: string[] = [first.url];
     const missed: string[] = [];
+
+    /**
+     * 边走边建的状态转移图。
+     *
+     * 每一轮我们都清楚「在 A 状态做了什么、到了 B 状态」——此前这个三元组一次都没写下来，
+     * 于是产出的材料只剩一张张屏幕的静态清单，下游整理出的规格里一条转移都没有。
+     * 记边不花任何额外调用：它全部来自循环自己已有的变量。
+     */
+    const sfgStates: SfgState[] = [];
+    const sfgEdges: SfgTransition[] = [];
+    /** 签名 → 稳定 id。同一路由的不同可见状态编号区分，而不是当成另一条路由。 */
+    const idBySig = new Map<string, string>();
+    const idFor = (screen: { url: string; controls: string[]; title?: string }): string => {
+      const sig = signatureOf(screen);
+      const known = idBySig.get(sig);
+      if (known) return known;
+      const route = routeOf(screen.url).split("?")[0];
+      const nth = sfgStates.filter((st) => st.route === route).length;
+      const id = nth === 0 ? route : `${route}#${nth}`;
+      idBySig.set(sig, id);
+      sfgStates.push({
+        id,
+        route,
+        title: screen.title ?? "",
+        controls: screen.controls.slice(0, 60),
+      });
+      return id;
+    };
+    let currentId = idFor(first);
     /**
      * 试过什么，按**地址**记，不按屏幕签名记。
      *
@@ -484,6 +533,32 @@ export async function runObserve(
 
         const after = await snapshot(`第 ${screens.length + 1} 屏`);
         const sig = signatureOf(after);
+        const wasNew = !seen.has(sig);
+        const toId = idFor(after);
+        sfgEdges.push({
+          from: currentId,
+          to: toId,
+          action:
+            next.kind === "goto"
+              ? { kind: "goto", target: next.href, selector: "" }
+              : next.kind === "login"
+                ? { kind: "login", target: "登录表单", selector: "", input: "${env.*} / ${secret.*}" }
+                : { kind: "click", target: next.label, selector: next.selector },
+          ok: true,
+          /**
+           * 「回到已知状态」和「状态没变」是两件事，标错了下游会以为什么都没发生。
+           *
+           * 前者是一条**真实的转移**（`/cart` 点 Continue Shopping 回到 `/inventory`），
+           * 算结构覆盖率时要计入；后者才是原地不动。判据是 from 与 to 相不相等，
+           * 不是「目标见过没见过」——我第一版写的就是后者。
+           */
+          ...(wasNew
+            ? {}
+            : currentId === toId
+              ? { note: "状态未变" }
+              : { note: "回到已知状态" }),
+        });
+        currentId = toId;
         current = after;
         if (seen.has(sig)) {
           // 原地打转也要记一笔：它是「这个产品就这么大」和「探索走不动了」之间的区别。
@@ -505,6 +580,19 @@ export async function runObserve(
         const what =
           next.kind === "goto" ? `走到 ${next.href}` : next.kind === "click" ? `点 ${next.label}` : next.instruction;
         missed.push(`${what} —— ${why}`);
+        // 走不通也是一条边：它记的是「这条路走不过去」，而那正是下游「没有答案的地方」
+        // 的来源之一。丢掉它，材料就只剩成功路径，看起来像这个产品没有走不通的地方。
+        sfgEdges.push({
+          from: currentId,
+          action:
+            next.kind === "goto"
+              ? { kind: "goto", target: next.href, selector: "" }
+              : next.kind === "login"
+                ? { kind: "login", target: "登录表单", selector: "" }
+                : { kind: "click", target: next.label, selector: next.selector },
+          ok: false,
+          note: why,
+        });
         consecutiveFailures += 1;
       }
     }
@@ -526,6 +614,14 @@ export async function runObserve(
      * 后半句是这份材料唯一能自证薄不薄的地方：`spec.compose` 被要求把材料没说的记进
      * 「没有答案的地方」，而它只有在材料自己说了「这里我没看到」的时候才做得到。
      */
+    const graph: StateFlowGraph = {
+      abstraction: spec.stateAbstraction ?? "route+controls",
+      entry: sfgStates[0]?.id ?? "",
+      states: sfgStates,
+      transitions: sfgEdges,
+      stoppedBecause,
+    };
+
     const coverage = [
       "===== 这次探索走到哪为止 =====",
       `采到 ${screens.length} 屏（上限 ${maxScreens}），走了 ${rounds} 轮，停止原因：${stoppedBecause}`,
@@ -535,12 +631,15 @@ export async function runObserve(
     ].join("\n");
 
     return {
-      notes: [...screens, coverage].join("\n\n"),
+      // 图的摘要跟着材料一起走：下游整理规格时**先看结构再看正文**——
+      // 实证研究的结论是「精简的功能级上下文」对 LLM 最有效，原始屏幕转储不是。
+      notes: [...screens, describeGraph(graph), coverage].join("\n\n"),
       url: spec.url,
       log,
       shotRef: await shot(session),
       screens: screens.length,
       stoppedBecause,
+      graph,
     };
   } finally {
     await session?.cleanup();
