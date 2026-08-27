@@ -539,7 +539,22 @@ export async function runObserve(
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           return { key: c.href, kind: "goto", href: c.href };
         }
-        const key = `${here}::${c.selector}`;
+        /**
+         * 同一屏上**文案相同的控件是同一类控件，试一个就够**。
+         *
+         * Juice Shop 的搜索页有 12 个「Add to Basket」。它们指向不同商品，但对
+         * 「这个产品有哪些界面」这个问题给出的答案完全一样——点完 12 次，还在同一屏。
+         * 早先按 selector 记，于是这 12 次各算一个空轮，干轮预算在走到导航菜单之前
+         * 就耗光了：探索停在 8 屏，登录、注册、联系一个都没看到。**冗余不只是浪费，
+         * 它会把没探索的部分吃掉。**
+         *
+         * 按文案归一后的名字记（数字也归一，见 `numless` 的同一条理由：角标不是身份）。
+         * 没有可见文案的控件退回按 selector 记——那时文案不是身份，位置才是。
+         */
+        const cls = c.label.startsWith("（无可见文案")
+          ? c.selector
+          : c.label.replace(/\d+/g, "#");
+        const key = `${here}::${cls}`;
         if (triedClick.has(key)) continue;
         return { key, kind: "click", selector: c.selector, label: c.label };
       }
