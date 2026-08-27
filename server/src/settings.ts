@@ -1,3 +1,4 @@
+import { DATA_DIR } from "./datadir.js";
 // Global, runtime-configurable settings: the LLM-debug toggle and the editable
 // prompt templates. Persisted to .data/settings.json. When debug is on, a flag file
 // (.data/llm-debug.on) is written so the standalone model-proxy can pick it up and
@@ -13,7 +14,6 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = resolve(__dirname, "..", ".data");
 const SETTINGS_PATH = resolve(DATA_DIR, "settings.json");
 export const LLM_DEBUG_FLAG = resolve(DATA_DIR, "llm-debug.on");
 export const LLM_DEBUG_DIR = resolve(DATA_DIR, "llm-debug");

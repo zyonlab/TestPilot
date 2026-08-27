@@ -1,3 +1,4 @@
+import { dataPath } from "./datadir.js";
 // Local secrets vault: AES-256-GCM encryption at rest so credentials are never
 // stored as plaintext in the SQLite DB. The key lives in .data/secret.key (mode
 // 0600, gitignored). This is the local-first stand-in for a Vault/KMS backend —
@@ -8,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const KEY_PATH = resolve(__dirname, "..", ".data", "secret.key");
+const KEY_PATH = dataPath("secret.key");
 
 function loadOrCreateKey(): Buffer {
   if (existsSync(KEY_PATH)) {

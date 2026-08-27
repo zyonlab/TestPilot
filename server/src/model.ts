@@ -1,3 +1,4 @@
+import { withModel } from "@testpilot/harness-core";
 import { resolveModelConfig, PROBE_IMAGE, type ModelConfig } from "./config.js";
 import { getSettings, langDirective } from "./settings.js";
 
@@ -11,7 +12,17 @@ interface ChatMessage {
       >;
 }
 
+// Every call here waits for the same admission slot a runner's steps wait for — the
+// bottleneck is one endpoint, not one process.
 async function chat(
+  messages: ChatMessage[],
+  cfg: ModelConfig,
+  opts: { timeoutMs?: number; maxTokens?: number } = {},
+): Promise<string> {
+  return withModel(() => chatNow(messages, cfg, opts));
+}
+
+async function chatNow(
   messages: ChatMessage[],
   cfg: ModelConfig,
   opts: { timeoutMs?: number; maxTokens?: number } = {},
@@ -30,6 +41,12 @@ async function chat(
         messages,
         max_tokens: opts.maxTokens ?? 512,
         temperature: 0,
+        // Qwen3.x runs in "thinking" mode by default: the reply comes back as reasoning
+        // prose and hits the token limit before answering. Measured on this endpoint:
+        // 5.0s / finish_reason "length" with thinking on, 1.0s / "ok" with it off.
+        // Both spellings are sent because servers differ in which one they honour.
+        enable_thinking: false,
+        chat_template_kwargs: { enable_thinking: false },
       }),
       signal: controller.signal,
     });
@@ -62,7 +79,7 @@ export async function probeModel(
     await chat(
       [{ role: "user", content: "Reply with the single word: ok" }],
       cfg,
-      { timeoutMs: 8000, maxTokens: 16 },
+      { timeoutMs: 30000, maxTokens: 16 },
     );
   } catch (e) {
     return {
@@ -84,7 +101,7 @@ export async function probeModel(
         },
       ],
       cfg,
-      { timeoutMs: 15000, maxTokens: 32 },
+      { timeoutMs: 60000, maxTokens: 32 },
     );
     return {
       state: "ok",

@@ -15,16 +15,16 @@ export function resolveModelConfig(
       override?.baseUrl ||
       process.env.OPENAI_BASE_URL ||
       process.env.MIDSCENE_MODEL_BASE_URL ||
-      "http://127.0.0.1:8010/v1", // no-think proxy (see server/.env); raw model is :8000
+      "http://127.0.0.1:8000/v1", // the model itself; the no-think proxy (:8010) is optional
     apiKey:
       override?.apiKey ||
       process.env.OPENAI_API_KEY ||
       process.env.MIDSCENE_MODEL_API_KEY ||
-      "",
+      "1234",
     modelName:
       override?.modelName ||
       process.env.MIDSCENE_MODEL_NAME ||
-      "Qwen3.6-35B-A3B-4bit",
+      "Qwen3.8-27B-4bit",
   };
 }
 

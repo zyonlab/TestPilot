@@ -1,3 +1,16 @@
+import { DATA_DIR } from "./datadir.js";
+import type {
+  ChainAssertion,
+  MachineOracle,
+  OracleCheck,
+  StorageState,
+  VisualDiff,
+  VisualStatus,
+} from "@testpilot/harness-testing";
+// These types describe what crosses the process boundary to the runner, so the domain
+// package owns them; re-exported here because the whole gateway imports them from db.
+export type { ChainAssertion, OracleCheck, StorageState, VisualDiff, VisualStatus };
+
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -5,7 +18,6 @@ import { dirname, resolve } from "node:path";
 import { encryptSecret, decryptSecret } from "./vault.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = resolve(__dirname, "..", ".data");
 mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new Database(resolve(DATA_DIR, "testpilot.db"));
@@ -162,6 +174,93 @@ if (!runCols.has("infraError")) {
       "failureReason LIKE '%ECONNREFUSED%' OR failureReason LIKE '%502%' OR failureReason LIKE '%timeout%')",
   );
 }
+// Structured failure attribution (docs/spec/06). `infraError` stays for compatibility;
+// these two say WHICH kind of failure it was, which is what the statistics bucket by.
+if (!runCols.has("failCode")) db.exec("ALTER TABLE runs ADD COLUMN failCode TEXT");
+if (!runCols.has("failKind")) db.exec("ALTER TABLE runs ADD COLUMN failKind TEXT");
+
+// A case executed inside a workflow run is still an execution.
+//
+// 执行记录 used to list only suite batches, and product runs were the only thing written
+// here at all — so a project whose cases were exercised by the repair loop showed an empty
+// execution page. An empty page reads as "never ran", which was false: those cases had run,
+// passed, and their timings were sitting in the workflow's repair report where the board
+// could not see them.
+//
+// `projectId` is stored rather than joined because a workflow execution has no board case
+// to join through: it runs a candidate (`S-01-1-…`) that only becomes `tc-…` if someone
+// approves it later, and may never. `origin` is what keeps the two readable apart.
+if (!runCols.has("origin"))
+  db.exec("ALTER TABLE runs ADD COLUMN origin TEXT NOT NULL DEFAULT 'board'");
+if (!runCols.has("wfRunId")) db.exec("ALTER TABLE runs ADD COLUMN wfRunId TEXT");
+if (!runCols.has("projectId")) {
+  db.exec("ALTER TABLE runs ADD COLUMN projectId TEXT");
+  // Backfill once, from the join the page used to do at read time. Rows whose case has
+  // since been deleted stay null and simply do not appear under any project.
+  db.exec(
+    `UPDATE runs SET projectId =
+       (SELECT c.projectId FROM test_cases c WHERE c.id = runs.caseId)
+     WHERE projectId IS NULL`,
+  );
+}
+
+// Which end the project is tested on. It decides what the rest of the UI may offer: web3
+// and chain configuration are web-only capabilities, and leaving them visible on an iOS
+// project would be offering a control that cannot do anything. Defaults to 'web' so every
+// project that predates the column keeps behaving exactly as it did.
+const projCols = new Set(
+  (db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map((r) => r.name),
+);
+if (!projCols.has("targetPlatform"))
+  db.exec("ALTER TABLE projects ADD COLUMN targetPlatform TEXT NOT NULL DEFAULT 'web'");
+
+// Where a generated case came from and what the harness thought of it. A case that entered
+// the board through review should still be able to answer "which run made me, from which
+// story, by which design method" — otherwise the board loses the traceability that gate ①
+// spent its effort establishing.
+const genCols = new Set(
+  (db.prepare("PRAGMA table_info(test_cases)").all() as { name: string }[]).map((r) => r.name),
+);
+if (!genCols.has("storyId")) db.exec("ALTER TABLE test_cases ADD COLUMN storyId TEXT");
+if (!genCols.has("designMethod")) db.exec("ALTER TABLE test_cases ADD COLUMN designMethod TEXT");
+if (!genCols.has("tier")) db.exec("ALTER TABLE test_cases ADD COLUMN tier INTEGER");
+if (!genCols.has("gateScore")) db.exec("ALTER TABLE test_cases ADD COLUMN gateScore REAL");
+if (!genCols.has("sourceRunId")) db.exec("ALTER TABLE test_cases ADD COLUMN sourceRunId TEXT");
+// The machine-checkable form of the case's outcome, when stage one produced one. Stored
+// with the case because the board runs cases too, and a verdict that only the workflow
+// path could settle deterministically would make the two paths disagree.
+if (!genCols.has("oracleJson")) db.exec("ALTER TABLE test_cases ADD COLUMN oracleJson TEXT");
+// Whether this case only went green after its assertion was weakened during repair. It is
+// the one mark on the board that says "this pass is worth less than it looks".
+if (!genCols.has("degraded")) db.exec("ALTER TABLE test_cases ADD COLUMN degraded INTEGER NOT NULL DEFAULT 0");
+
+// Review decisions live apart from the cases, because a rejection has no case to hang on:
+// the point of recording it is that the queue stops offering it again.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS review_decisions (
+    wfRunId TEXT NOT NULL,
+    caseId TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    note TEXT,
+    createdCaseId TEXT,
+    at TEXT NOT NULL,
+    PRIMARY KEY (wfRunId, caseId)
+  );
+`);
+// Edits made in the review queue, kept apart from both the product and the board: the
+// workflow's output is what the harness produced and must stay as it was (it is evidence
+// in every later comparison), while the board only ever sees a case that was approved. An
+// edit is the third thing — a proposal, waiting on the same decision as the case itself.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS review_edits (
+    wfRunId TEXT NOT NULL,
+    caseId TEXT NOT NULL,
+    json TEXT NOT NULL,
+    at TEXT NOT NULL,
+    PRIMARY KEY (wfRunId, caseId)
+  );
+`);
+
 const caseCols = new Set(
   (db.prepare("PRAGMA table_info(test_cases)").all() as { name: string }[]).map((r) => r.name),
 );
@@ -203,10 +302,13 @@ if (envCols.size && !envCols.has("sessionEnc"))
 export type Priority = "P0" | "P1" | "P2";
 export type RunStatus = "passed" | "failed" | "notRun" | "running";
 
+export type TargetPlatform = "web" | "ios" | "android";
 export interface Project {
   id: string;
   name: string;
   targetUrl: string;
+  /** web | ios | android — web3 and chain assertions exist only on web. */
+  targetPlatform: TargetPlatform;
   createdAt: string;
 }
 export interface Step {
@@ -217,16 +319,76 @@ export type CaseType = "functional" | "negative" | "boundary" | "e2e";
 export type Web3Mode = "" | "injected" | "metamask"; // "" = no wallet
 // An on-chain assertion checked against the RPC after the case's steps run — verifies the
 // real chain state, not just the UI (e.g. a token balance rose after a swap).
-export interface ChainAssertion {
-  // txSubmitted: the wallet sent ≥/=/≤ N successful (mined, status 1) transactions this run.
-  kind: "erc20Balance" | "nativeBalance" | "txSubmitted";
-  account?: string; // default: the test wallet
-  token?: string; // ERC-20 contract (for erc20Balance)
-  decimals?: number; // token decimals for display/compare (default 18; USDC=6)
-  op: "increased" | "decreased" | "changed" | "gte" | "lte" | "eq";
-  value?: string; // human-unit threshold (balance) or count (txSubmitted) for gte/lte/eq
-  label?: string; // display label
+export interface ReviewDecision {
+  wfRunId: string;
+  caseId: string;
+  decision: "approved" | "rejected";
+  note?: string;
+  createdCaseId?: string;
+  at: string;
 }
+
+export function recordReviewDecision(d: ReviewDecision): void {
+  db.prepare(
+    `INSERT INTO review_decisions (wfRunId, caseId, decision, note, createdCaseId, at)
+     VALUES (@wfRunId, @caseId, @decision, @note, @createdCaseId, @at)
+     ON CONFLICT(wfRunId, caseId) DO UPDATE SET decision=excluded.decision, note=excluded.note,
+       createdCaseId=excluded.createdCaseId, at=excluded.at`,
+  ).run({ ...d, note: d.note ?? null, createdCaseId: d.createdCaseId ?? null });
+}
+
+export const listReviewDecisions = (wfRunId: string): ReviewDecision[] =>
+  db.prepare("SELECT * FROM review_decisions WHERE wfRunId=?").all(wfRunId) as ReviewDecision[];
+
+/** One reviewer's (or the model's) proposed replacement for a generated case. */
+export interface ReviewEdit {
+  title?: string;
+  expected?: string;
+  steps?: string[];
+  precondition?: string[];
+  tier?: number;
+  designMethod?: string;
+  priority?: Priority;
+  /** Who proposed it: a person in the queue, or a regeneration. */
+  by?: "human" | "model";
+  note?: string;
+}
+
+export function saveReviewEdit(wfRunId: string, caseId: string, edit: ReviewEdit): void {
+  db.prepare(
+    `INSERT INTO review_edits (wfRunId, caseId, json, at) VALUES (?,?,?,?)
+     ON CONFLICT(wfRunId, caseId) DO UPDATE SET json=excluded.json, at=excluded.at`,
+  ).run(wfRunId, caseId, JSON.stringify(edit), new Date().toISOString());
+}
+
+export function clearReviewEdit(wfRunId: string, caseId: string): void {
+  db.prepare("DELETE FROM review_edits WHERE wfRunId=? AND caseId=?").run(wfRunId, caseId);
+}
+
+export const listReviewEdits = (wfRunId: string): Record<string, ReviewEdit> =>
+  Object.fromEntries(
+    (db.prepare("SELECT caseId, json FROM review_edits WHERE wfRunId=?").all(wfRunId) as Array<{
+      caseId: string;
+      json: string;
+    }>).map((r) => [r.caseId, JSON.parse(r.json) as ReviewEdit]),
+  );
+
+/**
+ * Every edit ever made in the review queue, newest first.
+ *
+ * The per-run lookup answers "what was changed in this batch"; the code line needs the
+ * other question — "what has been rewritten in this project, by whom" — and that one
+ * cannot be assembled from per-run calls without knowing every run id first.
+ */
+export const listAllReviewEdits = (limit = 200): Array<{ wfRunId: string; caseId: string; at: string; edit: ReviewEdit }> =>
+  (db.prepare("SELECT wfRunId, caseId, json, at FROM review_edits ORDER BY at DESC LIMIT ?").all(limit) as Array<{
+    wfRunId: string; caseId: string; json: string; at: string;
+  }>).map((r) => ({ wfRunId: r.wfRunId, caseId: r.caseId, at: r.at, edit: JSON.parse(r.json) as ReviewEdit }));
+
+/** The decision that created a given board case, if it came through review at all. */
+export const decisionForCreatedCase = (caseId: string): ReviewDecision | undefined =>
+  db.prepare("SELECT * FROM review_decisions WHERE createdCaseId=?").get(caseId) as ReviewDecision | undefined;
+
 export interface TestCase {
   id: string;
   projectId: string;
@@ -248,15 +410,20 @@ export interface TestCase {
   steps: Step[];
   code?: string;
   createdAt: string;
+  /* ---- provenance, for a case that came out of a workflow ---- */
+  storyId?: string; // the user story it was designed from
+  designMethod?: string; // equivalence / boundary / state-transition / decision-table / negative
+  tier?: number; // how hard its verdict is: 1 assert, 2 invariant, 3 judge
+  gateScore?: number; // what gate ① thought of the batch it arrived in
+  sourceRunId?: string; // the workflow run that produced it
+  /** The outcome in a form a program settles — no model, no screenshot, no wobble. */
+  oracle?: MachineOracle;
+  /** Its assertion was weakened (or the case rebuilt) during stage-two repair. */
+  degraded?: boolean;
 }
 
 // A captured browser session (Playwright-compatible storageState shape) — cookies plus
 // per-origin localStorage. Injected before navigation so runs start authenticated.
-export interface StorageState {
-  cookies: Array<Record<string, unknown>>;
-  origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
-  headers?: Record<string, string>; // captured auth headers (e.g. Authorization from API login)
-}
 // API-style login (method C): call the site's login endpoint directly, capture the
 // session cookie and/or a token from the response — no UI driving. Body/url may hold
 // ${env.KEY}/${secret.KEY} placeholders.
@@ -299,26 +466,12 @@ export interface SecretMeta {
   key: string;
   updatedAt: string;
 }
-export type VisualStatus = "new_baseline" | "match" | "diff";
-export interface VisualDiff {
-  stepIdx: number;
-  status: VisualStatus;
-  mismatchPct: number;
-  baselineRef?: string; // artifact filename served by /api/artifacts/:name
-  currentRef?: string;
-  diffRef?: string;
-}
 export interface Baseline {
   id: string;
   caseId: string;
   stepIdx: number;
   imgPath: string;
   updatedAt: string;
-}
-export interface OracleCheck {
-  assertion: string; // the expected condition that was verified
-  status: "pass" | "fail";
-  detail?: string;
 }
 export interface RunRecord {
   id: string;
@@ -339,6 +492,25 @@ export interface RunRecord {
   attempts?: number; // how many tries this run took (1 = passed first time)
   healed?: boolean; // passed only after a self-heal retry → a flake signal
   infraError?: boolean; // model/network failure — not a real test failure; excluded from flake/MTTR
+  failCode?: string; // wire code, e.g. EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT
+  failKind?: "infra" | "locate" | "assert"; // which bucket the statistics should count it in
+  /**
+   * Which project this execution belongs to.
+   *
+   * Stored, not joined: a workflow execution runs a candidate case that has no board row
+   * to join through, and may never get one.
+   */
+  projectId?: string;
+  /** The workflow run that executed it, when it came from one. */
+  wfRunId?: string;
+  /**
+   * Where the execution came from — the reader needs this to know what a green row means.
+   *
+   * `suite` and `case` both ran a case the board already accepted; `workflow` ran a
+   * candidate during generation, before anyone approved it. Reported by the ledger query;
+   * only `board` vs `workflow` is stored (suite-vs-case is a batch membership question).
+   */
+  origin?: "suite" | "case" | "workflow";
 }
 
 export type FlakeVerdict = "stable" | "flaky" | "broken" | "unknown";
@@ -381,16 +553,20 @@ export interface BatchRun {
 /* ---- serialization ---- */
 type CaseRow = Omit<
   TestCase,
-  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions"
+  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions" | "oracle" | "degraded"
 > & {
   steps: string;
   postSteps: string;
   hasCode: number;
   quarantined: number;
   chainAssertionsJson: string;
+  oracleJson: string | null;
+  degraded: number;
 };
 const rowToCase = (r: CaseRow): TestCase => ({
   ...r,
+  oracle: r.oracleJson ? (JSON.parse(r.oracleJson) as MachineOracle) : undefined,
+  degraded: !!r.degraded,
   hasCode: !!r.hasCode,
   quarantined: !!r.quarantined,
   type: r.type || "functional",
@@ -400,8 +576,10 @@ const rowToCase = (r: CaseRow): TestCase => ({
 });
 type RunRow = Omit<
   RunRecord,
-  "logs" | "screenshots" | "visual" | "perf" | "oracle" | "healed" | "infraError"
+  "logs" | "screenshots" | "visual" | "perf" | "oracle" | "healed" | "infraError" | "origin"
 > & {
+  /** As stored: 'board' or 'workflow'. The ledger refines 'board' into suite/case. */
+  origin?: string;
   logs: string;
   screenshots: string;
   visualJson: string | null;
@@ -419,6 +597,9 @@ const rowToRun = (r: RunRow): RunRecord => ({
   oracle: JSON.parse(r.oracleJson || "[]"),
   healed: !!r.healed,
   infraError: !!r.infraError,
+  // 'board' is left undefined here rather than guessed: telling suite from ad-hoc needs
+  // batch membership, which only the ledger query looks up.
+  origin: r.origin === "workflow" ? "workflow" : undefined,
 });
 
 let seq = 1000;
@@ -429,12 +610,34 @@ export const listProjects = (): Project[] =>
   db.prepare("SELECT * FROM projects ORDER BY createdAt").all() as Project[];
 export const getProject = (id: string): Project | undefined =>
   db.prepare("SELECT * FROM projects WHERE id=?").get(id) as Project | undefined;
-export function createProject(name: string, targetUrl: string): Project {
-  const p: Project = { id: newId("prj"), name, targetUrl, createdAt: new Date().toISOString() };
-  db.prepare("INSERT INTO projects (id,name,targetUrl,createdAt) VALUES (?,?,?,?)").run(
-    p.id, p.name, p.targetUrl, p.createdAt,
-  );
+export function createProject(
+  name: string,
+  targetUrl: string,
+  targetPlatform: TargetPlatform = "web",
+): Project {
+  const p: Project = {
+    id: newId("prj"),
+    name,
+    targetUrl,
+    targetPlatform,
+    createdAt: new Date().toISOString(),
+  };
+  db.prepare(
+    "INSERT INTO projects (id,name,targetUrl,targetPlatform,createdAt) VALUES (?,?,?,?,?)",
+  ).run(p.id, p.name, p.targetUrl, p.targetPlatform, p.createdAt);
   return p;
+}
+export function updateProject(
+  id: string,
+  patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>,
+): Project | undefined {
+  const cur = getProject(id);
+  if (!cur) return undefined;
+  const next = { ...cur, ...patch };
+  db.prepare("UPDATE projects SET name=?, targetUrl=?, targetPlatform=? WHERE id=?").run(
+    next.name, next.targetUrl, next.targetPlatform, id,
+  );
+  return next;
 }
 // Delete a project and everything under it (cases, runs, baselines, envs, secrets, batches).
 export function deleteProject(id: string): void {
@@ -490,12 +693,28 @@ export function createCase(input: Partial<TestCase> & { projectId: string; title
     steps: input.steps || [],
     code: input.code || "",
     createdAt: input.createdAt || new Date().toISOString(),
+    // Provenance travels with the case, or the board cannot answer the first question
+    // anyone asks of a generated case: where did this come from?
+    storyId: input.storyId,
+    designMethod: input.designMethod,
+    tier: input.tier,
+    gateScore: input.gateScore,
+    sourceRunId: input.sourceRunId,
+    oracle: input.oracle,
+    degraded: input.degraded,
   };
   db.prepare(
-    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt)
-     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt)`,
+    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt,storyId,designMethod,tier,gateScore,sourceRunId,oracleJson,degraded)
+     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt,@storyId,@designMethod,@tier,@gateScore,@sourceRunId,@oracleJson,@degraded)`,
   ).run({
     ...c,
+    storyId: c.storyId ?? null,
+    designMethod: c.designMethod ?? null,
+    tier: c.tier ?? null,
+    gateScore: c.gateScore ?? null,
+    sourceRunId: c.sourceRunId ?? null,
+    oracleJson: c.oracle ? JSON.stringify(c.oracle) : null,
+    degraded: c.degraded ? 1 : 0,
     hasCode: c.hasCode ? 1 : 0,
     quarantined: c.quarantined ? 1 : 0,
     web3Mode: c.web3Mode || "",
@@ -549,26 +768,39 @@ export const listRuns = (caseId?: string): RunRecord[] =>
       ? (db.prepare("SELECT * FROM runs WHERE caseId=? ORDER BY startedAt DESC").all(caseId) as RunRow[])
       : (db.prepare("SELECT * FROM runs ORDER BY startedAt DESC LIMIT 200").all() as RunRow[])
   ).map(rowToRun);
-// Project-scoped runs for the Runs page. Runs is the SUITE (batch) execution ledger,
-// so it only lists runs that came from a suite (id present in batch_runs). Ad-hoc
-// single-case runs are viewed inline in the case detail, not here.
+/**
+ * Every execution this project has had — the ledger the Runs page is named after.
+ *
+ * It used to list only suite batches, which made the page a batch ledger wearing an
+ * execution ledger's name: a project whose cases had only ever been exercised by the
+ * repair loop showed nothing at all, and nothing reads as "never ran".
+ *
+ * Three origins, told apart rather than merged, because a green row means a different
+ * thing in each: `suite` and `case` ran a case the board accepted, `workflow` ran a
+ * candidate during generation that nobody had approved yet. The LEFT JOIN is what lets
+ * the last kind appear — it has no board row to join through.
+ */
 export const listRunsByProject = (projectId: string): RunRecord[] =>
   (
     db
       .prepare(
-        `SELECT r.* FROM runs r
-         JOIN test_cases c ON c.id = r.caseId
-         WHERE c.projectId = ?
-           AND r.id IN (SELECT runId FROM batch_runs WHERE runId IS NOT NULL)
+        `SELECT r.*,
+                (r.id IN (SELECT runId FROM batch_runs WHERE runId IS NOT NULL)) AS inBatch
+         FROM runs r
+         LEFT JOIN test_cases c ON c.id = r.caseId
+         WHERE r.projectId = ? OR c.projectId = ?
          ORDER BY r.startedAt DESC LIMIT 200`,
       )
-      .all(projectId) as RunRow[]
-  ).map(rowToRun);
+      .all(projectId, projectId) as Array<RunRow & { inBatch: number }>
+  ).map((r) => ({
+    ...rowToRun(r),
+    origin: r.origin === "workflow" ? ("workflow" as const) : r.inBatch ? ("suite" as const) : ("case" as const),
+  }));
 export function createRun(r: Omit<RunRecord, "id">): RunRecord {
   const run: RunRecord = { ...r, id: newId("run") };
   db.prepare(
-    `INSERT INTO runs (id,caseId,caseTitle,priority,status,durationMs,startedAt,failureReason,logs,screenshots,reportPath,tokens,visualJson,perfJson,oracleJson,attempts,healed,infraError)
-     VALUES (@id,@caseId,@caseTitle,@priority,@status,@durationMs,@startedAt,@failureReason,@logs,@screenshots,@reportPath,@tokens,@visualJson,@perfJson,@oracleJson,@attempts,@healed,@infraError)`,
+    `INSERT INTO runs (id,caseId,caseTitle,priority,status,durationMs,startedAt,failureReason,logs,screenshots,reportPath,tokens,visualJson,perfJson,oracleJson,attempts,healed,infraError,failCode,failKind,origin,projectId,wfRunId)
+     VALUES (@id,@caseId,@caseTitle,@priority,@status,@durationMs,@startedAt,@failureReason,@logs,@screenshots,@reportPath,@tokens,@visualJson,@perfJson,@oracleJson,@attempts,@healed,@infraError,@failCode,@failKind,@origin,@projectId,@wfRunId)`,
   ).run({
     ...run,
     failureReason: run.failureReason ?? null,
@@ -582,6 +814,12 @@ export function createRun(r: Omit<RunRecord, "id">): RunRecord {
     attempts: run.attempts ?? 1,
     healed: run.healed ? 1 : 0,
     infraError: run.infraError ? 1 : 0,
+    failCode: run.failCode ?? null,
+    failKind: run.failKind ?? null,
+    // Only the two stored values; the ledger derives suite-vs-case from batch membership.
+    origin: run.origin === "workflow" ? "workflow" : "board",
+    projectId: run.projectId ?? null,
+    wfRunId: run.wfRunId ?? null,
   });
   return run;
 }
@@ -647,6 +885,12 @@ export const getPerfBaseline = (caseId: string): Record<string, number> | undefi
     | undefined;
   return r ? (JSON.parse(r.metricsJson) as Record<string, number>) : undefined;
 };
+/** When this case's performance baseline was last accepted. */
+export const perfBaselineUpdatedAt = (caseId: string): string | undefined =>
+  (db.prepare("SELECT updatedAt FROM perf_baselines WHERE caseId=?").get(caseId) as
+    | { updatedAt: string }
+    | undefined)?.updatedAt;
+
 export function upsertPerfBaseline(caseId: string, metrics: Record<string, number>): void {
   db.prepare(
     "INSERT INTO perf_baselines (caseId,metricsJson,updatedAt) VALUES (?,?,?) " +
