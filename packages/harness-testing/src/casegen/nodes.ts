@@ -64,8 +64,20 @@ export function parseJson<T>(
    * 解析报「Unexpected non-whitespace character after JSON」——读起来像格式坏了，
    * 其实是我们切错了。多一个对象、前面带一段带花括号的解释，都属于这一类。
    */
+  /**
+   * 模型返回**裸数组**时，把它套回它该在的那个键下面。
+   *
+   * TokenHarbor 上 guided decoding 只是建议不是强制——实测同一个 schema 要求对象，
+   * 回来的是 `[{...},{...}]`。这不是格式坏了，是约束没生效。schema 里只有一个数组字段时
+   * 该套哪个键是唯一的，套错不了；不唯一就不猜。
+   */
+  const arrayKey = soleArrayKey(schema);
+  const wrapped = arrayKey
+    ? balancedArrays(cleaned).map((a) => `{"${arrayKey}":${a}}`)
+    : [];
+
   let lastError = "";
-  for (const c of candidates) {
+  for (const c of [...candidates, ...wrapped]) {
     let raw: unknown;
     try {
       raw = JSON.parse(c);
@@ -82,6 +94,52 @@ export function parseJson<T>(
         .join("; ")}`;
   }
   throw new Error(`${label}: reply ${lastError}`);
+}
+
+/**
+ * schema 里唯一的那个数组字段的名字。不唯一就返回空——该套哪个键说不准的时候不猜。
+ */
+function soleArrayKey(schema: unknown): string | undefined {
+  const def = (schema as { _def?: { typeName?: string; shape?: () => Record<string, { _def?: { typeName?: string } }> } })._def;
+  if (def?.typeName !== "ZodObject" || !def.shape) return undefined;
+  const shape = def.shape();
+  const arrays = Object.entries(shape).filter(([, v]) => v?._def?.typeName === "ZodArray");
+  return arrays.length === 1 ? arrays[0][0] : undefined;
+}
+
+/** 顶层的平衡数组。与对象那一个同样要认字符串与转义。 */
+export function balancedArrays(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "[") {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === "]") {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        out.push(text.slice(start, i + 1));
+        start = -1;
+      }
+      if (depth < 0) depth = 0;
+    }
+  }
+  if (depth > 0 && start >= 0) out.push(text.slice(start));
+  return out;
 }
 
 /**

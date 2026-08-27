@@ -514,3 +514,29 @@ describe("pulling JSON out of a reply that has more than one", () => {
     ).toThrow(/cut off at maxTokens \(2080\).*budget problem/s);
   });
 });
+
+/**
+ * 模型返回裸数组。
+ *
+ * TokenHarbor 上 guided decoding 只是**建议**不是强制——实测同一个 schema 要求对象，
+ * 回来的是 `[{...},{...}]`。这不是格式坏了，是约束没生效；而它在日志里长得和
+ * 「模型返回的 JSON 不合法」一模一样。
+ */
+describe("a reply that came back as a bare array", () => {
+  const shape = z.object({ stories: z.array(z.object({ id: z.string() })).min(1) });
+
+  it("套回它该在的那个键下面", () => {
+    expect(parseJson('[{"id":"US-01"},{"id":"US-02"}]', shape, "plan.stories").stories).toHaveLength(2);
+  });
+
+  it("对象形式仍然优先——它才是要求的那种", () => {
+    const both = '[{"id":"WRONG"}]\n{"stories":[{"id":"US-09"}]}';
+    expect(parseJson(both, shape, "plan.stories").stories[0].id).toBe("US-09");
+  });
+
+  it("schema 里有不止一个数组字段时不猜", () => {
+    // 该套哪个键说不准，套错了会产出一份看起来正常、其实张冠李戴的产物。
+    const two = z.object({ a: z.array(z.string()), b: z.array(z.string()) });
+    expect(() => parseJson('["x"]', two, "n")).toThrow();
+  });
+});
