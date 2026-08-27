@@ -460,13 +460,22 @@ export function planStoriesNode(
     params: z.object({
       maxStories: z.number().int().min(1).max(50).default(12),
       lang: z.string().optional(),
-      /** Story descriptions run ~200 tokens each; a real spec needs more room than a mock one. */
+      /**
+       * 一条故事的体量。
+       *
+       * 原估算是 ~200 token/条，那是故事只有 id/title/acceptance 的时候。加上 `role`、
+       * `benefit`、`flowId`、`activity`，验收标准又改成 Given/When/Then 三段，一条故事
+       * 实际在 400–500 token。按旧估算给预算，回复会被腰斩——而腰斩的回复解析出来是
+       * 「JSON 格式错误」，看起来像提示词的问题。
+       *
+       * 加字段就要回头看预算，这是同一件事的两半。
+       */
       maxTokens: z.number().int().min(400).max(16000).optional(),
     }),
     input: SpecDocSchema,
     output: StoryBundleSchema,
     run: async (spec, params, ctx) => {
-      const maxTokens = params.maxTokens ?? Math.max(1200, params.maxStories * 260);
+      const maxTokens = params.maxTokens ?? Math.max(2400, params.maxStories * 520);
       const res = await opts.model.chat({
         stable: STORIES_STABLE,
         variable: storiesVariable(spec.text, params.lang),
