@@ -475,3 +475,42 @@ describe("stories that stand up", () => {
     expect(out.specText).toBe("规格全文");
   });
 });
+
+/**
+ * 回复里不止一个 JSON 对象。
+ *
+ * 原来的做法是「第一个 `{` 到最后一个 `}`」，它假设回复里恰好一个对象。换一个模型之后
+ * 这个假设就不成立了：实测收到过 `{…}\n{…}`，切出来那段报「Unexpected non-whitespace
+ * character after JSON」——读起来像模型返回的格式坏了，其实是**我们切错了**。
+ */
+describe("pulling JSON out of a reply that has more than one", () => {
+  const shape = z.object({ stories: z.array(z.object({ id: z.string() })).min(1) });
+
+  it("两个对象时取合形状的那一个", () => {
+    const reply = '{"note":"thinking out loud"}\n{"stories":[{"id":"US-01"}]}';
+    expect(parseJson(reply, shape, "plan.stories").stories[0].id).toBe("US-01");
+  });
+
+  it("前面有一段带花括号的解释也不受影响", () => {
+    const reply = 'Here is the shape { id, title } I will use:\n{"stories":[{"id":"US-02"}]}';
+    expect(parseJson(reply, shape, "plan.stories").stories[0].id).toBe("US-02");
+  });
+
+  it("字符串里的花括号不参与配平", () => {
+    // 不认字符串，一段带 `}` 的文案会把计数弄乱，切出来的东西解析失败，
+    // 报的却是「模型返回的 JSON 不合法」。
+    const reply = '{"stories":[{"id":"US-03"}],"note":"用 } 结尾的说明"}';
+    expect(parseJson(reply, shape, "plan.stories").stories[0].id).toBe("US-03");
+  });
+
+  it("一个都不合形状时，报的是形状不对而不是格式不对", () => {
+    expect(() => parseJson('{"a":1}\n{"b":2}', shape, "plan.stories")).toThrow(/expected shape/);
+  });
+
+  it("被腰斩的那一个仍然报预算问题", () => {
+    // 没闭合的对象也留着当候选，交给上面那句报「这是预算问题，不是格式问题」。
+    expect(() =>
+      parseJson('{"stories":[{"id":"US-01"', shape, "plan.stories", { truncated: true, maxTokens: 2080 }),
+    ).toThrow(/cut off at maxTokens \(2080\).*budget problem/s);
+  });
+});

@@ -53,23 +53,76 @@ export function parseJson<T>(
     ? ` — the reply was cut off at maxTokens${opts.maxTokens ? ` (${opts.maxTokens})` : ""}, so this is a budget problem, not a formatting one`
     : "";
   const cleaned = text.replace(/```[a-z]*\n?/gi, "").trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error(`${label}: no JSON object in the reply${cutOff}`);
-  let raw: unknown;
-  try {
-    raw = JSON.parse(cleaned.slice(start, end + 1));
-  } catch (e) {
-    throw new Error(`${label}: reply is not valid JSON${cutOff} — ${(e as Error).message}`);
-  }
-  const parsed = schema.safeParse(raw);
-  if (!parsed.success)
-    throw new Error(
-      `${label}: reply does not match the expected shape — ${parsed.error.issues
+  const candidates = balancedObjects(cleaned);
+  if (!candidates.length) throw new Error(`${label}: no JSON object in the reply${cutOff}`);
+
+  /**
+   * 逐个候选试，取第一个合形状的。
+   *
+   * 原来的做法是「第一个 `{` 到最后一个 `}`」，它假设回复里**恰好一个** JSON 对象。
+   * 换一个模型之后这个假设就不成立了：实测收到过 `{…}\n{…}` 这样的回复，切出来的那段
+   * 解析报「Unexpected non-whitespace character after JSON」——读起来像格式坏了，
+   * 其实是我们切错了。多一个对象、前面带一段带花括号的解释，都属于这一类。
+   */
+  let lastError = "";
+  for (const c of candidates) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(c);
+    } catch (e) {
+      lastError = lastError || `not valid JSON${cutOff} — ${(e as Error).message}`;
+      continue;
+    }
+    const parsed = schema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    lastError =
+      lastError ||
+      `does not match the expected shape — ${parsed.error.issues
         .map((i) => `${i.path.join(".") || "(root)"} ${i.message}`)
-        .join("; ")}`,
-    );
-  return parsed.data;
+        .join("; ")}`;
+  }
+  throw new Error(`${label}: reply ${lastError}`);
+}
+
+/**
+ * 把回复里每一个**括号平衡**的顶层对象切出来。
+ *
+ * 要认字符串与转义，否则一段带 `}` 的文案会把计数弄乱——而弄乱之后切出来的东西
+ * 解析失败，报的却是「模型返回的 JSON 不合法」。
+ */
+export function balancedObjects(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        out.push(text.slice(start, i + 1));
+        start = -1;
+      }
+      if (depth < 0) depth = 0;
+    }
+  }
+  // 没闭合的那个也留着：它多半是被 maxTokens 腰斩的那一个，交给上面报「预算问题」。
+  if (depth > 0 && start >= 0) out.push(text.slice(start));
+  return out;
 }
 
 const slug = (s: string): string =>
