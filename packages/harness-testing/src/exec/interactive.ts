@@ -521,6 +521,20 @@ export async function runObserve(
           await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
           current = await snapshot(`回退后`);
           /**
+           * **退回之后 `currentId` 也要跟着变。**
+           *
+           * 第一版只更新了 `current`（下一步从哪一屏挑控件），没更新 `currentId`
+           * （下一条边记成从哪个状态出发）。于是从 /oups 退回 /owners/find 之后，
+           * 在 /owners/find 上点的「Find Owner」，被记成了发生在错误页上的点击——
+           * 图里因此多出一条 `/oups --[点 Find Owner]--> /owners` 的边，
+           * 而错误页上根本没有那个按钮。
+           *
+           * 后果不是「少了一条边」，是**图在说一件没发生过的事**：下游据此算出的最短路径
+           * 会绕经错误页，产出的流程叫「经错误页触发主人列表加载」。看起来完整，全是错的。
+           */
+          currentId = idFor(current);
+          noteLinks(current, currentId);
+          /**
            * 退不动就停。
            *
            * 走到历史开头之后 `goBack()` 什么也不做，而这一轮又没试任何控件——于是它会
