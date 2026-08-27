@@ -19,7 +19,8 @@
       "startedOnce": "2026-08-27",
       "observed": {
         "digest": "sha256:2766c68b03afd64d154339a2574cdf18db1a1b92b3013a4d6a3dfb9be1bac6cd",
-        "note": "HTTP 200，首屏 63ms。入口页链接：/owners/find（按姓氏搜索）、/vets（列表+分页）、/oups（故意抛异常的错误页）。 不要用 --rm：实测它中途退出过一次，容器连同日志一起被删掉，为什么退出就再也查不到了。"
+        "note": "HTTP 200，首屏 63ms。入口页链接：/owners/find（按姓氏搜索）、/vets（列表+分页）、/oups（故意抛异常的错误页）。 不要用 --rm：实测它中途退出过一次，容器连同日志一起被删掉，为什么退出就再也查不到了。",
+        "locale": "**消息随 Accept-Language 变**：zh-CN 时校验消息是中文。基准环境必须固定 `Accept-Language: en`，否则同一次操作在不同机器上产出不同文案，历史数字失去可比性。"
       }
     },
     {

@@ -57,7 +57,8 @@
           "empty",
           "不填",
           "留空",
-          "blank"
+          "blank",
+          "全部主人"
         ],
         "assertAnyOf": [
           "10",
@@ -192,6 +193,7 @@
         "assertAnyOf": [
           "numeric value out of bounds",
           "numeric",
+          "数值",
           "数字"
         ]
       }
@@ -278,5 +280,6 @@
         ]
       }
     }
-  ]
+  ],
+  "locale": "**这个应用的消息随浏览器语言变**：`Accept-Language: zh-CN` 时校验消息是「不能为空」，`en` 时是 `must not be empty`；而「搜不到」那条两种语言下都是英文 `has not been found`——混着的。 清单最初只引用了英文，因为它是用 curl 探的（curl 不发 Accept-Language）；而 harness 走浏览器，发的是 zh-CN。于是清单里内建了一个必然漏判——**它引用的语言不是 harness 实际看到的语言**。 两处都修了：清单双语并列，同时基准环境固定 `Accept-Language: en`。后者更要紧——一个消息随浏览器语言变的应用不算冻结，跨机器跑出来的数字没法比。"
 }
