@@ -179,7 +179,12 @@ describe("gate ②", () => {
     expect(g.findings.some((f) => f.rule === "inline-secret" && f.severity === "block")).toBe(true);
   });
 
-  const textCaseFor = (id: string, designMethod: "equivalence" | "negative" | "boundary") => ({
+  // 五种设计方法都要能传进来：这个 helper 原先只收三种，而下面那条真实误报用例的方法
+  // 恰恰是 state-transition——类型检查一直是红的，只是测试跑得过所以没人看。
+  const textCaseFor = (
+    id: string,
+    designMethod: "equivalence" | "negative" | "boundary" | "state-transition" | "decision-table",
+  ) => ({
     id,
     storyId: "US-01",
     title: id,

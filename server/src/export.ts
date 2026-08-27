@@ -1,7 +1,14 @@
 import type { Project, TestCase, Environment } from "./db.js";
 
+/**
+ * 文件名。
+ *
+ * CJK 必须留着：这个平台产出的用例标题就是中文的，而剥掉 CJK 之后每一条标题都塌成空串、
+ * 退回 `"case"`——于是**同一个优先级下所有用例写的是同一个文件，互相覆盖**，
+ * 一批用例导出之后只剩一条，而且一声不响。
+ */
 const slug = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "case";
+  s.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "case";
 
 // Turn a ${env.KEY}/${secret.KEY} template into a JS template-literal body that
 // reads process.env at run time: "hi ${env.USER}" → `hi ${process.env.USER ?? ""}`.
@@ -32,16 +39,31 @@ function specForCase(tc: TestCase, targetUrl: string): string {
         .map((s) => `  await aiAction(${lit(s.text)}).catch(() => {});`)
         .join("\n")
     : "";
-  const assert = tc.expected
-    ? `  await aiAssert(${lit(tc.expected)});`
-    : `  await aiAssert("the page reached the expected state");`;
+  /**
+   * 判据：能由程序判定的就由程序判定。
+   *
+   * 此前这里无条件写 `aiAssert`，于是平台内刚兑现的 tier1/tier2 机器判据一导出就全变回
+   * 「模型看一眼截图然后表态」——导出的套件整套退回 tier3，而 tier 这个标签好不容易才
+   * 摆脱这个状态。有 oracle 就用 oracle，没有才退回 judge，和平台内是同一条规则。
+   */
+  const assert = tc.oracle
+    ? `  await checkOracle(page, ${JSON.stringify(tc.oracle)}${tc.oracle.kind === "delta" ? ", before" : ""});` +
+      (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
+    : tc.expected
+      ? `  await aiAssert(${lit(tc.expected)});`
+      : `  await aiAssert("the page reached the expected state");`;
   const trace = tc.requirementId ? ` — req ${tc.requirementId}` : "";
+  const usesOracle = !!tc.oracle;
+  const needsBefore = tc.oracle?.kind === "delta";
+  // 只解构真的用到的 fixture。一条由程序判定的用例不该顺手把判定模型的 fixture 也拉起来——
+  // 那既是多余的开销，也让「这条用例到底要不要模型」在源码上看不出来。
+  const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(usesOracle ? [] : ["aiAssert"])];
   return `import { test } from "./ai";
-
+${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "./oracle";\n` : ""}
 // ${tc.priority} · ${tc.type}${trace} — ${tc.priorityReason || ""}
-test(${JSON.stringify(`[${tags}] ${tc.title}`)}, async ({ page, aiAction, aiAssert }) => {
+test(${JSON.stringify(`[${tags}] ${tc.title}`)}, async ({ ${fixtures.join(", ")} }) => {
   await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
-${steps}
+${needsBefore ? "  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await bodyText(page);\n" : ""}${steps}
 ${assert}${post}
 });
 `;
@@ -158,6 +180,98 @@ export const test = base.extend(PlaywrightAiFixture());
 export { expect } from "@playwright/test";
 `;
 
+  /**
+   * 判据的机器判定，原样搬进导出的工程。
+   *
+   * 在这个文件出现之前，导出只会写 `aiAssert(expected)`——**平台内刚兑现的 tier1/tier2
+   * 一导出就全变回让模型看截图**，而那正是 tier 这个标签好不容易才摆脱的状态。
+   * 语义与 `harness-testing/exec/oracle.ts` 保持一致：文本按可见正文的包含判定，
+   * 次数按字面量出现次数，delta 需要动作前后各读一次。
+   */
+  files["tests/oracle.ts"] =
+    `import type { Page } from "@playwright/test";
+
+export type Oracle =
+  | { kind: "text" | "noText"; value: string }
+  | { kind: "url"; value: string }
+  | { kind: "count"; value: string; op: "eq" | "gte" | "lte"; n: number }
+  | { kind: "delta"; value: string; direction: "increased" | "decreased" | "unchanged"; by?: number };
+
+export const bodyText = (page: Page): Promise<string> =>
+  page.evaluate(() => document.body?.innerText ?? "");
+
+function occurrences(haystack: string, needle: string): number {
+  if (!needle) return 0;
+  let from = 0, n = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at === -1) return n;
+    n += 1;
+    from = at + needle.length;
+  }
+}
+
+/**
+ * 标签旁边的那个数。
+ *
+ * 刻意简单，也刻意在读不到时明说：同一个标签出现两次且数值不同，或者旁边根本不是数字，
+ * 就返回 undefined 让检查如实报「读不到」——猜一个，是「确定性判据」变成抛硬币的方式。
+ */
+export function readNumberNear(text: string, label: string): number | undefined {
+  const found: number[] = [];
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(label, from);
+    if (at === -1) break;
+    from = at + label.length;
+    const m = text.slice(from, from + 40).match(/-?\\d+(?:[.,]\\d+)?/);
+    if (m) found.push(Number(m[0].replace(",", "")));
+  }
+  if (!found.length) return undefined;
+  return found.every((v) => v === found[0]) ? found[0] : undefined;
+}
+
+/** 判定，并在失败时说清楚页面上实际是什么。程序判定：不调模型，不看截图。 */
+export async function checkOracle(page: Page, oracle: Oracle, before?: string): Promise<void> {
+  const after = await bodyText(page);
+  const fail = (detail: string): never => {
+    throw new Error(\`oracle \${oracle.kind} failed — \${detail}\`);
+  };
+  switch (oracle.kind) {
+    case "text":
+      if (!after.includes(oracle.value)) fail(\`页面上没有「\${oracle.value}」\`);
+      return;
+    case "noText":
+      if (after.includes(oracle.value)) fail(\`页面上仍有「\${oracle.value}」\`);
+      return;
+    case "url":
+      if (!page.url().includes(oracle.value)) fail(\`地址是 \${page.url()}，不含 \${oracle.value}\`);
+      return;
+    case "count": {
+      const n = occurrences(after, oracle.value);
+      const ok = oracle.op === "eq" ? n === oracle.n : oracle.op === "gte" ? n >= oracle.n : n <= oracle.n;
+      if (!ok) fail(\`「\${oracle.value}」出现 \${n} 次（要求 \${oracle.op} \${oracle.n}）\`);
+      return;
+    }
+    case "delta": {
+      // 关系需要两次观察。没有前置快照时如实报「测不到」，而不是把它算成产品的错。
+      if (before === undefined) fail(\`没有取到步骤执行前的快照，\${oracle.value} 的变化无法判定\`);
+      const a = readNumberNear(before!, oracle.value);
+      const b = readNumberNear(after, oracle.value);
+      if (a === undefined || b === undefined)
+        fail(\`读不到 \${oracle.value} 旁边的数值（前 \${a ?? "—"} / 后 \${b ?? "—"}）\`);
+      const diff = b! - a!;
+      const ok =
+        oracle.direction === "increased" ? (oracle.by !== undefined ? diff === oracle.by : diff > 0)
+        : oracle.direction === "decreased" ? (oracle.by !== undefined ? diff === -oracle.by : diff < 0)
+        : diff === 0;
+      if (!ok) fail(\`\${oracle.value}: \${a} → \${b}（Δ \${diff}）\`);
+      return;
+    }
+  }
+}
+`;
+
   if (hasAuth) {
     const loginSteps = (login!.steps ?? [])
       .map((s) => `  await aiAction(${lit(s)});`)
@@ -176,11 +290,14 @@ ${loginSteps}
 `;
   }
 
+  // 两条标题仍然可能塌成同一个名字（截断、或只差标点）。撞名就带上用例 id：
+  // 一个静默覆盖掉另一条用例的导出，比导出失败更糟——它看起来是成功的。
+  const taken = new Set<string>();
   for (const tc of cases) {
-    files[`tests/${tc.priority.toLowerCase()}-${slug(tc.title)}.spec.ts`] = specForCase(
-      tc,
-      defaultEnv?.baseUrl || project.targetUrl,
-    );
+    let name = `tests/${tc.priority.toLowerCase()}-${slug(tc.title)}.spec.ts`;
+    if (taken.has(name)) name = `tests/${tc.priority.toLowerCase()}-${slug(tc.title)}-${tc.id}.spec.ts`;
+    taken.add(name);
+    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl);
   }
 
   const envLines = [...envVarNames].sort().map((k) => {
