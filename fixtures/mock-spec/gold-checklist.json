@@ -1,0 +1,268 @@
+{
+  "id": "acme-portal-v1.2",
+  "spec": "acme-portal.md",
+  "note": "人工编写的黄金清单。Coverage 这个数的全部意义来自这份清单——它由人写、不由模型生成，且其中标记 heldOut 的条目从不参与任何调参，只在评测时使用。匹配是确定性的关键词规则（可复现），代价是措辞差异会漏判；这一点写在 docs/spec/01 的边界里。 关键词是双语的：被测产品的界面是英文，而规格是中文，产出可能落在任一侧——只认一种语言的尺子会系统性低估诚实的工作。扩充同义词是在修尺子，不是在对着某一次运行调分数。",
+  "items": [
+    {
+      "id": "G-01",
+      "story": "US-01",
+      "title": "有效凭证登录成功并进入个人面板",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": [
+          "correct password",
+          "logs in successfully",
+          "successful login",
+          "valid credential",
+          "valid credentials",
+          "成功登录",
+          "有效凭证",
+          "正确的用户名和密码",
+          "登录成功"
+        ],
+        "assertAnyOf": [
+          "Welcome",
+          "dashboard",
+          "dashboard is ready",
+          "welcome",
+          "欢迎",
+          "面板"
+        ]
+      }
+    },
+    {
+      "id": "G-02",
+      "story": "US-01",
+      "title": "面板显示当前登录者的用户名",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "assertAnyOf": [
+          "Welcome",
+          "username",
+          "welcome,",
+          "用户名",
+          "登录者"
+        ]
+      }
+    },
+    {
+      "id": "G-03",
+      "story": "US-02",
+      "title": "密码错误被拒绝并提示",
+      "designMethod": "negative",
+      "expectTier": 1,
+      "match": {
+        "anyOf": [
+          "incorrect password",
+          "invalid password",
+          "wrong credentials",
+          "wrong password",
+          "密码错误",
+          "错误密码",
+          "错误的密码"
+        ],
+        "assertAnyOf": [
+          "Invalid username or password",
+          "invalid username or password",
+          "拒绝",
+          "提示",
+          "错误"
+        ]
+      }
+    },
+    {
+      "id": "G-04",
+      "story": "US-02",
+      "title": "用户名为空被拒绝",
+      "designMethod": "boundary",
+      "expectTier": 1,
+      "match": {
+        "anyOf": [
+          "blank username",
+          "empty username",
+          "username is empty",
+          "用户名为空",
+          "用户名留空",
+          "空用户名"
+        ],
+        "assertAnyOf": [
+          "Invalid username or password",
+          "invalid username or password",
+          "不能为空",
+          "拒绝",
+          "错误"
+        ]
+      }
+    },
+    {
+      "id": "G-05",
+      "story": "US-02",
+      "title": "密码为空被拒绝",
+      "designMethod": "boundary",
+      "expectTier": 1,
+      "match": {
+        "anyOf": [
+          "blank password",
+          "empty password",
+          "password is empty",
+          "密码为空",
+          "密码留空",
+          "空密码"
+        ],
+        "assertAnyOf": [
+          "Invalid username or password",
+          "invalid username or password",
+          "不能为空",
+          "拒绝",
+          "错误"
+        ]
+      }
+    },
+    {
+      "id": "G-06",
+      "story": "US-02",
+      "title": "被拒绝时不得出现个人面板",
+      "designMethod": "negative",
+      "expectTier": 1,
+      "heldOut": true,
+      "match": {
+        "assertAnyOf": [
+          "is not present",
+          "no longer displayed",
+          "not displayed",
+          "not shown",
+          "remains on the login",
+          "不显示面板",
+          "仍在登录页",
+          "停留在登录",
+          "未出现面板"
+        ]
+      }
+    },
+    {
+      "id": "G-07",
+      "story": "US-03",
+      "title": "退出登录回到登录表单",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "match": {
+        "anyOf": [
+          "log out",
+          "log out button",
+          "logging out",
+          "logout",
+          "logs out",
+          "登出",
+          "退出"
+        ],
+        "assertAnyOf": [
+          "login form",
+          "login form is visible",
+          "sign in",
+          "sign in form",
+          "登录表单",
+          "登录页",
+          "重新显示"
+        ]
+      }
+    },
+    {
+      "id": "G-08",
+      "story": "US-03",
+      "title": "退出后表单不残留上次输入",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "match": {
+        "assertAnyOf": [
+          "does not contain the previously",
+          "empty",
+          "input fields are empty",
+          "不残留",
+          "为空",
+          "清空"
+        ]
+      }
+    },
+    {
+      "id": "G-09",
+      "story": "US-04",
+      "title": "首次进入页面不显示错误提示",
+      "designMethod": "negative",
+      "expectTier": 1,
+      "match": {
+        "assertAnyOf": [
+          "is not present on the page",
+          "no error",
+          "no error message",
+          "不显示错误",
+          "无错误提示",
+          "没有错误"
+        ]
+      }
+    },
+    {
+      "id": "G-10",
+      "story": "US-04",
+      "title": "登录成功后先前的错误提示消失",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "match": {
+        "assertAnyOf": [
+          "error disappears",
+          "error message disappears",
+          "is not present on the page",
+          "不再显示错误",
+          "错误提示清除",
+          "错误消失"
+        ]
+      }
+    },
+    {
+      "id": "G-11",
+      "story": "US-02",
+      "title": "纯空白用户名被拒绝",
+      "designMethod": "boundary",
+      "expectTier": 1,
+      "match": {
+        "anyOf": [
+          "only spaces",
+          "spaces only",
+          "whitespace",
+          "whitespace only",
+          "空格",
+          "空白"
+        ]
+      }
+    },
+    {
+      "id": "G-12",
+      "story": "US-01",
+      "title": "超长输入不导致页面异常",
+      "designMethod": "boundary",
+      "expectTier": 2,
+      "match": {
+        "anyOf": [
+          "200",
+          "200 characters",
+          "long password",
+          "long username",
+          "maximum length",
+          "very long",
+          "超长",
+          "过长",
+          "长度上限"
+        ]
+      }
+    }
+  ],
+  "outOfScope": [
+    "注册 / 找回密码 / 修改密码",
+    "记住我 / 自动登录 / 会话过期",
+    "第三方登录 / 验证码 / 登录失败锁定",
+    "多语言"
+  ]
+}

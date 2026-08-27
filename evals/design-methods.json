@@ -1,0 +1,14 @@
+{
+  "id": "design-methods",
+  "title": "明确点名测试设计方法，比只说「设计用例」强多少",
+  "why": "design.cases 的提示词里点名了等价类/边界值/状态迁移/判定表/负例五种方法，并要求每条用例说出自己用的是哪一种。这是提示词里最长的一段，也是最容易被认为「模型自己也会」而砍掉的一段。它到底换来了多少覆盖率，没人量过。",
+  "graphId": "g1-text-cases",
+  "goldPath": "fixtures/mock-spec/gold-checklist.json",
+  "casesNode": "gate",
+  "a": { "label": "点名方法（现状）", "ablate": [] },
+  "b": { "label": "不点名方法", "ablate": ["design-methods"] },
+  "expect": {
+    "direction": "a-better",
+    "note": "预判 a 更好，且差距主要出现在边界值和负例上——这两类是模型不被提醒就想不到的。如果差距很小，这段提示词就该缩短：它现在占着上下文，也占着每次改提示词时的注意力。"
+  }
+}

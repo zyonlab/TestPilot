@@ -1,0 +1,14 @@
+{
+  "id": "selftest-dedupe",
+  "title": "拿 TestPilot 自己的规格跑：去重是在删重复，还是在删覆盖",
+  "why": "去重按 key 合并用例，看板上因此干净了。但「重复」是按 key 判的，而 key 是生成出来的——两条其实测不同边界的用例拿到同一个 key，就会有一条被静默删掉，而删掉的那条不会在任何地方留下痕迹。用自测图跑是因为它的金标清单是人手工从规格里抽的，能分辨「少了一条重复」和「少了一条覆盖」。",
+  "graphId": "selftest-g1",
+  "goldPath": "fixtures/self-test/gold-checklist.json",
+  "casesNode": "gate",
+  "a": { "label": "去重（现状）", "ablate": [] },
+  "b": { "label": "不去重", "ablate": ["dedupe"] },
+  "expect": {
+    "direction": "no-difference",
+    "note": "预判覆盖率不动：去重删掉的应该只是重复。一旦 b 的覆盖率明显更高，就说明 key 撞了不该撞的，那是个要立刻改的缺陷，不是一个调参问题。"
+  }
+}
