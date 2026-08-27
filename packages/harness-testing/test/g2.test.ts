@@ -28,9 +28,7 @@ const textCase = (id: string, title: string, steps: string[], expected: string) 
   key: `${id}|params|assert`, covers: [],
 });
 
-const gatedBundle = (): GatedBundle => ({
-  origin: "test",
-  stories: [{ id: "US-01", title: "登录", acceptance: [] }],
+const gatedBundle = (): GatedBundle => ({ origin: "x", flows: [], stories: [{ id: "US-01", title: "登录", acceptance: [] }],
   cases: [
     textCase("c1", "有效凭证登录", ["输入 ${env.USERNAME}", "输入 ${secret.PASSWORD}", "点击 Sign in"], "显示 Your dashboard is ready."),
     textCase("c2", "退出登录", ["输入 ${env.USERNAME}", "输入 ${secret.PASSWORD}", "点击 Sign in", "点击 Log out"], "显示登录表单"),

@@ -152,9 +152,7 @@ describe("switches that change what a node does", () => {
 });
 
 describe("stage-two switches", () => {
-  const seed = (): GatedBundle => ({
-    origin: "t",
-    stories: [{ id: "US-01", title: "登录", acceptance: [] }],
+  const seed = (): GatedBundle => ({ origin: "x", flows: [], stories: [{ id: "US-01", title: "登录", acceptance: [] }],
     cases: [
       {
         id: "c1",

@@ -172,6 +172,21 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    * 结构覆盖率能不能算的前提，也是「这批用例有多少在测行为」的粗略读数。
    */
   const covering = cases.filter((c) => (c.covers ?? []).length > 0).length;
+
+  /**
+   * 声称覆盖了一条规格里根本没有的转移。
+   *
+   * 这比「说不出转移」更糟：它让结构覆盖率看起来更高，而多出来的那一条谁也走不到。
+   * 评分那一侧会把它过滤掉（分子只认图上有的），但**过滤掉不等于没发生**——
+   * 一条编出来的引用说明这条用例并不知道自己在验证什么。
+   */
+  const known = new Set(bundle.stories.flatMap(() => [] as string[]));
+  for (const f of bundle.flows ?? []) for (const tr of f.transitions ?? []) known.add(tr);
+  if (known.size)
+    for (const c of cases)
+      for (const cv of c.covers ?? [])
+        if (!known.has(cv))
+          add("covers-unknown", `声称覆盖 ${cv}，但规格里没有这条转移`, c.id, "warn");
   for (const c of cases)
     if (!(c.covers ?? []).length && c.designMethod === "state-transition")
       add(

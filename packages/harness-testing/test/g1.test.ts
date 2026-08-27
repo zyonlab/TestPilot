@@ -198,9 +198,7 @@ describe("G1: specification → text cases", () => {
 });
 
 describe("gate ①", () => {
-  const bundle = (cases: CaseBundle["cases"]): CaseBundle => ({
-    origin: "test",
-    stories: [{ id: "US-01", title: "story", acceptance: [] }],
+  const bundle = (cases: CaseBundle["cases"]): CaseBundle => ({ origin: "x", flows: [], stories: [{ id: "US-01", title: "story", acceptance: [] }],
     cases,
   });
   const base = {
@@ -335,7 +333,7 @@ describe("gate ① on the stories themselves", () => {
     key: "checkout|cart|step-one", covers: [],
   };
   const withStories = (stories: unknown[]) =>
-    runGate({ origin: "x", stories: stories as never, cases: [kase] as never });
+    runGate({ origin: "x", flows: [], stories: stories as never, cases: [kase] as never });
 
   it("说不出谁想要、能得到什么的条目被标出来", () => {
     const r = withStories([{ id: "US-01", title: "页面底部显示社交链接", acceptance: [] }]);
@@ -388,7 +386,7 @@ describe("gate ① on what a case exercises", () => {
     ...over,
   });
   const gate = (cases: unknown[]) =>
-    runGate({ origin: "x", stories: [{ id: "US-01", title: "s", acceptance: [] }] as never, cases: cases as never });
+    runGate({ origin: "x", flows: [], stories: [{ id: "US-01", title: "s", acceptance: [] }] as never, cases: cases as never });
 
   it("报出有几条说得出转移", () => {
     const r = gate([mk({ covers: ["/->/inv"] }), mk({ id: "c2" })]);
@@ -404,5 +402,48 @@ describe("gate ① on what a case exercises", () => {
     // 「登录页显示六个账号」本来就不改变任何东西。
     const r = gate([mk({ designMethod: "equivalence" })]);
     expect(r.findings.some((f) => f.rule === "no-transition")).toBe(false);
+  });
+});
+
+/**
+ * 用例声称覆盖的转移，规格里得真有。
+ *
+ * 编出来的引用比说不出更糟：它让结构覆盖率看起来更高，而多出来的那条谁也走不到。
+ * 评分那一侧会把它过滤掉（分子只认图上有的），但**过滤掉不等于没发生**——
+ * 一条编出来的引用说明这条用例并不知道自己在验证什么。
+ */
+describe("gate ① on what a case claims to cover", () => {
+  const mk = (covers: string[]) => ({
+    id: "c1",
+    storyId: "US-01",
+    title: "t",
+    designMethod: "state-transition" as const,
+    precondition: [],
+    steps: ["点击"],
+    expected: "页面显示 X",
+    tier: 1 as const,
+    oracle: { kind: "text" as const, value: "X" },
+    key: "a|b|c",
+    covers,
+  });
+  const bundle = (covers: string[]) => ({
+    origin: "x",
+    stories: [{ id: "US-01", title: "s", acceptance: [] }] as never,
+    flows: [{ id: "F-1", name: "n", purpose: "p", steps: ["登录"], transitions: ["/->/inv"], endsAt: "/inv" }] as never,
+    cases: [mk(covers)] as never,
+  });
+
+  it("引用规格里有的转移，不标", () => {
+    expect(runGate(bundle(["/->/inv"])).findings.some((f) => f.rule === "covers-unknown")).toBe(false);
+  });
+
+  it("引用一条规格里没有的转移，标出来", () => {
+    const r = runGate(bundle(["/->/nowhere"]));
+    expect(r.findings.some((f) => f.rule === "covers-unknown")).toBe(true);
+  });
+
+  it("规格里一条流程都没有时不误判——那时无从校验", () => {
+    const noFlows = { origin: "x", stories: [{ id: "US-01", title: "s", acceptance: [] }] as never, flows: [] as never, cases: [mk(["/->/x"])] as never };
+    expect(runGate(noFlows).findings.some((f) => f.rule === "covers-unknown")).toBe(false);
   });
 });

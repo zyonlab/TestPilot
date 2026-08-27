@@ -135,7 +135,7 @@ describe("the case budget", () => {
     );
     const node = designCasesNode({ model });
     const out = await node.run(
-      { origin: "t", derivedFrom: "document" as const, stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
+      { origin: "t", derivedFrom: "document" as const, flows: [], stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
       { contextTokens: 2000, perStoryMaxTokens: 2000, maxCasesPerStory: 4, specText: "spec", oracleGuidance: "default" as const },
       {
         nodeId: "design",
@@ -162,7 +162,7 @@ describe("the stricter oracle guidance", () => {
       );
       const node = designCasesNode({ model });
       await node.run(
-        { origin: "t", derivedFrom: "document" as const, stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
+        { origin: "t", derivedFrom: "document" as const, flows: [], stories: [{ id: "US-01", title: "s", acceptance: ["a"] }] },
         { contextTokens: 2000, perStoryMaxTokens: 2000, maxCasesPerStory: 4, specText: "spec", oracleGuidance },
         { nodeId: "design", ablated: new Set(), spend: () => {}, emit: () => {}, signal: new AbortController().signal } as never,
       );

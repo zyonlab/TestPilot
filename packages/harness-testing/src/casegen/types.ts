@@ -162,6 +162,14 @@ export const SpecFlowSchema = z.object({
   purpose: z.string().default(""),
   /** 走完这条流程的动作序列。由 `computeFlows` 填，模型改不动。 */
   steps: z.array(z.string()).default([]),
+  /**
+   * 这条流程走过的转移 id（`from->to`），与 `steps` 一一对应。
+   *
+   * 用例要靠它声明自己验证了哪条转移，而**声明要能对上，规格里就得先写出这些 id**——
+   * 第一版只渲染了人读的「登录 → 点购物车」，却要求用例引用 `from->to`：要求写了，
+   * 数据没给，于是 35 条用例里只有 11 条填得出来。
+   */
+  transitions: z.array(z.string()).default([]),
   endsAt: z.string().default(""),
 });
 export type SpecFlow = z.infer<typeof SpecFlowSchema>;
@@ -219,6 +227,8 @@ export type SpecDoc = z.infer<typeof SpecDocSchema>;
 
 export const StoryBundleSchema = z.object({
   origin: z.string().default("inline"),
+  /** 规格里的流程。故事挂在它上面，用例引用它的转移 id——一路带下去。 */
+  flows: z.array(SpecFlowSchema).default([]),
   /** 这批故事背后的规格是怎么来的——一路带到用例上，因为它改变断言的含义。 */
   derivedFrom: SpecProvenance.optional(),
   /**
@@ -239,6 +249,8 @@ export const CaseBundleSchema = z.object({
   origin: z.string().default("inline"),
   derivedFrom: SpecProvenance.optional(),
   stories: z.array(StorySchema).default([]),
+  /** 规格里的流程，一路带下来——门禁要拿它校验用例声称覆盖的转移真的存在。 */
+  flows: z.array(SpecFlowSchema).default([]),
   cases: z.array(TextCaseSchema).default([]),
 });
 export type CaseBundle = z.infer<typeof CaseBundleSchema>;

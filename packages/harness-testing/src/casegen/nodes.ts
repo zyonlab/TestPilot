@@ -490,6 +490,7 @@ export function composeSpecNode(
         name: named.get(f.id)?.name ?? "",
         purpose: named.get(f.id)?.purpose ?? "",
         steps: f.steps.map((s) => s.how),
+        transitions: f.steps.map((s) => `${s.from}->${s.to}`),
         endsAt: f.endsAt,
       }));
       const invented = parsed.flows.filter((f) => !computed.flows.some((c) => c.id === f.id)).length;
@@ -510,9 +511,16 @@ export function composeSpecNode(
           ? [
               "",
               "## 流程",
-              ...flows.map(
-                (f) => `- **${f.id}** ${f.name || "(未命名)"}${f.purpose ? ` —— ${f.purpose}` : ""}\n  > ${f.steps.join(" → ")}`,
-              ),
+              /**
+               * 每一步都带上它的转移 id。
+               *
+               * 用例要引用这些 id 来声明自己验证了哪条转移；只渲染人读的箭头串，
+               * 等于要求它引用一个从没出现过的东西。
+               */
+              ...flows.flatMap((f) => [
+                `- **${f.id}** ${f.name || "(未命名)"}${f.purpose ? ` —— ${f.purpose}` : ""}`,
+                ...f.steps.map((how, i) => `  > \`${f.transitions[i] ?? ""}\`　${how}`),
+              ]),
             ]
           : []),
         "",
@@ -668,6 +676,8 @@ export function planStoriesNode(
         // 规格跟着故事走。`design.cases` 吃的是 `stories`，拿不到 `spec` 节点的产物，而图上
         // 那个 `specText` 参数建图时填不出来——所以在这一行出现之前，它一直在空规格上设计用例。
         specText: spec.text,
+        // 流程同理：用例要引用它的转移 id，门禁要拿它校验那些 id 真的存在。
+        flows: spec.flows ?? [],
         stories,
       };
     },
@@ -795,6 +805,7 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
         origin: bundle.origin,
         derivedFrom: bundle.derivedFrom,
         stories: bundle.stories,
+        flows: bundle.flows ?? [],
         cases,
       };
     },
