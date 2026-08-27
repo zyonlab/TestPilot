@@ -84,6 +84,12 @@ export function resolveChainConfig(override?: Partial<ChainConfig>): ChainConfig
   };
 }
 
-// 1x1 red PNG as a data URL — used to probe whether the model accepts image input.
+/**
+ * 探针图：16×16 纯红 PNG。
+ *
+ * 原先是 1×1。托管网关会**直接拒收**这么小的图（"too large, corrupted, or an unsupported
+ * format"），于是自检把一个能看图的模型报成 `notMultimodal` —— 一个假阴性，而它的后果是
+ * 让人以为执行链路用不了。探针要小到不花钱，也要真到不被当成坏文件。
+ */
 export const PROBE_IMAGE =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=";

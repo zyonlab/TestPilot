@@ -6,8 +6,15 @@ import { defineHarnessConfig } from "@testpilot/harness-core";
  * so this file is the map of what exists rather than a lock on the values.
  */
 export default defineHarnessConfig({
-  // One self-hosted VL model: admission is 1, no matter how many browsers are open.
-  model: { concurrency: 1 },
+  /**
+   * 准入并发。
+   *
+   * 自托管那颗一次只服务一个请求、并发就 502，所以一直是 1。换到托管接口之后这个理由
+   * 不成立了——限制变成了**限流**（免费档 20 次/分钟），而不是「它会崩」。3 够用且留了余量：
+   * G1 那十几次串行文本调用是这条流水线最长的一段，摊开就是几分钟对半小时的差别。
+   * 切回本地时记得改回 1。
+   */
+  model: { concurrency: 3 },
   execution: { queueConcurrency: 1, runnerCount: 1 },
   events: { keepLast: 200_000, trimMs: 10 * 60_000 },
   budget: { calls: 500, usd: 0, ms: 4 * 60 * 60_000 },
@@ -54,7 +61,9 @@ export default defineHarnessConfig({
         "capture point for LLM debug",
       command: "node",
       args: ["scripts/model-proxy.mjs"],
-      env: { MODEL_UPSTREAM: "http://127.0.0.1:8000", PROXY_PORT: "8010" },
+      // 代理用 fetch 转发并原样带上 Authorization，所以 https 上游可直接指。
+      // 切回本地：改成 http://127.0.0.1:8000。
+      env: { MODEL_UPSTREAM: "https://tokenharbor.ai", PROXY_PORT: "8010" },
       // Autostarted: Midscene exposes no per-request body hook, so this is the only place
       // `enable_thinking:false` can be injected into ITS calls — and without it a Qwen3.x
       // model answers with its own reasoning instead of the expected output.
