@@ -197,16 +197,29 @@ export function modelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel 
     model: env.MIDSCENE_MODEL_NAME ?? "Qwen3.8-27B-4bit",
     timeoutMs: env.TP_MODEL_TIMEOUT_MS ? Number(env.TP_MODEL_TIMEOUT_MS) : undefined,
     /**
-     * `TP_MODEL_THINK=1` 打开思考。
+     * **默认开着思考。**`TP_MODEL_THINK=0` 关掉。
      *
-     * 默认关着，理由是思考的 token 计入 completion——同一句「reply OK」，开着花 22 个
-     * reasoning token，关着花 1 个；而这条流水线的每个节点都在 maxTokens 边缘（已经因为
-     * 预算不足失败过三次），思考会直接把可用的输出预算吃掉一块。
+     * 这个默认值是量出来的，不是拍的。PetClinic 上两臂条件完全一致地各跑三轮
+     * （见 `docs/spec/13-重新规划.md` 阶段 C）：
      *
-     * 但「关掉思考会不会让产出变差」是个**经验问题**，不该由默认值替人回答——
-     * 我们有黄金清单和覆盖度量，可以直接测。做成开关是为了能配对比较。
+     *   语义覆盖      关 0.723 ± 0.078　开 0.630 ± 0.128　——**看不出差别**
+     *   门禁①        关 0.982 ± 0.025　开 **1.000 ± 0.000**
+     *   说得出转移    关 76%　　　　　　开 **89%**
+     *   用例数        关 34.0 ± **8.5**　开 39.7 ± **0.6**
+     *   代价          +17% token，+55% 耗时
+     *
+     * 按覆盖率选，两者没区别；按**方差**选，开思考明显赢。而方差恰恰卡着这个项目的两件
+     * 正事：配对评测（B 阶段的消融就死在单臂 ±0.39 的方差上，两臂均值差 0.00），
+     * 以及产出交给人复核（门禁满分、89% 的用例说得出自己验哪条转移，直接降阅读成本）。
+     *
+     * **方差本身是可以被当作指标优化的**——一个方差小的配置，能让同样的样本量读出更小的
+     * 效应。这条比覆盖率那一栏更值钱。
+     *
+     * 曾经默认是关的，理由是「推理 token 吃 maxTokens 预算」。那个理由在 DashScope 上成立
+     * （实测同一句话开着花 22 个 reasoning token），在 TokenHarbor 上不成立
+     * （实测 completion_tokens 与关着时相同）。**理由绑在出口上，换出口就要重验。**
      */
-    noThink: env.TP_MODEL_THINK === "1" ? false : undefined,
+    noThink: env.TP_MODEL_THINK === "0" ? true : false,
     thinkBudget: env.TP_MODEL_THINK_BUDGET ? Number(env.TP_MODEL_THINK_BUDGET) : undefined,
   });
 }
