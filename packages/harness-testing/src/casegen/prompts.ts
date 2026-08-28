@@ -384,6 +384,19 @@ export const COMPOSE_SCHEMA = {
         required: ["id", "name"],
       },
     },
+    /**
+     * 上面那句注释写完之后，我又照着犯了一遍：提示词里加了 `modules`，schema 里没加。
+     * 后果是模型**一个模块名都产不出来**，全部回落到路由段——故事图的横轴于是叫
+     * `owners`、`oups`、`/`。那是代码词汇，不是用户活动，而横轴恰恰是人第一眼看的东西。
+     */
+    modules: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, name: { type: "string" } },
+        required: ["id", "name"],
+      },
+    },
     rules: {
       type: "array",
       items: {

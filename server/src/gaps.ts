@@ -163,7 +163,25 @@ export function computeGaps(input: {
   for (const u of spec?.unknowns ?? [])
     gaps.push({ reach: "unseen", kind: "unknown", what: `材料里没有答案`, detail: u });
 
-  return gaps;
+  /**
+   * **去重。**
+   *
+   * 一个入口从五个状态上都看得见，它是**一个**缺口（「这个入口没进去」），不是五个。
+   * 实测一次运行报出 46 条「看见没进去」，一列 55 条——人看不动，而看不动的清单
+   * 等于没有清单。缺口的价值在于**能被读完**。
+   *
+   * 身份取「哪一类 + 说的是什么」：转移天然唯一；链接按目标地址算，谁看见的不重要。
+   */
+  const seen = new Set<string>();
+  return gaps.filter((g) => {
+    const key =
+      g.kind === "link"
+        ? `link::${(g.detail ?? "").replace(/^.*?走到 /, "")}`
+        : `${g.kind}::${g.detail ?? g.what}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** 探索为什么停下来。它决定了「没看到」那一类缺口该不该怪探索。 */
