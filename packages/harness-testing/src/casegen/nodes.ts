@@ -656,8 +656,15 @@ export function planStoriesNode(
     input: SpecDocSchema,
     output: StoryBundleSchema,
     run: async (spec, params, ctx) => {
-      // 故事带上验收标准、角色、收益、活动之后单条长了不少；520 是加这些字段之前定的。
-      const maxTokens = params.maxTokens ?? Math.max(4000, params.maxStories * 900);
+      /**
+       * 一条故事现在带 id、标题、角色、收益、flowId、活动、来源，外加**多条**
+       * Given/When/Then 验收标准——中文下单条轻松 300+ token。520 是加这些字段**之前**
+       * 定的，900 是我拍的，两次都不够。
+       *
+       * 给足：每条 1600，下限 8000。切断的代价（整批故事作废）远大于多要一点预算的代价，
+       * 而这个方向上没有对称的风险——要多了只是没用完。
+       */
+      const maxTokens = params.maxTokens ?? Math.min(32000, Math.max(8000, params.maxStories * 1600));
       const res = await opts.model.chat({
         stable: STORIES_STABLE,
         variable: storiesVariable(spec.text, params.lang),
