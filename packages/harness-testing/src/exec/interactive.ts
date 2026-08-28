@@ -874,7 +874,23 @@ export async function runObserve(
         const fillables = screen.elements.filter((e) => e.fillable && !e.form);
         const box =
           fillables.find((e) => LOOKUP_SUBMIT.test(`${e.label} ${e.display}`)) ??
-          (fillables.length === 1 && !screen.elements.some((e) => e.form) && fillables[0]!.width >= 60
+          /**
+           * 兜底那一条**只对真正匿名的输入框成立**。
+           *
+           * 它当初是为 Juice Shop 的搜索框加的——那个框没有 aria-label、没有 placeholder、
+           * 没有 id、没有 title，按名字永远认不出来，只能靠「整屏没有 form、只有一个
+           * 孤零零的输入框」这个形状来认。
+           *
+           * 但形状认不出用途。dimeshift 的 `/plans` 上有一个叫 **Plan name** 的框，
+           * 同样没有 form、同样只有一个——兜底规则把它当成查询框，填了个值回车，
+           * **真的建了一条计划**。被测应用被改了，而基准的意义全在于它冻结不变。
+           *
+           * 有名字的框不走兜底：名字里没写「搜索」，就不该假设它是搜索。
+           */
+          (fillables.length === 1 &&
+          !screen.elements.some((e) => e.form) &&
+          fillables[0]!.width >= 60 &&
+          fillables[0]!.label.startsWith("（无可见文案")
             ? fillables[0]
             : undefined);
         if (box) {
