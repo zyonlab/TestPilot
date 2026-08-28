@@ -992,8 +992,8 @@ export async function runObserve(
         const page = session!.page as unknown as {
           goto: (u: string) => Promise<unknown>;
           $eval: (sel: string, fn: (el: unknown, arg?: unknown) => unknown, arg?: unknown) => Promise<unknown>;
-          press: (sel: string, key: string) => Promise<unknown>;
-          fill: (sel: string, value: string) => Promise<unknown>;
+          press: (sel: string, key: string, opts?: { timeout?: number }) => Promise<unknown>;
+          fill: (sel: string, value: string, opts?: { timeout?: number }) => Promise<unknown>;
         };
         if (next.kind === "goto") {
           note(`第 ${rounds} 轮：走到 ${next.href}`);
@@ -1015,8 +1015,16 @@ export async function runObserve(
              * 于是回车时组件拿到的还是空串，什么都不会发生。一次实测里搜索实验就是这样
              * 静悄悄地什么都没做。填表单那一支不受影响：那边是整表提交，走的是 DOM 值。
              */
-            await page.fill(next.form, next.variant === "empty" ? "" : BAD_VALUES.text!.unmatched);
-            await page.press(next.form, "Enter");
+            /**
+             * **一定要给超时。**`fill` 会等元素变成可操作，而一个折叠到 4px、
+             * 被别的层盖住、或者根本不可编辑的框永远等不到那一刻——一次实测里这一句
+             * 把整次探索挂死了 28 分钟，没有任何错误。探索是有预算的，
+             * 任何一步都不该能吃掉全部预算。
+             */
+            await page.fill(next.form, next.variant === "empty" ? "" : BAD_VALUES.text!.unmatched, {
+              timeout: 4000,
+            });
+            await page.press(next.form, "Enter", { timeout: 4000 });
           } else {
           /**
            * 字段类别在页内重新判一次。
