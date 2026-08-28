@@ -136,12 +136,31 @@ for (let i = 1; i <= RUNNER_COUNT; i++) {
     // the wallet build lives in .wallets/, and both must stay where the gateway reads them.
     cwd: resolve(__dirname, ".."),
     execArgv: TSX_ARGV,
-    // Midscene reads these at call time. It has no hook for per-request body fields, so
-    // its traffic goes through the no-think proxy while the platform's own model config
-    // keeps pointing at the model itself.
+    /**
+     * Midscene 在调用时读这两个变量。它没有逐请求改 body 的钩子，所以**当需要
+     * 「不思考」时**，它的流量要走 no-think 代理。
+     *
+     * 但那个代理不能是**硬编码的默认值**。它此前写死成 `http://127.0.0.1:8010/v1`，
+     * 于是：代理没起来的时候，runner 打到一个空端口上，Midscene 报
+     * `MODEL_UNAVAILABLE: 404 status code (no body)`——**读起来像模型挂了，
+     * 其实是地址错了**。今天整整一天执行层一次都没连上模型，就是因为这一行，
+     * 而报出来的错把人引向模型服务。
+     *
+     * 现在默认开思考（见 `modelFromEnv`），no-think 代理**本身就是反的**。
+     * 所以顺序改成：显式配了代理就走代理，否则走和平台其余部分**同一个地址**。
+     * 一个组件的默认值不该是「一个可能没在跑的东西」。
+     */
     env: {
-      OPENAI_BASE_URL: process.env.MIDSCENE_PROXY_URL || "http://127.0.0.1:8010/v1",
-      MIDSCENE_MODEL_BASE_URL: process.env.MIDSCENE_PROXY_URL || "http://127.0.0.1:8010/v1",
+      OPENAI_BASE_URL:
+        process.env.MIDSCENE_PROXY_URL ||
+        process.env.OPENAI_BASE_URL ||
+        process.env.MIDSCENE_MODEL_BASE_URL ||
+        "http://127.0.0.1:8010/v1",
+      MIDSCENE_MODEL_BASE_URL:
+        process.env.MIDSCENE_PROXY_URL ||
+        process.env.MIDSCENE_MODEL_BASE_URL ||
+        process.env.OPENAI_BASE_URL ||
+        "http://127.0.0.1:8010/v1",
     },
     // Deliberately never: a dead runner has a reason, and whether to retry the WORK
     // is the loop layer's decision, not the supervisor's.
