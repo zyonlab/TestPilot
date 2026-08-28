@@ -628,3 +628,34 @@ describe("挂不到流程的故事，活动名也要归一到模块", () => {
     ]);
   });
 });
+
+describe("活动名只能是已知模块——一个瞎编的列头比没有列头更糟", () => {
+  it("模型把整段规格正文抄进 activity 时，置空而不是让它变成列头", async () => {
+    const logs: Array<Record<string, unknown>> = [];
+    const blob = "## 模块\n- **owners** 管理主人　（/owners）\n  > 包含流程：F-1\n".repeat(30);
+    const node = planStoriesNode({
+      model: new FakeModel(() =>
+        JSON.stringify({
+          stories: [
+            { id: "S-01", title: "甲", activity: blob, acceptance: ["Given a / When b / Then c"] },
+            { id: "S-02", title: "乙", activity: "管理主人", acceptance: ["Given a / When b / Then c"] },
+          ],
+        }),
+      ),
+    });
+    const out = await node.run(
+      {
+        text: "x", title: "", origin: "explore", rules: [], unknowns: [], flows: [],
+        modules: [{ id: "owners", name: "管理主人", flowIds: [], routes: [] }],
+      },
+      { maxStories: 12 },
+      {
+        nodeId: "stories", ablated: new Set(), spend: () => {},
+        emit: (kind: string, payload: Record<string, unknown>) => logs.push({ kind, ...payload }),
+        signal: new AbortController().signal,
+      } as never,
+    );
+    expect(out.stories[0]!.activity).toBeUndefined();
+    expect(out.stories[1]!.activity).toBe("管理主人");
+  });
+});

@@ -245,6 +245,26 @@ export const STORIES_SCHEMA = {
   required: ["stories"],
 } as const;
 
+
+/**
+ * 活动这一栏必须**只能填模块名**。
+ *
+ * 放开成自由字符串的后果实测到了：模型把整段规格正文（三千多字符）抄进了 `activity`，
+ * 而故事图的横轴正是这一栏——那会变成一个三千字的列头，整页当场不可读。
+ *
+ * 约束解码能把它钉成枚举，所以就该钉成枚举。这是同一条教训的第三次：
+ * **提示词里的要求，schema 里不给位置（或不加约束），等于没有要求。**
+ */
+export const storiesSchema = (moduleNames: string[]) => {
+  const base = JSON.parse(JSON.stringify(STORIES_SCHEMA)) as typeof STORIES_SCHEMA;
+  const props = (base as { properties: { stories: { items: { properties: Record<string, unknown> } } } })
+    .properties.stories.items.properties;
+  props.activity = moduleNames.length
+    ? { type: "string", enum: moduleNames }
+    : { type: "string" };
+  return base;
+};
+
 export const CASES_SCHEMA = {
   type: "object",
   properties: {

@@ -7,7 +7,7 @@ import {
   CASES_STABLE,
   CASES_STABLE_PLAIN,
   ORACLE_STRICT,
-  STORIES_SCHEMA,
+  storiesSchema,
   STORIES_STABLE,
   casesVariable,
   storiesVariable,
@@ -671,7 +671,9 @@ export function planStoriesNode(
       const res = await opts.model.chat({
         stable: STORIES_STABLE,
         variable: storiesVariable(spec.text, params.lang),
-        schema: STORIES_SCHEMA,
+        // 活动只能填模块名——放开成自由串时，模型把整段规格正文抄进了这一栏，
+        // 而它就是故事图的列头。见 `storiesSchema`。
+        schema: storiesSchema((spec.modules ?? []).map((m) => m.name || m.id)),
         maxTokens,
         label: "plan.stories",
       });
@@ -732,11 +734,26 @@ export function planStoriesNode(
         nameOfModule.set(m.id.toLowerCase(), display);
         if (m.name) nameOfModule.set(m.name.toLowerCase(), display);
       }
+      /**
+       * **活动只能是已知的模块名，别的一律丢掉。**
+       *
+       * 约束解码已经把它钉成枚举了（见 `storiesSchema`），这里是第二道：约束解码在有些
+       * 端点上会被降级成普通调用（`guidedSupported` 一旦为假就永久关掉），那时这一栏又是
+       * 自由字符串。实测放开的后果是模型把**整段规格正文**（三千多字符）抄了进来——
+       * 而这一栏就是故事图的列头，一个三千字的列头会让整页当场不可读。
+       *
+       * 认不出来就置空，让它落到「未归类」那一列。**宁可少一个分类，不可多一个假分类**：
+       * 一个瞎编的列头比没有列头更糟，因为人会信它。
+       */
+      const known = new Set([...nameOfModule.values()]);
       const stories = raw.map(attribute).map((st) => {
         const byFlow = st.flowId ? moduleOfFlow.get(st.flowId) : undefined;
         if (byFlow) return { ...st, activity: byFlow };
         const byName = nameOfModule.get((st.activity ?? "").trim().toLowerCase());
-        return byName ? { ...st, activity: byName } : st;
+        if (byName) return { ...st, activity: byName };
+        return known.size && st.activity && !known.has(st.activity)
+          ? { ...st, activity: undefined }
+          : st;
       });
       const activities = new Set(stories.map((s) => s.activity).filter(Boolean));
       /**
