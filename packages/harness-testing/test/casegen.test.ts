@@ -594,3 +594,37 @@ describe("故事图的骨架必须比躯干粗", () => {
     expect(logs.some((l) => String(l.text ?? "").includes("横过来的列表"))).toBe(false);
   });
 });
+
+describe("挂不到流程的故事，活动名也要归一到模块", () => {
+  it("模型抄了模块 id 的，换成模块名——同一个模块不该裂成两列", async () => {
+    const logs: Array<Record<string, unknown>> = [];
+    const node = planStoriesNode({
+      model: new FakeModel(() =>
+        JSON.stringify({
+          stories: [
+            { id: "S-01", title: "甲", flowId: "F-1", activity: "随便写的", acceptance: ["Given a / When b / Then c"] },
+            // 没有 flowId，活动名是模块 id —— 实测里模型抄的正是规格正文里的粗体 id
+            { id: "S-02", title: "乙", activity: "search", acceptance: ["Given a / When b / Then c"] },
+            { id: "S-03", title: "丙", activity: "SEARCH", acceptance: ["Given a / When b / Then c"] },
+          ],
+        }),
+      ),
+    });
+    const out = await node.run(
+      {
+        text: "x", title: "", origin: "explore", rules: [], unknowns: [],
+        flows: [{ id: "F-1", name: "f", purpose: "", steps: [], transitions: [], endsAt: "/x" }],
+        modules: [{ id: "search", name: "搜索与浏览商品", flowIds: ["F-1"], routes: [] }],
+      },
+      { maxStories: 12 },
+      {
+        nodeId: "stories", ablated: new Set(), spend: () => {},
+        emit: (kind: string, payload: Record<string, unknown>) => logs.push({ kind, ...payload }),
+        signal: new AbortController().signal,
+      } as never,
+    );
+    expect(out.stories.map((s) => s.activity)).toEqual([
+      "搜索与浏览商品", "搜索与浏览商品", "搜索与浏览商品",
+    ]);
+  });
+});

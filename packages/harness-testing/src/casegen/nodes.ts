@@ -686,9 +686,23 @@ export function planStoriesNode(
        */
       const moduleOfFlow = new Map<string, string>();
       for (const m of spec.modules ?? []) for (const fid of m.flowIds) moduleOfFlow.set(fid, m.name || m.id);
+      /**
+       * 挂不到流程的故事，回填够不着。而它们的 `activity` 实测是模块的 **id**——
+       * 规格正文把模块渲染成 `- **search** 搜索与浏览商品`，模型抄了粗体那一段。
+       * 于是同一个模块裂成两列：一列叫「搜索与浏览商品」，一列叫 `search`。
+       * 所以再补一步归一：活动名对上某个模块的 id 或名字，一律换成那个模块的名字。
+       */
+      const nameOfModule = new Map<string, string>();
+      for (const m of spec.modules ?? []) {
+        const display = m.name || m.id;
+        nameOfModule.set(m.id.toLowerCase(), display);
+        if (m.name) nameOfModule.set(m.name.toLowerCase(), display);
+      }
       const stories = raw.map(attribute).map((st) => {
         const byFlow = st.flowId ? moduleOfFlow.get(st.flowId) : undefined;
-        return byFlow ? { ...st, activity: byFlow } : st;
+        if (byFlow) return { ...st, activity: byFlow };
+        const byName = nameOfModule.get((st.activity ?? "").trim().toLowerCase());
+        return byName ? { ...st, activity: byName } : st;
       });
       const activities = new Set(stories.map((s) => s.activity).filter(Boolean));
       /**
