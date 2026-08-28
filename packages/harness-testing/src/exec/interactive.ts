@@ -341,8 +341,24 @@ export async function runObserve(
              * 毫无道理，因为屏幕上从来没有这几个字。整个下游的设计基础是「逐字引用界面文案」，
              * 材料把内部标识符冒充成文案，后面每一层都会当真。
              */
+            const tagName = el.tagName.toLowerCase();
             const fallback = e.getAttribute("title") || e.getAttribute("data-test") || path;
-            const shown = label || (fallback ? `（无可见文案·${fallback}）` : "");
+            /**
+             * **可填的输入框即使一个字都没有，也不能丢。**
+             *
+             * 下面那道 `.filter(c => c.label.trim())` 是为了挡掉垃圾可点元素。但
+             * Juice Shop 的搜索框没有 aria-label、没有 placeholder、没有 id、没有 title
+             * ——四样兜底全空，于是它被整条过滤掉，对整个探索**不存在**。搜索这一整块
+             * 行为（「搜不到时说什么」）因此永远做不了实验。
+             *
+             * 一个输入框的用途是**被填**，不是被读。没有文案不代表它不重要，
+             * 只代表这个产品没给它文案。仍然按老规矩标明这不是界面文案。
+             */
+            const anonInput =
+              (tagName === "input" && !["submit", "button", "reset", "hidden"].includes((e.type || "").toLowerCase())) ||
+              tagName === "textarea";
+            const shown =
+              label || (fallback ? `（无可见文案·${fallback}）` : anonInput ? "（无可见文案·输入框）" : "");
             const tag = el.tagName.toLowerCase();
 
             // 这个元素怎么再找回来：data-test → id → 一条 nth-of-type 路径。内联，见上面那段。
@@ -800,9 +816,19 @@ export async function runObserve(
        * 那条一样：往一个新增表单里填值再回车，会真的写库。
        */
       if (!submitBtn) {
-        const box = screen.elements.find(
-          (e) => e.fillable && !e.form && LOOKUP_SUBMIT.test(`${e.label} ${e.display}`),
-        );
+        /**
+         * 哪个输入框算「查询框」：文案像搜索的，**或者**这一屏上只有它一个可填控件
+         * 而且整屏没有表单。
+         *
+         * 后一条是为匿名输入框准备的——Juice Shop 的搜索框四样文案兜底全空，
+         * 按名字永远认不出来。而「整屏没有 form、只有一个孤零零的输入框」这个形状
+         * 本身就说明了它是干什么的：新增和编辑都会用表单，用不上表单的输入框
+         * 基本只有搜索和筛选。
+         */
+        const fillables = screen.elements.filter((e) => e.fillable && !e.form);
+        const box =
+          fillables.find((e) => LOOKUP_SUBMIT.test(`${e.label} ${e.display}`)) ??
+          (fillables.length === 1 && !screen.elements.some((e) => e.form) ? fillables[0] : undefined);
         if (box) {
           for (const variant of ["empty", "unmatched"] as const) {
             const k = `${here}::__probe__::${box.selector}::${variant}`;
