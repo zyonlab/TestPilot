@@ -44,6 +44,16 @@ export interface Module {
   id: string;
   routes: string[];
   flowIds: string[];
+  /**
+   * 这一块里那些界面的标题。
+   *
+   * 模块要由模型起一个**人话名字**（故事图的横轴就是它）。此前喂给它的只有
+   * `- oups　路由 /oups　流程 F-5` ——一个路由段、一个流程编号，**没有任何可据以命名的
+   * 东西**。结果是模型把 id 原样抄成了名字，横轴上写着 `oups`、`vets`、`owners`。
+   *
+   * 那不是模型偷懒，是我们没给它信息。标题是这一块「是干什么的」最直接的证据。
+   */
+  titles: string[];
 }
 
 const howOf = (t: SfgTransition): string =>
@@ -158,8 +168,10 @@ export function computeModules(graph: StateFlowGraph, flows: Flow[]): Module[] {
   const byId = new Map<string, Module>();
   for (const st of graph.states) {
     const id = seg(st.route);
-    const m = byId.get(id) ?? { id, routes: [], flowIds: [] };
+    const m = byId.get(id) ?? { id, routes: [], flowIds: [], titles: [] };
     if (!m.routes.includes(st.route)) m.routes.push(st.route);
+    const title = (st.title ?? "").trim();
+    if (title && !m.titles.includes(title)) m.titles.push(title);
     byId.set(id, m);
   }
   for (const f of flows) {
@@ -183,6 +195,11 @@ export function describeFlows(flows: Flow[], modules: Module[], truncated: boole
     ),
     "",
     "模块（按路由前缀聚类）：",
-    ...modules.map((m) => `- ${m.id}　路由 ${m.routes.join(", ")}　流程 ${m.flowIds.join(", ") || "（无）"}`),
+    ...modules.map(
+      (m) =>
+        `- ${m.id}　路由 ${m.routes.join(", ")}　流程 ${m.flowIds.join(", ") || "（无）"}` +
+        // 标题是「这一块是干什么的」最直接的证据。没有它，模型只能把 id 抄一遍。
+        `${m.titles.length ? `　界面标题：${m.titles.slice(0, 5).join(" / ")}` : ""}`,
+    ),
   ].join("\n");
 }

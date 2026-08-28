@@ -525,6 +525,19 @@ export function composeSpecNode(
         flowIds: m.flowIds,
         routes: m.routes,
       }));
+      /**
+       * 把 id 原样抄成名字，等于没起名字。
+       *
+       * 约束解码要求 `name` 存在，但要求不了它**不等于 id**。而模块名就是故事图的横轴
+       * ——横轴上写着 `oups`、`vets` 时，复核的人第一眼看到的是代码词汇。
+       * 报出来，因为这件事从产出上看完全正常：字段有值、结构完整。
+       */
+      const unnamed = modules.filter((m) => m.name === m.id).map((m) => m.id);
+      if (unnamed.length)
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text: `${unnamed.length} 个模块没起出人话名字（${unnamed.join("、")}）——故事图的横轴会显示代码词汇`,
+        });
       const invented = parsed.flows.filter((f) => !computed.flows.some((c) => c.id === f.id)).length;
       if (invented)
         ctx.emit("log", {
