@@ -139,7 +139,10 @@ export function gateCodeNode(): NodeDef<
     input: CodeBundleSchema,
     output: GatedCodeBundleSchema,
     run: async (bundle, params, ctx) => {
-      const gate = runCodeGate(bundle, params);
+      // 判据是从文字用例带下来的，门禁要用它来判断「代码里没有断言」是不是真的
+      // 意味着「这条用例不可能失败」。
+      const oracleOf = (caseId: string) => bundle.cases.find((c) => c.id === caseId)?.oracle;
+      const gate = runCodeGate(bundle, params, oracleOf);
       ctx.emit("gate.result", {
         nodeId: ctx.nodeId,
         gate: "code",

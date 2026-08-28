@@ -76,7 +76,12 @@ function credentialLiteral(
   return !invalidByDesign;
 }
 
-export function runCodeGate(bundle: CodeBundle, opts: CodeGateOptions = {}): CodeGateReport {
+export function runCodeGate(
+  bundle: CodeBundle,
+  opts: CodeGateOptions = {},
+  /** 这条用例有没有机器判据。有的话，「代码里没有断言」不再意味着「不可能失败」。 */
+  oracleOf?: (caseId: string) => unknown,
+): CodeGateReport {
   const cfg = { ...DEFAULTS, ...opts };
   const findings: CodeFinding[] = [];
   const add = (rule: string, message: string, severity: CodeFinding["severity"], caseId?: string) =>
@@ -95,7 +100,22 @@ export function runCodeGate(bundle: CodeBundle, opts: CodeGateOptions = {}): Cod
     if (!parsed.actions.length) add("empty", "the code performs no action", "block", c.caseId);
 
     const all = [...c.actions];
-    if (!all.some((a) => a.kind === "assert")) {
+    /**
+     * **有机器判据的用例，断言不在代码里——它在判据里。**
+     *
+     * 这条规则原来的前提是「代码里没有断言的用例不可能失败」，那在阶段二只有 `aiAssert`
+     * 一种检查方式时是对的。现在不是了：带机器判据的用例，判决在最后一条语句之后由程序
+     * 求值（见 `exec/run.ts`），代码里再写一句 `aiAssert` 反而有害——它跑在判据之前，
+     * 模型判假就抛异常，把程序本该下的结论否掉。
+     *
+     * 所以代码生成被明确要求「有判据就只写动作」。而这条规则没跟着改，
+     * 结果是 40 条用例里 **38 条被 block**，一条都执行不了。
+     *
+     * **一条规则的正确性建立在另一处的行为上，而那处行为被改了。**这在这个项目里
+     * 是反复出现的形状（见 `docs/spec/13-重新规划.md` 里 dimeshift 那一节）。
+     */
+    const hasMachineOracle = !!oracleOf?.(c.caseId);
+    if (!all.some((a) => a.kind === "assert") && !hasMachineOracle) {
       withoutAssertion += 1;
       // A case with no assertion cannot fail. It is not a test, it is a visit.
       add("no-assertion", "nothing is asserted: this case can never fail", "block", c.caseId);
