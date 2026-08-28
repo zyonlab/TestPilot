@@ -977,6 +977,17 @@ export async function runObserve(
           await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
           current = await snapshot(`回退后`);
           /**
+           * 退回来落到一个 0 控件的页面上——那是死路（404、JSON、空壳），不是界面。
+           * 不能给它建状态：一建，它就成了图里的一屏，还会被「看见但没走过」的链接
+           * 指过去，让下游以为那里真有个界面。直接回入口重来。
+           */
+          if (!current.elements.length) {
+            note(`退回来是一张空页面——回入口`, "warn");
+            await page.goto(first.url);
+            await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+            current = await snapshot("回入口");
+          }
+          /**
            * **退回之后 `currentId` 也要跟着变。**
            *
            * 第一版只更新了 `current`（下一步从哪一屏挑控件），没更新 `currentId`
@@ -1158,7 +1169,9 @@ export async function runObserve(
           deadHref.add(next.href);
           triedGoto.delete(next.href);
           note(`${next.href} 直接访问打不开（一个控件都没有）——改成点它`, "warn");
-          await page.goto(current.url);
+          // 用 goBack 而不是 goto 回去：goto 会把死页面留在历史里，
+          // 后面探索退不动时 `goBack()` 正好退回它，`idFor` 又给它建一个 0 控件的状态。
+          await page.goBack().catch(() => page.goto(current.url));
           await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
           current = await snapshot("退回");
           currentId = idFor(current);
