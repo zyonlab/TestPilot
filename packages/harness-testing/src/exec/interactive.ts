@@ -707,6 +707,27 @@ export async function runObserve(
         }
       }
 
+      /**
+       * **没去过的路由，优先于同一路由上的新状态。**
+       *
+       * 探索现在是预算受限的（采满上限而停，不是没东西可点了）。预算怎么花就决定了
+       * 覆盖到哪：Juice Shop 上一次把 30 屏花在 `/#/search` 的十几个页内状态上，
+       * 而 `/#/register`、`/#/about` 一次都没去——它们在侧边栏里躺着，只是排在后面。
+       *
+       * 一条通往没见过的路由的链接，是**确定**能带来一个全新界面的动作；点一个同路由的
+       * 控件是**可能**带来一个新状态。预算紧的时候先要确定的那个。这也正是基于 URL 的
+       * 爬虫先扩边界再深入的道理。
+       *
+       * 只对 `href` 成立——点击的落点事先不知道，没法这样排序。
+       */
+      const knownRoutes = new Set(sfgStates.map((st) => st.route));
+      for (const c of ordered) {
+        if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
+        if (!c.href || c.href === here || triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
+        if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
+        return { key: c.href, kind: "goto", href: c.href };
+      }
+
       for (const c of ordered) {
         // 外站不点：探索的对象是这个产品，不是它页脚链到的地方。
         if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
