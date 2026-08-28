@@ -17,6 +17,61 @@ import {
   type StateFlowGraph,
 } from "./sfg.js";
 
+/**
+ * 做实验的三个等价类。
+ *
+ * 一个输入框的取值空间，对测试有意义的划分就这三块加一块「填对的」：
+ * 空、格式不对、格式对但系统里查不到。遍历永远走不到后面两块——它们不在任何一条
+ * 点击路径上，只有故意填进去才会出现。而两应用各五次的数据显示，**每次都漏的十条
+ * 里有六条落在这两块里**。
+ */
+export type ProbeVariant = "empty" | "malformed" | "unmatched";
+
+/** 图里和日志里怎么称呼这三类实验。它会一路走进规格、故事、用例的措辞里。 */
+const PROBE_WORDS: Record<ProbeVariant, string> = {
+  empty: "空着提交",
+  malformed: "填格式非法的值提交",
+  unmatched: "填查不到的值提交",
+};
+
+/**
+ * 「填查不到的值」只对**查询/登录**表单做。
+ *
+ * 这一类实验填的是**格式合法**的值——在一个新增/编辑表单上提交，它会通过校验然后
+ * **真的写库**。那一刻探索就不再是观察：被测应用被改了，而基准应用的全部意义在于它
+ * 冻结不变，两次跑的是同一个东西。（PetClinic 五次运行图完全一致、标准差为 0，
+ * 正是这个性质的体现；一旦有写入，这个数就会开始飘，而且没人知道是哪一次飘的。）
+ *
+ * 而这一类实验真正想看的行为——「搜不到时说什么」「凭证错误时说什么」——本来就只
+ * 出现在查询和登录上。所以限制不是妥协，是把它用在它成立的地方。
+ *
+ * 空提交和格式非法都不受限：它们的设计目的就是过不了校验，过不了就写不进去。
+ */
+export const LOOKUP_SUBMIT = /find|search|查找|搜索|检索|filter|筛选|log\s*in|sign\s*in|登录|登入/i;
+
+/** 有格式的字段类别。纯文本不在其中：`<input type="text">` 填什么都不算格式错。 */
+const FORMATTED = ["email", "tel", "number", "password", "url", "date"];
+
+/**
+ * 每一类字段的坏值。**确定性的表，不问模型。**
+ *
+ * `malformed` 要触发格式校验：电话填字母、密码只给一个字符、日期给 99/99/9999。
+ * `unmatched` 要格式合法但系统里没有：一个不存在的邮箱、一个查不到的姓氏——
+ * 「搜不到时提示什么」「凭证错误时提示什么」这两类行为只有这样才看得到。
+ *
+ * 邮箱的 `.invalid` 是 RFC 2606 保留的顶级域，永远不会解析到真实主机——
+ * 一个基准应用的实验不该往任何真实地址发东西。
+ */
+export const BAD_VALUES: Record<string, { malformed: string; unmatched: string }> = {
+  email: { malformed: "not-an-email", unmatched: "nobody@example.invalid" },
+  tel: { malformed: "abcdef", unmatched: "0000000000" },
+  number: { malformed: "abc", unmatched: "999999999" },
+  password: { malformed: "x", unmatched: "wrongpassword123" },
+  url: { malformed: "nope", unmatched: "https://example.invalid" },
+  date: { malformed: "99/99/9999", unmatched: "1900-01-01" },
+  text: { malformed: "", unmatched: "zzzznotaproduct" },
+};
+
 export type Emit = (evt: Record<string, unknown>) => void;
 
 /** Cooperative cancellation: the UI closing the stream must stop the work, not orphan it. */
@@ -166,6 +221,14 @@ export async function runObserve(
     clickable: boolean;
     /** 这是个可填的输入框吗——做实验那一步要靠它。 */
     fillable: boolean;
+    /**
+     * 这个字段**有没有格式**：邮箱、电话、数字、密码、网址、日期各有各的非法值，
+     * 而纯文本没有——一个 `<input type="text">` 填什么都不算格式错。
+     *
+     * 做实验要按等价类分：空 / 格式非法 / 格式合法但查无此值。中间那一类只对有格式的
+     * 字段成立，所以要在选动作之前就知道这一屏有没有这种字段，否则会白花一轮。
+     */
+    fieldKind: "email" | "tel" | "number" | "password" | "url" | "date" | "text" | "";
     /** 它属于哪个表单（表单元素的选择器）。同一个表单的字段要一起提交才有意义。 */
     form: string;
     /** 提交按钮。有它才提交得了。 */
@@ -283,6 +346,34 @@ export async function runObserve(
               fillable:
                 (tag === "input" && !["submit", "button", "reset", "hidden", "checkbox", "radio", "file"].includes(type)) ||
                 tag === "textarea",
+              /**
+               * 字段类别：先信 `type`，再看名字。
+               *
+               * 很多表单把邮箱写成 `<input type="text" name="email">`——只看 type 会把
+               * 它当纯文本，于是「填个非法邮箱」这一类实验对它永远做不了。名字、id、
+               * placeholder、aria-label 四个一起看，命中哪个都算。
+               */
+              fieldKind: ((): Control["fieldKind"] => {
+                if (["email", "tel", "number", "password", "url", "date"].includes(type))
+                  return type as Control["fieldKind"];
+                if (tag === "textarea") return "text";
+                if (tag !== "input") return "";
+                const hint = [
+                  e.getAttribute("name") || "",
+                  el.id || "",
+                  e.placeholder || "",
+                  e.getAttribute("aria-label") || "",
+                ]
+                  .join(" ")
+                  .toLowerCase();
+                if (/mail/.test(hint)) return "email";
+                if (/phone|tel(?!e?metry)|mobile|电话|手机/.test(hint)) return "tel";
+                if (/pass|密码/.test(hint)) return "password";
+                if (/\burl\b|website|homepage|网址/.test(hint)) return "url";
+                if (/date|birth|日期|生日/.test(hint)) return "date";
+                if (/\bnum|qty|quantity|amount|zip|postal|数量|金额|邮编/.test(hint)) return "number";
+                return "text";
+              })(),
               form: formSel,
               submit: type === "submit" || (tag === "button" && (el.getAttribute("type") || "submit") === "submit"),
               clickable:
@@ -493,7 +584,7 @@ export async function runObserve(
        * 而绝大多数表单对空提交都有话说。填坏值（电话填字母、日期填昨天）需要知道字段语义，
        * 那是下一步的事。
        */
-      | { key: string; kind: "probe"; form: string; submit: string; label: string };
+      | { key: string; kind: "probe"; form: string; submit: string; label: string; variant: ProbeVariant };
     const nextAction = (screen: { url: string; elements: Control[] }): Step | undefined => {
       const here = pathOf(screen.url);
       // 有密码框就先登录：凭证写在页面上（演示站的常见做法），那一句需要看着页面判断，
@@ -528,15 +619,39 @@ export async function runObserve(
        */
       const submitBtn = screen.elements.find((e) => e.submit && e.form);
       if (submitBtn) {
-        const probeKey = `${here}::__probe__::${submitBtn.form}`;
-        if (!triedClick.has(probeKey))
+        /**
+         * 一个表单做三次实验，按等价类分：
+         *
+         *   empty      清空所有字段再提交         —— 必填校验
+         *   malformed  给有格式的字段填非法值      —— 格式校验（电话填字母、密码太短）
+         *   unmatched  填格式合法但查不到的值      —— 「搜不到」「凭证错误」这一类
+         *
+         * 此前只做 empty，理由是「唯一不需要知道字段语义就能做的实验」。两个应用各跑五次
+         * 之后，**每次都漏的十条里有六条要后两类**（搜不存在的姓氏、电话填字母、
+         * 邮箱留空、凭证错误、密码过短、搜索无匹配）。不需要语义的那一半已经拿到了，
+         * 剩下的必须认字段——但认字段用不着模型，`type` 加上名字就够。
+         *
+         * `malformed` 只在这一屏真有带格式的字段时才做：纯文本框填什么都不算格式错，
+         * 白做一轮，而干轮预算就是这样被吃掉的。
+         */
+        const hasFormatted = screen.elements.some(
+          (e) => e.fillable && e.form === submitBtn.form && FORMATTED.includes(e.fieldKind),
+        );
+        const isLookup = LOOKUP_SUBMIT.test(submitBtn.label);
+        for (const variant of ["empty", "malformed", "unmatched"] as const) {
+          if (variant === "malformed" && !hasFormatted) continue;
+          if (variant === "unmatched" && !isLookup) continue;
+          const probeKey = `${here}::__probe__::${submitBtn.form}::${variant}`;
+          if (triedClick.has(probeKey)) continue;
           return {
             key: probeKey,
             kind: "probe",
             form: submitBtn.form,
             submit: submitBtn.selector,
             label: submitBtn.label,
+            variant,
           };
+        }
       }
 
       for (const c of ordered) {
@@ -636,7 +751,7 @@ export async function runObserve(
       try {
         const page = session!.page as unknown as {
           goto: (u: string) => Promise<unknown>;
-          $eval: (sel: string, fn: (el: unknown) => unknown) => Promise<unknown>;
+          $eval: (sel: string, fn: (el: unknown, arg?: unknown) => unknown, arg?: unknown) => Promise<unknown>;
         };
         if (next.kind === "goto") {
           note(`第 ${rounds} 轮：走到 ${next.href}`);
@@ -648,15 +763,52 @@ export async function runObserve(
            * 清空而不是随便填：**空提交是唯一不需要知道字段语义就能做的实验**，
            * 而它恰好触发绝大多数产品的必填校验——那正是遍历永远走不到的那类状态。
            */
-          note(`第 ${rounds} 轮：空着提交表单（${next.label}）`);
-          await page.$eval(next.form, (f) => {
-            for (const el of (f as HTMLElement).querySelectorAll("input, textarea")) {
-              const i = el as HTMLInputElement;
-              if (["submit", "button", "reset", "hidden", "checkbox", "radio", "file"].includes(i.type)) continue;
-              i.value = "";
-              i.dispatchEvent(new Event("input", { bubbles: true }));
-            }
-          });
+          note(`第 ${rounds} 轮：${PROBE_WORDS[next.variant]}（${next.label}）`);
+          /**
+           * 字段类别在页内重新判一次。
+           *
+           * 判定规则和采集那边是同一套（`type` 优先、再看名字），但不能把采集时的结论
+           * 传进来——`page.$eval` 的函数体是**序列化到浏览器里执行**的，闭包变量带不过去。
+           * 表反而可以：它是纯数据，随参数一起过去。
+           */
+          await page.$eval(
+            next.form,
+            (f: unknown, arg: unknown) => {
+              const { variant, values } = arg as {
+                variant: string;
+                values: Record<string, { malformed: string; unmatched: string }>;
+              };
+              for (const el of (f as HTMLElement).querySelectorAll("input, textarea")) {
+                const i = el as HTMLInputElement;
+                const type = (i.type || "").toLowerCase();
+                if (["submit", "button", "reset", "hidden", "checkbox", "radio", "file"].includes(type)) continue;
+                let kind = "text";
+                if (["email", "tel", "number", "password", "url", "date"].includes(type)) kind = type;
+                else if (i.tagName.toLowerCase() !== "textarea") {
+                  const hint = [i.name || "", i.id || "", i.placeholder || "", i.getAttribute("aria-label") || ""]
+                    .join(" ")
+                    .toLowerCase();
+                  if (/mail/.test(hint)) kind = "email";
+                  else if (/phone|tel(?!e?metry)|mobile|电话|手机/.test(hint)) kind = "tel";
+                  else if (/pass|密码/.test(hint)) kind = "password";
+                  else if (/\burl\b|website|homepage|网址/.test(hint)) kind = "url";
+                  else if (/date|birth|日期|生日/.test(hint)) kind = "date";
+                  else if (/\bnum|qty|quantity|amount|zip|postal|数量|金额|邮编/.test(hint)) kind = "number";
+                }
+                const row = values[kind] ?? values.text;
+                // 格式非法这一轮只碰有格式的字段：纯文本框填什么都不算格式错，
+                // 动了它反而会把「哪个字段引发了这条消息」搅浑。
+                const v = variant === "empty" ? "" : variant === "malformed" ? row.malformed : row.unmatched;
+                if (variant === "malformed" && !v) continue;
+                i.value = v;
+                i.dispatchEvent(new Event("input", { bubbles: true }));
+                i.dispatchEvent(new Event("change", { bubbles: true }));
+                // Angular / Vue 的表单校验挂在 blur 上——不派发它，填了也不显示错误。
+                i.dispatchEvent(new Event("blur", { bubbles: true }));
+              }
+            },
+            { variant: next.variant, values: BAD_VALUES },
+          );
           await page.$eval(next.submit, (el) => (el as HTMLElement).click());
         } else if (next.kind === "click") {
           /**
@@ -699,7 +851,7 @@ export async function runObserve(
               : next.kind === "login"
                 ? { kind: "login", target: "登录表单", selector: "", input: "${env.*} / ${secret.*}" }
                 : next.kind === "probe"
-                  ? { kind: "probe", target: `${next.label}（空表单）`, selector: next.submit, input: "" }
+                  ? { kind: "probe", target: `${next.label}（${PROBE_WORDS[next.variant]}）`, selector: next.submit, input: "" }
                   : { kind: "click", target: next.label, selector: next.selector },
           ok: true,
           walked: true,
@@ -745,7 +897,7 @@ export async function runObserve(
             : next.kind === "click"
               ? `点 ${next.label}`
               : next.kind === "probe"
-                ? `空着提交 ${next.label}`
+                ? `${PROBE_WORDS[next.variant]} ${next.label}`
                 : next.instruction;
         missed.push(`${what} —— ${why}`);
         // 走不通也是一条边：它记的是「这条路走不过去」，而那正是下游「没有答案的地方」
@@ -758,7 +910,7 @@ export async function runObserve(
               : next.kind === "login"
                 ? { kind: "login", target: "登录表单", selector: "" }
                 : next.kind === "probe"
-                  ? { kind: "probe", target: `${next.label}（空表单）`, selector: next.submit, input: "" }
+                  ? { kind: "probe", target: `${next.label}（${PROBE_WORDS[next.variant]}）`, selector: next.submit, input: "" }
                   : { kind: "click", target: next.label, selector: next.selector },
           ok: false,
           walked: true,

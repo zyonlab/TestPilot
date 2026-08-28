@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ABSTRACTIONS, abstractionOf, describeGraph, type StateFlowGraph, pathOf } from "../src/exec/sfg.js";
+import { BAD_VALUES, LOOKUP_SUBMIT } from "../src/exec/interactive.js";
 
 /**
  * 状态抽象是这一层的关键变量：过松会把没探索过的当成已探索（漏测），过紧会把探索过的
@@ -242,5 +243,28 @@ describe("角标数字不该炸出新状态", () => {
     expect(a({ url: "http://x/p?page=1", controls: ["下一页"] })).not.toBe(
       a({ url: "http://x/p?page=2", controls: ["下一页"] }),
     );
+  });
+});
+
+describe("做实验的三个等价类", () => {
+  it("坏值表覆盖每一种有格式的字段", () => {
+    for (const k of ["email", "tel", "number", "password", "url", "date"]) {
+      expect(BAD_VALUES[k]?.malformed).toBeTruthy();
+      expect(BAD_VALUES[k]?.unmatched).toBeTruthy();
+    }
+  });
+  it("纯文本没有「格式非法」——填什么都不算格式错", () => {
+    expect(BAD_VALUES.text!.malformed).toBe("");
+    expect(BAD_VALUES.text!.unmatched).toBeTruthy();
+  });
+  it("查不到的邮箱用 RFC 2606 保留域，永远解析不到真实主机", () => {
+    expect(BAD_VALUES.email!.unmatched).toMatch(/\.invalid$/);
+    expect(BAD_VALUES.url!.unmatched).toMatch(/\.invalid$/);
+  });
+  it("只有查询/登录表单允许「填查不到的值」——别的表单会真的写库", () => {
+    for (const ok of ["Find Owner", "Search", "查找主人", "Log in", "登录", "Filter"])
+      expect(LOOKUP_SUBMIT.test(ok)).toBe(true);
+    for (const no of ["Add Owner", "Update Owner", "Register", "Submit", "保存", "新增宠物"])
+      expect(LOOKUP_SUBMIT.test(no)).toBe(false);
   });
 });
