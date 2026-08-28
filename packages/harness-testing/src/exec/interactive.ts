@@ -490,8 +490,10 @@ export async function runObserve(
       const here = pathOf(screen.url);
       const set = linksSeen.get(id) ?? new Set<string>();
       for (const c of screen.elements)
-        if (c.href && c.href !== here && !c.external && !NOT_A_SCREEN.test(c.href) && !OFF_LIMITS.test(c.display))
+        if (c.href && c.href !== here && !c.external && !NOT_A_SCREEN.test(c.href) && !OFF_LIMITS.test(c.display)) {
           set.add(c.href);
+          if (!triedGoto.has(c.href)) frontier.add(c.href);
+        }
       linksSeen.set(id, set);
     };
 
@@ -553,6 +555,17 @@ export async function runObserve(
      * 12 张商品卡片因此只花 1 轮而不是 12 轮；而两个导航链接谁也不挡谁。
      */
     const shapeDry = new Set<string>();
+    /**
+     * **看见过但还没走的地址。**
+     *
+     * 探索是深度优先的：在 `/#/login` 上同时看见了 `#/forgot-password` 和 `#/register`，
+     * 按 DOM 顺序走了前一个，然后顺着走远，**再没回来** —— `#/register` 就此丢失。
+     * 材料里明明记着这条链接，注册页却一次都没进过，而它是五次全漏里的一条。
+     *
+     * 所以另存一份全局队列：这一屏没东西可做时，先去队列里取一个没去过的地址，
+     * 而不是直接退回上一屏。爬虫本来就是这么做的——边界是全局的，不是当前页的。
+     */
+    const frontier = new Set<string>();
     /** 下一轮要先回到哪张表单上接着做实验。见 `nextAction` 开头那段。 */
     let probeReturn: string | undefined;
     /**
@@ -783,6 +796,26 @@ export async function runObserve(
         if (shapeDry.has(`${currentId}::${shape}`)) continue;
         if ((shapeCount.get(`${here}::${shape}`) ?? 0) >= SHAPE_CAP) continue;
         return { key, kind: "click", selector: c.selector, label: c.label, shape };
+      }
+
+      /**
+       * 这一屏没东西可做了——先去全局队列里取一个还没去过的地址，再考虑退回上一屏。
+       *
+       * 退回只能回到来的那条路上，而队列里装的是**在任何一屏上见过**的地址。
+       * `#/register` 就是死在这个差别上的：它在登录页上被看见，探索从登录页走去了
+       * 别处，退回也只是原路返回，那条链接再没被想起来。
+       */
+      for (const href of frontier) {
+        frontier.delete(href);
+        if (triedGoto.has(href) || NOT_A_SCREEN.test(href)) continue;
+        let route = "";
+        try {
+          route = pathOf(new URL(href, screen.url).toString());
+        } catch {
+          continue;
+        }
+        if (sfgStates.some((st) => st.route === route)) continue;
+        return { key: href, kind: "goto", href };
       }
       return undefined;
     };
