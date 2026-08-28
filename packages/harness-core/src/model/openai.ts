@@ -48,7 +48,24 @@ export class OpenAIModel implements ModelClient {
         { role: "system", content: req.stable },
         { role: "user", content: req.images?.length ? content : req.variable },
       ],
-      max_tokens: req.maxTokens ?? 1024,
+      /**
+       * **思考的 token 计入 `max_tokens`。**
+       *
+       * 调用方要的是「答案有多长」，而开着思考时，模型先写一段推理，再写答案，两段
+       * 共用这一个预算。实测：思考打开之后，同样的 `plan.stories` 调用 3 次里 2 次
+       * 在 12800 处被切断——不是模型不会答，是它把预算花在推理上，答案写到一半没地方了。
+       *
+       * 所以这里替调用方把推理那一份加回去。倍数 3 是实测的量级（一次简单问答里
+       * 22 个 reasoning token 对 1 个答案 token；复杂任务上比例低得多，3 倍够用），
+       * 上限 32000 是 DashScope 收得下的规模。
+       *
+       * 不这么做的话，「开思考」和「不开思考」的对照是不公平的：那等于让开着思考的那一组
+       * 用一半的预算答同一道题。
+       */
+      max_tokens: Math.min(
+        32000,
+        (req.maxTokens ?? 1024) * (this.opts.noThink === false ? 3 : 1),
+      ),
       temperature: 0,
     };
     if (this.opts.noThink !== false) {
