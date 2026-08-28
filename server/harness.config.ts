@@ -151,7 +151,7 @@ export default defineHarnessConfig({
       args: ["scripts/model-proxy.mjs"],
       // 代理用 fetch 转发并原样带上 Authorization，所以 https 上游可直接指。
       // 切回本地：改成 http://127.0.0.1:8000。
-      env: { MODEL_UPSTREAM: "https://tokenharbor.ai", PROXY_PORT: "8010" },
+      env: { MODEL_UPSTREAM: "https://dashscope.aliyuncs.com", PROXY_PORT: "8010" },
       // Autostarted: Midscene exposes no per-request body hook, so this is the only place
       // `enable_thinking:false` can be injected into ITS calls — and without it a Qwen3.x
       // model answers with its own reasoning instead of the expected output.
