@@ -616,6 +616,25 @@ export async function runObserve(
      * 而不是直接退回上一屏。爬虫本来就是这么做的——边界是全局的，不是当前页的。
      */
     const frontier = new Set<string>();
+    /**
+     * **直接访问打不开的地址。**
+     *
+     * 单页应用的路由有三种形态，而它们对「直接访问这个地址」的答案完全相反：
+     *
+     *   哈希路由（Juice Shop）        `/#/login` 直接访问可以
+     *   服务端渲染（PetClinic）        `/owners/find` 直接访问可以
+     *   pushState 且服务端没兜底       `/user/signin` 直接访问是 **404**
+     *
+     * dimeshift 属于第三种：`/user/signin` 返回 `{"code":"ResourceNotFound"}`，
+     * 而点那条链接会在当前页开一个**弹窗**（URL 不变，多出 5 个输入框）。于是
+     * 「没去过的路由优先」这条策略在它身上是**有害的**——把浏览器带去 404，
+     * 而真正的登录界面就在一次点击之外。
+     *
+     * 三种形态没法从页面上看出来，只能试：**goto 过去发现是死路，就把这个地址记下来，
+     * 退回去改成点它。** 判据是「这一屏一个控件都没有」——一个正常界面不会没有控件，
+     * 而 404 页、JSON 响应、空壳都没有。
+     */
+    const deadHref = new Set<string>();
     /** 下一轮要先回到哪张表单上接着做实验。见 `nextAction` 开头那段。 */
     let probeReturn: string | undefined;
     /**
@@ -808,6 +827,7 @@ export async function runObserve(
       for (const c of ordered) {
         if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
         if (!c.href || c.href === here || triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
+        if (deadHref.has(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
         return { key: c.href, kind: "goto", href: c.href };
       }
@@ -880,7 +900,7 @@ export async function runObserve(
        */
       for (const href of frontier) {
         frontier.delete(href);
-        if (triedGoto.has(href) || NOT_A_SCREEN.test(href)) continue;
+        if (triedGoto.has(href) || NOT_A_SCREEN.test(href) || deadHref.has(href)) continue;
         let route = "";
         try {
           route = pathOf(new URL(href, screen.url).toString());
@@ -901,7 +921,9 @@ export async function runObserve(
          * 「已经在这儿了」全部跳过，商品详情就一个都进不去——一个把整块功能判成
          * 「不用去」的规则，比没有规则更糟，因为它看起来是在正常工作。
          */
-        if (c.href && c.href !== here) {
+        // 直接访问打不开的地址不再 goto，但**也不跳过它**——落到下面的点击分支上，
+        // 因为那才是这类单页应用打开它的方式。
+        if (c.href && c.href !== here && !deadHref.has(c.href)) {
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           return { key: c.href, kind: "goto", href: c.href };
         }
@@ -1120,6 +1142,25 @@ export async function runObserve(
           await page.goto(first.url);
           await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
           current = await snapshot("退回入口");
+          currentId = idFor(current);
+          continue;
+        }
+        /**
+         * **一个控件都没有的屏是死路，不是界面。**
+         *
+         * 直接访问 dimeshift 的 `/user/signin` 得到的是 `{"code":"ResourceNotFound"}`
+         * ——它进了图，成了一个 0 控件的状态，还挤掉了一屏预算，而真正的登录界面
+         * 在一次点击之外。404 页、JSON 响应、空壳都没有控件；正常界面不会没有。
+         *
+         * 所以：不记这一屏，把这个地址记进 `deadHref`（下次改成点它），退回原处。
+         */
+        if (next.kind === "goto" && !after.elements.length) {
+          deadHref.add(next.href);
+          triedGoto.delete(next.href);
+          note(`${next.href} 直接访问打不开（一个控件都没有）——改成点它`, "warn");
+          await page.goto(current.url);
+          await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+          current = await snapshot("退回");
           currentId = idFor(current);
           continue;
         }
