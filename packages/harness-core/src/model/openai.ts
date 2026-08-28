@@ -16,6 +16,8 @@ export interface OpenAIModelOptions {
    * limit with thinking on, and 1.0s with the answer when it is off.
    */
   noThink?: boolean;
+  /** 开着思考时，推理最多写多长。见 `max_tokens` 那段。 */
+  thinkBudget?: number;
   /** Ask the endpoint to constrain decoding to the schema. Not every server supports it. */
   guided?: boolean;
   /** 网络层失败重试几次。默认 3。 */
@@ -51,23 +53,22 @@ export class OpenAIModel implements ModelClient {
       /**
        * **思考的 token 计入 `max_tokens`。**
        *
-       * 调用方要的是「答案有多长」，而开着思考时，模型先写一段推理，再写答案，两段
-       * 共用这一个预算。实测：思考打开之后，同样的 `plan.stories` 调用 3 次里 2 次
-       * 在 12800 处被切断——不是模型不会答，是它把预算花在推理上，答案写到一半没地方了。
+       * 调用方要的是「答案有多长」，而开着思考时模型先写推理再写答案，两段共用这一个
+       * 预算。实测：思考打开之后同样的 `plan.stories` 调用 3 次里 2 次在 12800 处被切断
+       * ——不是模型不会答，是它把预算花在推理上，答案写到一半没地方了。
        *
-       * 所以这里替调用方把推理那一份加回去。倍数 3 是实测的量级（一次简单问答里
-       * 22 个 reasoning token 对 1 个答案 token；复杂任务上比例低得多，3 倍够用），
-       * 上限 32000 是 DashScope 收得下的规模。
+       * 第一版的修法是把总预算 ×3。**那个方向是错的**：它没有约束推理，只是允许模型
+       * 生成到 32000 token，于是一次 `plan.stories` 跑了 30 分钟还没结束——从「静悄悄
+       * 地截断」换成了「静悄悄地慢到不可用」。
        *
-       * 不这么做的话，「开思考」和「不开思考」的对照是不公平的：那等于让开着思考的那一组
-       * 用一半的预算答同一道题。
+       * 正确的旋钮是 `thinking_budget`：**限的是推理本身的长度**。给推理一份固定的额度，
+       * 答案的额度一分不动，两者相加才是 `max_tokens`。这样「开思考」和「不开思考」
+       * 对照时，答案那一份是完全相同的——差别只在模型有没有先想一遍。
        */
-      max_tokens: Math.min(
-        32000,
-        (req.maxTokens ?? 1024) * (this.opts.noThink === false ? 3 : 1),
-      ),
+      max_tokens: Math.min(32000, (req.maxTokens ?? 1024) + (this.thinkBudget ?? 0)),
       temperature: 0,
     };
+    if (this.thinkBudget) body.thinking_budget = this.thinkBudget;
     if (this.opts.noThink !== false) {
       // Both spellings: servers differ in which one they honour, and sending the wrong one
       // alone silently leaves thinking on.
@@ -141,6 +142,11 @@ export class OpenAIModel implements ModelClient {
     };
   }
 
+  /** 开着思考才有推理预算；关着时是 0，`max_tokens` 与不思考完全一致。 */
+  private get thinkBudget(): number {
+    return this.opts.noThink === false ? (this.opts.thinkBudget ?? 1024) : 0;
+  }
+
   private post(body: Record<string, unknown>): Promise<Response> {
     return fetch(`${this.opts.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -169,5 +175,6 @@ export function modelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel 
      * 我们有黄金清单和覆盖度量，可以直接测。做成开关是为了能配对比较。
      */
     noThink: env.TP_MODEL_THINK === "1" ? false : undefined,
+    thinkBudget: env.TP_MODEL_THINK_BUDGET ? Number(env.TP_MODEL_THINK_BUDGET) : undefined,
   });
 }

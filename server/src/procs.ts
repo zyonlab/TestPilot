@@ -118,6 +118,7 @@ supervisor.register({
     TP_WF_DB: dataPath("workflows.db"),
     // 思考开关要透传给 agent：模型客户端住在那个进程里。见 `modelFromEnv`。
     ...(process.env.TP_MODEL_THINK ? { TP_MODEL_THINK: process.env.TP_MODEL_THINK } : {}),
+    ...(process.env.TP_MODEL_THINK_BUDGET ? { TP_MODEL_THINK_BUDGET: process.env.TP_MODEL_THINK_BUDGET } : {}),
   },
   execArgv: TSX_ARGV,
   // The agent resumes from its checkpoint, so respawning is always the right move.
