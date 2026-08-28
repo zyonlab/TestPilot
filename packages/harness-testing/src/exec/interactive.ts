@@ -544,6 +544,23 @@ export async function runObserve(
     const shapeDry = new Set<string>();
     /** 下一轮要先回到哪张表单上接着做实验。见 `nextAction` 开头那段。 */
     let probeReturn: string | undefined;
+    /**
+     * 一个结构同类在同一条路由上最多点几次。
+     *
+     * `shapeDry` 只在代表**没走出去**时才拦——而 Juice Shop 的商品卡片每点一张都打开
+     * 一个内容不同的弹窗，**每次都是新状态**，于是那条规则一次都不触发：35 轮里有 14 轮
+     * （40% 的预算）花在 Banana、Basil、Berry、Bragă、Carrot……而登录之后的注册、联系、
+     * 关于三页一个都没走到。
+     *
+     * 所以再加一道硬上限。三次的理由：一次看不出这一类控件是不是都长一样，
+     * 三次足以看出，而十二次和三次给出的答案没有区别。
+     *
+     * **按路由计，不按状态计。**按状态计会被这个现象绕开——每点一张卡片都进了一个
+     * 新状态，计数在新状态里又从零开始。这几个状态共享同一条路由 `/#/search`，
+     * 而「这条路由上有一排长得一样的东西」才是要表达的事实。
+     */
+    const SHAPE_CAP = 3;
+    const shapeCount = new Map<string, number>();
     /** 去过的地址。同一个地址走第二次对发现新界面没有任何帮助。 */
     const triedGoto = new Set<string>();
     // 去重和状态 id 必须用**同一把尺子**量地址。此前这里另写了一个丢哈希的
@@ -710,8 +727,10 @@ export async function runObserve(
           : c.label.replace(/\d+/g, "#");
         const key = `${here}::${cls}`;
         if (triedClick.has(key)) continue;
-        if (shapeDry.has(`${currentId}::${shapeOf(c.selector)}`)) continue;
-        return { key, kind: "click", selector: c.selector, label: c.label, shape: shapeOf(c.selector) };
+        const shape = shapeOf(c.selector);
+        if (shapeDry.has(`${currentId}::${shape}`)) continue;
+        if ((shapeCount.get(`${here}::${shape}`) ?? 0) >= SHAPE_CAP) continue;
+        return { key, kind: "click", selector: c.selector, label: c.label, shape };
       }
       return undefined;
     };
@@ -863,6 +882,10 @@ export async function runObserve(
         emit({ type: "navigated", shotRef: await shot(session) });
 
         const cameFrom = currentId;
+        if (next.kind === "click") {
+          const ck = `${pathOf(current.url)}::${next.shape}`;
+          shapeCount.set(ck, (shapeCount.get(ck) ?? 0) + 1);
+        }
         const probeOrigin = next.kind === "probe" && next.rest > 0 ? current.url : undefined;
         const after = await snapshot(`第 ${screens.length + 1} 屏`);
         const sig = signatureOf(after);
