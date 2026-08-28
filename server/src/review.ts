@@ -11,6 +11,7 @@ import {
   type TestCase,
 } from "./db.js";
 import { getGraphVersion, nodeOutput, outputStore } from "./graphs.js";
+import { computeGaps, stoppedBecause, type Gap } from "./gaps.js";
 import { ABLATABLE, gated, modelFromEnv } from "@testpilot/harness-core";
 import {
   reviseCase,
@@ -108,6 +109,16 @@ export interface ReviewBatch {
   stories: ReviewStory[];
   items: ReviewItem[];
   pending: number;
+  /**
+   * **这个产品有、而这批用例没有的东西。**
+   *
+   * 复核的目的是判断「哪些有效、缺了什么」，而故事图此前只画得出前半句。
+   * 这些数据一直都在（图里的未走链接、走不通的路、没人覆盖的转移、规格的疑问），
+   * 只是从没送到人眼前。见 `gaps.ts`。
+   */
+  gaps: Gap[];
+  /** 探索为什么停下来——它决定「没看到」那一类该不该怪探索，还是这个产品就这么大。 */
+  exploreStoppedBecause?: string;
 }
 
 const METHOD_TO_TYPE: Record<string, CaseType> = {
@@ -188,6 +199,15 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
   const coded = ((await nodeOutput(wfRunId, "repair").catch(() => undefined)) ??
     (await nodeOutput(wfRunId, "codegate").catch(() => undefined))) as CodeBundleShape | undefined;
 
+  // 缺口要从**探索的图**和**规格**里算，而这两样此前复核根本没读过——
+  // 于是「缺了什么」这半个问题在界面上是不存在的。
+  const explore = (await nodeOutput(wfRunId, "explore").catch(() => undefined)) as
+    | { graph?: Parameters<typeof computeGaps>[0]["graph"] }
+    | undefined;
+  const spec = (await nodeOutput(wfRunId, "spec").catch(() => undefined)) as
+    | Parameters<typeof computeGaps>[0]["spec"]
+    | undefined;
+
   const decisions = new Map(listReviewDecisions(wfRunId).map((d) => [d.caseId, d]));
   const edits = listReviewEdits(wfRunId);
   const gateFindings = gated?.gate?.findings ?? [];
@@ -263,6 +283,13 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
     stats: gated?.gate?.stats,
     items,
     pending: items.filter((i) => !i.decision).length,
+    gaps: computeGaps({
+      graph: explore?.graph,
+      spec,
+      cases: gated?.cases ?? [],
+      stories: gated?.stories ?? [],
+    }),
+    exploreStoppedBecause: stoppedBecause(explore?.graph),
   };
 }
 

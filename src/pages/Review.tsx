@@ -68,6 +68,14 @@ interface Story {
   acceptance: string[];
 }
 
+interface Gap {
+  activity?: string;
+  reach: "missed" | "unseen";
+  kind: "transition" | "flow" | "module" | "link" | "blocked" | "unknown";
+  what: string;
+  detail?: string;
+}
+
 interface Batch {
   wfRunId: string;
   projectId?: string;
@@ -77,6 +85,8 @@ interface Batch {
   stories?: Story[];
   items: ReviewItem[];
   pending: number;
+  gaps?: Gap[];
+  exploreStoppedBecause?: string;
 }
 
 interface RunRow {
@@ -205,6 +215,78 @@ function EditForm({
  * 横轴来自数据，不是界面硬凑的分类：`activity` 由 `plan.stories` 填，
  * 而它的值来自规格里**算出来**的流程。没有那一步，这张图只能是假的。
  */
+/**
+ * 一列里的缺口。
+ *
+ * 两条设计约束，都是为了压住理解成本：
+ *
+ * **① 默认收起，只留一行计数。** 复核的人扫一遍地图时不该被缺口淹掉——他先要看见
+ * 「这一列有 3 处没测到、2 处没看到」，想追下去再展开。把十几条明细一次铺开，
+ * 等于把「有没有问题」和「问题是什么」两个层次压成一层。
+ *
+ * **② 两类分开，因为下一步不同。** 「没测到」是能立刻补一条用例的；「没看到」补用例
+ * 没用，得让探索再走一次。混在一个数字里，人只能得到一个焦虑的总数，得不到任何行动。
+ */
+function GapList({ gaps }: { gaps: Gap[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  if (!gaps.length) return null;
+  const missed = gaps.filter((g) => g.reach === "missed");
+  const unseen = gaps.filter((g) => g.reach === "unseen");
+
+  const row = (g: Gap, i: number) => (
+    <div key={i} className="rounded border border-dashed border-border/70 px-1.5 py-1">
+      <div className="text-[11px] leading-snug">{g.what}</div>
+      {g.detail && (
+        <div className="mt-0.5 break-words font-mono text-[10px] leading-snug text-muted-foreground">{g.detail}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="mt-2 rounded-lg border border-dashed border-amber-300/70 bg-amber-50/40 p-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="flex items-center gap-2 text-[11px]">
+          {!!missed.length && (
+            <span className="rounded bg-amber-200/70 px-1.5 py-0.5 font-medium text-amber-900" title={t("review.gapsMissedHint")}>
+              {missed.length} {t("review.gapsMissed")}
+            </span>
+          )}
+          {!!unseen.length && (
+            <span className="rounded bg-slate-200/80 px-1.5 py-0.5 font-medium text-slate-700" title={t("review.gapsUnseenHint")}>
+              {unseen.length} {t("review.gapsUnseen")}
+            </span>
+          )}
+        </span>
+        <span className="text-[10.5px] text-muted-foreground">{open ? t("review.gapsHide") : t("review.gapsShow")}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {!!missed.length && (
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-medium text-amber-900">
+                {t("review.gapsMissed")} · {t("review.gapsMissedHint")}
+              </div>
+              {missed.map(row)}
+            </div>
+          )}
+          {!!unseen.length && (
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-medium text-slate-700">
+                {t("review.gapsUnseen")} · {t("review.gapsUnseenHint")}
+              </div>
+              {unseen.map(row)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StoryMap({
   batch,
   selected,
@@ -231,6 +313,21 @@ function StoryMap({
     if (col) col.stories.push(st);
     else columns.push({ activity: key, stories: [st] });
   }
+
+  /**
+   * 缺口按活动归位；**一条故事都没有的模块也要占一列。**
+   *
+   * 这是整块改动里最要紧的一条：一整块功能没人管，比任何单条缺口都严重，
+   * 而它恰恰是「什么都不显示」时最容易被忽略的——地图上不出现，人就不会想起它。
+   */
+  const gaps = batch.gaps ?? [];
+  const gapsOf = new Map<string, Gap[]>();
+  for (const g of gaps) {
+    const key = g.activity?.trim() || t("review.gapsUnscoped");
+    gapsOf.set(key, [...(gapsOf.get(key) ?? []), g]);
+  }
+  for (const key of gapsOf.keys())
+    if (!columns.some((c) => c.activity === key)) columns.push({ activity: key, stories: [] });
   // 用例挂不到任何已知故事上的，单独一列——不藏起来。
   const orphanIds = new Set(batch.items.filter((i) => !stories.some((s) => s.id === i.storyId)).map((i) => i.storyId));
   if (orphanIds.size)
@@ -261,7 +358,13 @@ function StoryMap({
                 {col.stories.reduce((n, st) => n + (byStory.get(st.id)?.length ?? 0), 0)} {t("review.casesUnit")}
               </div>
             </div>
+            <GapList gaps={gapsOf.get(col.activity) ?? []} />
             <div className="space-y-2">
+              {!col.stories.length && (
+                <div className="rounded-lg border border-dashed border-border px-2.5 py-3 text-[11px] text-muted-foreground">
+                  {t("review.emptyModule")}
+                </div>
+              )}
               {col.stories.map((st) => {
                 const cases = byStory.get(st.id) ?? [];
                 const ids = cases.filter((c) => !c.decision).map((c) => c.caseId);
@@ -531,6 +634,28 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
 
           {batch && (
             <>
+              {/*
+                「缺了什么」的一句话答案，放在最前面。
+                复核这件事有两个问题：**这些用例对不对**，和**还缺什么**。第二个问题此前在
+                界面上根本不存在——地图只画得出「有什么」。所以它要有自己的一条，
+                而不是藏在某一列里等人去展开。
+              */}
+              {!!batch.gaps?.length && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 px-3 py-2 text-[12px]">
+                  <span className="font-medium text-amber-900">{t("review.gapsTitle")}</span>
+                  <span className="rounded bg-amber-200/70 px-1.5 py-0.5 text-amber-900">
+                    {batch.gaps.filter((g) => g.reach === "missed").length} {t("review.gapsMissed")}
+                  </span>
+                  <span className="rounded bg-slate-200/80 px-1.5 py-0.5 text-slate-700">
+                    {batch.gaps.filter((g) => g.reach === "unseen").length} {t("review.gapsUnseen")}
+                  </span>
+                  {batch.exploreStoppedBecause && (
+                    <span className="text-muted-foreground">
+                      {t("review.exploreStopped")}：{batch.exploreStoppedBecause}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
                 <span className="text-[12px] text-muted-foreground">
                   {t("review.pending")}: {batch.pending} / {batch.items.length}
