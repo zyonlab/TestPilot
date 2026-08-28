@@ -289,7 +289,18 @@ export async function runObserve(
               if (e.href) {
                 const u = new URL(e.href, location.href);
                 external = u.origin !== location.origin;
-                if (!external) path = u.pathname + u.search;
+                /**
+                 * **哈希路由要留住。**
+                 *
+                 * 和 `routeOf` 当初一模一样的错，只是在另一个地方：单页应用的侧边栏里，
+                 * Contact 是 `/#/contact`、About 是 `/#/about`——丢掉哈希，它们连同
+                 * 首页链接一起全都塌成 `/`，`triedGoto` 去重后只剩一个。实测里探索点开了
+                 * 侧边栏，下一步却是 `goto: /`，然后再也没回去：注册、联系、关于三页
+                 * 一次都没走到，而它们是五次全漏里的三条。
+                 *
+                 * `#section` 这种纯锚点仍然不算，判据同样是那个 `/`。
+                 */
+                if (!external) path = u.pathname + u.search + (u.hash.startsWith("#/") ? u.hash : "");
               }
             } catch {
               external = false;
