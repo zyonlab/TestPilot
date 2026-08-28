@@ -14,6 +14,11 @@ export const CODEGEN_STABLE = [
   "Rules:",
   "- Emit statements only. No imports, no wrapper function, no comments, no markdown fences.",
   "- Every case ends with at least one aiAssert. A case that asserts nothing cannot fail.",
+  "  EXCEPT when the material says VERDICT: decided by a program. Then emit the ACTIONS ONLY",
+  "  and no aiAssert at all — the verdict is already settled by a machine-checkable oracle",
+  "  that runs after your last statement. An aiAssert there is not a second opinion: it runs",
+  "  BEFORE the oracle and throws on failure, so a model judging a screenshot can veto a",
+  "  verdict a program was going to settle. It also costs a model call on every single run.",
   "- Keep ${env.NAME} and ${secret.NAME} placeholders exactly as they appear. Never write a",
   "  credential, a URL or a magic value into the source. If the case needs a username or a",
   "  password and does not name a placeholder, use ${env.USERNAME} and ${secret.PASSWORD}:",
@@ -41,6 +46,16 @@ export function codegenVariable(kase: {
   precondition?: string[];
   steps: string[];
   expected: string;
+  /**
+   * 这条用例的判决由谁下。
+   *
+   * 有机器判据时（38/40 的用例都有），判决在**最后一条语句之后**由程序求值，
+   * 而生成的代码此前一无所知——于是它照样写 `aiAssert`，那句话作为**步骤**执行，
+   * 模型判它为假就抛异常、用例失败，**机器判据根本没机会开口**。
+   * 等于把模型插在程序前面，让它可以否决一个程序本该决定的结论；每次执行还多烧一次调用
+   * （实测一批 40 条用例里有 57 次 aiAssert）。
+   */
+  oracle?: unknown;
 }): string {
   return [
     `CASE: ${kase.title}`,
@@ -48,6 +63,9 @@ export function codegenVariable(kase: {
     "STEPS:",
     ...kase.steps.map((s, i) => `${i + 1}. ${s}`),
     `EXPECTED: ${kase.expected}`,
+    ...(kase.oracle
+      ? ["VERDICT: decided by a program — emit the actions only, no aiAssert."]
+      : []),
   ].join("\n");
 }
 

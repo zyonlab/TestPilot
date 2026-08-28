@@ -81,7 +81,9 @@ export function codegenNode(opts: CodeGenNodeOptions): NodeDef<
         try {
           const res = await opts.model.chat({
             stable: CODEGEN_STABLE,
-            variable: codegenVariable(kase),
+            // 判决归谁，代码生成必须知道——否则它会写一句 aiAssert，
+            // 而那句话跑在机器判据之前，可以把它的结论否掉。
+            variable: codegenVariable({ ...kase, oracle: kase.oracle }),
             maxTokens: params.maxTokens,
             label: `codegen:${kase.id}`,
           });
