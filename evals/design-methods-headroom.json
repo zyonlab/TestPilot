@@ -1,0 +1,23 @@
+{
+ "id": "design-methods-headroom",
+ "title": "明确点名测试设计方法值多少覆盖率——在一个有余量的应用上问",
+ "why": "同名的那份定义跑在 `fixtures/mock-spec` 的 12 条黄金清单上，而两臂都覆盖到 0.889–1.000。那是**天花板效应**：清单太容易，没有空间显出差别，读出来的 p=1 说明的是「这道题两边都会做」，不是「这一段提示词没用」。 这一份换到 Juice Shop：14 条清单，基线语义覆盖 0.289 ± 0.061，余量充足。代价是要跑完整的探索——但探索是确定性的（同一个应用五次运行图完全一致、标准差为 0），所以两臂拿到的是同一张图，配对仍然成立。",
+ "graphId": "g0-explore",
+ "goldPath": "fixtures/benchmark/juiceshop-gold.json",
+ "casesNode": "gate",
+ "target": { "projectId": "prj-mtbnovrx-1001", "envRef": "env-mtbspt6x-1001", "url": "http://localhost:8084" },
+ "a": {
+  "label": "点名方法（现状）",
+  "ablate": [],
+  "params": { "explore": { "url": "http://localhost:8084", "deep": true, "maxScreens": 24, "dryRounds": 4, "settleMs": 1100 }, "stories": { "maxStories": 8 }, "design": { "maxCasesPerStory": 5 } }
+ },
+ "b": {
+  "label": "不点名方法",
+  "ablate": ["design-methods"],
+  "params": { "explore": { "url": "http://localhost:8084", "deep": true, "maxScreens": 24, "dryRounds": 4, "settleMs": 1100 }, "stories": { "maxStories": 8 }, "design": { "maxCasesPerStory": 5 } }
+ },
+ "expect": {
+  "direction": "a-better",
+  "note": "还是预判 a 更好，但把话说清楚：同名那份在天花板上跑出 p=1，什么都没证明。这一份如果仍然读不出方向，那就是**在有余量的地方也读不出方向**，那才是一个结论。届时该做的是缩短那一段提示词——它现在占着上下文，而上下文正是今天六次被截断的直接原因。"
+ }
+}
