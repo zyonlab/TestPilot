@@ -141,5 +141,16 @@ export function modelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel 
     apiKey: env.OPENAI_API_KEY ?? env.MIDSCENE_MODEL_API_KEY ?? "",
     model: env.MIDSCENE_MODEL_NAME ?? "Qwen3.8-27B-4bit",
     timeoutMs: env.TP_MODEL_TIMEOUT_MS ? Number(env.TP_MODEL_TIMEOUT_MS) : undefined,
+    /**
+     * `TP_MODEL_THINK=1` 打开思考。
+     *
+     * 默认关着，理由是思考的 token 计入 completion——同一句「reply OK」，开着花 22 个
+     * reasoning token，关着花 1 个；而这条流水线的每个节点都在 maxTokens 边缘（已经因为
+     * 预算不足失败过三次），思考会直接把可用的输出预算吃掉一块。
+     *
+     * 但「关掉思考会不会让产出变差」是个**经验问题**，不该由默认值替人回答——
+     * 我们有黄金清单和覆盖度量，可以直接测。做成开关是为了能配对比较。
+     */
+    noThink: env.TP_MODEL_THINK === "1" ? false : undefined,
   });
 }
