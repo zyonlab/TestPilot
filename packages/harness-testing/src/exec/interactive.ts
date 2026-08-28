@@ -542,6 +542,8 @@ export async function runObserve(
      * 12 张商品卡片因此只花 1 轮而不是 12 轮；而两个导航链接谁也不挡谁。
      */
     const shapeDry = new Set<string>();
+    /** 下一轮要先回到哪张表单上接着做实验。见 `nextAction` 开头那段。 */
+    let probeReturn: string | undefined;
     /** 去过的地址。同一个地址走第二次对发现新界面没有任何帮助。 */
     const triedGoto = new Set<string>();
     // 去重和状态 id 必须用**同一把尺子**量地址。此前这里另写了一个丢哈希的
@@ -584,7 +586,7 @@ export async function runObserve(
        * 而绝大多数表单对空提交都有话说。填坏值（电话填字母、日期填昨天）需要知道字段语义，
        * 那是下一步的事。
        */
-      | { key: string; kind: "probe"; form: string; submit: string; label: string; variant: ProbeVariant };
+      | { key: string; kind: "probe"; form: string; submit: string; label: string; variant: ProbeVariant; rest: number };
     const nextAction = (screen: { url: string; elements: Control[] }): Step | undefined => {
       const here = pathOf(screen.url);
       // 有密码框就先登录：凭证写在页面上（演示站的常见做法），那一句需要看着页面判断，
@@ -617,6 +619,22 @@ export async function runObserve(
        * 排在点击之前：校验状态是这一屏最值得看的东西，而点走了就回不来了
        * （多数导航会离开这一页）。一个表单只做一次，做过就记下。
        */
+      /**
+       * **先回实验台。**
+       *
+       * 一个表单有三档实验，而第一档往往就把页面带走了：PetClinic 的 `Find Owner`
+       * 空提交直接跳到 `/owners`，于是「填查不到的姓氏」这一档永远轮不到——而它正是
+       * 五次全漏的 G-04。实验和点击不一样：点击是「往前走」，实验是「在同一张表单上
+       * 换一种输入再看一次」，走了就得回来。
+       *
+       * 只在还有没做完的档时回，最多两次，不进 `triedGoto`（那张表就是要重复访问的）。
+       */
+      if (probeReturn) {
+        const back = probeReturn;
+        probeReturn = undefined;
+        return { key: `__probeback__${back}`, kind: "goto", href: back };
+      }
+
       const submitBtn = screen.elements.find((e) => e.submit && e.form);
       if (submitBtn) {
         /**
@@ -643,6 +661,12 @@ export async function runObserve(
           if (variant === "unmatched" && !isLookup) continue;
           const probeKey = `${here}::__probe__::${submitBtn.form}::${variant}`;
           if (triedClick.has(probeKey)) continue;
+          const applicable = (["empty", "malformed", "unmatched"] as const).filter(
+            (v) =>
+              !(v === "malformed" && !hasFormatted) &&
+              !(v === "unmatched" && !isLookup) &&
+              !triedClick.has(`${here}::__probe__::${submitBtn.form}::${v}`),
+          );
           return {
             key: probeKey,
             kind: "probe",
@@ -650,6 +674,7 @@ export async function runObserve(
             submit: submitBtn.selector,
             label: submitBtn.label,
             variant,
+            rest: applicable.length - 1,
           };
         }
       }
@@ -838,6 +863,7 @@ export async function runObserve(
         emit({ type: "navigated", shotRef: await shot(session) });
 
         const cameFrom = currentId;
+        const probeOrigin = next.kind === "probe" && next.rest > 0 ? current.url : undefined;
         const after = await snapshot(`第 ${screens.length + 1} 屏`);
         const sig = signatureOf(after);
         const wasNew = !seen.has(sig);
@@ -870,6 +896,8 @@ export async function runObserve(
         });
         currentId = toId;
         current = after;
+        // 实验把页面带走了，而这张表单还有没做完的档——下一轮先回去。
+        if (probeOrigin && pathOf(after.url) !== pathOf(probeOrigin)) probeReturn = probeOrigin;
         if (seen.has(sig)) {
           // 代表没走出去 → 它的结构同类一并跳过。这一条直接把「12 张商品卡片吃掉
           // 11 个干轮」变成 1 个。
