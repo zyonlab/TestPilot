@@ -103,7 +103,8 @@
    "noLoginNeeded": "首页明说「we don’t even ask you to register」——不登录就能用钱包，所以探索不需要凭证。这对基准是加分项：登录会把「探索能不能进去」和「产品有多少界面」两件事混在一起。",
    "role": "**第三个应用，干净的留出。**PetClinic 和 Juice Shop 上的探索修复都是对着它们调的，dimeshift 一次都没调过——它是唯一能回答「这些改进是不是只在调过的应用上成立」的那个。",
    "stateful": "**这个应用会被写。**实测一次探索之后：用户 1→2、钱包 1→3、流水 2→52。两个来源分不开——一是探索的实验（有一条越了界，已修），二是它自己的「不注册也能用」会自动建演示钱包和流水。所以**每次运行前必须重建容器**（镜像里带着 non-empty-db 的种子状态），否则第二次跑的已经不是同一个东西了。PetClinic 上不需要这一步：那边的探索是只读的，五次运行图完全一致、标准差为 0。",
-   "reset": "docker rm -f tp-bench-dimeshift && docker run -d --name tp-bench-dimeshift -p 8085:8080 dockercontainervm/dimeshift@sha256:0316bd172d772820c66b705b1c5aa706019e5eab941a4a9161d3e323e322af1f bash -c \"cd /home/dimeshift-application && ./run-services-docker.sh\""
+   "reset": "docker rm -f tp-bench-dimeshift && docker run -d --name tp-bench-dimeshift -p 8085:8080 dockercontainervm/dimeshift@sha256:0316bd172d772820c66b705b1c5aa706019e5eab941a4a9161d3e323e322af1f bash -c \"cd /home/dimeshift-application && ./run-services-docker.sh\"",
+   "gold": "fixtures/benchmark/dimeshift-gold.json"
   },
   {
    "id": "splittypie",
