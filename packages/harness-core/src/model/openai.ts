@@ -16,6 +16,8 @@ export interface OpenAIModelOptions {
    * limit with thinking on, and 1.0s with the answer when it is off.
    */
   noThink?: boolean;
+  /** 涨预算重发时说一声。留空则不说——这个类不该假设调用方有什么日志设施。 */
+  onLog?: (message: string) => void;
   /** 开着思考时，推理最多写多长。见 `max_tokens` 那段。 */
   thinkBudget?: number;
   /** Ask the endpoint to constrain decoding to the schema. Not every server supports it. */
@@ -39,7 +41,37 @@ export class OpenAIModel implements ModelClient {
     this.guidedSupported = opts.guided ?? true;
   }
 
+  /**
+   * **被截断就加大预算重来一次。**
+   *
+   * 截断的检测一直都有（`finish_reason === "length"`），但只被写进错误消息，从没拿来
+   * 重试过。于是每一个手工定的 `maxTokens` 常数都是**正确性关键**的：定小了，产出不是
+   * 报错，是「看起来正常、只是少了一截」——规格少几条规则、故事少几条、用例从 40 条
+   * 变成 9 条。一天之内这样撞了四次（6000、7200、12800、12800）。
+   *
+   * 有了这一层，那些常数就只影响**成本和时延**，不再影响**对错**：定小了就多花一次调用，
+   * 而且日志里说得清清楚楚。这才是「让这个数自己算出来」该有的样子——
+   * 光按材料规模乘一个我拍的每项常数，只是把猜测从总量挪到了每一项。
+   *
+   * 最多涨两次（×2、×4），上限 32000。还被截断就如实报错：那时问题多半不是预算，
+   * 是模型在原地重复。
+   */
   async chat(req: ChatRequest): Promise<ChatResponse> {
+    const ceiling = 32000;
+    let asked = req.maxTokens ?? 1024;
+    for (let grow = 0; ; grow++) {
+      const out = await this.once({ ...req, maxTokens: asked });
+      if (!out.truncated || grow >= 2 || asked >= ceiling) return out;
+      const next = Math.min(ceiling, asked * 2);
+      if (next === asked) return out;
+      this.opts.onLog?.(
+        `${req.label ?? "a call"}: 回复在 ${asked} tokens 处被截断，加大到 ${next} 重来一次`,
+      );
+      asked = next;
+    }
+  }
+
+  private async once(req: ChatRequest): Promise<ChatResponse> {
     const at = Date.now();
     const content: Array<Record<string, unknown>> = [{ type: "text", text: req.variable }];
     for (const url of req.images ?? []) content.push({ type: "image_url", image_url: { url } });
