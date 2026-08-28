@@ -579,6 +579,26 @@ export async function runObserve(
     // 和 `/#/login` 全被判成「去过了」——探索在第一屏就停了，而图看起来是满的。
     let current = first;
     triedGoto.add(pathOf(first.url));
+    /**
+     * 被测应用的边界。**在到达时判，不能只在链接上判。**
+     *
+     * 「站外链接不点」这条规则看的是链接的 origin，而 Juice Shop 有个
+     * `/redirect?to=<外部地址>` 端点——那个链接**本身是同源的**，规则判它内部完全正确，
+     * 但它一跳就把浏览器带去了 github.com。到了那里，`location.origin` 也变成了
+     * github.com，于是 GitHub 自己的每一条链接都成了"同源"：一次实测里 16 条路由有 6 条
+     * 是 GitHub 的（`/features/copilot`、`/mcp`……），30 屏预算被吃掉五分之一，
+     * 而这些屏和被测产品毫无关系。
+     *
+     * **同源的地址可以重定向到任何地方**，所以判据必须是「现在人在哪」，
+     * 而不是「链接指向哪」。
+     */
+    const homeOrigin = (() => {
+      try {
+        return new URL(first.url).origin;
+      } catch {
+        return "";
+      }
+    })();
     let stoppedBecause = spec.deep === false ? "只采入口页（deep 关闭）" : "";
     let dry = 0;
     let rounds = 0;
@@ -920,6 +940,22 @@ export async function runObserve(
         }
         const probeOrigin = next.kind === "probe" && next.rest > 0 ? current.url : undefined;
         const after = await snapshot(`第 ${screens.length + 1} 屏`);
+        const nowOrigin = (() => {
+          try {
+            return new URL(after.url).origin;
+          } catch {
+            return homeOrigin;
+          }
+        })();
+        if (homeOrigin && nowOrigin !== homeOrigin) {
+          // 这一屏不算数：它不属于被测产品。退回入口，接着走产品自己的东西。
+          note(`跟着 ${next.kind === "goto" ? next.href : "一次点击"} 走出了被测应用（到了 ${nowOrigin}）——退回入口`, "warn");
+          await page.goto(first.url);
+          await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+          current = await snapshot("退回入口");
+          currentId = idFor(current);
+          continue;
+        }
         const sig = signatureOf(after);
         const wasNew = !seen.has(sig);
         const toId = idFor(after);
