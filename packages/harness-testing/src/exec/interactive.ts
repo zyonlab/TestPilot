@@ -309,8 +309,26 @@ export async function runObserve(
           .slice(0, 60)
           .map((el) => {
             const e = el as HTMLElement & { placeholder?: string; type?: string; href?: string };
+            /**
+             * **按钮类 `<input>` 的文案在 `value` 里。**
+             *
+             * `<input type="submit" value="Sign In">` 屏幕上明明写着 Sign In，但 `<input>`
+             * 没有 `innerText`——四样兜底全空，它于是被无文案过滤整条丢掉。dimeshift 的
+             * 登录、注册全是这种按钮，结果是**提交按钮对探索不存在**，
+             * `find(e => e.submit && e.form)` 永远找不到东西，一条实验都做不了。
+             * PetClinic 和 Juice Shop 都用 `<button>`，所以这个洞一直没露出来。
+             *
+             * 只对 submit/button/reset 读 `value`：文本框的 `value` 是**用户填的内容**，
+             * 不是文案，拿它当文案会把数据泄进材料，也会让同一个框在填了不同东西之后
+             * 变成不同的控件。
+             */
+            const btnValue =
+              el.tagName.toLowerCase() === "input" && ["submit", "button", "reset"].includes((e.type || "").toLowerCase())
+                ? ((e as HTMLInputElement).value || "").trim()
+                : "";
             const label =
               (e.innerText || "").trim() ||
+              btnValue ||
               e.getAttribute("aria-label") ||
               e.placeholder ||
               e.getAttribute("name") ||
