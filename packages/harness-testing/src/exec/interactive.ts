@@ -993,6 +993,7 @@ export async function runObserve(
           goto: (u: string) => Promise<unknown>;
           $eval: (sel: string, fn: (el: unknown, arg?: unknown) => unknown, arg?: unknown) => Promise<unknown>;
           press: (sel: string, key: string) => Promise<unknown>;
+          fill: (sel: string, value: string) => Promise<unknown>;
         };
         if (next.kind === "goto") {
           note(`第 ${rounds} 轮：走到 ${next.href}`);
@@ -1006,17 +1007,15 @@ export async function runObserve(
            */
           note(`第 ${rounds} 轮：${PROBE_WORDS[next.variant]}（${next.label}）`);
           if (next.via === "enter") {
-            // 没有表单的输入框：填一个值，回车。这就是它的提交。
-            await page.$eval(
-              next.form,
-              (el, arg) => {
-                const i = el as HTMLInputElement;
-                i.value = (arg as { v: string }).v;
-                i.dispatchEvent(new Event("input", { bubbles: true }));
-                i.dispatchEvent(new Event("change", { bubbles: true }));
-              },
-              { v: next.variant === "empty" ? "" : BAD_VALUES.text!.unmatched },
-            );
+            /**
+             * 没有表单的输入框：填一个值，回车。这就是它的提交。
+             *
+             * 用 `fill` 而不是直接写 `.value`：Angular 的 ngModel 只认真正的聚焦 + 输入
+             * 事件序列，手动赋值加派发 `input` 它照收不误，但**模型里的值不会变**——
+             * 于是回车时组件拿到的还是空串，什么都不会发生。一次实测里搜索实验就是这样
+             * 静悄悄地什么都没做。填表单那一支不受影响：那边是整表提交，走的是 DOM 值。
+             */
+            await page.fill(next.form, next.variant === "empty" ? "" : BAD_VALUES.text!.unmatched);
             await page.press(next.form, "Enter");
           } else {
           /**
