@@ -248,6 +248,13 @@ export async function runObserve(
     /** 这是个可填的输入框吗——做实验那一步要靠它。 */
     fillable: boolean;
     /**
+     * 渲染宽度。只给「认不出名字的输入框」这条兜底规则用。
+     *
+     * Juice Shop 的搜索框折叠时只有 4px 宽——它在 DOM 里、也可见，但**填不进东西**，
+     * 回车也不起作用。宽度是「这个框现在能不能用」最直接的证据。
+     */
+    width: number;
+    /**
      * 这个字段**有没有格式**：邮箱、电话、数字、密码、网址、日期各有各的非法值，
      * 而纯文本没有——一个 `<input type="text">` 填什么都不算格式错。
      *
@@ -396,6 +403,7 @@ export async function runObserve(
               external,
               // 能填的：文本类 input、textarea、select。checkbox/radio 这一版先不管——
               // 它们的「坏值」不是空字符串，需要另一套判断。
+              width: Math.round(el.getBoundingClientRect().width),
               fillable:
                 (tag === "input" && !["submit", "button", "reset", "hidden", "checkbox", "radio", "file"].includes(type)) ||
                 tag === "textarea",
@@ -828,13 +836,23 @@ export async function runObserve(
         const fillables = screen.elements.filter((e) => e.fillable && !e.form);
         const box =
           fillables.find((e) => LOOKUP_SUBMIT.test(`${e.label} ${e.display}`)) ??
-          (fillables.length === 1 && !screen.elements.some((e) => e.form) ? fillables[0] : undefined);
+          (fillables.length === 1 && !screen.elements.some((e) => e.form) && fillables[0]!.width >= 60
+            ? fillables[0]
+            : undefined);
         if (box) {
           for (const variant of ["empty", "unmatched"] as const) {
-            const k = `${here}::__probe__::${box.selector}::${variant}`;
+            /**
+             * **按控件形状全局记，不按路由记。**
+             *
+             * 搜索框在工具栏里，每一条路由上都有——按路由记，它会在每一页各做两次实验。
+             * 一次实测里这样打出 15 条实验，把 30 屏预算吃光，注册、关于、联系三页
+             * 全部丢失，命中从 6/7 掉到 3/7。同一个控件在不同页面上做同一件事，
+             * 做一次就够。
+             */
+            const k = `__boxprobe__::${shapeOf(box.selector)}::${variant}`;
             if (triedClick.has(k)) continue;
             const left = (["empty", "unmatched"] as const).filter(
-              (v) => !triedClick.has(`${here}::__probe__::${box.selector}::${v}`),
+              (v) => !triedClick.has(`__boxprobe__::${shapeOf(box.selector)}::${v}`),
             );
             return {
               key: k,
