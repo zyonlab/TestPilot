@@ -378,7 +378,7 @@ export function sourceExploreNode(
 export function composeSpecNode(
   opts: CaseGenNodeOptions,
 ): NodeDef<
-  { lang?: string; maxTokens: number; maxRules: number },
+  { lang?: string; maxTokens?: number; maxRules: number },
   z.infer<typeof SpecMaterialSchema>,
   z.infer<typeof SpecDocSchema>
 > {
@@ -396,7 +396,14 @@ export function composeSpecNode(
        * 看起来像提示词的问题，其实是预算的问题。截断本身有专门的报错说这件事，
        * 但更好的做法是不要撞上它。
        */
-      maxTokens: z.number().int().min(600).max(16000).default(6000),
+      /**
+       * 留空则按材料规模自己算——见下面 `maxTokens` 的算法。
+       *
+       * 固定值在这条流水线上已经错过三次：3000 → 6000 → 还是不够。每次都是同一个原因：
+       * **探索变彻底了，材料变大了，而输出预算是上一轮定的**。规格的长度跟着规则数和
+       * 流程数走，而那两个数跟着图的大小走——那就直接按图算，别再手工调一个常数。
+       */
+      maxTokens: z.number().int().min(600).max(32000).optional(),
       maxRules: z.number().int().min(1).max(200).default(60),
     }),
     input: SpecMaterialSchema,
@@ -420,11 +427,27 @@ export function composeSpecNode(
           text: `图上路径过多，流程列表被截断——规格里的流程不是全部`,
         });
 
+      /**
+       * 输出预算按材料规模算。
+       *
+       * 一条规则连同证据原话约 120 个 token，一条流程连同每一步的转移 id 约 90 个，
+       * 再留一份给标题、摘要和「没有答案的地方」。上限 32000（DashScope 收得下），
+       * 下限 6000（小图也不至于被切）。
+       *
+       * **这个数不该再由人来调。**它在这条流水线上被手工调过两次，两次都是在一次
+       * 「回复被切断」之后补的——而切断这件事，从产出上看只是「规格短了点」。
+       */
+      const budget =
+        params.maxTokens ??
+        Math.min(
+          32000,
+          Math.max(6000, params.maxRules * 120 + computed.flows.length * 90 + 2000),
+        );
       const res = await opts.model.chat({
         stable: COMPOSE_STABLE,
         variable: composeVariable(material.text + flowText, material.origin ?? "inline", material.derivedFrom ?? "document", params.lang),
         schema: COMPOSE_SCHEMA,
-        maxTokens: params.maxTokens,
+        maxTokens: budget,
         label: "spec.compose",
       });
       ctx.spend({ calls: 1, tokens: res.tokens });
@@ -442,7 +465,7 @@ export function composeSpecNode(
           unknowns: z.array(z.string()).default([]),
         }),
         "spec.compose",
-        { truncated: res.truncated, maxTokens: params.maxTokens },
+        { truncated: res.truncated, maxTokens: budget },
       );
 
       const rules = parsed.rules.slice(0, params.maxRules);
@@ -628,12 +651,13 @@ export function planStoriesNode(
        *
        * 加字段就要回头看预算，这是同一件事的两半。
        */
-      maxTokens: z.number().int().min(400).max(16000).optional(),
+      maxTokens: z.number().int().min(400).max(32000).optional(),
     }),
     input: SpecDocSchema,
     output: StoryBundleSchema,
     run: async (spec, params, ctx) => {
-      const maxTokens = params.maxTokens ?? Math.max(2400, params.maxStories * 520);
+      // 故事带上验收标准、角色、收益、活动之后单条长了不少；520 是加这些字段之前定的。
+      const maxTokens = params.maxTokens ?? Math.max(4000, params.maxStories * 900);
       const res = await opts.model.chat({
         stable: STORIES_STABLE,
         variable: storiesVariable(spec.text, params.lang),
@@ -801,7 +825,7 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
       /** Context this node may spend on material. The spec is what grows without bound. */
       contextTokens: z.number().int().min(500).max(200_000).default(8000),
       /** A whole story's work is lost when the reply is cut off, so this is generous. */
-      perStoryMaxTokens: z.number().int().min(200).max(16000).default(6000),
+      perStoryMaxTokens: z.number().int().min(200).max(32000).default(9000),
       maxCasesPerStory: z.number().int().min(1).max(30).default(8),
       /**
        * How hard to press on what an assertion must name. `strict` appends a definition of
