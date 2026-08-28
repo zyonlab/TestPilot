@@ -23,6 +23,7 @@ const shop: StateFlowGraph = {
   abstraction: "route+controls",
   entry: "/",
   stoppedBecause: "",
+  unvisited: [],
   states: [
     { id: "/", route: "/", title: "登录", controls: [] },
     { id: "/inventory.html", route: "/inventory.html", title: "Products", controls: [] },

@@ -85,6 +85,17 @@ export const StateFlowGraphSchema = z.object({
   transitions: z.array(SfgTransitionSchema).default([]),
   /** 为什么停下来。一份薄图要能说出自己为什么薄。 */
   stoppedBecause: z.string().default(""),
+  /**
+   * **看见过、但那个地址从来没变成一个状态。**
+   *
+   * 「看见但没走过」的链接此前只在目标路由**确实到过**时才补成边——那条规矩是对的
+   * （补一条指向未知地方的边，等于凭空声称那里有一屏），但它的副作用是：
+   * **真正没去过的地址被整个丢掉了**。
+   *
+   * 而那恰恰是最该告诉人的一类：「这个产品有这个入口，我们一次都没进去」。
+   * 它不该变成一条边（那会让图说谎），但它必须活下来。所以单独存一份地址清单。
+   */
+  unvisited: z.array(z.string()).default([]),
 });
 export type StateFlowGraph = z.infer<typeof StateFlowGraphSchema>;
 

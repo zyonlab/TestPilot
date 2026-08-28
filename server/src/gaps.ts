@@ -42,11 +42,13 @@ interface GraphLike {
     action?: { kind?: string; target?: string };
   }>;
   stoppedBecause?: string;
+  /** 看见过、但那个地址从来没变成一个状态。真正的「没进去」只有这些。 */
+  unvisited?: string[];
 }
 
 interface SpecLike {
   modules?: Array<{ id: string; name?: string; flowIds?: string[]; routes?: string[] }>;
-  flows?: Array<{ id: string; name?: string; transitions?: string[] }>;
+  flows?: Array<{ id: string; name?: string; transitions?: string[]; steps?: string[]; endsAt?: string }>;
   unknowns?: string[];
 }
 
@@ -62,10 +64,16 @@ interface StoryLike {
   activity?: string;
 }
 
+/**
+ * 状态 id 里的 `~1` 是同路由多状态的内部消歧符。**它不该出现在给人看的字里。**
+ * 一个复核的人看到 `/owners/1/edit~1` 只会以为那是个地址，然后去浏览器里找不到它。
+ */
+const plainState = (id: string): string => id.split("~")[0];
+
 /** 一句话描述一条转移，给人看的那种。 */
 const describeEdge = (t: NonNullable<GraphLike["transitions"]>[number]): string => {
   const how = t.action?.kind === "goto" ? `走到 ${t.action.target ?? ""}` : `点「${t.action?.target ?? "?"}」`;
-  return `${t.from} ${how}${t.to ? ` → ${t.to}` : ""}`;
+  return `${plainState(t.from)} ${how}${t.to ? ` → ${plainState(t.to)}` : ""}`;
 };
 
 export function computeGaps(input: {
@@ -107,17 +115,26 @@ export function computeGaps(input: {
     });
   }
 
-  // ② 看见了链接、但没走进去的地方。**产品有这个入口，探索没进去。**
-  for (const t of graph?.transitions ?? []) {
-    if (t.walked !== false) continue;
+  /**
+   * ② 真正没进去的地址。
+   *
+   * 第一版用的是图里 `walked: false` 的边——**那些全是假缺口**。补那种边的规矩是
+   * 「只在目标路由确实到过时才补」（否则图会凭空声称那里有一屏），所以它们的意思其实是
+   * 「这条链接没走，但那一屏我们从别的路进去过」——不是缺口。人看到
+   * 「`/owners/find` 走到 `/vets` 没进去」而 `/vets` 明明在图里，只会觉得这东西在瞎报。
+   *
+   * **一个假缺口比没有缺口更糟**：它消耗信任，而信任是这一整块信息唯一的价值。
+   *
+   * 真正没进去的是 `graph.unvisited` —— 看见过、而那个地址从来没变成一个状态。
+   */
+  for (const href of graph?.unvisited ?? [])
     gaps.push({
-      activity: activityOfState(t.from),
+      activity: activityOfRoute.get(href.split("?")[0]),
       reach: "unseen",
       kind: "link",
-      what: `这个入口看见了，探索没进去`,
-      detail: describeEdge(t),
+      what: `这个入口一次都没进去`,
+      detail: href,
     });
-  }
 
   // ③ 试过、但走不通的路。
   for (const t of graph?.transitions ?? []) {
@@ -135,12 +152,17 @@ export function computeGaps(input: {
   const storiedFlows = new Set(stories.map((s) => s.flowId).filter(Boolean) as string[]);
   for (const f of spec?.flows ?? []) {
     if (storiedFlows.has(f.id)) continue;
+    /**
+     * 只写 `F-8` 等于没写：复核的人不知道 F-8 是什么，也没法判断它该不该有故事。
+     * 有名字用名字，没名字就把这条路径本身摊开——**路径是它唯一说得清自己的方式**。
+     */
+    const path = (f.steps ?? []).join(" → ");
     gaps.push({
       activity: activityOfFlow.get(f.id),
       reach: "missed",
       kind: "flow",
       what: `这条流程没有故事`,
-      detail: `${f.id}${f.name ? ` ${f.name}` : ""}`,
+      detail: f.name && f.name !== "(未命名)" ? `${f.name}（${f.id}）` : path || f.id,
     });
   }
 

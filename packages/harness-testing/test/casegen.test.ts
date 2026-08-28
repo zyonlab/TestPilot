@@ -344,6 +344,7 @@ describe("the specification's altitudes", () => {
       abstraction: "route+controls",
       entry: "/",
       stoppedBecause: "",
+  unvisited: [],
       states: [
         { id: "/", route: "/", title: "登录", controls: [] },
         { id: "/home", route: "/home", title: "首页", controls: [] },

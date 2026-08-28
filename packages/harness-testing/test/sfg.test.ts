@@ -44,6 +44,7 @@ describe("the graph handed downstream", () => {
     abstraction: "route+controls",
     entry: "/",
     stoppedBecause: "连续 3 轮没有发现新界面",
+  unvisited: [],
     states: [
       { id: "/", route: "/", title: "登录", controls: ["Login"] },
       { id: "/cart.html", route: "/cart.html", title: "Your Cart", controls: ["Checkout"] },
@@ -81,6 +82,7 @@ describe("revisiting a known state vs not moving at all", () => {
       abstraction: "route+controls",
       entry: "/",
       stoppedBecause: "",
+  unvisited: [],
       states: [],
       transitions: [
         { from: "/cart.html", to: "/inventory.html", action: { kind: "click", target: "Continue Shopping", selector: "" }, ok: true, walked: true, note: "回到已知状态" },
@@ -131,6 +133,7 @@ describe("edges we walked vs edges we only saw", () => {
     abstraction: "route+controls",
     entry: "/",
     stoppedBecause: "",
+  unvisited: [],
     states: [
       { id: "/", route: "/", title: "首页", controls: [] },
       { id: "/vets", route: "/vets", title: "兽医", controls: [] },
@@ -167,6 +170,7 @@ describe("probing a form on purpose", () => {
     abstraction: "route+controls",
     entry: "/owners/new",
     stoppedBecause: "",
+  unvisited: [],
     states: [
       { id: "/owners/new", route: "/owners/new", title: "New Owner", controls: [] },
       { id: "/owners/new#1", route: "/owners/new", title: "New Owner", controls: [] },

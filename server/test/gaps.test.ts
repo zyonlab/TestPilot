@@ -46,12 +46,6 @@ describe("缺口", () => {
     expect(g.some((x) => x.detail?.includes("刷新"))).toBe(false);
   });
 
-  it("看见没走的入口算「没看到」——它要的是重跑探索，不是补用例", () => {
-    const g = computeGaps({ graph, spec, cases: [], stories: [] });
-    const link = g.find((x) => x.kind === "link");
-    expect(link?.reach).toBe("unseen");
-    expect(link?.activity).toBe("浏览兽医");
-  });
 
   it("走不通的路也算「没看到」，并带上原因", () => {
     const g = computeGaps({ graph, spec, cases: [], stories: [] });
@@ -101,35 +95,40 @@ describe("缺口", () => {
 });
 
 describe("去重", () => {
-  it("同一个入口在五屏上看见，是一个缺口不是五个——看不动的清单等于没有清单", () => {
+  it("同一条转移不会报两次——看不动的清单等于没有清单", () => {
+    const t = { from: "/a", to: "/b", ok: true, walked: true, action: { kind: "click", target: "去" } };
     const g = computeGaps({
-      graph: {
-        states: [{ id: "/a", route: "/a" }, { id: "/b", route: "/b" }, { id: "/c", route: "/c" }],
-        transitions: [
-          { from: "/a", to: "/x", walked: false, action: { kind: "goto", target: "/x" } },
-          { from: "/b", to: "/x", walked: false, action: { kind: "goto", target: "/x" } },
-          { from: "/c", to: "/x", walked: false, action: { kind: "goto", target: "/x" } },
-        ],
-      },
+      graph: { states: [{ id: "/a", route: "/a" }, { id: "/b", route: "/b" }], transitions: [t, { ...t }] },
       spec: {},
       cases: [],
       stories: [],
     });
-    expect(g.filter((x) => x.kind === "link")).toHaveLength(1);
+    expect(g.filter((x) => x.kind === "transition")).toHaveLength(1);
   });
-  it("不同入口仍然各算一条", () => {
+});
+
+describe("给人看的字里不能有内部记号", () => {
+  it("状态 id 的 ~1 消歧后缀不出现在缺口文案里", () => {
     const g = computeGaps({
       graph: {
-        states: [{ id: "/a", route: "/a" }],
-        transitions: [
-          { from: "/a", to: "/x", walked: false, action: { kind: "goto", target: "/x" } },
-          { from: "/a", to: "/y", walked: false, action: { kind: "goto", target: "/y" } },
-        ],
+        states: [{ id: "/edit~1", route: "/edit" }, { id: "/done", route: "/done" }],
+        transitions: [{ from: "/edit~1", to: "/done", ok: true, walked: true, action: { kind: "click", target: "保存" } }],
       },
       spec: {},
       cases: [],
       stories: [],
     });
-    expect(g.filter((x) => x.kind === "link")).toHaveLength(2);
+    expect(g[0]!.detail).not.toContain("~");
+    expect(g[0]!.detail).toContain("/edit");
+  });
+
+  it("没名字的流程摊开它的路径——只写 F-8 等于没写", () => {
+    const g = computeGaps({
+      graph: {},
+      spec: { flows: [{ id: "F-8", name: "(未命名)", steps: ["走到 /owners", "点「编辑」"] }] },
+      cases: [],
+      stories: [],
+    });
+    expect(g.find((x) => x.kind === "flow")?.detail).toBe("走到 /owners → 点「编辑」");
   });
 });

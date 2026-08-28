@@ -1375,12 +1375,28 @@ export async function runObserve(
       }
     if (inferred) note(`补上 ${inferred} 条看见但没走过的链接`);
 
+    /**
+     * 剩下的那些——看见了、而那个地址**从来没变成一个状态**——单独收成一份清单。
+     *
+     * 它们进不了图（补一条指向未知地方的边等于凭空声称那里有一屏），但丢掉它们，
+     * 「这个产品有这个入口，我们一次都没进去」这句话就没人说得出来了。
+     */
+    const unvisited = [
+      ...new Set(
+        [...linksSeen.values()]
+          .flatMap((set) => [...set])
+          .filter((href) => !byRoute.has(href.split("?")[0]) && !NOT_A_SCREEN.test(href)),
+      ),
+    ].sort();
+    if (unvisited.length) note(`${unvisited.length} 个地址看见了但一次都没进去`);
+
     const graph: StateFlowGraph = {
       abstraction: spec.stateAbstraction ?? "route+controls",
       entry: sfgStates[0]?.id ?? "",
       states: sfgStates,
       transitions: sfgEdges,
       stoppedBecause,
+      unvisited,
     };
 
     const coverage = [
