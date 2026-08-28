@@ -4,7 +4,7 @@
  "pinning": "全部 pin 具体版本，不用 latest。基准的意义在于两次跑的是同一个东西；latest 会在某天悄悄换掉被测对象，而那种变化在结果里看起来像 harness 变了。",
  "apps": [
   {
-   "id": "petclinic",
+   "id": "petclinic-web",
    "name": "Spring PetClinic（服务端渲染版）",
    "framework": "Spring MVC + JSP",
    "why": "这套基准里最完整的一个：增删改查、表单校验、搜索、分页、跨实体关联。单容器自带界面，不需要另起前端——第一个要跑通的就是它。",
@@ -21,7 +21,9 @@
     "digest": "sha256:2766c68b03afd64d154339a2574cdf18db1a1b92b3013a4d6a3dfb9be1bac6cd",
     "note": "HTTP 200，首屏 63ms。入口页链接：/owners/find（按姓氏搜索）、/vets（列表+分页）、/oups（故意抛异常的错误页）。 不要用 --rm：实测它中途退出过一次，容器连同日志一起被删掉，为什么退出就再也查不到了。",
     "locale": "**消息随 Accept-Language 变**：zh-CN 时校验消息是中文。基准环境必须固定 `Accept-Language: en`，否则同一次操作在不同机器上产出不同文案，历史数字失去可比性。"
-   }
+   },
+   "ui": "**服务端渲染的完整界面**，不是 API。实测 `/owners/find` 返回 3583 字节 HTML，含 `<form>`、`<input>`、按钮 `Find Owner`，导航 Home / Find owners / Veterinarians / Error。",
+   "dontConfuseWith": "`springcommunity/spring-petclinic-rest`——同一个官方样例的**另一个变体，只有 API 没有界面**，已在 notSuitable 里判掉。两者名字极像，登记表里必须靠 id 分开：**这个是 `petclinic-web`，那个是 `petclinic-rest`**。混淆过一次，所以写在这里。"
   },
   {
    "id": "juice-shop",
@@ -136,7 +138,8 @@
    "id": "petclinic-rest",
    "why": "**只有 API，没有界面。** 我们测的是 GUI——探索靠采集可见控件、判据靠页面文本、用例靠点击与填写。一个没有界面的应用在这条流水线上什么都跑不出来。曾经登记它是因为它属于那套公开基准，但属于基准不等于对我们有用。",
    "image": "springcommunity/spring-petclinic-rest:4.0.2",
-   "note": "要用它当 GUI 基准，得再配一个前端容器；`springcommunity/spring-petclinic-angular` 查无此镜像。"
+   "note": "要用它当 GUI 基准，得再配一个前端容器；`springcommunity/spring-petclinic-angular` 查无此镜像。",
+   "dontConfuseWith": "`springcommunity/spring-framework-petclinic`（登记为 `petclinic-web`）——那个有完整界面，是在用的基准。"
   }
  ],
  "uiOnly": "**基准应用必须有界面。** 这条流水线的每一层都建立在界面上：探索采集可见控件、判据比对页面文本、用例靠点击与填写。一个只有 API 的应用在这里什么都跑不出来——属于公开基准不等于对我们有用。"
