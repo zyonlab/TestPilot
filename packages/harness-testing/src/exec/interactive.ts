@@ -899,6 +899,22 @@ export async function runObserve(
         // 实验把页面带走了，而这张表单还有没做完的档——下一轮先回去。
         if (probeOrigin && pathOf(after.url) !== pathOf(probeOrigin)) probeReturn = probeOrigin;
         if (seen.has(sig)) {
+          /**
+           * **实验的结果一定要进材料，哪怕它不算一个新状态。**
+           *
+           * 状态抽象是按**控件**算的，而校验消息只是**文字**——填一个字母进电话框、
+           * 提交、页面多出一行 `numeric value out of bounds`，控件集合一个字没变。
+           * 于是这一屏被判成「见过了」，它的文字连同那条消息一起被丢掉：实验做了，
+           * 结果没留下。实测里 `Add Owner（填格式非法的值提交）` 就是这样白做的，
+           * 材料里搜不到填进去的 `abcdef`，也搜不到应有的错误消息。
+           *
+           * 「这算不算一个新状态」和「这次观察值不值得留」是两个问题。遍历问前者，
+           * 实验问后者——实验本来就是冲着那些看不出结构差别的行为去的。
+           */
+          if (next.kind === "probe") {
+            screens.push(`（实验：${PROBE_WORDS[next.variant]} ${next.label}）\n${after.text}`);
+            note(`实验结果记入材料（状态未变，但页面文字变了）`);
+          }
           // 代表没走出去 → 它的结构同类一并跳过。这一条直接把「12 张商品卡片吃掉
           // 11 个干轮」变成 1 个。
           if (next.kind === "click") shapeDry.add(`${cameFrom}::${next.shape}`);
