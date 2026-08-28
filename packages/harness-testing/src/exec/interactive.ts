@@ -761,6 +761,29 @@ export async function runObserve(
         return { key: c.href, kind: "goto", href: c.href };
       }
 
+      /**
+       * 当前这一屏没有指向新路由的链接，就去**全局队列**里取一个。
+       *
+       * 队列装的是「在任何一屏上见过、但还没走过」的地址。`#/register` 就是死在这个
+       * 差别上：它在登录页上被看见，探索从登录页走去了 forgot-password，
+       * 而退回只能沿原路，那条链接再没被想起来。
+       *
+       * 位置很重要——**排在所有点击之前**。此前它放在最后（「这一屏彻底没事可做」才查），
+       * 而探索是预算受限的：预算在「没事可做」之前就花完了，队列一次都没被查过。
+       */
+      for (const href of frontier) {
+        frontier.delete(href);
+        if (triedGoto.has(href) || NOT_A_SCREEN.test(href)) continue;
+        let route = "";
+        try {
+          route = pathOf(new URL(href, screen.url).toString());
+        } catch {
+          continue;
+        }
+        if (sfgStates.some((st) => st.route === route)) continue;
+        return { key: href, kind: "goto", href };
+      }
+
       for (const c of ordered) {
         // 外站不点：探索的对象是这个产品，不是它页脚链到的地方。
         if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
@@ -798,25 +821,6 @@ export async function runObserve(
         return { key, kind: "click", selector: c.selector, label: c.label, shape };
       }
 
-      /**
-       * 这一屏没东西可做了——先去全局队列里取一个还没去过的地址，再考虑退回上一屏。
-       *
-       * 退回只能回到来的那条路上，而队列里装的是**在任何一屏上见过**的地址。
-       * `#/register` 就是死在这个差别上的：它在登录页上被看见，探索从登录页走去了
-       * 别处，退回也只是原路返回，那条链接再没被想起来。
-       */
-      for (const href of frontier) {
-        frontier.delete(href);
-        if (triedGoto.has(href) || NOT_A_SCREEN.test(href)) continue;
-        let route = "";
-        try {
-          route = pathOf(new URL(href, screen.url).toString());
-        } catch {
-          continue;
-        }
-        if (sfgStates.some((st) => st.route === route)) continue;
-        return { key: href, kind: "goto", href };
-      }
       return undefined;
     };
 
