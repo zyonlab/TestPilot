@@ -500,7 +500,7 @@ export async function runObserve(
      * 而它们对**界面**测试毫无意义。判据用扩展名，是因为它查得出来：
      * 一个 `.json` 结尾的地址不会是给人看的页面。
      */
-    const NOT_A_SCREEN = /\.(json|xml|csv|pdf|zip|png|jpe?g|gif|svg|ico|txt|rss|atom)(\?|$)/i;
+    const NOT_A_SCREEN = /\.(json|xml|csv|pdf|zip|png|jpe?g|gif|svg|ico|txt|md|yml|yaml|rss|atom)(\?|$)/i;
 
     /**
      * 每一屏上看得见的同源链接。
@@ -673,7 +673,7 @@ export async function runObserve(
        * 而绝大多数表单对空提交都有话说。填坏值（电话填字母、日期填昨天）需要知道字段语义，
        * 那是下一步的事。
        */
-      | { key: string; kind: "probe"; form: string; submit: string; label: string; variant: ProbeVariant; rest: number };
+      | { key: string; kind: "probe"; form: string; submit: string; label: string; variant: ProbeVariant; rest: number; via: "submit" | "enter" };
     const nextAction = (screen: { url: string; elements: Control[] }): Step | undefined => {
       const here = pathOf(screen.url);
       // 有密码框就先登录：凭证写在页面上（演示站的常见做法），那一句需要看着页面判断，
@@ -762,6 +762,7 @@ export async function runObserve(
             label: submitBtn.label,
             variant,
             rest: applicable.length - 1,
+            via: "submit",
           };
         }
       }
@@ -785,6 +786,42 @@ export async function runObserve(
         if (!c.href || c.href === here || triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
         return { key: c.href, kind: "goto", href: c.href };
+      }
+
+      /**
+       * **没有 `<form>` 的输入框也要能做实验——回车就是它的提交。**
+       *
+       * Juice Shop 的搜索页整页 0 个 `<form>`：搜索框是一个光秃秃的 `<input>`，
+       * 提交靠回车。而实验机制此前要求 `submit && form` 两个条件，于是搜索这一整块
+       * 行为——「搜不到时说什么」——永远做不了实验。单页应用不用 `<form>` 是常态，
+       * 这不是个别现象。
+       *
+       * 只对**查询类**输入框做（名字/占位符像搜索的那种），理由和 `LOOKUP_SUBMIT`
+       * 那条一样：往一个新增表单里填值再回车，会真的写库。
+       */
+      if (!submitBtn) {
+        const box = screen.elements.find(
+          (e) => e.fillable && !e.form && LOOKUP_SUBMIT.test(`${e.label} ${e.display}`),
+        );
+        if (box) {
+          for (const variant of ["empty", "unmatched"] as const) {
+            const k = `${here}::__probe__::${box.selector}::${variant}`;
+            if (triedClick.has(k)) continue;
+            const left = (["empty", "unmatched"] as const).filter(
+              (v) => !triedClick.has(`${here}::__probe__::${box.selector}::${v}`),
+            );
+            return {
+              key: k,
+              kind: "probe",
+              form: box.selector,
+              submit: box.selector,
+              label: box.label || "搜索框",
+              variant,
+              rest: left.length - 1,
+              via: "enter",
+            };
+          }
+        }
       }
 
       /**
@@ -911,6 +948,7 @@ export async function runObserve(
         const page = session!.page as unknown as {
           goto: (u: string) => Promise<unknown>;
           $eval: (sel: string, fn: (el: unknown, arg?: unknown) => unknown, arg?: unknown) => Promise<unknown>;
+          press: (sel: string, key: string) => Promise<unknown>;
         };
         if (next.kind === "goto") {
           note(`第 ${rounds} 轮：走到 ${next.href}`);
@@ -923,6 +961,20 @@ export async function runObserve(
            * 而它恰好触发绝大多数产品的必填校验——那正是遍历永远走不到的那类状态。
            */
           note(`第 ${rounds} 轮：${PROBE_WORDS[next.variant]}（${next.label}）`);
+          if (next.via === "enter") {
+            // 没有表单的输入框：填一个值，回车。这就是它的提交。
+            await page.$eval(
+              next.form,
+              (el, arg) => {
+                const i = el as HTMLInputElement;
+                i.value = (arg as { v: string }).v;
+                i.dispatchEvent(new Event("input", { bubbles: true }));
+                i.dispatchEvent(new Event("change", { bubbles: true }));
+              },
+              { v: next.variant === "empty" ? "" : BAD_VALUES.text!.unmatched },
+            );
+            await page.press(next.form, "Enter");
+          } else {
           /**
            * 字段类别在页内重新判一次。
            *
@@ -969,6 +1021,7 @@ export async function runObserve(
             { variant: next.variant, values: BAD_VALUES },
           );
           await page.$eval(next.submit, (el) => (el as HTMLElement).click());
+          }
         } else if (next.kind === "click") {
           /**
            * **按选择器点，不问模型。**
