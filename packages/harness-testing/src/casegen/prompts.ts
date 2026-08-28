@@ -222,11 +222,13 @@ export const STORIES_SCHEMA = {
   properties: {
     stories: {
       type: "array",
+      // zod 那边是 `.min(1)`：一次产出零条故事，整批就没了。两边说同一件事。
+      minItems: 1,
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
-          title: { type: "string" },
+          id: { type: "string", minLength: 1 },
+          title: { type: "string", minLength: 1 },
           acceptance: { type: "array", items: { type: "string" } },
           requirementId: { type: "string" },
           // Guided decoding constrains the reply to this schema, so a field the prompt asks
@@ -273,14 +275,25 @@ export const CASES_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          title: { type: "string" },
+          title: { type: "string", minLength: 1 },
           designMethod: {
             type: "string",
             enum: ["equivalence", "boundary", "state-transition", "decision-table", "negative"],
           },
           precondition: { type: "array", items: { type: "string" } },
-          steps: { type: "array", items: { type: "string" } },
-          expected: { type: "string" },
+          /**
+           * `minItems: 1` 必须写在这里，因为 zod 那边写着 `.min(1)`。
+           *
+           * 两边不一致的后果不是「少一条用例」：约束解码允许模型给空数组，zod 在后面拒绝，
+           * **整个故事的产出一条不剩**——实测一次运行里八条故事全军覆没，
+           * 错误是 `cases.0.steps Array must contain at least 1 element(s)`。
+           *
+           * 规矩：**JSON schema 是给模型的约束，zod 是给我们的校验，两边必须说同一件事。**
+           * 只写在 zod 里，等于把一条本可以在生成时避免的错，推迟到解析时才发现，
+           * 而那时已经付过一次模型调用了。
+           */
+          steps: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 },
+          expected: { type: "string", minLength: 1 },
           tier: { type: "integer", enum: [1, 2, 3] },
           // Guided decoding constrains the reply to this schema, so an oracle the prompt
           // asks for and the schema omits is an oracle the model cannot produce.
@@ -296,7 +309,7 @@ export const CASES_SCHEMA = {
             },
             required: ["kind", "value"],
           },
-          key: { type: "string" },
+          key: { type: "string", minLength: 1 },
           // 没写进 schema 的字段模型产不出来——`covers` 是结构覆盖率的全部来源。
           covers: { type: "array", items: { type: "string" } },
         },
@@ -397,7 +410,7 @@ export const COMPOSE_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: { type: "string", minLength: 1 },
           name: { type: "string" },
           purpose: { type: "string" },
         },
@@ -422,7 +435,7 @@ export const COMPOSE_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: { type: "string", minLength: 1 },
           text: { type: "string" },
           evidence: { type: "string" },
           altitude: { type: "string", enum: ["screen", "flow", "domain"] },
