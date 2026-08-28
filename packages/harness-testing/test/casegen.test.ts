@@ -1,3 +1,4 @@
+import { CASES_STABLE, CASES_STABLE_PLAIN } from "../src/casegen/prompts.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeModel } from "@testpilot/harness-core";
@@ -658,5 +659,25 @@ describe("活动名只能是已知模块——一个瞎编的列头比没有列�
     );
     expect(out.stories[0]!.activity).toBeUndefined();
     expect(out.stories[1]!.activity).toBe("管理主人");
+  });
+});
+
+describe("消融臂必须只差一件事", () => {
+  it("PLAIN 与现状只差点名方法那几行——别的一个字不动", () => {
+    const a = CASES_STABLE.split("\n");
+    const b = new Set(CASES_STABLE_PLAIN.split("\n"));
+    const only = a.filter((l) => !b.has(l));
+    // 六行：一句总述 + 五种方法各一行。多一行就说明砍到了别的东西。
+    expect(only).toHaveLength(6);
+    expect(only[0]).toContain("Apply test design methods explicitly");
+    for (const m of ["equivalence", "boundary", "state-transition", "decision-table", "negative"])
+      expect(only.some((l) => l.includes(`"${m}"`))).toBe(true);
+  });
+
+  it("判据规范必须留在消融臂里——第一版把它一起砍了，结果那次消融回答不了它问的问题", () => {
+    expect(CASES_STABLE_PLAIN).toContain("you MUST also give `oracle`");
+    expect(CASES_STABLE_PLAIN).toContain('"kind":"noText"');
+    expect(CASES_STABLE_PLAIN).toContain("all happy path is a bad suite");
+    expect(CASES_STABLE_PLAIN).toContain("CASE BUDGET");
   });
 });

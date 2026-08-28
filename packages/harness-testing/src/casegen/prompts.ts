@@ -109,34 +109,35 @@ export const CASES_STABLE = [
  * ablation. It still asks for good assertions, because otherwise the comparison would be
  * measuring two changes at once.
  */
-export const CASES_STABLE_PLAIN = [
-  "You are a senior test designer. Given ONE user story and the specification it came from,",
-  "design the text-level test cases for that story.",
-  "",
-  "Rules that decide whether a case is worth anything:",
-  "- `expected` is ONE concrete, checkable outcome. Name the observable thing: a literal",
-  "  message, a number, a state. Never 'works correctly', 'behaves normally', 'is fine'.",
-  "- Quote interface text EXACTLY as the specification writes it.",
-  "- `tier` says how hard the verdict is: 1 = a program can settle it, 2 = a relation,",
-  "  3 = a model has to judge a screen.",
-  "- Steps are short, concrete, end-agnostic actions. No selectors, no code.",
-  "- Never put credentials in a step. Use ${env.NAME} and ${secret.NAME} placeholders.",
-  "- `key` is a dedupe triple 'transition|parameters|assertion', lowercase, no spaces.",
-  "- The specification lists FLOWS, and under each one its steps, every step prefixed with",
-  "  a transition id in backticks like `/cart.html->/checkout-step-one.html`. When this case",
-  "  exercises one of those steps, copy that id into `covers` — verbatim, backticks removed.",
-  "  Several ids when the case walks several steps. Copy only ids that appear in the",
-  "  specification: an id you compose yourself covers nothing.",
-  "  A case that changes nothing has nothing to put there — and that is worth noticing:",
-  "  it is checking that a screen still looks the same, not that the product still does",
-  "  something.",
-  "- `designMethod` must still be one of: equivalence, boundary, state-transition,",
-  "  decision-table, negative — say which one each case happens to be.",
-  "- Design at most the number of cases stated as CASE BUDGET in the material.",
-  "",
-  'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","precondition":["..."],',
-  '"steps":["..."],"expected":"...","tier":1,"key":"login|valid-credentials|dashboard-shown"}]}',
-].join("\n");
+/**
+ * 消融臂：**只**去掉点名测试设计方法的那一段，别的一个字不动。
+ *
+ * 第一版是手写的第二份提示词，46 行里只留了 26 行——除了方法名，还顺手砍掉了整段判据
+ * 规范（五种 oracle 形式、「tier 1/2 必须给 oracle」）、「界面文案逐字引用」、
+ * 「全是正常路径的用例集是坏的用例集」和用例预算。
+ *
+ * 于是那次消融跑出来的结果**回答不了它声称的问题**：B 组门禁崩到 0.017
+ * （55 条 tier-unbacked、21 条 oracle-vague）不是因为没点名方法，是因为判据规范被一起
+ * 砍了。而 `evals/README.md` 第一条就写着：
+ *
+ * > 两组必须只差一件事。差两件事然后读一个数字，是一个项目说服自己相信假话的标准做法。
+ *
+ * 手写第二份必然会漂移——两份文本各自演化，没人拦得住。所以改成**从原文里减**：
+ * 单变量这件事由构造保证，不靠人记得同步。
+ */
+const METHOD_BLOCK_START = "Apply test design methods explicitly";
+const METHOD_BLOCK_END = '- "negative": an error path';
+
+export const CASES_STABLE_PLAIN = (() => {
+  const lines = CASES_STABLE.split("\n");
+  const from = lines.findIndex((l) => l.includes(METHOD_BLOCK_START));
+  const to = lines.findIndex((l) => l.includes(METHOD_BLOCK_END));
+  if (from < 0 || to < 0) throw new Error("CASES_STABLE 里找不到方法那一段——消融臂会变成和现状一样，那比跑不起来更糟");
+  // 连同后面那个空行一起去掉，免得留下两个连续空行——那是文本上的差异，不是变量。
+  const rest = lines.slice(to + 1);
+  const skip = rest[0]?.trim() === "" ? 1 : 0;
+  return [...lines.slice(0, from), ...rest.slice(skip)].join("\n");
+})();
 
 /**
  * A stricter definition of what an assertion has to name.
