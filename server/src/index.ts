@@ -1796,7 +1796,8 @@ app.get("/api/wf/runs/:id/continuations", async (req, res) => {
 
 app.post("/api/wf/runs/:id/continue", async (req, res) => {
   try {
-    res.json(await continueRun(req.params.id, String((req.body ?? {}).graphId ?? "")));
+    const body = (req.body ?? {}) as { graphId?: string; params?: Record<string, Record<string, unknown>> };
+    res.json(await continueRun(req.params.id, String(body.graphId ?? ""), body.params));
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }

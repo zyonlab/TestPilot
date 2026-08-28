@@ -86,7 +86,20 @@ export async function continuationsFor(runId: string): Promise<Continuation[]> {
  *
  * 目标端跟着源运行走：接着跑出来的代码属于同一个项目，让人再选一次只会让两半落在不同地方。
  */
-export async function continueRun(runId: string, graphId: string): Promise<{ wfRunId: string }> {
+/**
+ * `params` 是给续跑用的覆盖值。
+ *
+ * 没有它的时候，续跑只能照抄图里写死的参数——而 `g2-code` 的 `repair` 节点写着
+ * `{ maxRounds: 1, limit: 3 }`，那是开发期为了省钱定的。于是「把这批用例整套跑一遍」
+ * 这件事，在界面和 API 上都做不到，只能去改图。
+ *
+ * 而整套跑一遍恰恰是下一步（黑盒变异测试）的前提：它要拿同一套用例反复打不同的变异体。
+ */
+export async function continueRun(
+  runId: string,
+  graphId: string,
+  params?: Record<string, Record<string, unknown>>,
+): Promise<{ wfRunId: string }> {
   const options = await continuationsFor(runId);
   const pick = options.find((o) => o.graphId === graphId);
   if (!pick) throw new Error(`${graphId} 接不上这次运行：它的根节点要的输入类型对不上`);
@@ -94,6 +107,6 @@ export async function continueRun(runId: string, graphId: string): Promise<{ wfR
 
   const seed = await nodeOutput(runId, pick.fromNode);
   const previous = (outputStore.getRun(runId)?.detail ?? {}) as { target?: { projectId?: string; url?: string } };
-  const started = await startRun({ graphId, seed, target: previous.target });
+  const started = await startRun({ graphId, seed, target: previous.target, ...(params ? { params } : {}) });
   return { wfRunId: started.wfRunId };
 }
