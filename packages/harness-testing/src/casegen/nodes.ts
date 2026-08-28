@@ -661,10 +661,13 @@ export function planStoriesNode(
        * Given/When/Then 验收标准——中文下单条轻松 300+ token。520 是加这些字段**之前**
        * 定的，900 是我拍的，两次都不够。
        *
-       * 给足：每条 1600，下限 8000。切断的代价（整批故事作废）远大于多要一点预算的代价，
+       * 给足：每条 2600，下限 12000。切断的代价（整批故事作废）远大于多要一点预算的代价，
        * 而这个方向上没有对称的风险——要多了只是没用完。
+       *
+       * 2600 这个数是被**开着思考**的那一组逼出来的：模型先想一遍之后写的故事明显更长
+       * （验收标准更多、措辞更完整），1600 够不着。两组用同一个数，对照才成立。
        */
-      const maxTokens = params.maxTokens ?? Math.min(32000, Math.max(8000, params.maxStories * 1600));
+      const maxTokens = params.maxTokens ?? Math.min(32000, Math.max(12000, params.maxStories * 2600));
       const res = await opts.model.chat({
         stable: STORIES_STABLE,
         variable: storiesVariable(spec.text, params.lang),
