@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ABSTRACTIONS, abstractionOf, describeGraph, type StateFlowGraph, pathOf } from "../src/exec/sfg.js";
-import { BAD_VALUES, LOOKUP_SUBMIT } from "../src/exec/interactive.js";
+import { BAD_VALUES, LOOKUP_SUBMIT, budgeted } from "../src/exec/interactive.js";
 
 /**
  * 状态抽象是这一层的关键变量：过松会把没探索过的当成已探索（漏测），过紧会把探索过的
@@ -266,5 +266,28 @@ describe("做实验的三个等价类", () => {
       expect(LOOKUP_SUBMIT.test(ok)).toBe(true);
     for (const no of ["Add Owner", "Update Owner", "Register", "Submit", "保存", "新增宠物"])
       expect(LOOKUP_SUBMIT.test(no)).toBe(false);
+  });
+});
+
+describe("材料的字数预算按屏分，不从尾巴切", () => {
+  const graph = "图";
+  const cov = "覆盖";
+  it("不超预算时原样拼接", () => {
+    const out = budgeted(["a", "b"], graph, cov, 1000);
+    expect(out).toBe("a\n\nb\n\n图\n\n覆盖");
+  });
+  it("超预算时每屏都还在——不能整屏消失", () => {
+    const screens = Array.from({ length: 10 }, (_, i) => `第${i}屏 ` + "x".repeat(5000));
+    const out = budgeted(screens, graph, cov, 12000);
+    for (let i = 0; i < 10; i++) expect(out).toContain(`第${i}屏`);
+  });
+  it("截断要说自己截了多少", () => {
+    const out = budgeted(["y".repeat(9000)], graph, cov, 2000);
+    expect(out).toMatch(/还有 \d+ 字没写进来/);
+  });
+  it("图和覆盖摘要不参与分配——一截就废", () => {
+    const out = budgeted([("z".repeat(50000))], "完整的图", "完整的覆盖", 3000);
+    expect(out).toContain("完整的图");
+    expect(out).toContain("完整的覆盖");
   });
 });

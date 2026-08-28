@@ -72,6 +72,32 @@ export const BAD_VALUES: Record<string, { malformed: string; unmatched: string }
   text: { malformed: "", unmatched: "zzzznotaproduct" },
 };
 
+/**
+ * 材料的字数预算。**按屏分，不从尾巴切。**
+ *
+ * 网关那边有一刀 `notes.slice(0, 60000)`。屏数只有 8 的时候它从不生效；探索改进到
+ * 25–30 屏之后，它每次都生效——而**从尾巴切会整屏整屏地消失**。一次实测里 about 和
+ * contact 两屏被整个切掉，材料里于是既没有 `Corporate History` 也没有 `CAPTCHA`，
+ * 看起来像是探索没走到，其实走到了、记下了、然后在最后一步被丢掉。
+ *
+ * 从尾巴切还有一层更坏的性质：**丢掉的总是最后探索到的那些屏**，而那恰好是新加的
+ * 「未访问路由优先」「全局队列」费力够到的部分。改进越有效，被丢掉的越多。
+ *
+ * 所以改成按屏分配：每屏一份等额预算，超了的屏自己截断并标明截断了多少。
+ * 图和覆盖摘要不参与分配——它们是结构，一截就废。
+ */
+export function budgeted(screens: string[], graphText: string, coverage: string, total = 200000): string {
+  const tail = `${graphText}\n\n${coverage}`;
+  const room = Math.max(0, total - tail.length - 2);
+  const joined = screens.join("\n\n");
+  if (joined.length <= room) return `${joined}\n\n${tail}`;
+  const per = Math.max(600, Math.floor(room / Math.max(1, screens.length)) - 2);
+  const cut = screens.map((sc) =>
+    sc.length <= per ? sc : `${sc.slice(0, per)}\n…（这一屏还有 ${sc.length - per} 字没写进来）`,
+  );
+  return `${cut.join("\n\n")}\n\n${tail}`;
+}
+
 export type Emit = (evt: Record<string, unknown>) => void;
 
 /** Cooperative cancellation: the UI closing the stream must stop the work, not orphan it. */
@@ -1154,7 +1180,7 @@ export async function runObserve(
     return {
       // 图的摘要跟着材料一起走：下游整理规格时**先看结构再看正文**——
       // 实证研究的结论是「精简的功能级上下文」对 LLM 最有效，原始屏幕转储不是。
-      notes: [...screens, describeGraph(graph), coverage].join("\n\n"),
+      notes: budgeted(screens, describeGraph(graph), coverage),
       url: spec.url,
       log,
       shotRef: await shot(session),

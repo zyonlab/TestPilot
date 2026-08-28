@@ -1204,10 +1204,20 @@ setAgentObserver(async (input) => {
     },
     ARTIFACT_DIR,
   );
-  // 上限跟着屏数走：探索改成循环之后，24000 字会在第四五屏上把后面的界面**整段切掉**，
-  // 而被切掉的部分在下游看不出来——材料看起来是完整的，只是短。
+  /**
+   * 上限跟着屏数走。这里已经被同一件事咬过两次：
+   *
+   * 24000 字那一版会在第四五屏上把后面的界面整段切掉；改成 60000 之后，探索从 8 屏
+   * 长到 25–30 屏，它又每次都生效了——about 和 contact 两屏被整个切掉，材料里于是
+   * 既没有 `Corporate History` 也没有 `CAPTCHA`，看起来像是探索没走到。
+   *
+   * 现在按屏分配预算在 `budgeted()` 里做（每屏截断并标明截了多少），这一刀只作为
+   * 最后的护栏，且放宽到 240000——它再生效就说明 `budgeted` 的预算算错了。
+   */
+  if (result.notes.length > 240000)
+    console.warn(`[explore] 材料 ${result.notes.length} 字，超过护栏 240000——按屏分配的预算算错了`);
   return {
-    notes: result.notes.slice(0, 60000),
+    notes: result.notes.slice(0, 240000),
     url: result.url,
     screens: result.screens,
     stoppedBecause: result.stoppedBecause,
