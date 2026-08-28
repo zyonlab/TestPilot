@@ -944,9 +944,27 @@ export async function runObserve(
           : c.label.replace(/\d+/g, "#");
         const key = `${here}::${cls}`;
         if (triedClick.has(key)) continue;
+        /**
+         * **结构同类去重不适用于带 href 的元素。**
+         *
+         * 那两条规则（代表走不出去就跳过同类、同类每条路由最多三次）是为**重复的部件**
+         * 设计的：12 张商品卡片、一张表的 30 行——它们长得一样，也做同一件事。
+         * 当初我写下它们时就注意到导航栏是反例（`nav > a:nth-of-type(1)` 和 `(2)`
+         * 形状相同却通向两个不同页面），当时的理由是「真正的导航链接走 goto 分支，
+         * 不受影响」。
+         *
+         * dimeshift 把这个前提打掉了：它的 `/user/signin` 直接访问是 404，
+         * 于是那些链接落到了**点击**分支上——而 `$ dimeshift` 和 `Home` 都指向 `/`、
+         * 点了状态不变，`shapeDry` 就把整条导航栏判成了同一类。`Sign In`、`Register`
+         * 从此再也不会被点，图坍缩到只剩首页一个状态。
+         *
+         * 修法回到那两条规则的本意：**href 不同就是去处不同**，那不是重复部件。
+         */
         const shape = shapeOf(c.selector);
-        if (shapeDry.has(`${currentId}::${shape}`)) continue;
-        if ((shapeCount.get(`${here}::${shape}`) ?? 0) >= SHAPE_CAP) continue;
+        if (!c.href) {
+          if (shapeDry.has(`${currentId}::${shape}`)) continue;
+          if ((shapeCount.get(`${here}::${shape}`) ?? 0) >= SHAPE_CAP) continue;
+        }
         return { key, kind: "click", selector: c.selector, label: c.label, shape };
       }
 
@@ -965,7 +983,10 @@ export async function runObserve(
       const next = nextAction(current);
       if (!next) {
         // 这一屏能点的都点过了。退回上一屏接着找——不退，探索会卡在最深的那一屏上。
-        const page = session!.page as unknown as { goBack?: () => Promise<unknown> };
+        const page = session!.page as unknown as {
+          goBack?: () => Promise<unknown>;
+          goto: (u: string) => Promise<unknown>;
+        };
         if (!page.goBack) {
           stoppedBecause = "这一屏能点的都点过了，而且退不回去";
           break;
@@ -1024,6 +1045,7 @@ export async function runObserve(
       try {
         const page = session!.page as unknown as {
           goto: (u: string) => Promise<unknown>;
+          goBack: () => Promise<unknown>;
           $eval: (sel: string, fn: (el: unknown, arg?: unknown) => unknown, arg?: unknown) => Promise<unknown>;
           press: (sel: string, key: string, opts?: { timeout?: number }) => Promise<unknown>;
           fill: (sel: string, value: string, opts?: { timeout?: number }) => Promise<unknown>;
