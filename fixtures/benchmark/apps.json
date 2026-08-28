@@ -23,7 +23,8 @@
     "locale": "**消息随 Accept-Language 变**：zh-CN 时校验消息是中文。基准环境必须固定 `Accept-Language: en`，否则同一次操作在不同机器上产出不同文案，历史数字失去可比性。"
    },
    "ui": "**服务端渲染的完整界面**，不是 API。实测 `/owners/find` 返回 3583 字节 HTML，含 `<form>`、`<input>`、按钮 `Find Owner`，导航 Home / Find owners / Veterinarians / Error。",
-   "dontConfuseWith": "`springcommunity/spring-petclinic-rest`——同一个官方样例的**另一个变体，只有 API 没有界面**，已在 notSuitable 里判掉。两者名字极像，登记表里必须靠 id 分开：**这个是 `petclinic-web`，那个是 `petclinic-rest`**。混淆过一次，所以写在这里。"
+   "dontConfuseWith": "`springcommunity/spring-petclinic-rest`——同一个官方样例的**另一个变体，只有 API 没有界面**，已在 notSuitable 里判掉。两者名字极像，登记表里必须靠 id 分开：**这个是 `petclinic-web`，那个是 `petclinic-rest`**。混淆过一次，所以写在这里。",
+   "port": 8080
   },
   {
    "id": "juice-shop",
@@ -86,14 +87,21 @@
    "why": "研究基准里的 Backbone 代表。记账应用，表单与列表操作密集。",
    "url": "http://localhost:8083",
    "repo": "https://github.com/jeka-kiselyov/dimeshift",
-   "start": null,
+   "start": "容器 Cmd 是 bash（当虚拟机用的镜像），要自己起服务：`bash -c \"cd /home/dimeshift-application && ./run-services-docker.sh\"`——那个脚本先起 MySQL 再 npm start。启动方式是从镜像里的 `/root/.bash_history` 翻出来的。",
    "health": {
     "kind": "http",
     "url": "http://localhost:8083/"
    },
    "verified": null,
-   "startedOnce": null,
-   "caveat": "无官方镜像；需 Node + MySQL 自行构建，且依赖较老。"
+   "startedOnce": "2026-08-28",
+   "caveat": "无官方镜像；需 Node + MySQL 自行构建，且依赖较老。",
+   "image": "dockercontainervm/dimeshift@sha256:0316bd172d772820c66b705b1c5aa706019e5eab941a4a9161d3e323e322af1f",
+   "tag": "non-empty-db",
+   "port": 8085,
+   "ui": "完整界面（Backbone 单页应用，真实路由不是哈希路由）。导航 Home / Wallets / Goals / Register / Sign In / Settings；路由 `/wallets`、`/plans`、`/user/registration`、`/user/signin`、`/profile`。",
+   "whyThisImage": "`dockercontainervm/*` 这一族同时打包了 dimeshift、claroline、ppma、collabtive——正好是公开 AWGT 研究的主题应用集，八成就是研究者自己打的包。它还有 `crawler` 和 `non-empty-db` 两个 tag，后者带种子数据，正是基准需要的。按 digest 钉死（tag 不是 latest，但 digest 更稳）。",
+   "noLoginNeeded": "首页明说「we don’t even ask you to register」——不登录就能用钱包，所以探索不需要凭证。这对基准是加分项：登录会把「探索能不能进去」和「产品有多少界面」两件事混在一起。",
+   "role": "**第三个应用，干净的留出。**PetClinic 和 Juice Shop 上的探索修复都是对着它们调的，dimeshift 一次都没调过——它是唯一能回答「这些改进是不是只在调过的应用上成立」的那个。"
   },
   {
    "id": "splittypie",

@@ -107,6 +107,31 @@ export default defineHarnessConfig({
       healthcheck: { kind: "http", url: "http://localhost:8084/" },
     },
     {
+      id: "bench-dimeshift",
+      kind: "app",
+      description:
+        "DimeShift（Backbone 单页应用，真实路由）：钱包、收支、目标、注册登录。" +
+        "**在公开 AWGT 研究的主题应用集里**，而且不登录就能用——它是第三个基准，也是唯一" +
+        "一个探索改进没对着它调过的，所以泛化只能由它来回答",
+      command: "docker",
+      // 按 digest 钉死。tag 是 `non-empty-db`（带种子数据），但 digest 比 tag 更稳。
+      // 这个镜像的 Cmd 是 bash（当虚拟机用），服务要自己起——启动命令是从镜像里的
+      // /root/.bash_history 翻出来的，脚本先起 MySQL 再 npm start。
+      args: [
+        "run",
+        "--name",
+        "tp-bench-dimeshift",
+        "-p",
+        "8085:8080",
+        "dockercontainervm/dimeshift@sha256:0316bd172d772820c66b705b1c5aa706019e5eab941a4a9161d3e323e322af1f",
+        "bash",
+        "-c",
+        "cd /home/dimeshift-application && ./run-services-docker.sh",
+      ],
+      autostart: false,
+      healthcheck: { kind: "http", url: "http://localhost:8085/" },
+    },
+    {
       id: "bench-pagekit",
       kind: "app",
       description: "Pagekit（Vue + PHP）：后台管理、内容编辑、权限。sqlite 变体免去外部数据库",
