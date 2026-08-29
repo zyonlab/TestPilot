@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { computeFlows, computeModules, describeFlows } from "../exec/flows.js";
+import { scanSmells } from "./smells.js";
 import { ABLATABLE, fitToBudget, type ModelClient, type NodeDef } from "@testpilot/harness-core";
 import {
   CASES_SCHEMA,
@@ -608,6 +609,23 @@ export function composeSpecNode(
        * 海拔分布要报出来。一份只有 `screen` 规则的规格是屏幕清单，不是规格——
        * 由它推出的用例只能检查「屏幕还是不是原来的样子」，而这件事从产出上看不出来。
        */
+      /**
+       * 需求异味：写法上就注定验不了的句子。见 `smells.ts`。
+       *
+       * 报，不拦——异味是警告不是判决。但**必须报出来**：规格是模型写的，
+       * 而模型最擅长写的恰恰是「正确显示」「合理提示」这一类，
+       * 而下游一层都拦不住它——拆故事时变成一条模糊的故事，设计用例时变成一条含糊的断言，
+       * 直到执行那一刻才发现没有任何东西可判。
+       */
+      const smells = scanSmells(located.map((r) => ({ id: r.id, text: r.text })));
+      if (smells.smells.length)
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text:
+            `${Math.round(smells.ratio * 100)}% 的规则带需求异味（${smells.smells.length} 处）：` +
+            smells.smells.slice(0, 4).map((s) => `${s.where}「${s.hit}」${s.what.split("：")[0]}`).join("；"),
+        });
+
       const altitudes: Record<string, number> = {};
       for (const r of located) altitudes[r.altitude ?? "unspecified"] = (altitudes[r.altitude ?? "unspecified"] ?? 0) + 1;
       ctx.emit("wf.node.output", {
@@ -617,6 +635,9 @@ export function composeSpecNode(
         grounded: located.filter((r) => r.source).length,
         flows: flows.length,
         altitudes,
+        // 有异味的规则占比。跨版本可比——单看条数会被规格长度带偏。
+        smellRatio: smells.ratio,
+        smells: smells.byRule,
       });
       if (located.length && !(altitudes.flow || altitudes.domain))
         ctx.emit("log", {
