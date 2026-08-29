@@ -123,22 +123,6 @@ export async function executeRun(
       stopApprover = startPopupApprover(session.browser);
       logs.push(`wallet ready (unlocked=${session.walletUnlocked})`);
     }
-    /**
-     * **变异体到底生效了没有，必须读回来。**
-     *
-     * 注入脚本自己记账改了几处（`window.__tpMutation.applied`）。改了 0 处的变异体
-     * 不算「用例没抓到」——它算**没生效**。把工具自己的失败伪装成用例集的盲区，
-     * 是这套度量里最坏的一种错：它会让杀掉率虚低，而低的那部分看起来像真发现。
-     */
-    if (opts.mutation) {
-      const applied = await (session.page as unknown as {
-        evaluate<T>(fn: () => T): Promise<T>;
-      })
-        .evaluate(() => (window as unknown as { __tpMutation?: { applied?: number } }).__tpMutation?.applied ?? 0)
-        .catch(() => 0);
-      mutationApplied = applied;
-      rlog(`变异体 ${opts.mutation.id}：改了 ${applied} 处${applied ? "" : "——没生效，这一次不算数"}`);
-    }
     await shot();
     // Login flow (登录态): resolve ${secret.*}/${env.*} for execution, but log the
     // TEMPLATE text so credentials never appear in logs/reports.
@@ -169,6 +153,25 @@ export async function executeRun(
       rlog(`step ${i + 1}: ${step}`);
       await withModel(() => session!.agent.aiAction(resolveText(step, ctx)));
       await shot();
+    }
+    /**
+     * **变异体到底生效了没有，必须读回来——而且要在步骤跑完之后读。**
+     *
+     * 注入脚本用 `MutationObserver` 随页面变化持续应用。第一版在会话刚启动时就读，
+     * 那时页面还在入口页，像「has not been found」这种**提交表单之后才出现**的文字
+     * 一处都没改到——于是三个变异体全被记成「没生效」，而它们其实一次都没有机会生效。
+     *
+     * 那一次实验因此什么都没测出来。但它也证明了三分类是对的：如果把「没生效」
+     * 混进「活下来」，报告会写成「杀掉率 0.000，发现 3 个盲区」——一个完全虚假的结论。
+     */
+    if (opts.mutation) {
+      const applied = await (session.page as unknown as {
+        evaluate<T>(fn: () => T): Promise<T>;
+      })
+        .evaluate(() => (window as unknown as { __tpMutation?: { applied?: number } }).__tpMutation?.applied ?? 0)
+        .catch(() => 0);
+      mutationApplied = applied;
+      rlog(`变异体 ${opts.mutation.id}：改了 ${applied} 处${applied ? "" : "——没生效，这一次不算数"}`);
     }
     // Functional oracle: verify the case's expected outcome and record it structurally.
     const oracle: OracleCheck[] = [];
