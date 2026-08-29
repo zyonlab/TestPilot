@@ -47,9 +47,16 @@ describe("变异算子", () => {
 });
 
 describe("生成变异体：只看产品，不看用例", () => {
-  it("改文案取自规格规则引用的产品原话", () => {
-    const ms = generateMutants({ graph, spec });
-    const t = ms.filter((m) => m.operator === "text");
+  it("改文案取自规则里引号括起来的界面文案", () => {
+    // 旧版取 evidence，而 evidence 常常是大段材料原文（控件列表、图的边），
+    // 那种目标永远匹配不到一个文本节点。
+    const spec3 = {
+      rules: [
+        { id: "R-1", text: "空提交时逐项提示「must not be empty」", evidence: "must not be empty" },
+        { id: "R-2", text: "搜不到时提示「has not been found」", evidence: "has not been found" },
+      ],
+    };
+    const t = generateMutants({ graph, spec: spec3 }).filter((m) => m.operator === "text");
     expect(t.map((m) => m.target)).toEqual(["must not be empty", "has not been found"]);
     expect(t[0]!.from).toContain("R-1");
   });
@@ -319,5 +326,31 @@ describe("判错 vs 没走到——xUnit 里的 failure 与 error", () => {
         endedAt: "http://localhost:8080/owners/1/edit", covers: ["/owners/1->/owners/1/edit~1"] },
     ]);
     expect(d[0]!.excluded).toBeUndefined();
+  });
+});
+
+describe("改文案的目标取自规则里引号括起来的界面文案", () => {
+  const spec2 = {
+    rules: [
+      { id: "R-1", text: "首页显示标题「Welcome」，并提供四个导航链接", evidence: "一大段材料原文\n- a: x -> /y" },
+      { id: "R-2", text: "查不到姓氏时页面显示「has not been found」" },
+      { id: "R-3", text: "「FIND OWNERS」链接指向 /owners/find" },
+    ],
+  };
+
+  it("引号里的界面文案才是目标——不是 evidence", () => {
+    // 第一版直接用 evidence，结果目标是大段控件列表，永远匹配不到文本节点。
+    const t = generateMutants({ spec: spec2 }, 9).filter((m) => m.operator === "text");
+    expect(t.map((m) => m.target)).toEqual(["Welcome", "has not been found", "FIND OWNERS"]);
+  });
+
+  it("路由和选择器不是界面文案", () => {
+    const t = generateMutants({ spec: { rules: [{ id: "R", text: "指向「/owners/find」" }] } }, 9);
+    expect(t.filter((m) => m.operator === "text")).toHaveLength(0);
+  });
+
+  it("目标是单行的——多行的匹配不到文本节点", () => {
+    const t = generateMutants({ spec: spec2 }, 9).filter((m) => m.operator === "text");
+    expect(t.every((m) => !m.target.includes("\n"))).toBe(true);
   });
 });

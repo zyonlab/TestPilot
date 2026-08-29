@@ -122,20 +122,37 @@ export function generateMutants(
   };
 
   /**
-   * ① 改文案。取自**规格规则的 evidence**——那是从材料里逐字摘的产品原话，
-   * 而不是用例声称要断言的东西。两者可能重叠，但来源不同，这一点是这条规矩的全部。
+   * ① 改文案。取自**规格规则里被引号括起来的那些界面文案**。
+   *
+   * 第一版直接用 `evidence`，结果全是垃圾：`evidence` 是从材料里摘的原文，
+   * 而材料里有大段控件列表和图的边——
+   *
+   *     把界面上的「input[text]: lastName\n- button[submit]: Find Owner
+   *      - a: Add Owner -> /owners/new」改成…
+   *
+   * 这种目标永远匹配不到一个文本节点，只会产生一堆「没生效」。
+   *
+   * 规则文本里用「」/""/'' 引起来的才是**界面上真的会出现的那句话**——
+   * 这条流水线一路要求「逐字引用界面文案」，那些引号正是那个要求的产物。
+   * 从它们生成变异体，既干净又和用例的判据来源不同（判据来自 `oracle`，
+   * 这里来自规则正文）。
    */
-  for (const r of (spec?.rules ?? []).slice()) {
-    const ev = (r.evidence ?? "").trim();
-    if (!ev || ev.length < 4 || ev.length > 80) continue;
+  const LITERAL = /[「"'"']([^「」"'"'\n]{2,60})[」"'"']/g;
+  for (const r of spec?.rules ?? []) {
     if (out.filter((m) => m.operator === "text").length >= limit) break;
-    push({
-      operator: "text",
-      target: ev,
-      replacement: nearMiss(ev),
-      what: `把界面上的「${ev}」改成「${nearMiss(ev)}」`,
-      from: `规格规则 ${r.id} 引用的产品原话`,
-    });
+    for (const m of (r.text ?? "").matchAll(LITERAL)) {
+      const lit = m[1]!.trim();
+      // 路由、选择器、纯数字不是界面文案。
+      if (!lit || lit.length < 2 || /^[/#.]|->|:nth-|^\d+$/.test(lit)) continue;
+      if (out.filter((x) => x.operator === "text").length >= limit) break;
+      push({
+        operator: "text",
+        target: lit,
+        replacement: nearMiss(lit),
+        what: `把界面上的「${lit}」改成「${nearMiss(lit)}」`,
+        from: `规格规则 ${r.id} 引用的界面文案`,
+      });
+    }
   }
 
   /** ② 藏控件。取自图上真实采到的控件文案。 */
