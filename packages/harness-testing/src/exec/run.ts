@@ -33,6 +33,18 @@ export interface RunResult {
    * 看起来像真发现。
    */
   mutationApplied?: number;
+  /**
+   * 判据求值时页面停在哪。
+   *
+   * 有它才分得清**判错**和**没走到**：一条声称覆盖 `/owners/find->/owners` 的用例，
+   * 如果最后停在 `/owners/find`，那它根本没到过要验的那一屏——
+   * 它的「失败」是**执行没走到**，不是「产品和期望不符」。
+   *
+   * xUnit 里这两件事叫 failure 与 error，分得清清楚楚；而我们此前只有一个 failed，
+   * 于是在算精确率时把「没走到」全算成了用例虚报——**那会系统性地低估精确率，
+   * 而低估的那部分看起来像用例写得差**。
+   */
+  endedAt?: string;
 }
 
 /**
@@ -94,6 +106,8 @@ export async function executeRun(
   const logs: string[] = [];
   /** 变异体改了几处。`undefined` = 这次没注变异体；`0` = 注了但没生效。 */
   let mutationApplied: number | undefined;
+  /** 判据求值时页面停在哪——用来分辨「判错」和「没走到」。 */
+  let endedAt: string | undefined;
   const screenshots: string[] = [];
   const pngBuffers: Buffer[] = [];
   let session;
@@ -184,6 +198,7 @@ export async function executeRun(
       const shown = describeOracle(opts.oracle);
       rlog(`assert (machine): ${shown}`);
       const snapAfter = await snapshotPage(session.page);
+      endedAt = snapAfter.url;
       const verdict = evaluateOracle(opts.oracle, snapAfter, snapBefore);
       oracle.push({
         assertion: expected || shown,
@@ -251,6 +266,7 @@ export async function executeRun(
     const perfMetrics = await capturePerf(session.page).catch(() => ({}) as PerfMetrics);
     return {
       status: assertFailed ? "failed" : "passed",
+      ...(endedAt ? { endedAt } : {}),
       ...(mutationApplied === undefined ? {} : { mutationApplied }),
       failure: assertFailed ? classifyFailure(assertFailed) : undefined,
       durationMs: Date.now() - t0,

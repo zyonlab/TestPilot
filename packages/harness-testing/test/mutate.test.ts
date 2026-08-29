@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { generateMutants, labelOf, nearMiss } from "../src/mutate/operators.js";
 import { buildMutationScript } from "../src/mutate/inject.js";
 import { judgeMutant, scoreMutants, survivorsAsGaps } from "../src/mutate/score.js";
+import { detectionCases, fromCleanRun, fromMutantRun } from "../src/mutate/detection.js";
+import { scoreDetection } from "@testpilot/harness-core";
 
 const graph = {
   states: [
@@ -190,5 +192,132 @@ describe("注入脚本本身要能被打包器解析", () => {
   it("模板体里不能出现反引号——注释里写一个都会把模板提前闭合", () => {
     const s = buildMutationScript({ id: "M", operator: "text", what: "", from: "", target: "a", replacement: "b" });
     expect(s.includes("`")).toBe(false);
+  });
+});
+
+describe("检测评估：干净跑量虚报，变异跑量召回", () => {
+  const M = { id: "M-1", operator: "text" as const, what: "", from: "", target: "FIND OWNERS", replacement: "FIND OWNER" };
+  const oracles = [
+    { caseId: "c1", literal: "FIND OWNERS" },   // 判据正是被改坏的那句
+    { caseId: "c2", literal: "Veterinarians" }, // 判据是别的
+    { caseId: "c3" },                            // 没有文字判据
+  ];
+
+  it("干净跑：产品是对的，所以实际情况全是「应该通过」", () => {
+    const d = fromCleanRun([
+      { caseId: "c1", status: "passed" },
+      { caseId: "c2", status: "failed", failKind: "assert" },
+    ]);
+    expect(d.every((x) => x.actual === "passed")).toBe(true);
+    // 判失败的那条就是虚报
+    expect(d.find((x) => x.caseId === "c2")?.predicted).toBe("failed");
+  });
+
+  it("基础设施故障被排除——那是「没有判决」，不是「判错」", () => {
+    const d = fromCleanRun([{ caseId: "c1", status: "failed", failKind: "infra" }]);
+    expect(d[0]!.excluded).toBe(true);
+  });
+
+  it("变异跑：判据正是被改坏那句话的用例，实际情况是「应该失败」", () => {
+    const d = fromMutantRun(M, oracles, [
+      { caseId: "c1", status: "failed", failKind: "assert" },
+      { caseId: "c2", status: "passed" },
+      { caseId: "c3", status: "passed" },
+    ]);
+    expect(d.find((x) => x.caseId.endsWith("c1"))?.actual).toBe("failed");
+    expect(d.find((x) => x.caseId.endsWith("c2"))?.actual).toBe("passed");
+    expect(d.find((x) => x.caseId.endsWith("c3"))?.actual).toBe("passed");
+  });
+
+  it("大小写不敏感——判据来自规格，变异目标来自 innerText，可能只差大小写", () => {
+    const d = fromMutantRun(
+      { ...M, target: "find owners" },
+      [{ caseId: "c1", literal: "FIND OWNERS" }],
+      [{ caseId: "c1", status: "failed", failKind: "assert" }],
+    );
+    expect(d[0]!.actual).toBe("failed");
+  });
+
+  it("没生效的变异体不进检测——产品其实没被改坏，罚用例集是错的", () => {
+    const d = detectionCases({
+      clean: [{ caseId: "c1", status: "passed" }],
+      oracles,
+      mutantRuns: [{ mutant: M, outcomes: [{ caseId: "c1", status: "passed" }], applied: 0 }],
+    });
+    expect(d).toHaveLength(1); // 只有干净跑那一条
+  });
+
+  it("两者合起来才凑得齐混淆矩阵——只有干净跑量不出召回", () => {
+    const d = detectionCases({
+      clean: [
+        { caseId: "c1", status: "passed" },
+        { caseId: "c2", status: "passed" },
+      ],
+      oracles,
+      mutantRuns: [
+        { mutant: M, applied: 3, outcomes: [
+          { caseId: "c1", status: "failed", failKind: "assert" }, // 该抓到，抓到了 → TP
+          { caseId: "c2", status: "passed" },                      // 不该动，没动 → TN
+        ] },
+      ],
+    });
+    const r = scoreDetection(d as never);
+    expect(r.truePositives).toBe(1);
+    expect(r.falsePositives).toBe(0);
+    expect(r.recall).toBe(1);
+  });
+
+  it("该抓没抓到就是漏报", () => {
+    const d = detectionCases({
+      clean: [{ caseId: "c1", status: "passed" }],
+      oracles,
+      mutantRuns: [{ mutant: M, applied: 3, outcomes: [{ caseId: "c1", status: "passed" }] }],
+    });
+    const r = scoreDetection(d as never);
+    expect(r.falseNegatives).toBe(1);
+    expect(r.recall).toBe(0);
+  });
+});
+
+describe("判错 vs 没走到——xUnit 里的 failure 与 error", () => {
+  it("停在声称要走到的终点上，失败就是真的判错", () => {
+    const d = fromCleanRun([
+      { caseId: "c1", status: "failed", failKind: "assert",
+        endedAt: "http://localhost:8080/owners", covers: ["/owners/find->/owners"] },
+    ]);
+    expect(d[0]!.excluded).toBeUndefined();
+  });
+
+  it("没停在终点上就是没走到——那是 error，不算用例虚报", () => {
+    // 实测：S-02-5 判据「页面显示 Pets」，PetClinic 的主人列表确实有这一列，
+    // 但点 FIND OWNERS 只到搜索表单，执行停在 /owners/find。用例对、产品对、执行没走到。
+    const d = fromCleanRun([
+      { caseId: "c1", status: "failed", failKind: "assert",
+        endedAt: "http://localhost:8080/owners/find", covers: ["/owners/find->/owners"] },
+    ]);
+    expect(d[0]!.excluded).toBe(true);
+    expect(d[0]!.excludeReason).toContain("没走到");
+  });
+
+  it("通过的用例不受这条影响——只有失败才需要分辨是哪一种", () => {
+    const d = fromCleanRun([
+      { caseId: "c1", status: "passed", endedAt: "http://localhost:8080/x", covers: ["/a->/b"] },
+    ]);
+    expect(d[0]!.excluded).toBeUndefined();
+  });
+
+  it("说不出自己要走到哪的用例，无法判断，照旧算判错", () => {
+    const d = fromCleanRun([
+      { caseId: "c1", status: "failed", failKind: "assert", endedAt: "http://localhost:8080/x", covers: [] },
+    ]);
+    expect(d[0]!.excluded).toBeUndefined();
+  });
+
+  it("同路由消歧后缀不影响比对", () => {
+    const d = fromCleanRun([
+      { caseId: "c1", status: "failed", failKind: "assert",
+        endedAt: "http://localhost:8080/owners/1/edit", covers: ["/owners/1->/owners/1/edit~1"] },
+    ]);
+    expect(d[0]!.excluded).toBeUndefined();
   });
 });
