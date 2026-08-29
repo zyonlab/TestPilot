@@ -32,11 +32,11 @@ export function buildMutationScript(m: Mutant): string {
 
   const apply = () => {
     if (cfg.op === "text") {
-      // **大小写不敏感。**变异目标是从图的控件文案里取的，而那些是 `innerText` 采的
-      // ——`innerText` **会应用 CSS 的 text-transform**，DOM 文本节点不会。
+      // 大小写不敏感。变异目标取自图的控件文案，那些是 innerText 采的，
+      // 而 innerText 会应用 CSS 的 text-transform，DOM 文本节点不会。
       // PetClinic 的导航看起来是 FIND OWNERS，文本节点里其实是 "Find owners"。
-      // 逐字匹配于是一处都改不到，报出来是「这个变异体没生效」，
-      // 读起来像工具坏了——而实际上是采集和注入读的是两种表示。
+      // 逐字匹配于是一处都改不到，报出来是「这个变异体没生效」——
+      // 采集和注入读的是两种表示。（注意：这段在模板字符串里，不能出现反引号。）
       const lower = cfg.target.toLowerCase();
       const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
       const hits = [];

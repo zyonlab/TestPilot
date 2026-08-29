@@ -185,3 +185,10 @@ describe("大小写：采集用 innerText（会套 CSS 大小写变换），注�
     expect(s).toContain("label.toLowerCase() === cfg.target.toLowerCase()");
   });
 });
+
+describe("注入脚本本身要能被打包器解析", () => {
+  it("模板体里不能出现反引号——注释里写一个都会把模板提前闭合", () => {
+    const s = buildMutationScript({ id: "M", operator: "text", what: "", from: "", target: "a", replacement: "b" });
+    expect(s.includes("`")).toBe(false);
+  });
+});
