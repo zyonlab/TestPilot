@@ -24,7 +24,18 @@
    },
    "ui": "**服务端渲染的完整界面**，不是 API。实测 `/owners/find` 返回 3583 字节 HTML，含 `<form>`、`<input>`、按钮 `Find Owner`，导航 Home / Find owners / Veterinarians / Error。",
    "dontConfuseWith": "`springcommunity/spring-petclinic-rest`——同一个官方样例的**另一个变体，只有 API 没有界面**，已在 notSuitable 里判掉。两者名字极像，登记表里必须靠 id 分开：**这个是 `petclinic-web`，那个是 `petclinic-rest`**。混淆过一次，所以写在这里。",
-   "port": 8080
+   "port": 8080,
+   "stateful": true,
+   "reset": "docker restart tp-bench-petclinic",
+   "whyStateful": "**它一直是有状态的，只是没被标出来，于是被写坏过一次。**2026-08-29 实测数据库里多出 3 个 John Doe，主人数从 10 漂到 13——黄金清单 G-03「空姓氏搜索返回全部主人（10 条）」当场失真。写它的是流水线自己跑出来的「新增主人」用例：这类用例填的是格式合法的值，能通过校验，于是真的落库。探测用的坏值走保留域名（.invalid）不落库，但正例用例没有这层保护，也不该有——它们本来就该测真实提交。所以防线不在用例侧，在基准侧：跑之前对一次指纹，跑完再对一次。",
+   "frozen": {
+    "url": "http://localhost:8080/owners?lastName=",
+    "headers": {
+     "Accept-Language": "en"
+    },
+    "ownerCount": 10,
+    "note": "镜像用内存库，restart 即还原；不需要备份卷。"
+   }
   },
   {
    "id": "juice-shop",
