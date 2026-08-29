@@ -32,14 +32,28 @@ export function buildMutationScript(m: Mutant): string {
 
   const apply = () => {
     if (cfg.op === "text") {
+      // **大小写不敏感。**变异目标是从图的控件文案里取的，而那些是 `innerText` 采的
+      // ——`innerText` **会应用 CSS 的 text-transform**，DOM 文本节点不会。
+      // PetClinic 的导航看起来是 FIND OWNERS，文本节点里其实是 "Find owners"。
+      // 逐字匹配于是一处都改不到，报出来是「这个变异体没生效」，
+      // 读起来像工具坏了——而实际上是采集和注入读的是两种表示。
+      const lower = cfg.target.toLowerCase();
       const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
       const hits = [];
       while (walker.nextNode()) {
         const n = walker.currentNode;
-        if (n.nodeValue && n.nodeValue.indexOf(cfg.target) >= 0) hits.push(n);
+        if (n.nodeValue && n.nodeValue.toLowerCase().indexOf(lower) >= 0) hits.push(n);
       }
       for (const n of hits) {
-        n.nodeValue = n.nodeValue.split(cfg.target).join(cfg.replacement);
+        let v = "";
+        let rest = n.nodeValue;
+        let at = rest.toLowerCase().indexOf(lower);
+        while (at >= 0) {
+          v += rest.slice(0, at) + cfg.replacement;
+          rest = rest.slice(at + cfg.target.length);
+          at = rest.toLowerCase().indexOf(lower);
+        }
+        n.nodeValue = v + rest;
         state.applied += 1;
       }
       return;
@@ -47,7 +61,7 @@ export function buildMutationScript(m: Mutant): string {
     if (cfg.op === "hide") {
       for (const el of document.querySelectorAll("button, a, input, select, textarea, [role=button]")) {
         const label = (el.innerText || el.value || el.getAttribute("aria-label") || "").trim();
-        if (label === cfg.target && el.style.display !== "none") {
+        if (label.toLowerCase() === cfg.target.toLowerCase() && el.style.display !== "none") {
           el.style.display = "none";
           state.applied += 1;
         }

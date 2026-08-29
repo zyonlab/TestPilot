@@ -174,3 +174,14 @@ describe("变异得分", () => {
     expect(scoreMutants([judgeMutant(M, 0, clean, clean)]).score).toBe(0);
   });
 });
+
+describe("大小写：采集用 innerText（会套 CSS 大小写变换），注入读文本节点（不会）", () => {
+  it("改文案的匹配是大小写不敏感的", () => {
+    const s = buildMutationScript({ id: "M", operator: "text", what: "", from: "", target: "FIND OWNERS", replacement: "FIND OWNER" });
+    expect(s).toContain("toLowerCase");
+  });
+  it("藏控件的匹配也是", () => {
+    const s = buildMutationScript({ id: "M", operator: "hide", what: "", from: "", target: "Find Owner" });
+    expect(s).toContain("label.toLowerCase() === cfg.target.toLowerCase()");
+  });
+});
