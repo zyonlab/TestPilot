@@ -70,8 +70,12 @@ interface Story {
 
 interface Gap {
   activity?: string;
-  reach: "missed" | "unseen";
-  kind: "transition" | "flow" | "module" | "link" | "blocked" | "unknown";
+  /**
+   * 三类的分法是**人要怎么处置**，不是它从哪来：
+   *   missed 补一条用例 · unseen 重跑探索 · blind **改断言**
+   */
+  reach: "missed" | "unseen" | "blind";
+  kind: "transition" | "flow" | "module" | "link" | "blocked" | "unknown" | "mutant";
   what: string;
   detail?: string;
 }
@@ -87,6 +91,8 @@ interface Batch {
   pending: number;
   gaps?: Gap[];
   exploreStoppedBecause?: string;
+  /** 没跑过变异测试时是 undefined——和「0 分」是两回事，界面上必须分得开。 */
+  mutation?: { score: number; killed: number; survived: number; notApplied: number; cases: number };
 }
 
 interface RunRow {
@@ -233,6 +239,9 @@ function GapList({ gaps }: { gaps: Gap[] }) {
   if (!gaps.length) return null;
   const missed = gaps.filter((g) => g.reach === "missed");
   const unseen = gaps.filter((g) => g.reach === "unseen");
+  // 「验不住」单独一类，而且要排在最前：它是三类里唯一一个「做了但没用」的
+  // ——一条全绿的用例守着一个它根本守不住的地方，比没写用例更值得先看。
+  const blind = gaps.filter((g) => g.reach === "blind");
 
   const row = (g: Gap, i: number) => (
     <div key={i} className="rounded border border-dashed border-border/70 px-1.5 py-1">
@@ -250,6 +259,11 @@ function GapList({ gaps }: { gaps: Gap[] }) {
         className="flex w-full items-center justify-between gap-2 text-left"
       >
         <span className="flex items-center gap-2 text-[11px]">
+          {!!blind.length && (
+            <span className="rounded bg-rose-200/80 px-1.5 py-0.5 font-medium text-rose-900" title={t("review.gapsBlindHint")}>
+              {blind.length} {t("review.gapsBlind")}
+            </span>
+          )}
           {!!missed.length && (
             <span className="rounded bg-amber-200/70 px-1.5 py-0.5 font-medium text-amber-900" title={t("review.gapsMissedHint")}>
               {missed.length} {t("review.gapsMissed")}
@@ -265,6 +279,14 @@ function GapList({ gaps }: { gaps: Gap[] }) {
       </button>
       {open && (
         <div className="mt-2 space-y-2">
+          {!!blind.length && (
+            <div className="space-y-1">
+              <div className="text-[10.5px] font-medium text-rose-900">
+                {t("review.gapsBlind")} · {t("review.gapsBlindHint")}
+              </div>
+              {blind.map(row)}
+            </div>
+          )}
           {!!missed.length && (
             <div className="space-y-1">
               <div className="text-[10.5px] font-medium text-amber-900">
@@ -649,10 +671,29 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                   <span className="rounded bg-slate-200/80 px-1.5 py-0.5 text-slate-700">
                     {batch.gaps.filter((g) => g.reach === "unseen").length} {t("review.gapsUnseen")}
                   </span>
+                  {!!batch.gaps.filter((g) => g.reach === "blind").length && (
+                    <span className="rounded bg-rose-200/80 px-1.5 py-0.5 text-rose-900">
+                      {batch.gaps.filter((g) => g.reach === "blind").length} {t("review.gapsBlind")}
+                    </span>
+                  )}
                   {batch.exploreStoppedBecause && (
                     <span className="text-muted-foreground">
                       {t("review.exploreStopped")}：{batch.exploreStoppedBecause}
                     </span>
+                  )}
+                  {/*
+                    「没跑过」和「0 分」必须分得开：前者是「不知道这套用例验不验得住」，
+                    后者是「知道，而且它一个都拦不住」。把没跑过显示成 0 分，
+                    是把无知包装成结论。
+                  */}
+                  {batch.mutation ? (
+                    <span className="text-muted-foreground">
+                      {t("review.mutationScore")} {Math.round(batch.mutation.score * 100)}%
+                      （杀掉 {batch.mutation.killed} · 活下来 {batch.mutation.survived} ·
+                      没生效 {batch.mutation.notApplied} · {batch.mutation.cases} 条用例）
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">{t("review.mutationNotRun")}</span>
                   )}
                 </div>
               )}

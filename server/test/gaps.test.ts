@@ -132,3 +132,48 @@ describe("给人看的字里不能有内部记号", () => {
     expect(g.find((x) => x.kind === "flow")?.detail).toBe("走到 /owners → 点「编辑」");
   });
 });
+
+describe("活下来的变异体：第三类缺口「验不住」", () => {
+  const g2 = {
+    states: [
+      { id: "/vets", route: "/vets", controls: ["a: Veterinarians -> /vets", "a: Home -> /"] },
+      { id: "/owners", route: "/owners", controls: ["a: Find Owner -> /owners/find"] },
+    ],
+    transitions: [],
+  };
+  const spec2 = {
+    modules: [
+      { id: "vets", name: "浏览兽医", flowIds: [], routes: ["/vets"] },
+      { id: "owners", name: "管理主人", flowIds: [], routes: ["/owners"] },
+    ],
+  };
+
+  it("它的处置和另外两类都不同——不是补用例，也不是重跑探索，是改断言", () => {
+    const g = computeGaps({
+      graph: g2, spec: spec2, cases: [], stories: [],
+      survivors: [{ what: "把「Veterinarians」改成「Veterinarian」——没有任何用例因此失败", from: "图上采到的控件文案", target: "Veterinarians" }],
+    });
+    const m = g.find((x) => x.kind === "mutant");
+    expect(m?.reach).toBe("blind");
+  });
+
+  it("按它改的那段文字出现在哪，落到对应的那一列", () => {
+    const g = computeGaps({
+      graph: g2, spec: spec2, cases: [], stories: [],
+      survivors: [{ what: "改了兽医导航", from: "图", target: "Veterinarians" }],
+    });
+    expect(g.find((x) => x.kind === "mutant")?.activity).toBe("浏览兽医");
+  });
+
+  it("落不到任何一列时不归类——宁可不归类，也不要让人去查一块没问题的功能", () => {
+    const g = computeGaps({
+      graph: g2, spec: spec2, cases: [], stories: [],
+      survivors: [{ what: "改了某处", from: "图", target: "这段文字哪儿都没有" }],
+    });
+    expect(g.find((x) => x.kind === "mutant")?.activity).toBeUndefined();
+  });
+
+  it("没跑变异测试时不产生这类缺口", () => {
+    expect(computeGaps({ graph: g2, spec: spec2, cases: [], stories: [] }).some((x) => x.kind === "mutant")).toBe(false);
+  });
+});

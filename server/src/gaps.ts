@@ -18,13 +18,26 @@
  * 分开报，每一条都对应一个明确的下一步。
  */
 
-export type GapReach = "missed" | "unseen";
+/**
+ * 缺口按**人要怎么处置**分类，不按它从哪来分类。
+ *
+ *   missed  没测到——看见了、走过了，但没有用例验它      → 补一条用例
+ *   unseen  没看到——探索根本没进去                    → 让探索再走一次
+ *   blind   验不住——**测了，但那条断言拦不住这个变更**   → 现有用例不够严，改断言
+ *
+ * 第三类是变异测试带来的，也是三类里**最可行动**的一类：它不但说「这里有问题」，
+ * 还说得出「把什么改成什么，你们这套用例不会叫」。前两类只能说「这里没人管」。
+ *
+ * 它也比前两类更难堪：`missed` 和 `unseen` 是没做到，`blind` 是**做了但没用**
+ * ——一条全绿的用例守着一个它根本守不住的地方。
+ */
+export type GapReach = "missed" | "unseen" | "blind";
 
 export interface Gap {
   /** 归到故事图的哪一列。空表示它不属于任何模块（例如规格层面的疑问）。 */
   activity?: string;
   reach: GapReach;
-  kind: "transition" | "flow" | "module" | "link" | "blocked" | "unknown";
+  kind: "transition" | "flow" | "module" | "link" | "blocked" | "unknown" | "mutant";
   /** 一句人话。不用行话，不放选择器。 */
   what: string;
   /** 证据：转移 id、地址、原始错误。人要追下去时靠它。 */
@@ -32,7 +45,7 @@ export interface Gap {
 }
 
 interface GraphLike {
-  states?: Array<{ id: string; route?: string; title?: string }>;
+  states?: Array<{ id: string; route?: string; title?: string; controls?: string[] }>;
   transitions?: Array<{
     from: string;
     to?: string;
@@ -76,13 +89,22 @@ const describeEdge = (t: NonNullable<GraphLike["transitions"]>[number]): string 
   return `${plainState(t.from)} ${how}${t.to ? ` → ${plainState(t.to)}` : ""}`;
 };
 
+/** 一个活下来的变异体：产品被改成了这样，而没有任何用例因此失败。 */
+export interface SurvivingMutant {
+  what: string;
+  from: string;
+  /** 它改的是哪一段文字/控件——用来把它落到故事图的哪一列。 */
+  target?: string;
+}
+
 export function computeGaps(input: {
   graph?: GraphLike;
   spec?: SpecLike;
   cases?: CaseLike[];
   stories?: StoryLike[];
+  survivors?: SurvivingMutant[];
 }): Gap[] {
-  const { graph, spec, cases = [], stories = [] } = input;
+  const { graph, spec, cases = [], stories = [], survivors = [] } = input;
   const gaps: Gap[] = [];
 
   /**
@@ -184,6 +206,28 @@ export function computeGaps(input: {
   // ⑥ 规格自己承认没答案的地方。它不属于任何模块——那正是它的性质。
   for (const u of spec?.unknowns ?? [])
     gaps.push({ reach: "unseen", kind: "unknown", what: `材料里没有答案`, detail: u });
+
+  /**
+   * ⑦ 活下来的变异体。
+   *
+   * 它落到哪一列：看它改的那段文字出现在哪个状态上，再由那个状态的路由反查模块。
+   * 找不到就不归类——**宁可不归类，也不要归错**：一条挂错列的缺口会让人去检查
+   * 一块本来没问题的功能。
+   */
+  for (const m of survivors) {
+    const at = m.target
+      ? (graph?.states ?? []).find((st) =>
+          (st.controls ?? []).some((c) => c.toLowerCase().includes(m.target!.toLowerCase())),
+        )
+      : undefined;
+    gaps.push({
+      activity: at ? activityOfState(at.id) : undefined,
+      reach: "blind",
+      kind: "mutant",
+      what: m.what,
+      detail: m.from,
+    });
+  }
 
   /**
    * **去重。**

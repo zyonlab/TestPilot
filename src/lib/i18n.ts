@@ -730,6 +730,18 @@ export const dict: Record<string, Entry> = {
     en: "Exploration never got there — a case won't help; explore again",
     ja: "探索が到達していない — 再探索が必要",
   },
+  "review.gapsBlind": { zh: "验不住", en: "not caught", ja: "検出できない" },
+  "review.gapsBlindHint": {
+    zh: "测了，但那条断言拦不住这个变更 —— 现有用例不够严，要改断言",
+    en: "Tested, but the assertion does not catch this change — the case is too loose",
+    ja: "テストはあるが、この変更を検出できない — アサーションが緩い",
+  },
+  "review.mutationScore": { zh: "变异得分", en: "Mutation score", ja: "ミューテーションスコア" },
+  "review.mutationNotRun": {
+    zh: "未跑变异测试 —— 这套用例验不验得住，目前不知道",
+    en: "No mutation run — whether these cases actually catch faults is unknown",
+    ja: "ミューテーション未実行",
+  },
   "review.gapsNone": { zh: "这一列没有发现缺口", en: "No gaps found here", ja: "ギャップなし" },
   "review.gapsShow": { zh: "看缺口", en: "Show gaps", ja: "ギャップを表示" },
   "review.gapsHide": { zh: "收起", en: "Hide", ja: "隠す" },

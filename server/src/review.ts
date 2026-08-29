@@ -12,6 +12,7 @@ import {
 } from "./db.js";
 import { getGraphVersion, nodeOutput, outputStore } from "./graphs.js";
 import { computeGaps, stoppedBecause, type Gap } from "./gaps.js";
+import { readMutationReport } from "./mutation.js";
 import { ABLATABLE, gated, modelFromEnv } from "@testpilot/harness-core";
 import {
   reviseCase,
@@ -119,6 +120,13 @@ export interface ReviewBatch {
   gaps: Gap[];
   /** 探索为什么停下来——它决定「没看到」那一类该不该怪探索，还是这个产品就这么大。 */
   exploreStoppedBecause?: string;
+  /**
+   * 变异实验的结果——**没跑过时是 undefined，不是 0 分**。
+   *
+   * 这两者在界面上必须分得开：没跑过意味着「不知道这套用例验不验得住」，
+   * 0 分意味着「知道，而且它一个都拦不住」。
+   */
+  mutation?: { score: number; killed: number; survived: number; notApplied: number; cases: number };
 }
 
 const METHOD_TO_TYPE: Record<string, CaseType> = {
@@ -208,6 +216,12 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
     | Parameters<typeof computeGaps>[0]["spec"]
     | undefined;
 
+  /**
+   * 变异实验是对着**已经生成好的那批用例**跑的，所以它挂在哪一次运行上，
+   * 要看用例是哪一次产的。这里先按本次运行找；找不到就没有——不编一个 0 分出来。
+   */
+  const mutation = readMutationReport(wfRunId);
+
   const decisions = new Map(listReviewDecisions(wfRunId).map((d) => [d.caseId, d]));
   const edits = listReviewEdits(wfRunId);
   const gateFindings = gated?.gate?.findings ?? [];
@@ -288,7 +302,20 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       spec,
       cases: gated?.cases ?? [],
       stories: gated?.stories ?? [],
+      // 活下来的变异体是第三类缺口：不是「没测到」，是**测了但验不住**。
+      survivors: mutation?.survivors ?? [],
     }),
+    ...(mutation
+      ? {
+          mutation: {
+            score: mutation.score,
+            killed: mutation.killed,
+            survived: mutation.survived,
+            notApplied: mutation.notApplied,
+            cases: mutation.cases,
+          },
+        }
+      : {}),
     exploreStoppedBecause: stoppedBecause(explore?.graph),
   };
 }
