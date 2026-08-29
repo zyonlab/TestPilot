@@ -24,8 +24,10 @@ export interface MutationReport {
   at: string;
   killed: number;
   survived: number;
+  /** 生效了、但这一轮有用例根本没跑成——不知道抓没抓住，不进分母。 */
+  inconclusive?: number;
   notApplied: number;
-  /** 分母只算生效了的变异体——没生效的既不算杀掉也不算活下来。 */
+  /** 分母只算「生效了、且这一轮跑得干净」的变异体。其余的是不知道，不是零分。 */
   score: number;
   /** 跑了哪些用例。样本太小的得分不该被当成结论，所以这个数要跟着报。 */
   cases: number;

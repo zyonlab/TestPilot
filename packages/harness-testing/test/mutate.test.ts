@@ -150,8 +150,41 @@ describe("变异得分", () => {
   it("基础设施故障不算抓住缺陷——否则模型越不稳，得分越高", () => {
     const flaky = [{ caseId: "c1", status: "failed" as const, failKind: "infra" }, clean[1]!, clean[2]!];
     const r = judgeMutant(M, 4, clean, flaky);
-    expect(r.verdict).toBe("survived");
+    expect(r.killedBy).toEqual([]);
     expect(r.ignoredInfra).toEqual(["c1"]);
+  });
+
+  it("剔掉基础设施故障后没有新失败，是「不知道」，不是「活下来」", () => {
+    // 挂掉的那条正可能是本该叫的那条。记成 survived 就是把工具故障说成用例集的盲区。
+    const flaky = [{ caseId: "c1", status: "failed" as const, failKind: "infra" }, clean[1]!, clean[2]!];
+    expect(judgeMutant(M, 4, clean, flaky).verdict).toBe("inconclusive");
+  });
+
+  it("有一条真失败就是杀掉——同一轮里别的用例挂了不影响这个结论", () => {
+    const mixed = [
+      { caseId: "c1", status: "failed" as const, failKind: "assert" },
+      { caseId: "c2", status: "failed" as const, failKind: "infra" },
+      clean[2]!,
+    ];
+    const r = judgeMutant(M, 4, clean, mixed);
+    expect(r.verdict).toBe("killed");
+    expect(r.killedBy).toEqual(["c1"]);
+    expect(r.ignoredInfra).toEqual(["c2"]);
+  });
+
+  it("「不知道」不进分母——宁可样本小，也不要一个假的盲区", () => {
+    const flaky = [{ caseId: "c1", status: "failed" as const, failKind: "infra" }, clean[1]!, clean[2]!];
+    const s = scoreMutants([
+      judgeMutant(M, 1, clean, [{ caseId: "c1", status: "failed", failKind: "assert" }, clean[1]!, clean[2]!]),
+      judgeMutant({ ...M, id: "M-2" }, 1, clean, flaky),
+    ]);
+    expect(s).toMatchObject({ killed: 1, survived: 0, inconclusive: 1, denom: 1 });
+    expect(s.score).toBe(1);
+  });
+
+  it("「不知道」不会变成写给人看的缺口", () => {
+    const flaky = [{ caseId: "c1", status: "failed" as const, failKind: "infra" }, clean[1]!, clean[2]!];
+    expect(survivorsAsGaps(scoreMutants([judgeMutant(M, 3, clean, flaky)]))).toHaveLength(0);
   });
 
   it("没生效是第三类，不是「活下来」——那是工具的问题，不是用例集的", () => {

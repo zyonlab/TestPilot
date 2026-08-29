@@ -92,7 +92,14 @@ interface Batch {
   gaps?: Gap[];
   exploreStoppedBecause?: string;
   /** 没跑过变异测试时是 undefined——和「0 分」是两回事，界面上必须分得开。 */
-  mutation?: { score: number; killed: number; survived: number; notApplied: number; cases: number };
+  mutation?: {
+    score: number;
+    killed: number;
+    survived: number;
+    inconclusive: number;
+    notApplied: number;
+    cases: number;
+  };
 }
 
 interface RunRow {
@@ -691,6 +698,15 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                       {t("review.mutationScore")} {Math.round(batch.mutation.score * 100)}%
                       （杀掉 {batch.mutation.killed} · 活下来 {batch.mutation.survived} ·
                       没生效 {batch.mutation.notApplied} · {batch.mutation.cases} 条用例）
+                      {/*
+                        「不知道」只在真的有的时候才占一行。平时不显示，是因为
+                        一个恒为 0 的字段会被读者学会忽略，等它真的不为 0 那天也照样忽略。
+                      */}
+                      {batch.mutation.inconclusive > 0 && (
+                        <span className="ml-1 text-amber-600 dark:text-amber-500">
+                          · 另有 {batch.mutation.inconclusive} 个没跑成，不计入分母
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">{t("review.mutationNotRun")}</span>

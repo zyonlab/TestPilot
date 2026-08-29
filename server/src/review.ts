@@ -126,7 +126,14 @@ export interface ReviewBatch {
    * 这两者在界面上必须分得开：没跑过意味着「不知道这套用例验不验得住」，
    * 0 分意味着「知道，而且它一个都拦不住」。
    */
-  mutation?: { score: number; killed: number; survived: number; notApplied: number; cases: number };
+  mutation?: {
+    score: number;
+    killed: number;
+    survived: number;
+    inconclusive: number;
+    notApplied: number;
+    cases: number;
+  };
 }
 
 const METHOD_TO_TYPE: Record<string, CaseType> = {
@@ -311,6 +318,8 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
             score: mutation.score,
             killed: mutation.killed,
             survived: mutation.survived,
+            // 老报告里没有这个字段，缺了当 0——它只会让分数显得更可信，不会更不可信。
+            inconclusive: mutation.inconclusive ?? 0,
             notApplied: mutation.notApplied,
             cases: mutation.cases,
           },
