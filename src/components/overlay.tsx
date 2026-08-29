@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/prefs";
 
@@ -42,6 +42,18 @@ function useEscapeToClose(active: boolean, onClose: () => void) {
  */
 const widths = new Map<string, number>();
 
+/** 展开到最宽时能占到哪：留一条能看见画布的缝，好让人记得自己是从哪儿进来的。 */
+const wideOf = (): number => Math.max(420, window.innerWidth - 80);
+
+/**
+ * 没拖过时该多宽。
+ *
+ * 原来是一个固定的 980：在 1440 的屏上偏窄（故事图四列要横向滚、
+ * 用例标题被截断），在 2560 的屏上又浪费。跟着视口走，两头都合理。
+ */
+const roomyDefault = (fallback: number): number =>
+  Math.min(wideOf(), Math.max(fallback, Math.round(window.innerWidth * 0.72)));
+
 /**
  * Right-side slide-over. Header row with an optional title + close (X) button;
  * the content area scrolls. Backdrop dims and closes on click. Escape closes,
@@ -76,8 +88,25 @@ export function Drawer({
 }) {
   const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(() => (resizeKey ? widths.get(resizeKey) ?? defaultWidth : 0));
+  const [width, setWidth] = useState(() =>
+    resizeKey ? (widths.get(resizeKey) ?? roomyDefault(defaultWidth)) : 0,
+  );
   const drag = useRef<{ x: number; w: number } | null>(null);
+  /**
+   * 展开之前那一档宽度。
+   *
+   * 展开是个**开关**，不是一次单程操作：人点开它看一眼宽的，然后要能回到原来那档。
+   * 只提供「变宽」而不提供「回去」，等于逼人重新拖一次那条 1.5px 的边。
+   */
+  const restoreTo = useRef<number | null>(null);
+  const wide = resizeKey ? width >= wideOf() - 4 : false;
+  const toggleWide = () => {
+    if (!resizeKey) return;
+    const next = wide ? (restoreTo.current ?? roomyDefault(defaultWidth)) : wideOf();
+    if (!wide) restoreTo.current = width;
+    setWidth(next);
+    widths.set(resizeKey, next);
+  };
   useBodyScrollLock(open);
   useEscapeToClose(open, onClose);
 
@@ -163,11 +192,30 @@ export function Drawer({
               ))}
             </div>
           )}
+          {/*
+            拖那条 1.5px 的边是**发现不了**的交互：它没有可见的样子，
+            也没人会去试。放一个明确的开关在标题栏里——故事图和产品地图
+            都是「宽一点就好读很多」的东西，而这一下应当只花一次点击。
+          */}
+          {resizeKey && (
+            <button
+              onClick={toggleWide}
+              title={t(wide ? "overlay.narrow" : "overlay.widen")}
+              aria-label={t(wide ? "overlay.narrow" : "overlay.widen")}
+              className={cn(
+                "ml-auto cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              {wide ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+            </button>
+          )}
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("overlay.close")}
             className={cn(
-              "ml-auto cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              "cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              !resizeKey && "ml-auto",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
@@ -236,7 +284,7 @@ export function Dialog({
             onClick={onClose}
             aria-label="Close"
             className={cn(
-              "ml-auto cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              "cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >

@@ -707,13 +707,21 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
     <>
       <TopBar />
       <div className="flex-1 overflow-auto p-4">
-        <div className="mx-auto max-w-4xl space-y-4">
+        {/*
+          **列宽跟着看的是什么走。**
+          一行 896px 是读字的合理上限，再宽眼睛在行末就找不到下一行的开头——
+          所以逐条列表守着它。但故事图不是拿来读的，是拿来扫的：横轴是活动，
+          列越多越看得出全貌。把它一起关进阅读列宽里，结果是抽屉拉到全屏、
+          图还是只显示三列，人白拉了一次。
+        */}
+        <div className={cn("mx-auto space-y-4", view === "map" ? "max-w-none" : "max-w-4xl")}>
           <div>
             <h1 className="flex items-center gap-2 font-display text-lg font-medium text-foreground">
               <ClipboardCheck className="h-5 w-5 text-primary" />
               {t("nav.review")}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("review.subtitle")}</p>
+            {/* 说明文字任何时候都守着阅读宽度：它是拿来读的，跟下面那张图不是一回事。 */}
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t("review.subtitle")}</p>
             {error && <p className="mt-1 text-[12px] text-rose-500">{error}</p>}
           </div>
 
