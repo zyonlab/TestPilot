@@ -72,6 +72,32 @@ function appendQuery(url: string, query?: Record<string, string>): string {
   }
 }
 
+/**
+ * 装变异体。**两条启动路径都要装。**
+ *
+ * 一个变异体没装上，计数就恒为 0，而报告会说「没生效」。我先后怀疑了读回时机、
+ * 怀疑了 API，最后发现是**第一版只写在注入钱包那条分支里**——正常执行走的是另一条。
+ * 这个函数存在的唯一理由就是不让那件事再发生一次。
+ *
+ * 要在第一次导航之前装好，而且要对**每一个新文档**都重新执行：加载后再注入的话
+ * 第一屏是原样的，而很多用例第一步就在第一屏上断言。
+ *
+ * 注入写法试过三种，只有一种成立（见函数体里的表）。教训是：
+ * 我最早用 Playwright 的 `addInitScript({ content })` 做 smoke 测试，它收字符串、一次就通，
+ * 于是我以为「注入这件事验过了」。**在另一个 API 上验证过，不等于在这个 API 上能用**
+ * ——而失败的表现是计数恒为 0，也就是「变异体没生效」，看起来像被测的东西有问题。
+ */
+async function installMutation(page: Page, opts: LaunchOpts): Promise<void> {
+  if (!opts.mutation) return;
+  // 传函数 + 在页内 `new Function(src)()` 求值。三种写法实测过，只有这一种成立：
+  //   evaluateOnNewDocument(源码字符串)                      → 不执行
+  //   CDP Page.addScriptToEvaluateOnNewDocument({ source })  → 不执行
+  //   evaluateOnNewDocument((src) => new Function(src)(), s) → **生效**
+  await page.evaluateOnNewDocument((src: string) => {
+    new Function(src)();
+  }, opts.mutation.script);
+}
+
 // Fixed headers + captured cookies must be set BEFORE the first navigation.
 async function applyPreNav(page: Page, opts: LaunchOpts): Promise<void> {
   if (opts.extraHeaders && Object.keys(opts.extraHeaders).length) {
@@ -176,12 +202,7 @@ export async function launchSession(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     );
     const { address, sentTxs } = await setupInjectedWallet(page, cfg);
-    /**
-     * 变异体要在**第一次导航之前**装好，而且要用 `evaluateOnNewDocument`——
-     * 它对每一个新文档都重新执行。加载后再注入的话，第一屏是原样的，
-     * 而很多用例第一步就在第一屏上断言。
-     */
-    if (opts.mutation) await page.evaluateOnNewDocument(opts.mutation.script);
+    await installMutation(page, opts);
     await applyPreNav(page, opts);
     const navUrl = appendQuery(url, opts.query);
     await page.goto(navUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
@@ -253,7 +274,10 @@ export async function launchSession(
   // for memory-constrained self-hosted models (MLX prefill guard). Same as the injected path.
   await page.setViewport(resolveViewport());
   await installQueryInterception(page, opts.query);
-  await applyPreNav(page, opts);
+  // **两条启动路径都要装。**第一版只写在注入钱包那条分支里，而正常执行走的是这一条
+    // ——于是变异体一次都没装上，计数恒为 0，我先后怀疑了时机和 API，都不是。
+    await installMutation(page, opts);
+    await applyPreNav(page, opts);
   const navUrl = appendQuery(url, opts.query);
   // domcontentloaded (not networkidle0): robust for sites with analytics/polling that
   // never fully idle. aiAction waits for its target elements anyway.
