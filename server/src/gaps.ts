@@ -237,13 +237,20 @@ export function computeGaps(input: {
    * 等于没有清单。缺口的价值在于**能被读完**。
    *
    * 身份取「哪一类 + 说的是什么」：转移天然唯一；链接按目标地址算，谁看见的不重要。
+   *
+   * **`detail` 不总是身份。**变异缺口的 `detail` 是它的**来源**（「图上走过的一条转移」），
+   * 而来源是许多变异体共有的——拿它当身份，四条盲区会被合并成三条，
+   * 而且是静默合并。实测掉的正是「把指向 /owners/1 的链接改指到别处」那条。
+   * 对变异缺口，身份是 `what`：它说的是哪一个具体缺陷。
    */
   const seen = new Set<string>();
   return gaps.filter((g) => {
     const key =
       g.kind === "link"
         ? `link::${(g.detail ?? "").replace(/^.*?走到 /, "")}`
-        : `${g.kind}::${g.detail ?? g.what}`;
+        : g.kind === "mutant"
+          ? `mutant::${g.what}`
+          : `${g.kind}::${g.detail ?? g.what}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

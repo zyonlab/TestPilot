@@ -177,3 +177,21 @@ describe("活下来的变异体：第三类缺口「验不住」", () => {
     expect(computeGaps({ graph: g2, spec: spec2, cases: [], stories: [] }).some((x) => x.kind === "mutant")).toBe(false);
   });
 });
+
+describe("变异缺口的身份是「哪个缺陷」，不是「哪来的」", () => {
+  const two = [
+    { what: "把指向「/owners/new」的链接改指到别处——没有任何用例因此失败", from: "图上走过的一条转移" },
+    { what: "把指向「/owners/1」的链接改指到别处——没有任何用例因此失败", from: "图上走过的一条转移" },
+  ];
+
+  it("来源相同的两条盲区不该被合并成一条", () => {
+    // 实测掉过一条：去重键用了 detail（= from），而 from 是许多变异体共有的。
+    const g = computeGaps({ survivors: two }).filter((x) => x.kind === "mutant");
+    expect(g).toHaveLength(2);
+  });
+
+  it("同一条盲区报两次仍然只算一条", () => {
+    const g = computeGaps({ survivors: [two[0]!, { ...two[0]! }] }).filter((x) => x.kind === "mutant");
+    expect(g).toHaveLength(1);
+  });
+});
