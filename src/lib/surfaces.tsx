@@ -40,6 +40,13 @@ export interface Surface {
   id: string;
   /** 同一组的界面在同一张卡里以 tab 并列——它们是同一个对象的不同镜头。 */
   group: string;
+  /**
+   * i18n 的 key，不是文字。
+   *
+   * 这里原来直接写中文，于是这十二个 tab 标题**永远只有中文**，
+   * 而界面其余部分跟随语言设置——英文用户看到的是半中半英。
+   * 存 key、在渲染处翻译：语言是视图的事，不是这张表的事。
+   */
   title: string;
   render: (ctx: SurfaceContext) => React.ReactNode;
   /** 需要先选中项目才有内容可看。 */
@@ -55,27 +62,27 @@ export const SURFACES: Surface[] = [
    * 但缺口在复核那一侧，所以复核里的缺口能点过来（见 Review 的 `mapHref`），
    * 两边靠 URL 里的落点串起来，而不是把地图复制一份塞进复核。
    */
-  { id: "map", group: "explore", title: "产品地图", render: (ctx) => <ProductMap focusRun={ctx.wfRunId} focus={ctx.focus} /> },
+  { id: "map", group: "explore", title: "surface.map", render: (ctx) => <ProductMap focusRun={ctx.wfRunId} focus={ctx.focus} /> },
 
   // 用例这一组：同一批用例的三种看法——它是什么、要不要它、它凭什么这么写。
-  { id: "cases", group: "cases", title: "用例看板", render: () => <CasesBoard />, needsProject: true },
+  { id: "cases", group: "cases", title: "surface.cases", render: () => <CasesBoard />, needsProject: true },
   // 唯一一个吃上下文的：从某次运行的门禁卡点进来，就该停在那一批上。
-  { id: "review", group: "cases", title: "复核队列", render: (ctx) => <ReviewPage focusRun={ctx.wfRunId} /> },
-  { id: "trace", group: "cases", title: "需求追溯", render: () => <TracePage />, needsProject: true },
+  { id: "review", group: "cases", title: "surface.review", render: (ctx) => <ReviewPage focusRun={ctx.wfRunId} /> },
+  { id: "trace", group: "cases", title: "surface.trace", render: () => <TracePage />, needsProject: true },
 
   // 代码这一组：生成的、能跑的、被改过的，以及怎么进客户的仓库。
-  { id: "code", group: "code", title: "测试代码", render: () => <CodeLinePage />, needsProject: true },
-  { id: "changes", group: "code", title: "变更", render: () => <ChangesPage />, needsProject: true },
-  { id: "deliver", group: "code", title: "交付与接入", render: () => <Delivery />, needsProject: true },
+  { id: "code", group: "code", title: "surface.code", render: () => <CodeLinePage />, needsProject: true },
+  { id: "changes", group: "code", title: "surface.changes", render: () => <ChangesPage />, needsProject: true },
+  { id: "deliver", group: "code", title: "surface.deliver", render: () => <Delivery />, needsProject: true },
 
   // 运行这一组：被测产品的结果，加上唯一需要人点头的那一格。
-  { id: "runs", group: "runs", title: "执行记录", render: () => <RunReportPage />, needsProject: true },
-  { id: "batches", group: "runs", title: "套件批次", render: () => <SuitePage />, needsProject: true },
-  { id: "baselines", group: "runs", title: "待审批基线", render: () => <BaselinesPage />, needsProject: true },
-  { id: "trends", group: "runs", title: "趋势", render: () => <TrendsPage />, needsProject: true },
+  { id: "runs", group: "runs", title: "surface.runs", render: () => <RunReportPage />, needsProject: true },
+  { id: "batches", group: "runs", title: "surface.batches", render: () => <SuitePage />, needsProject: true },
+  { id: "baselines", group: "runs", title: "surface.baselines", render: () => <BaselinesPage />, needsProject: true },
+  { id: "trends", group: "runs", title: "surface.trends", render: () => <TrendsPage />, needsProject: true },
 
   // 这一版 harness 自己好不好——量的不是产品，所以它挂在图上，不挂在任何一个节点上。
-  { id: "evals", group: "evals", title: "迭代评测", render: () => <EvalsPage /> },
+  { id: "evals", group: "evals", title: "surface.evals", render: () => <EvalsPage /> },
 ];
 
 export const surfaceById = (id: string): Surface | undefined => SURFACES.find((s) => s.id === id);

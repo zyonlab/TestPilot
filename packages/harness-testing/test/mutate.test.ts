@@ -240,7 +240,7 @@ describe("检测评估：干净跑量虚报，变异跑量召回", () => {
   const oracles = [
     { caseId: "c1", literal: "FIND OWNERS", kind: "text" },   // 判据正是被改坏的那句
     { caseId: "c2", literal: "Veterinarians", kind: "text" }, // 判据是别的
-    { caseId: "c3" },                            // 没有文字判据
+    { caseId: "c3", kind: "text" },                            // 没有文字判据
   ];
 
   it("干净跑：产品是对的，所以实际情况全是「应该通过」", () => {

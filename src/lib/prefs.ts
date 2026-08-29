@@ -59,7 +59,16 @@ export const usePrefs = create<PrefsState>((set, get) => {
 });
 
 // Translation hook: re-renders components when the language changes.
-export function useT(): (key: string) => string {
+export function useT(): (key: string, vars?: Record<string, string | number>) => string {
   const lang = usePrefs((s) => s.lang);
-  return (key: string) => translate(key, lang);
+  return (key, vars) => translate(key, lang, vars);
 }
+
+/**
+ * 在 React 之外取文案（store 里拼给人看的字串时要用）。
+ *
+ * 用它拼出来的文字**不会**在切语言时自己更新——所以凡是用了它的地方，
+ * 都必须有人在语言变了之后重新拼一遍。见 Workspace 里跟着 lang 重载产物那一处。
+ */
+export const tOutsideReact = (key: string, vars?: Record<string, string | number>): string =>
+  translate(key, usePrefs.getState().lang, vars);

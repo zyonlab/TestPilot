@@ -204,6 +204,14 @@ export interface ObserveResult {
   /** 走到过几屏，以及为什么停下来——一份材料薄不薄，得能看出是产品小还是探索停早了。 */
   screens?: number;
   stoppedBecause?: string;
+  /**
+   * 探索为什么停下来，**结构化的那一份**。
+   *
+   * `stoppedBecause` 是一句中文，它被写进图 JSON、原样显示在界面上——
+   * 于是英文界面里会突然冒出一句「采满 18 屏的上限」。在这里把语言从数据里摘出去：
+   * 界面拿 kind 自己翻译，旧运行没有这个字段就回落到那句原文。
+   */
+  stopped?: { kind: string; n?: number };
   /** 走过的那张图。点和**边**都在——边此前是被丢掉的那一半。 */
   graph?: StateFlowGraph;
 }
@@ -700,6 +708,8 @@ export async function runObserve(
       }
     })();
     let stoppedBecause = spec.deep === false ? "只采入口页（deep 关闭）" : "";
+    let stopped: { kind: string; n?: number } | undefined =
+      spec.deep === false ? { kind: "entryOnly" } : undefined;
     let dry = 0;
     let rounds = 0;
     /**
@@ -1023,6 +1033,8 @@ export async function runObserve(
         };
         if (!page.goBack) {
           stoppedBecause = "这一屏能点的都点过了，而且退不回去";
+          stopped = { kind: "noWayBack" };
+          stopped = { kind: "noWayBack" };
           break;
         }
         note("这一屏能点的都点过了，退回上一屏");
@@ -1065,11 +1077,14 @@ export async function runObserve(
            */
           if (signatureOf(current) === before) {
             stoppedBecause = "能点的都点过了，也退不动了";
+            stopped = { kind: "exhausted" };
             break;
           }
           continue;
         } catch {
           stoppedBecause = "这一屏能点的都点过了，而且退不回去";
+          stopped = { kind: "noWayBack" };
+          stopped = { kind: "noWayBack" };
           break;
         }
       }
@@ -1331,7 +1346,16 @@ export async function runObserve(
         consecutiveFailures += 1;
       }
     }
-    if (!stoppedBecause)
+    if (!stoppedBecause) {
+      stopped = token.cancelled
+        ? { kind: "cancelled" }
+        : screens.length >= maxScreens
+          ? { kind: "screenCap", n: maxScreens }
+          : rounds >= maxRounds
+            ? { kind: "actionBudget", n: maxRounds }
+            : consecutiveFailures >= 3
+              ? { kind: "stuck" }
+              : { kind: "dry", n: dryLimit };
       stoppedBecause = token.cancelled
         ? "被取消"
         : screens.length >= maxScreens
@@ -1341,6 +1365,7 @@ export async function runObserve(
             : consecutiveFailures >= 3
               ? "连续 3 次点不动"
               : `连续 ${dryLimit} 轮没有发现新界面`;
+    }
     note(`探索结束：${screens.length} 屏 / ${rounds} 轮，${stoppedBecause}`);
 
     /**
@@ -1396,6 +1421,7 @@ export async function runObserve(
       states: sfgStates,
       transitions: sfgEdges,
       stoppedBecause,
+      stopped,
       unvisited,
     };
 
@@ -1416,6 +1442,7 @@ export async function runObserve(
       shotRef: await shot(session),
       screens: screens.length,
       stoppedBecause,
+      stopped,
       graph,
     };
   } finally {

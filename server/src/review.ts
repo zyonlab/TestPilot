@@ -113,6 +113,7 @@ function trimGraph(g: {
   }>;
   unvisited?: string[];
   stoppedBecause?: string;
+  stopped?: { kind: string; n?: number };
 }): ReviewGraph {
   return {
     entry: g.entry,
@@ -138,6 +139,7 @@ function trimGraph(g: {
     })),
     unvisited: g.unvisited,
     stoppedBecause: g.stoppedBecause,
+    stopped: g.stopped,
   };
 }
 
@@ -156,6 +158,7 @@ export interface ReviewGraph {
   }>;
   unvisited?: string[];
   stoppedBecause?: string;
+  stopped?: { kind: string; n?: number };
 }
 
 export interface ReviewBatch {
@@ -185,6 +188,8 @@ export interface ReviewBatch {
   gaps: Gap[];
   /** 探索为什么停下来——它决定「没看到」那一类该不该怪探索，还是这个产品就这么大。 */
   exploreStoppedBecause?: string;
+  /** 同一件事的结构化版本，界面靠它翻译。旧运行没有，就回落到上面那句原文。 */
+  exploreStopped?: { kind: string; n?: number };
   /**
    * 探索画出来的状态流图，原样给界面画。
    *
@@ -403,6 +408,7 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
         }
       : {}),
     exploreStoppedBecause: stoppedBecause(explore?.graph),
+    ...(explore?.graph?.stopped ? { exploreStopped: explore.graph.stopped } : {}),
     ...(explore?.graph ? { graph: trimGraph(explore.graph) } : {}),
   };
 }

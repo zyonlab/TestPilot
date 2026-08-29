@@ -1,6 +1,7 @@
 import { Drawer } from "@/components/overlay";
 import { InSectionProvider } from "@/components/SectionNav";
 import { surfaceById, surfacesInGroup } from "@/lib/surfaces";
+import { useT } from "@/lib/prefs";
 
 /**
  * 打开的物料卡，作为一个抽屉。
@@ -29,6 +30,7 @@ export function SurfacePanel({
   onClose: () => void;
   onSwitch: (id: string) => void;
 }) {
+  const t = useT();
   const surface = surfaceById(surfaceId);
   if (!surface) return null;
   const siblings = surfacesInGroup(surface.group);
@@ -41,7 +43,7 @@ export function SurfacePanel({
       defaultWidth={980}
       tabs={siblings.map((s) => ({
         id: s.id,
-        label: s.title,
+        label: t(s.title),
         active: s.id === surface.id,
         onSelect: () => onSwitch(s.id),
       }))}

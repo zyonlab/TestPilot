@@ -86,6 +86,11 @@ export const StateFlowGraphSchema = z.object({
   /** 为什么停下来。一份薄图要能说出自己为什么薄。 */
   stoppedBecause: z.string().default(""),
   /**
+   * 停下来的原因，结构化的那一份。界面靠它翻译；
+   * `stoppedBecause` 那句中文留着，旧运行只有它。
+   */
+  stopped: z.object({ kind: z.string(), n: z.number().optional() }).optional(),
+  /**
    * **看见过、但那个地址从来没变成一个状态。**
    *
    * 「看见但没走过」的链接此前只在目标路由**确实到过**时才补成边——那条规矩是对的

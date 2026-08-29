@@ -1510,10 +1510,117 @@ export const dict: Record<string, Entry> = {
   "projects.noCasesYet": { zh: "还没有用例", en: "no cases yet", ja: "ケースなし" },
   "projects.openTestCases": { zh: "打开测试用例", en: "Open test cases", ja: "テストケースを開く" },
   "projects.active": { zh: "活动", en: "Active", ja: "アクティブ" },
+
+  // ---- 产物卡：这些以前写死在 src/lib/wf.ts 里，于是它们永远只有中文 ----
+  "art.map": { zh: "产品地图", en: "Product map", ja: "プロダクトマップ" },
+  "art.mapSub": { zh: "{walked} 条路走过 · {unseen} 个入口没进去", en: "{walked} paths walked · {unseen} entrances never opened", ja: "{walked} 経路を通過 · {unseen} 入口は未訪問" },
+  "art.mapSubClean": { zh: "{walked} 条路走过", en: "{walked} paths walked", ja: "{walked} 経路を通過" },
+  "art.mapOpen": { zh: "看地图", en: "Open the map", ja: "マップを開く" },
+  "art.spec": { zh: "规格材料", en: "Specification", ja: "仕様資料" },
+  "art.specFromExplore": { zh: "规格材料 · 探索得来", en: "Specification · from exploration", ja: "仕様資料 · 探索から" },
+  "art.specFromCode": { zh: "规格材料 · 由代码推得", en: "Specification · from the codebase", ja: "仕様資料 · コードから" },
+  "art.specObservedWarn": { zh: "描述现状而非意图：由它产出的用例只能发现「变了」", en: "Describes what is, not what was intended: cases from it can only catch “it changed”", ja: "意図ではなく現状の記述：ここから出るケースは「変わった」しか検出できない" },
+  "art.specOpen": { zh: "读全文", en: "Read it", ja: "全文を読む" },
+  "art.stories": { zh: "用户故事", en: "User stories", ja: "ユーザーストーリー" },
+  "art.storiesFrom": { zh: "来自 {n} 份文档", en: "from {n} documents", ja: "{n} 件の文書から" },
+  "art.storiesTree": { zh: "故事树", en: "Story tree", ja: "ストーリーツリー" },
+  "art.storiesOpen": { zh: "读故事", en: "Read the stories", ja: "ストーリーを読む" },
+  "art.cases": { zh: "文本用例", en: "Written cases", ja: "テキストケース" },
+  "art.casesSample": { zh: "抽样 {n} 条", en: "{n} sampled", ja: "{n} 件を抽出" },
+  "art.casesOpen": { zh: "看这批用例", en: "See this batch", ja: "このバッチを見る" },
+  "art.gate1": { zh: "门禁①", en: "Gate ①", ja: "ゲート①" },
+  "art.gate1Sub": { zh: "{n} 条 finding · 负例 {neg}%", en: "{n} findings · {neg}% negative", ja: "{n} 件の指摘 · 異常系 {neg}%" },
+  "art.gateOpen": { zh: "去复核", en: "Go review", ja: "レビューへ" },
+  "art.tierBacked": { zh: "判据有据率", en: "Machine-backed oracles", ja: "機械判定の割合" },
+  "art.tierClaims": { zh: "声称 {claims}", en: "claims {claims}", ja: "申告 {claims}" },
+  "art.code": { zh: "用例代码", en: "Case code", ja: "ケースコード" },
+  "art.codeOpen": { zh: "打开代码线", en: "Open the code line", ja: "コードラインを開く" },
+  "art.codeGate2": { zh: "门禁② {score}", en: "Gate ② {score}", ja: "ゲート② {score}" },
+  "art.codeGenerated": { zh: "已生成", en: "generated", ja: "生成済み" },
+  "art.runs": { zh: "执行", en: "Execution", ja: "実行" },
+  "art.runsOpen": { zh: "看执行记录", en: "See the runs", ja: "実行記録を見る" },
+  "art.runsSub": { zh: "loose {loose} · strict {strict} · 退化 {degraded}", en: "loose {loose} · strict {strict} · degraded {degraded}", ja: "loose {loose} · strict {strict} · 劣化 {degraded}" },
+
+  // ---- 轨迹行 ----
+  "tr.runStart": { zh: "{graph} v{ver} · {n} 个节点", en: "{graph} v{ver} · {n} nodes", ja: "{graph} v{ver} · {n} ノード" },
+  "tr.ablated": { zh: " · 消融 {list}", en: " · ablated {list}", ja: " · アブレーション {list}" },
+  "tr.enter": { zh: "进入 {type}", en: "entering {type}", ja: "{type} に入る" },
+  "tr.done": { zh: "完成", en: "done", ja: "完了" },
+  "tr.failed": { zh: "失败：{msg}", en: "failed: {msg}", ja: "失敗：{msg}" },
+  "tr.gate": { zh: "门禁 {gate} · {pct}%", en: "gate {gate} · {pct}%", ja: "ゲート {gate} · {pct}%" },
+  "tr.gateFindings": { zh: "门禁 {gate} · {pct}% · {n} 条 finding", en: "gate {gate} · {pct}% · {n} findings", ja: "ゲート {gate} · {pct}% · {n} 件の指摘" },
+  "tr.produced": { zh: "{story} → {n} 条", en: "{story} → {n}", ja: "{story} → {n} 件" },
+  "tr.exec": { zh: "执行 {status}", en: "run {status}", ja: "実行 {status}" },
+  "tr.repairRound": { zh: "修复第 {n} 轮", en: "repair round {n}", ja: "修復 {n} 回目" },
+  "tr.repairRoundChanges": { zh: "修复第 {n} 轮 · {changes}", en: "repair round {n} · {changes}", ja: "修復 {n} 回目 · {changes}" },
+  "tr.breakpoint": { zh: "停在断点前（{reason}）", en: "stopped before a breakpoint ({reason})", ja: "ブレークポイント手前で停止（{reason}）" },
+
+  // ---- 物料卡的 tab 标题（以前写死在 surfaces.tsx）----
+  "surface.map": { zh: "产品地图", en: "Product map", ja: "プロダクトマップ" },
+  "surface.cases": { zh: "用例看板", en: "Case board", ja: "ケースボード" },
+  "surface.review": { zh: "复核队列", en: "Review queue", ja: "レビュー待ち" },
+  "surface.trace": { zh: "需求追溯", en: "Traceability", ja: "トレーサビリティ" },
+  "surface.code": { zh: "测试代码", en: "Test code", ja: "テストコード" },
+  "surface.changes": { zh: "变更", en: "Changes", ja: "変更" },
+  "surface.deliver": { zh: "交付与接入", en: "Delivery", ja: "デリバリー" },
+  "surface.runs": { zh: "执行记录", en: "Run report", ja: "実行記録" },
+  "surface.batches": { zh: "套件批次", en: "Suite batches", ja: "スイートバッチ" },
+  "surface.baselines": { zh: "待审批基线", en: "Baselines to approve", ja: "承認待ちベースライン" },
+  "surface.trends": { zh: "趋势", en: "Trends", ja: "トレンド" },
+  "surface.evals": { zh: "迭代评测", en: "Evals", ja: "評価" },
+
+  // ---- 零散的几处 ----
+  "wf.gateWaiting": { zh: " · {n} 等", en: " · {n} waiting", ja: " · {n} 待機" },
+  "code.roundsN": { zh: "{n} 轮", en: "{n} rounds", ja: "{n} 回" },
+  "review.mutationBreak": { zh: "（杀掉 {killed} · 活下来 {survived} · 没生效 {notApplied} · {cases} 条用例）", en: "(killed {killed} · survived {survived} · not applied {notApplied} · {cases} cases)", ja: "（撃破 {killed} · 生存 {survived} · 未適用 {notApplied} · {cases} 件）" },
+  "review.mutationInconclusive": { zh: "· 另有 {n} 个没跑成，不计入分母", en: "· {n} more could not be judged, excluded from the denominator", ja: "· 判定不能が {n} 件、分母から除外" },
+  "code.gate2": { zh: "门禁② {score}", en: "Gate ② {score}", ja: "ゲート② {score}" },
+  "stop.entryOnly": { zh: "只采入口页（deep 关闭）", en: "entry page only (deep is off)", ja: "入口ページのみ（deep オフ）" },
+  "stop.noWayBack": { zh: "这一屏能点的都点过了，而且退不回去", en: "everything on this screen was clicked, and there is no way back", ja: "この画面は押せるものを押し切り、戻れなくなった" },
+  "stop.exhausted": { zh: "能点的都点过了，也退不动了", en: "everything clickable was clicked, and going back no longer moves", ja: "押せるものを押し切り、戻ることもできなくなった" },
+  "stop.cancelled": { zh: "被取消", en: "cancelled", ja: "キャンセルされた" },
+  "stop.screenCap": { zh: "采满 {n} 屏的上限", en: "hit the {n}-screen cap", ja: "{n} 画面の上限に達した" },
+  "stop.actionBudget": { zh: "用完 {n} 次动作预算", en: "used up the {n}-action budget", ja: "{n} 回の操作予算を使い切った" },
+  "stop.stuck": { zh: "连续 3 次点不动", en: "three clicks in a row did nothing", ja: "3 回続けて何も起きなかった" },
+  "stop.dry": { zh: "连续 {n} 轮没有发现新界面", en: "{n} rounds in a row found no new screen", ja: "{n} ラウンド連続で新しい画面が見つからなかった" },
+  "overlay.dragWidth": { zh: "拖动改变宽度", en: "Drag to resize", ja: "ドラッグで幅を変更" },
+  "map.legendTitle": { zh: "怎么读这张图", en: "How to read this", ja: "この図の読み方" },
+  "map.legendCollapsed": { zh: "怎么读这张图 ▾", en: "How to read this ▾", ja: "この図の読み方 ▾" },
+  "map.legendHide": { zh: "收起", en: "Hide", ja: "隠す" },
+  "map.legendWalked": { zh: "走过这条路，并且有用例验它", en: "Walked, and a case checks it", ja: "通過済みで、検証するケースがある" },
+  "map.legendMissed": { zh: "没有用例验它", en: "no case checks it", ja: "検証するケースがない" },
+  "map.legendMissedPre": { zh: "走过，但", en: "Walked, but ", ja: "通過したが" },
+  "map.legendClickable": { zh: "· 可点", en: "· clickable", ja: "· クリック可" },
+  "map.legendUnseen": { zh: "只在页面上看见，没点进去", en: "Seen on the page, never opened", ja: "ページ上で見えたが、開いていない" },
+  "map.stoppedBecause": { zh: "探索停下来是因为：", en: "Exploration stopped because: ", ja: "探索が止まった理由：" },
+  "map.stoppedMeaning": { zh: "停在这里，意味着虚线之外还有没画出来的地方。", en: "Stopping here means there is more beyond the dashed edges than this map shows.", ja: "ここで止まったということは、破線の先に描かれていない部分がある。" },
+  "map.variant": { zh: "状态 {n}", en: "state {n}", ja: "状態 {n}" },
+  "map.variantWhy": { zh: "同一个地址下的第二种页面状态——探索把它们分开了，因为上面的控件不一样", en: "A second page state at the same address — exploration split them because their controls differ", ja: "同じアドレスの別の画面状態——コントロールが違うため探索が分けた" },
+  "map.controls": { zh: "{n} 控件", en: "{n} controls", ja: "{n} コントロール" },
+  "map.missedOut": { zh: "{n} 条路没验", en: "{n} paths unchecked", ja: "{n} 経路が未検証" },
+  "map.unseenHere": { zh: "{n} 个入口没进", en: "{n} entrances unopened", ja: "{n} 入口が未訪問" },
+  "map.detailGaps": { zh: "这里缺什么（{n}）", en: "What is missing here ({n})", ja: "ここに足りないもの（{n}）" },
+  "map.detailControls": { zh: "这一屏上有什么（{n}）", en: "What is on this screen ({n})", ja: "この画面にあるもの（{n}）" },
+  "map.detailNone": { zh: "这里没有待处理的缺口。", en: "Nothing outstanding here.", ja: "ここに未処理のギャップはありません。" },
+  "map.detailWalkedPath": { zh: "一条走过的路", en: "A path that was walked", ja: "通過した経路" },
+  "map.close": { zh: "关闭", en: "Close", ja: "閉じる" },
+  "map.noGraph": { zh: "这次运行没有留下状态流图。", en: "This run left no state-flow graph.", ja: "この実行は状態遷移グラフを残していません。" },
+  "map.noGraphWhy": { zh: "地图由 explore 这一步画出来。从既有文档开始的运行不经过它，更早的运行则可能还没有保存这份产物。", en: "The map comes from the explore step. Runs that start from existing documents skip it, and older runs may not have saved it.", ja: "マップは explore ステップが描きます。既存文書から始まる実行はそこを通らず、古い実行では保存されていないことがあります。" },
 };
 
-export function translate(key: string, lang: Lang): string {
+/**
+ * 取一条文案，顺带把 `{名字}` 换成值。
+ *
+ * 插值放在这里而不是让每个调用方自己 `.replace`：调用方各写各的，
+ * 迟早有人漏掉一处占位符，而漏掉的表现是界面上明晃晃地印着 `{n}`。
+ * 更要紧的是——**没有插值就没法把带数字的句子放进 i18n**，
+ * 于是那些句子只能写死在代码里，也就永远只有一种语言。
+ */
+export function translate(key: string, lang: Lang, vars?: Record<string, string | number>): string {
   const entry = dict[key];
-  if (!entry) return key;
-  return entry[lang] || entry.en || key;
+  const text = entry ? entry[lang] || entry.en || key : key;
+  if (!vars) return text;
+  return text.replace(/\{(\w+)\}/g, (m, name: string) =>
+    Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : m,
+  );
 }

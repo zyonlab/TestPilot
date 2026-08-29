@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ABSTRACTIONS, abstractionOf, describeGraph, type StateFlowGraph, pathOf } from "../src/exec/sfg.js";
+import { ABSTRACTIONS, StateFlowGraphSchema, abstractionOf, describeGraph, type StateFlowGraph, pathOf } from "../src/exec/sfg.js";
 import { BAD_VALUES, LOOKUP_SUBMIT, budgeted } from "../src/exec/interactive.js";
 
 /**
@@ -293,5 +293,31 @@ describe("材料的字数预算按屏分，不从尾巴切", () => {
     const out = budgeted([("z".repeat(50000))], "完整的图", "完整的覆盖", 3000);
     expect(out).toContain("完整的图");
     expect(out).toContain("完整的覆盖");
+  });
+});
+
+describe("停止原因要能脱离语言", () => {
+  it("图里存得下结构化的停止原因", () => {
+    const g = StateFlowGraphSchema.parse({
+      abstraction: "route+controls/norm",
+      entry: "/",
+      states: [],
+      transitions: [],
+      stoppedBecause: "采满 18 屏的上限",
+      stopped: { kind: "screenCap", n: 18 },
+    });
+    expect(g.stopped).toEqual({ kind: "screenCap", n: 18 });
+  });
+
+  it("旧图没有这个字段也照样解析——那时只有那句中文", () => {
+    const g = StateFlowGraphSchema.parse({
+      abstraction: "route+controls",
+      entry: "/",
+      states: [],
+      transitions: [],
+      stoppedBecause: "连续 3 次点不动",
+    });
+    expect(g.stopped).toBeUndefined();
+    expect(g.stoppedBecause).toBe("连续 3 次点不动");
   });
 });

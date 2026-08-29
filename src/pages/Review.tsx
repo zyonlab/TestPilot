@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClipboardCheck, Check, X, ChevronDown, ChevronRight, Wand2, Undo2, Replace, Save } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui";
@@ -6,6 +6,7 @@ import { useT } from "@/lib/prefs";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { API_BASE } from "@/lib/base";
+import { stopReason } from "@/lib/stopReason";
 
 /**
  * The review queue.
@@ -93,6 +94,7 @@ interface Batch {
   pending: number;
   gaps?: Gap[];
   exploreStoppedBecause?: string;
+  exploreStopped?: { kind: string; n?: number };
   /** 没跑过变异测试时是 undefined——和「0 分」是两回事，界面上必须分得开。 */
   mutation?: {
     score: number;
@@ -575,6 +577,25 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
     void loadRuns();
   }, []);
 
+  /**
+   * 跟住外面选的那次运行。
+   *
+   * `loadRuns()` 只在挂载时跑一次，而 `focusRun` 是后到的——它要等地址栏里的
+   * `run=` 被解析、运行被选中才有值。于是从别人发来的链接进来时，
+   * 这一页停在**最新那一批**，而不是链接指的那一批：链接看起来是坏的。
+   *
+   * 只在 `focusRun` **真的变了**时跟。否则人手动点开另一批之后，
+   * 下一次重渲染就会把他拽回去——那种「我点的东西自己弹回来」比不跟随更糟。
+   */
+  const followed = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!focusRun || followed.current === focusRun) return;
+    if (!runs.some((r) => r.wfRunId === focusRun)) return;
+    followed.current = focusRun;
+    void openRun(focusRun);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRun, runs]);
+
   const act = async (decision: "approve" | "reject") => {
     if (!batch || !selected.size) return;
     setBusy(true);
@@ -737,9 +758,10 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                       {batch.gaps.filter((g) => g.reach === "blind").length} {t("review.gapsBlind")}
                     </span>
                   )}
-                  {batch.exploreStoppedBecause && (
+                  {(batch.exploreStopped || batch.exploreStoppedBecause) && (
                     <span className="text-muted-foreground">
-                      {t("review.exploreStopped")}：{batch.exploreStoppedBecause}
+                      {t("review.exploreStopped")}：
+                      {stopReason(t, batch.exploreStopped, batch.exploreStoppedBecause)}
                     </span>
                   )}
                   {/*
@@ -749,16 +771,20 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                   */}
                   {batch.mutation ? (
                     <span className="text-muted-foreground">
-                      {t("review.mutationScore")} {Math.round(batch.mutation.score * 100)}%
-                      （杀掉 {batch.mutation.killed} · 活下来 {batch.mutation.survived} ·
-                      没生效 {batch.mutation.notApplied} · {batch.mutation.cases} 条用例）
+                      {t("review.mutationScore")} {Math.round(batch.mutation.score * 100)}%{" "}
+                      {t("review.mutationBreak", {
+                        killed: batch.mutation.killed,
+                        survived: batch.mutation.survived,
+                        notApplied: batch.mutation.notApplied,
+                        cases: batch.mutation.cases,
+                      })}
                       {/*
                         「不知道」只在真的有的时候才占一行。平时不显示，是因为
                         一个恒为 0 的字段会被读者学会忽略，等它真的不为 0 那天也照样忽略。
                       */}
                       {batch.mutation.inconclusive > 0 && (
                         <span className="ml-1 text-amber-600 dark:text-amber-500">
-                          · 另有 {batch.mutation.inconclusive} 个没跑成，不计入分母
+                          {t("review.mutationInconclusive", { n: batch.mutation.inconclusive })}
                         </span>
                       )}
                     </span>

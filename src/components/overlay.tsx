@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/prefs";
 
 // Locks body scroll while at least one overlay is open (ref-counted so nested
 // overlays don't clobber each other's restore).
@@ -73,6 +74,7 @@ export function Drawer({
   tabs?: Array<{ id: string; label: string; active: boolean; onSelect: () => void }>;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(() => (resizeKey ? widths.get(resizeKey) ?? defaultWidth : 0));
   const drag = useRef<{ x: number; w: number } | null>(null);
@@ -135,7 +137,7 @@ export function Drawer({
               document.body.style.userSelect = "none";
               e.preventDefault();
             }}
-            title="拖动改变宽度"
+            title={t("overlay.dragWidth")}
             className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize hover:bg-primary/30"
           />
         )}

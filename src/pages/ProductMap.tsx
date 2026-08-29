@@ -16,6 +16,7 @@ import "@xyflow/react/dist/style.css";
 import { useT } from "@/lib/prefs";
 import { cn } from "@/lib/cn";
 import { API_BASE } from "@/lib/base";
+import { stopReason } from "@/lib/stopReason";
 
 /**
  * 产品地图：探索走出来的那张状态流图。
@@ -60,6 +61,7 @@ interface MapGraph {
   }>;
   unvisited?: string[];
   stoppedBecause?: string;
+  stopped?: { kind: string; n?: number };
 }
 
 export interface MapGap {
@@ -142,6 +144,7 @@ interface StateData extends Record<string, unknown> {
 }
 
 function StateNode({ data, selected }: NodeProps) {
+  const t = useT();
   const d = data as StateData;
   return (
     <div
@@ -159,20 +162,20 @@ function StateNode({ data, selected }: NodeProps) {
         {d.variant > 0 && (
           <span
             className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground"
-            title="同一个地址下的第二种页面状态——探索把它们分开了，因为上面的控件不一样"
+            title={t("map.variantWhy")}
           >
-            状态 {d.variant}
+            {t("map.variant", { n: d.variant })}
           </span>
         )}
       </div>
       {d.title && <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{d.title}</div>}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px]">
-        <span className="text-muted-foreground">{d.controls} 控件</span>
+        <span className="text-muted-foreground">{t("map.controls", { n: d.controls })}</span>
         {d.missed > 0 && (
-          <span className="text-amber-600 dark:text-amber-500">{d.missed} 条路没验</span>
+          <span className="text-amber-600 dark:text-amber-500">{t("map.missedOut", { n: d.missed })}</span>
         )}
         {d.unseen > 0 && (
-          <span className="text-muted-foreground/70">{d.unseen} 个入口没进</span>
+          <span className="text-muted-foreground/70">{t("map.unseenHere", { n: d.unseen })}</span>
         )}
       </div>
       <Handle type="source" position={Position.Right} className="!h-2 !w-2" />
@@ -192,6 +195,7 @@ const LEGEND_KEY = "productmap:legend";
  * 每次进来都要再关一次的东西，跟不能关一样烦人。
  */
 function Legend({ stopped }: { stopped?: string }) {
+  const t = useT();
   const [open, setOpen] = useState(() => {
     try {
       return localStorage.getItem(LEGEND_KEY) !== "0";
@@ -216,16 +220,16 @@ function Legend({ stopped }: { stopped?: string }) {
         onClick={toggle}
         className="rounded-lg border border-border bg-card/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
       >
-        怎么读这张图 ▾
+        {t("map.legendCollapsed")}
       </button>
     );
 
   return (
     <div className="max-w-[290px] rounded-lg border border-border bg-card/95 p-2.5 text-[11px] shadow-sm backdrop-blur">
       <div className="mb-1.5 flex items-center justify-between gap-3">
-        <span className="font-medium text-foreground">怎么读这张图</span>
+        <span className="font-medium text-foreground">{t("map.legendTitle")}</span>
         <button onClick={toggle} className="text-[10.5px] text-muted-foreground hover:text-foreground">
-          收起
+          {t("map.legendHide")}
         </button>
       </div>
       <ul className="space-y-1 text-muted-foreground">
@@ -233,13 +237,13 @@ function Legend({ stopped }: { stopped?: string }) {
           <svg width="26" height="6" aria-hidden>
             <line x1="0" y1="3" x2="26" y2="3" stroke="currentColor" strokeWidth="2" />
           </svg>
-          走过这条路，并且有用例验它
+          {t("map.legendWalked")}
         </li>
         <li className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
           <svg width="26" height="6" aria-hidden>
             <line x1="0" y1="3" x2="26" y2="3" stroke="currentColor" strokeWidth="2" />
           </svg>
-          走过，但<span className="font-medium">没有用例验它</span> · 可点
+          {t("map.legendMissedPre")}<span className="font-medium">{t("map.legendMissed")}</span> {t("map.legendClickable")}
         </li>
         <li className="flex items-center gap-2">
           <svg width="26" height="6" aria-hidden>
@@ -254,13 +258,13 @@ function Legend({ stopped }: { stopped?: string }) {
               opacity="0.5"
             />
           </svg>
-          只在页面上看见，没点进去
+          {t("map.legendUnseen")}
         </li>
       </ul>
       {stopped && (
         <div className="mt-2 border-t border-border pt-1.5 text-[10.5px] text-muted-foreground">
-          探索停下来是因为：<span className="text-foreground">{stopped}</span>
-          <div className="mt-0.5 opacity-80">停在这里，意味着虚线之外还有没画出来的地方。</div>
+          {t("map.stoppedBecause")}<span className="text-foreground">{stopped}</span>
+          <div className="mt-0.5 opacity-80">{t("map.stoppedMeaning")}</div>
         </div>
       )}
     </div>
@@ -281,6 +285,7 @@ function Detail({
   gaps: MapGap[];
   onClose: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex h-full w-[300px] flex-none flex-col overflow-hidden border-l border-border bg-card">
       <div className="flex items-start gap-2 border-b border-border px-3 py-2">
@@ -291,7 +296,7 @@ function Detail({
         <button
           onClick={onClose}
           className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
-          aria-label="关闭"
+          aria-label={t("map.close")}
         >
           ✕
         </button>
@@ -300,7 +305,7 @@ function Detail({
         {gaps.length > 0 && (
           <div>
             <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
-              这里缺什么（{gaps.length}）
+              {t("map.detailGaps", { n: gaps.length })}
             </div>
             <ul className="space-y-1.5">
               {gaps.map((g, i) => (
@@ -327,7 +332,7 @@ function Detail({
         {controls && controls.length > 0 && (
           <div>
             <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
-              这一屏上有什么（{controls.length}）
+              {t("map.detailControls", { n: controls.length })}
             </div>
             <ul className="space-y-0.5 font-mono text-[10.5px] text-muted-foreground">
               {controls.map((c, i) => (
@@ -339,7 +344,7 @@ function Detail({
           </div>
         )}
         {gaps.length === 0 && !controls?.length && (
-          <div className="text-[11px] text-muted-foreground">这里没有待处理的缺口。</div>
+          <div className="text-[11px] text-muted-foreground">{t("map.detailNone")}</div>
         )}
       </div>
     </div>
@@ -555,11 +560,8 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
   if (!graph || !graph.states.length)
     return (
       <div className="space-y-2 p-6 text-[12px] text-muted-foreground">
-        <div className="text-foreground">这次运行没有留下状态流图。</div>
-        <div>
-          地图由 <span className="font-mono">explore</span> 这一步画出来。
-          从既有文档开始的运行不经过它，更早的运行则可能还没有保存这份产物。
-        </div>
+        <div className="text-foreground">{t("map.noGraph")}</div>
+        <div>{t("map.noGraphWhy")}</div>
       </div>
     );
 
@@ -591,7 +593,7 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
           <Background />
           <Controls showInteractive={false} />
           <Panel position="top-left" className="!left-3 !top-3">
-            <Legend stopped={graph.stoppedBecause} />
+            <Legend stopped={stopReason(t, graph.stopped, graph.stoppedBecause)} />
           </Panel>
           <MiniMap pannable zoomable className="!bg-muted/70" style={{ width: 108, height: 68 }} />
         </ReactFlow>
@@ -600,10 +602,10 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
         <Detail
           title={
             sel.kind === "state"
-              ? plainRoute(sel.id) + (variantOf(sel.id) ? ` · 状态 ${variantOf(sel.id)}` : "")
+              ? plainRoute(sel.id) + (variantOf(sel.id) ? ` · ${t("map.variant", { n: variantOf(sel.id) })}` : "")
               : `${plainRoute(sel.id.split("->")[0]!)} → ${plainRoute(sel.id.split("->")[1]!)}`
           }
-          subtitle={sel.kind === "state" ? selState?.title : "一条走过的路"}
+          subtitle={sel.kind === "state" ? selState?.title : t("map.detailWalkedPath")}
           controls={sel.kind === "state" ? selState?.controls : undefined}
           gaps={sel.kind === "state" ? (stateGaps.get(sel.id) ?? []) : selEdgeGaps}
           onClose={() => setSel(null)}

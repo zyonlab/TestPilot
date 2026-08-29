@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { tOutsideReact as tr } from "./prefs";
 import type { EventEnvelope } from "./types";
 import { connectEvents, type WsState } from "./ws";
 import { API_BASE } from "./base";
@@ -598,15 +599,15 @@ export const useWf = create<WfState>((set, get) => ({
       const walked = (g.transitions ?? []).filter((t) => t.walked !== false).length;
       const unseen = (g.unvisited ?? []).length;
       cards.push({
-        id: "a-map", node: "explore", title: "产品地图",
+        id: "a-map", node: "explore", title: tr("art.map"),
         value: String((g.states ?? []).length),
         sub: unseen
           // 「没进去的入口」摆在卡面上，因为它是这张图唯一会让人改主意的数：
           // 它说的是「这张地图是不全的，而且缺了这么多」。
-          ? `${walked} 条路走过 · ${unseen} 个入口没进去`
-          : `${walked} 条路走过`,
+          ? tr("art.mapSub", { walked, unseen })
+          : tr("art.mapSubClean", { walked }),
         tone: unseen ? "warn" : undefined,
-        opens: { surface: "map", label: "看地图" },
+        opens: { surface: "map", label: tr("art.mapOpen") },
       });
     }
 
@@ -620,43 +621,43 @@ export const useWf = create<WfState>((set, get) => ({
       const from = String(full[specNode].derivedFrom ?? "document");
       cards.push({
         id: "a-spec", node: specNode,
-        title: from === "exploration" ? "规格材料 · 探索得来" : from === "codebase" ? "规格材料 · 由代码推得" : "规格材料",
+        title: from === "exploration" ? tr("art.specFromExplore") : from === "codebase" ? tr("art.specFromCode") : tr("art.spec"),
         value: String(parts.length || 1),
         sub: from === "exploration"
-          ? "描述现状而非意图：由它产出的用例只能发现「变了」"
+          ? tr("art.specObservedWarn")
           : parts.map((x) => x.split("/").pop()).join(" · ").slice(0, 42) || origin,
         tone: from === "exploration" ? "warn" : undefined,
         // Not a surface card: the material belongs to this run, so it opens its own drawer
         // reading what this run actually captured rather than today's file on disk.
-        opens: { surface: "spec", label: "读全文" },
+        opens: { surface: "spec", label: tr("art.specOpen") },
       });
     }
     if (full.stories?.stories) {
       const st = full.stories.stories as Array<{ id: string; source?: string }>;
       const docs = new Set(st.map((x) => x.source).filter(Boolean));
       cards.push({
-        id: "a-stories", node: "stories", title: "用户故事", value: String(st.length),
-        sub: docs.size ? `来自 ${docs.size} 份文档` : "故事树",
-        opens: { surface: "stories", label: "读故事" },
+        id: "a-stories", node: "stories", title: tr("art.stories"), value: String(st.length),
+        sub: docs.size ? tr("art.storiesFrom", { n: docs.size }) : tr("art.storiesTree"),
+        opens: { surface: "stories", label: tr("art.storiesOpen") },
       });
     }
     if (full.design?.cases) {
       const cs = full.design.cases as Array<{ title: string }>;
       cards.push({
-        id: "a-cases", node: "design", title: "文本用例", value: String(cs.length),
-        sub: `抽样 ${Math.min(3, cs.length)} 条`, samples: cs.slice(0, 3).map((c) => c.title),
+        id: "a-cases", node: "design", title: tr("art.cases"), value: String(cs.length),
+        sub: tr("art.casesSample", { n: Math.min(3, cs.length) }), samples: cs.slice(0, 3).map((c) => c.title),
         // 这次运行的一百条在复核队列里，不在看板上——看板是「已经批准的那些」。
-        opens: { surface: "review", label: "看这批用例" },
+        opens: { surface: "review", label: tr("art.casesOpen") },
       });
     }
     const gated = full.gate ?? full.codegen;
     if (gated?.gate) {
       const g = gated.gate as { score?: number; findings?: unknown[]; stats?: any };
       cards.push({
-        id: "a-gate", node: full.gate ? "gate" : "codegen", title: "门禁①",
+        id: "a-gate", node: full.gate ? "gate" : "codegen", title: tr("art.gate1"),
         value: `${Math.round((g.score ?? 0) * 100)}%`,
-        sub: `${g.findings?.length ?? 0} 条 finding · 负例 ${Math.round((g.stats?.negativeRatio ?? 0) * 100)}%`,
-        opens: { surface: "review", label: "去复核" },
+        sub: tr("art.gate1Sub", { n: g.findings?.length ?? 0, neg: Math.round((g.stats?.negativeRatio ?? 0) * 100) }),
+        opens: { surface: "review", label: tr("art.gateOpen") },
       });
       // The claim and what can be delivered, side by side: this gap is the number worth
       // watching, and no other page reports it.
@@ -665,9 +666,9 @@ export const useWf = create<WfState>((set, get) => ({
       const machine = (backed["1"] ?? 0) + (backed["2"] ?? 0);
       if (total)
         cards.push({
-          id: "a-tier", node: full.gate ? "gate" : "codegen", title: "判据有据率",
+          id: "a-tier", node: full.gate ? "gate" : "codegen", title: tr("art.tierBacked"),
           value: `${Math.round((machine / total) * 100)}%`,
-          sub: `声称 ${Object.entries((g.stats?.tiers ?? {}) as Record<string, number>).map(([k, v]) => `${v}×t${k}`).join(" ")}`,
+          sub: tr("art.tierClaims", { claims: Object.entries((g.stats?.tiers ?? {}) as Record<string, number>).map(([k, v]) => `${v}×t${k}`).join(" ") }),
           tone: machine === 0 ? "warn" : undefined,
         });
     }
@@ -675,9 +676,9 @@ export const useWf = create<WfState>((set, get) => ({
     if (coded?.code) {
       cards.push({
         id: "a-code", node: full.repair ? "repair" : full.codegate ? "codegate" : "codegen",
-        title: "用例代码", value: String((coded.code as unknown[]).length),
-        opens: { surface: "code", label: "打开代码线" },
-        sub: coded.gate?.score !== undefined ? `门禁② ${Number(coded.gate.score).toFixed(2)}` : "已生成",
+        title: tr("art.code"), value: String((coded.code as unknown[]).length),
+        opens: { surface: "code", label: tr("art.codeOpen") },
+        sub: coded.gate?.score !== undefined ? tr("art.codeGate2", { score: Number(coded.gate.score).toFixed(2) }) : tr("art.codeGenerated"),
       });
     }
     if (full.repair?.repair) {
@@ -685,9 +686,9 @@ export const useWf = create<WfState>((set, get) => ({
       const n = r.outcomes?.length ?? 0;
       const passed = Math.round((r.loosePassRate ?? 0) * n);
       cards.push({
-        id: "a-runs", node: "repair", title: "执行", value: `${passed}/${n}`,
-        opens: { surface: "runs", label: "看执行记录" },
-        sub: `loose ${(r.loosePassRate ?? 0).toFixed(2)} · strict ${(r.strictPassRate ?? 0).toFixed(2)} · 退化 ${r.degraded?.length ?? 0}`,
+        id: "a-runs", node: "repair", title: tr("art.runs"), value: `${passed}/${n}`,
+        opens: { surface: "runs", label: tr("art.runsOpen") },
+        sub: tr("art.runsSub", { loose: (r.loosePassRate ?? 0).toFixed(2), strict: (r.strictPassRate ?? 0).toFixed(2), degraded: r.degraded?.length ?? 0 }),
         tone: (r.degraded?.length ?? 0) > 0 ? "warn" : undefined,
       });
     }
@@ -729,24 +730,24 @@ export const useWf = create<WfState>((set, get) => ({
         const ts = String(e.ts).slice(11, 19);
         const node = String(p.nodeId ?? e.scope.nodeRunId ?? "—").split(":").pop() ?? "—";
         if (e.kind === "wf.run.started")
-          rows.push({ ts, kind: "run", node: "—", text: `${p.graphId} v${p.graphVersion} · ${(p.nodes ?? []).length} 个节点${(p.ablated ?? []).length ? ` · 消融 ${(p.ablated as string[]).join(",")}` : ""}`, right: "" });
-        else if (e.kind === "wf.node.started") rows.push({ ts, kind: "node", node, text: `进入 ${p.type}`, right: "" });
+          rows.push({ ts, kind: "run", node: "—", text: tr("tr.runStart", { graph: String(p.graphId), ver: String(p.graphVersion), n: (p.nodes ?? []).length }) + ((p.ablated ?? []).length ? tr("tr.ablated", { list: (p.ablated as string[]).join(",") }) : ""), right: "" });
+        else if (e.kind === "wf.node.started") rows.push({ ts, kind: "node", node, text: tr("tr.enter", { type: String(p.type) }), right: "" });
         else if (e.kind === "wf.node.finished")
           rows.push({
             ts, kind: p.status === "done" ? "node" : "err", node,
-            text: p.status === "done" ? "完成" : `失败：${String(p.error ?? "").slice(0, 90)}`,
+            text: p.status === "done" ? tr("tr.done") : tr("tr.failed", { msg: String(p.error ?? "").slice(0, 90) }),
             right: [p.ms ? `${(Number(p.ms) / 1000).toFixed(1)}s` : "", p.spend?.calls ? `${p.spend.calls} calls` : "", p.spend?.tokens ? `${p.spend.tokens} tok` : ""].filter(Boolean).join(" · "),
           });
         else if (e.kind === "gate.result")
-          rows.push({ ts, kind: "gate", node, text: `门禁 ${p.gate} · ${Math.round(Number(p.score ?? 0) * 100)}% · ${p.findings} 条 finding`, right: "" });
+          rows.push({ ts, kind: "gate", node, text: tr("tr.gateFindings", { gate: String(p.gate), pct: Math.round(Number(p.score ?? 0) * 100), n: String(p.findings) }), right: "" });
         else if (e.kind === "wf.node.output" && p.storyId)
-          rows.push({ ts, kind: "model", node, text: `${p.storyId} → ${p.produced} 条`, right: "" });
+          rows.push({ ts, kind: "model", node, text: tr("tr.produced", { story: String(p.storyId), n: String(p.produced) }), right: "" });
         else if (e.kind === "run.finished")
-          rows.push({ ts, kind: p.status === "passed" ? "node" : "err", node: String(p.caseId ?? "").slice(0, 18), text: `执行 ${p.status}${p.failKind ? ` · ${p.failKind}` : ""}`, right: "" });
+          rows.push({ ts, kind: p.status === "passed" ? "node" : "err", node: String(p.caseId ?? "").slice(0, 18), text: tr("tr.exec", { status: String(p.status) }) + (p.failKind ? ` · ${p.failKind}` : ""), right: "" });
         else if (e.kind === "repair.round")
-          rows.push({ ts, kind: "model", node: String(p.caseId ?? "").slice(0, 18), text: `修复第 ${p.round} 轮 · ${(p.changes ?? []).join(" · ")}`, right: "" });
+          rows.push({ ts, kind: "model", node: String(p.caseId ?? "").slice(0, 18), text: tr("tr.repairRoundChanges", { n: String(p.round), changes: (p.changes ?? []).join(" · ") }), right: "" });
         else if (e.kind === "wf.paused")
-          rows.push({ ts, kind: "err", node, text: `停在断点前（${p.reason}）`, right: "" });
+          rows.push({ ts, kind: "err", node, text: tr("tr.breakpoint", { reason: String(p.reason) }), right: "" });
       }
       set({ trace: rows });
     } catch {
@@ -1073,33 +1074,33 @@ function traceRowFor(e: EventEnvelope): TraceRow | undefined {
   const node = String(p.nodeId ?? e.scope.nodeRunId ?? "—").split(":").pop() ?? "—";
   switch (e.kind) {
     case "wf.node.started":
-      return { ts, kind: "node", node, text: `进入 ${p.type}`, right: "" };
+      return { ts, kind: "node", node, text: tr("tr.enter", { type: String(p.type) }), right: "" };
     case "wf.node.finished":
       return {
         ts,
         kind: p.status === "done" ? "node" : "err",
         node,
-        text: p.status === "done" ? "完成" : `失败：${String(p.error ?? "").slice(0, 90)}`,
+        text: p.status === "done" ? tr("tr.done") : tr("tr.failed", { msg: String(p.error ?? "").slice(0, 90) }),
         right: [p.ms ? `${(Number(p.ms) / 1000).toFixed(1)}s` : "", p.spend?.calls ? `${p.spend.calls} calls` : ""]
           .filter(Boolean)
           .join(" · "),
       };
     case "gate.result":
-      return { ts, kind: "gate", node, text: `门禁 ${p.gate} · ${Math.round(Number(p.score ?? 0) * 100)}%`, right: "" };
+      return { ts, kind: "gate", node, text: tr("tr.gate", { gate: String(p.gate), pct: Math.round(Number(p.score ?? 0) * 100) }), right: "" };
     case "wf.node.output":
-      return p.storyId ? { ts, kind: "model", node, text: `${p.storyId} → ${p.produced} 条`, right: "" } : undefined;
+      return p.storyId ? { ts, kind: "model", node, text: tr("tr.produced", { story: String(p.storyId), n: String(p.produced) }), right: "" } : undefined;
     case "repair.round":
-      return { ts, kind: "model", node: String(p.caseId ?? "").slice(0, 18), text: `修复第 ${p.round} 轮`, right: "" };
+      return { ts, kind: "model", node: String(p.caseId ?? "").slice(0, 18), text: tr("tr.repairRound", { n: String(p.round) }), right: "" };
     case "run.finished":
       return {
         ts,
         kind: p.status === "passed" ? "node" : "err",
         node: String(p.caseId ?? "").slice(0, 18),
-        text: `执行 ${p.status}${p.failKind ? ` · ${p.failKind}` : ""}`,
+        text: tr("tr.exec", { status: String(p.status) }) + (p.failKind ? ` · ${p.failKind}` : ""),
         right: "",
       };
     case "wf.paused":
-      return { ts, kind: "err", node, text: `停在断点前（${p.reason}）`, right: "" };
+      return { ts, kind: "err", node, text: tr("tr.breakpoint", { reason: String(p.reason) }), right: "" };
     default:
       return undefined;
   }

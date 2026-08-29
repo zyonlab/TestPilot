@@ -64,6 +64,8 @@ interface GraphLike {
     action?: { kind?: string; target?: string };
   }>;
   stoppedBecause?: string;
+  /** 停下来的原因，结构化的那一份——界面靠它翻译，不靠解析中文。 */
+  stopped?: { kind: string; n?: number };
   /** 看见过、但那个地址从来没变成一个状态。真正的「没进去」只有这些。 */
   unvisited?: string[];
 }

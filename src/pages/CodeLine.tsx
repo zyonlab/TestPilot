@@ -124,7 +124,7 @@ function Detail({ p, onClose }: { p: Provenance; onClose: () => void }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-        {p.gate2 !== undefined && <Pill tone={p.gate2 >= 0.8 ? "good" : "warn"}>门禁② {p.gate2.toFixed(2)}</Pill>}
+        {p.gate2 !== undefined && <Pill tone={p.gate2 >= 0.8 ? "good" : "warn"}>{t("code.gate2", { score: p.gate2.toFixed(2) })}</Pill>}
         {p.degraded && <Pill tone="warn">{t("code.degraded")}</Pill>}
         {p.drifted && <Pill tone="warn">{t("code.drifted")}</Pill>}
         {p.outcome?.status && (
@@ -314,7 +314,7 @@ export function CodeLinePage() {
                   )}
                 </td>
                 <td className="px-2 py-1.5 font-mono text-[11.5px]">{r.gate2?.toFixed(2) ?? "—"}</td>
-                <td className="px-2 py-1.5 font-mono text-[11.5px]">{r.rounds ? `${r.rounds} 轮` : "—"}</td>
+                <td className="px-2 py-1.5 font-mono text-[11.5px]">{r.rounds ? t("code.roundsN", { n: r.rounds }) : "—"}</td>
                 <td className="px-2 py-1.5">
                   {r.outcome?.status ? (
                     <Pill tone={r.outcome.status === "passed" ? "good" : "bad"}>

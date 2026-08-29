@@ -19,7 +19,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Play, Square, RotateCw, StepForward, Save, Pencil, Trash2, X, History, Circle, CircleDot, SkipForward, Settings as SettingsIcon, FlaskConical, Globe, ChevronRight, ServerCog, Hand, SquareDashedMousePointer, Stethoscope, CircleDollarSign } from "lucide-react";
 import { Button } from "@/components/ui";
-import { useT } from "@/lib/prefs";
+import { useT, usePrefs } from "@/lib/prefs";
 import { cn } from "@/lib/cn";
 import { API_BASE, IS_OVERRIDDEN, resetApiBase } from "@/lib/base";
 import { runFromHash, useWf, type Artifact, type GraphDef, type NodeRun, type NodeState, type Runtime, type TraceRow } from "@/lib/wf";
@@ -471,7 +471,7 @@ function RuntimeRail({
         <div className="flex gap-5 overflow-x-auto border-t border-border/60 px-3 py-2">
           <Gauge
             label={t("wf.rtGate")}
-            value={`${rt.gate.active} / ${rt.gate.limit}${rt.gate.waiting ? ` · ${rt.gate.waiting} 等` : ""}`}
+            value={`${rt.gate.active} / ${rt.gate.limit}${rt.gate.waiting ? t("wf.gateWaiting", { n: rt.gate.waiting }) : ""}`}
             tone={rt.gate.waiting ? "warn" : rt.gate.active ? "warn" : "good"}
             title={t("wf.rtGateWhy")}
           />
@@ -573,7 +573,9 @@ export function WorkspacePage() {
     nodeTypes,
     draft: topoDraft,
     artifacts,
+    loadArtifacts,
     trace,
+    loadTrace,
     runtime,
     loadGate,
     syncToProject,
@@ -796,6 +798,20 @@ export function WorkspacePage() {
     const own = runs.find((r) => r.id === wfRunId)?.projectId;
     if (own && own !== activeProjectId) void selectProject(own);
   }, [wfRunId, runs, activeProjectId, selectProject]);
+
+  /**
+   * 换语言之后把产物卡与轨迹重新拼一遍。
+   *
+   * 这两样的文字是在 store 里拼好的（那里没有 React，取不到会重渲染的 `t`），
+   * 所以它们不会自己跟着语言变。不重拼的话，表现是**换了语言，画布上的卡片
+   * 还是旧语言**——比整块不翻译更糟，因为它看起来像是漏翻了几处。
+   */
+  const lang = usePrefs((st) => st.lang);
+  useEffect(() => {
+    if (!wfRunId) return;
+    void loadArtifacts(wfRunId);
+    void loadTrace(wfRunId);
+  }, [lang, wfRunId, loadArtifacts, loadTrace]);
 
   // 抽屉里的东西导航走了，抽屉就该让位——否则新建项目成功后，人看到的还是设置。
   useEffect(() => {
