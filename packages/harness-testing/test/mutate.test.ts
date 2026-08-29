@@ -238,8 +238,8 @@ describe("注入脚本本身要能被打包器解析", () => {
 describe("检测评估：干净跑量虚报，变异跑量召回", () => {
   const M = { id: "M-1", operator: "text" as const, what: "", from: "", target: "FIND OWNERS", replacement: "FIND OWNER" };
   const oracles = [
-    { caseId: "c1", literal: "FIND OWNERS" },   // 判据正是被改坏的那句
-    { caseId: "c2", literal: "Veterinarians" }, // 判据是别的
+    { caseId: "c1", literal: "FIND OWNERS", kind: "text" },   // 判据正是被改坏的那句
+    { caseId: "c2", literal: "Veterinarians", kind: "text" }, // 判据是别的
     { caseId: "c3" },                            // 没有文字判据
   ];
 
@@ -272,7 +272,7 @@ describe("检测评估：干净跑量虚报，变异跑量召回", () => {
   it("大小写不敏感——判据来自规格，变异目标来自 innerText，可能只差大小写", () => {
     const d = fromMutantRun(
       { ...M, target: "find owners" },
-      [{ caseId: "c1", literal: "FIND OWNERS" }],
+      [{ caseId: "c1", literal: "FIND OWNERS", kind: "text" }],
       [{ caseId: "c1", status: "failed", failKind: "assert" }],
     );
     expect(d[0]!.actual).toBe("failed");
@@ -305,6 +305,31 @@ describe("检测评估：干净跑量虚报，变异跑量召回", () => {
     expect(r.truePositives).toBe(1);
     expect(r.falsePositives).toBe(0);
     expect(r.recall).toBe(1);
+  });
+
+  it("改链接的变异体，要跟 url 判据对上——只看文本判据的话它永远没有「本该失败」的用例", () => {
+    // 这条守的是一个真出过的 bug：relink 轮里每条真实失败都被记成虚报，
+    // 精确率与召回率同时为 0，量的不是用例集，是记分法自己的边界。
+    const M = { id: "M", operator: "relink" as const, what: "", from: "", target: "/vets" };
+    const oracles = [
+      { caseId: "u1", literal: "/vets", kind: "url" },
+      { caseId: "t1", literal: "/vets", kind: "text" },
+    ];
+    const cs = fromMutantRun(M, oracles, [
+      { caseId: "u1", status: "failed" as const },
+      { caseId: "t1", status: "failed" as const },
+    ]);
+    expect(cs.find((c) => c.caseId.endsWith("u1"))!.actual).toBe("failed");
+    // 文本判据发现不了链接被改指——它这次失败是连带反应，不该记成「本该失败」。
+    expect(cs.find((c) => c.caseId.endsWith("t1"))!.actual).toBe("passed");
+  });
+
+  it("改文案的变异体反过来——url 判据发现不了", () => {
+    const M = { id: "M", operator: "text" as const, what: "", from: "", target: "Find Owner", replacement: "x" };
+    const cs = fromMutantRun(M, [{ caseId: "u1", literal: "Find Owner", kind: "url" }], [
+      { caseId: "u1", status: "failed" as const },
+    ]);
+    expect(cs[0]!.actual).toBe("passed");
   });
 
   it("该抓没抓到就是漏报", () => {

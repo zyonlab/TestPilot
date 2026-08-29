@@ -47,11 +47,41 @@ export interface RunOutcome {
   covers?: string[];
 }
 
-/** 一条用例的判据里那句被检查的字面量（`text` / `noText` 判据才有）。 */
+/** 一条用例的判据：被检查的字面量，以及它是哪一种判据。 */
 export interface CaseOracle {
   caseId: string;
   literal?: string;
+  /**
+   * `text` / `noText` / `url` / …。**必填**，理由见 `NOTICEABLE_BY`。
+   *
+   * 做成必填而不是可选，是因为「缺了就当匹配不上」和「缺了就当都匹配」都会静默出错，
+   * 而这一类静默出错正是这张表要修的那个 bug。让编译器在调用方那里拦住它。
+   */
+  kind: string;
 }
+
+/**
+ * 哪一种判据发现得了哪一种变异。
+ *
+ * 这张表原来不存在，`fromMutantRun` 一律只看 `text` / `noText` 判据的字面量。
+ * 后果是 **relink 变异体结构上不可能有「本该失败」的用例**：它改的是 URL，
+ * 而能发现 URL 被改的只有 `url` 判据，那类判据当时压根不进匹配。
+ * 于是 relink 轮里每一条真实失败都被记成虚报——2026-08-29 那批
+ * hide+relink 的精确率与召回率同时为 0，量的不是用例集，是这个记分法自己的边界。
+ *
+ * 教训跟 `inconclusive` 那次是同一条：**一个指标算得出数，不等于它在量它声称的东西。**
+ * 分算子看一眼就露馅了（text 的召回率是 1.000，relink 是 0.000——
+ * 真实的用例集不会有这么整齐的分界，有这种分界的是 bug）。
+ */
+const NOTICEABLE_BY: Record<string, readonly string[]> = {
+  text: ["text", "noText"],
+  // 控件藏起来，它的文案跟着从 innerText 里消失，所以还是文本判据发现它。
+  // 「因为控件没了而走不到那一屏」是可达性问题，已经被 neverArrived 排除了，不在这里算。
+  hide: ["text", "noText"],
+  relink: ["url"],
+  // 少掉一项，条数判据最直接；文案判据在少掉的正好是它引用的那一项时也发现得了。
+  dropOne: ["count", "text", "noText"],
+};
 
 export interface DetectionCase {
   caseId: string;
@@ -121,6 +151,9 @@ export function fromCleanRun(outcomes: RunOutcome[]): DetectionCase[] {
 /**
  * 变异跑：被改坏的那句话是已知的，所以**判据正是那句话的用例应该失败**，别的应该通过。
  *
+ * 「判据正是那句话」要分算子看：改文案的只有文本判据发现得了，改链接的只有 URL 判据
+ * 发现得了。见 `NOTICEABLE_BY`。
+ *
  * 匹配用大小写不敏感的包含关系，理由和注入那边一样：判据里的字面量来自规格
  * （逐字引用界面文案），而变异目标来自图的控件文案（`innerText` 采的，
  * 会套 CSS 的 text-transform）——两者可能只差大小写。
@@ -131,8 +164,10 @@ export function fromMutantRun(
   outcomes: RunOutcome[],
 ): DetectionCase[] {
   const target = mutant.target.toLowerCase();
+  const kinds = NOTICEABLE_BY[mutant.operator] ?? ["text", "noText"];
   const shouldNotice = new Set(
     oracles
+      .filter((o) => kinds.includes(o.kind))
       .filter((o) => o.literal && o.literal.toLowerCase().includes(target))
       .map((o) => o.caseId),
   );
