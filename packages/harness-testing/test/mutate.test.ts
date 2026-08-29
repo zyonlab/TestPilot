@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateMutants, labelOf, nearMiss } from "../src/mutate/operators.js";
 import { buildMutationScript } from "../src/mutate/inject.js";
+import { judgeMutant, scoreMutants, survivorsAsGaps } from "../src/mutate/score.js";
 
 const graph = {
   states: [
@@ -114,5 +115,62 @@ describe("注入脚本", () => {
   it("四种算子都在脚本里有分支", () => {
     const s = m({});
     for (const op of ["text", "hide", "relink", "dropOne"]) expect(s).toContain(`"${op}"`);
+  });
+});
+
+describe("变异得分", () => {
+  const M = { id: "M-1", operator: "text" as const, what: "把 A 改成 B", from: "规则 R-1", target: "A", replacement: "B" };
+  const clean = [
+    { caseId: "c1", status: "passed" as const },
+    { caseId: "c2", status: "passed" as const },
+    { caseId: "c3", status: "failed" as const, failKind: "assert" },
+  ];
+
+  it("「杀掉」是造成了新的失败，不是「有失败」——干净跑本来就有 3 条失败", () => {
+    const same = [...clean];
+    expect(judgeMutant(M, 4, clean, same).verdict).toBe("survived");
+  });
+
+  it("新失败才算杀掉，并记下是谁抓到的", () => {
+    const worse = [{ caseId: "c1", status: "failed" as const, failKind: "assert" }, clean[1]!, clean[2]!];
+    const r = judgeMutant(M, 4, clean, worse);
+    expect(r.verdict).toBe("killed");
+    expect(r.killedBy).toEqual(["c1"]);
+  });
+
+  it("基础设施故障不算抓住缺陷——否则模型越不稳，得分越高", () => {
+    const flaky = [{ caseId: "c1", status: "failed" as const, failKind: "infra" }, clean[1]!, clean[2]!];
+    const r = judgeMutant(M, 4, clean, flaky);
+    expect(r.verdict).toBe("survived");
+    expect(r.ignoredInfra).toEqual(["c1"]);
+  });
+
+  it("没生效是第三类，不是「活下来」——那是工具的问题，不是用例集的", () => {
+    const r = judgeMutant(M, 0, clean, clean);
+    expect(r.verdict).toBe("notApplied");
+    expect(r.killedBy).toEqual([]);
+  });
+
+  it("杀掉率的分母只算生效了的——没生效的既不算杀掉也不算活下来", () => {
+    const rs = [
+      judgeMutant(M, 1, clean, [{ caseId: "c1", status: "failed", failKind: "assert" }, clean[1]!, clean[2]!]),
+      judgeMutant({ ...M, id: "M-2" }, 1, clean, clean),
+      judgeMutant({ ...M, id: "M-3" }, 0, clean, clean),
+    ];
+    const s = scoreMutants(rs);
+    expect(s).toMatchObject({ killed: 1, survived: 1, notApplied: 1 });
+    expect(s.score).toBe(0.5);
+  });
+
+  it("活下来的能直接说成缺口——报杀掉率必须同时报它们", () => {
+    const rs = [judgeMutant(M, 3, clean, clean)];
+    const g = survivorsAsGaps(scoreMutants(rs));
+    expect(g).toHaveLength(1);
+    expect(g[0]!.what).toContain("没有任何用例因此失败");
+    expect(g[0]!.from).toBe("规则 R-1");
+  });
+
+  it("一个变异体都没生效时，得分是 0 而不是崩掉", () => {
+    expect(scoreMutants([judgeMutant(M, 0, clean, clean)]).score).toBe(0);
   });
 });
