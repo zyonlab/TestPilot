@@ -42,6 +42,15 @@ export interface Gap {
   what: string;
   /** 证据：转移 id、地址、原始错误。人要追下去时靠它。 */
   detail?: string;
+  /**
+   * 机器可读的落点：这条缺口指向状态流图上的**哪一处**。
+   *
+   * `detail` 是给人读的一句话（「/owners 走到 …→ /owners/find」），
+   * 它没法拿来在图上定位——要定位就得再解析那句话，而解析人话是错的。
+   * 所以另开这个字段：界面拿它高亮图上对应的边或节点，
+   * 于是「这条路走过没有用例验它」从一句读不懂的字符串变成图上一条红边。
+   */
+  anchor?: { kind: "edge"; from: string; to: string } | { kind: "state"; id: string };
 }
 
 interface GraphLike {
@@ -83,9 +92,31 @@ interface StoryLike {
  */
 const plainState = (id: string): string => id.split("~")[0];
 
+/**
+ * 跳转目标只留路径。
+ *
+ * 图上采到的 target 有时是绝对地址（`http://localhost:8080/owners/find`）。
+ * 原样印出来有两个坏处：一是**同一条边在不同地方长得不一样**（这里带 host、
+ * 别处不带），二是它长到会盖住图上别的东西——实测边标签压在节点上，
+ * 而压住它的那半截字（host 和端口）对读的人没有任何意义。
+ */
+export const shortTarget = (target?: string): string => {
+  if (!target) return "";
+  if (!/^https?:\/\//.test(target)) return target;
+  try {
+    const u = new URL(target);
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return target;
+  }
+};
+
 /** 一句话描述一条转移，给人看的那种。 */
 const describeEdge = (t: NonNullable<GraphLike["transitions"]>[number]): string => {
-  const how = t.action?.kind === "goto" ? `走到 ${t.action.target ?? ""}` : `点「${t.action?.target ?? "?"}」`;
+  const how =
+    t.action?.kind === "goto"
+      ? `走到 ${shortTarget(t.action.target)}`
+      : `点「${t.action?.target ?? "?"}」`;
   return `${plainState(t.from)} ${how}${t.to ? ` → ${plainState(t.to)}` : ""}`;
 };
 
@@ -111,6 +142,21 @@ export function computeGaps(input: {
    * 路由 → 活动名。故事图的列是活动（模块名），缺口必须落到同一列里，
    * 否则人得在两套坐标之间自己换算——那正是要避免的理解成本。
    */
+  /**
+   * 地址 → 在哪一屏上看见的它。
+   *
+   * 「没进去的入口」本身不是图上的一个节点——那正是「没进去」的意思。
+   * 但它一定是从某一屏上看见的，锚到那一屏，人在图上就有地方落眼：
+   * 「哦，是这一屏上的这个链接没走」。锚不到就不给锚点，界面那边不给可点样式，
+   * **宁可不可点，也不要点了跳到一个不相干的地方**。
+   */
+  const seenFrom = new Map<string, string>();
+  for (const st of graph?.states ?? [])
+    for (const c of st.controls ?? []) {
+      const href = c.split(" -> ")[1]?.trim();
+      if (href && !seenFrom.has(href)) seenFrom.set(href, st.id);
+    }
+
   const activityOfRoute = new Map<string, string>();
   const activityOfFlow = new Map<string, string>();
   for (const m of spec?.modules ?? []) {
@@ -134,6 +180,7 @@ export function computeGaps(input: {
       kind: "transition",
       what: `这条路走过，没有用例验它`,
       detail: describeEdge(t),
+      ...(t.to ? { anchor: { kind: "edge" as const, from: t.from, to: t.to } } : {}),
     });
   }
 
@@ -156,6 +203,8 @@ export function computeGaps(input: {
       kind: "link",
       what: `这个入口一次都没进去`,
       detail: href,
+      // 它还不是图上的一个状态（那正是「没进去」的意思），所以锚在**看见它的那一屏**上。
+      ...(seenFrom.get(href) ? { anchor: { kind: "state" as const, id: seenFrom.get(href)! } } : {}),
     });
 
   // ③ 试过、但走不通的路。

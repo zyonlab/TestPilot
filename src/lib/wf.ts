@@ -541,6 +541,37 @@ export const useWf = create<WfState>((set, get) => ({
     );
 
     const cards: Artifact[] = [];
+
+    /**
+     * 探索走出来的那张图，作为它自己的一张卡。
+     *
+     * 此前 explore 这一步在画布上只有「19.5s」，它真正的产出——产品长什么样、
+     * 哪些屏走到了、哪些入口没进去——一件都没露出来。而下游每一条缺口都在引用它。
+     * 卡上报的是「几屏几条路」而不是「几个状态几条转移」：读它的人关心的是产品，
+     * 不是这个 harness 的内部词汇。
+     */
+    if (full.explore?.graph) {
+      const g = full.explore.graph as {
+        states?: unknown[];
+        transitions?: Array<{ walked?: boolean }>;
+        unvisited?: unknown[];
+        stoppedBecause?: string;
+      };
+      const walked = (g.transitions ?? []).filter((t) => t.walked !== false).length;
+      const unseen = (g.unvisited ?? []).length;
+      cards.push({
+        id: "a-map", node: "explore", title: "产品地图",
+        value: String((g.states ?? []).length),
+        sub: unseen
+          // 「没进去的入口」摆在卡面上，因为它是这张图唯一会让人改主意的数：
+          // 它说的是「这张地图是不全的，而且缺了这么多」。
+          ? `${walked} 条路走过 · ${unseen} 个入口没进去`
+          : `${walked} 条路走过`,
+        tone: unseen ? "warn" : undefined,
+        opens: { surface: "map", label: "看地图" },
+      });
+    }
+
     const specNode = has("spec") ? "spec" : has("explore") ? "explore" : "";
     if (specNode && full[specNode]) {
       const origin = String(full[specNode].origin ?? "");

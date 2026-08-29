@@ -743,6 +743,7 @@ export const dict: Record<string, Entry> = {
     ja: "ミューテーション未実行",
   },
   "review.gapsNone": { zh: "这一列没有发现缺口", en: "No gaps found here", ja: "ギャップなし" },
+  "review.gapLocate": { zh: "在地图上看它", en: "Find it on the map", ja: "マップで見る" },
   "review.gapsShow": { zh: "看缺口", en: "Show gaps", ja: "ギャップを表示" },
   "review.gapsHide": { zh: "收起", en: "Hide", ja: "隠す" },
   "review.gapsTitle": { zh: "这个产品有、而这批用例没有的", en: "In the product, missing from this batch", ja: "製品にあってこのバッチにないもの" },

@@ -11,7 +11,7 @@ import {
   type TestCase,
 } from "./db.js";
 import { getGraphVersion, nodeOutput, outputStore } from "./graphs.js";
-import { computeGaps, stoppedBecause, type Gap } from "./gaps.js";
+import { computeGaps, shortTarget, stoppedBecause, type Gap } from "./gaps.js";
 import { readMutationReport } from "./mutation.js";
 import { ABLATABLE, gated, modelFromEnv } from "@testpilot/harness-core";
 import {
@@ -93,6 +93,71 @@ export interface ReviewStory {
   acceptance: string[];
 }
 
+/**
+ * 只留画图要用的字段。
+ *
+ * 边上的一句话在这里就拼好，而不是丢给界面拼：这句话（「走到 /vets」「点『Find Owner』」）
+ * 已经在 `gaps.ts` 的 `describeEdge` 里定过一次，两处各拼一遍迟早会不一致，
+ * 而**同一条边在图上和在缺口清单里叫不同的名字**，是最伤信任的那种不一致。
+ */
+function trimGraph(g: {
+  entry?: string;
+  abstraction?: string;
+  states?: Array<{ id: string; route?: string; title?: string; controls?: string[] }>;
+  transitions?: Array<{
+    from: string;
+    to?: string;
+    walked?: boolean;
+    ok?: boolean;
+    action?: { kind?: string; target?: string };
+  }>;
+  unvisited?: string[];
+  stoppedBecause?: string;
+}): ReviewGraph {
+  return {
+    entry: g.entry,
+    abstraction: g.abstraction,
+    states: (g.states ?? []).map((s) => ({
+      id: s.id,
+      route: s.route,
+      title: s.title,
+      controls: s.controls,
+    })),
+    transitions: (g.transitions ?? []).map((t) => ({
+      from: t.from,
+      to: t.to,
+      walked: t.walked,
+      ok: t.ok,
+      kind: t.action?.kind,
+      // 跟 gaps.ts 的 describeEdge 用同一个收短规则：同一条边在图上和在缺口清单里
+      // 必须读起来是同一句话。
+      label:
+        t.action?.kind === "goto"
+          ? `走到 ${shortTarget(t.action.target)}`
+          : `点「${t.action?.target ?? "?"}」`,
+    })),
+    unvisited: g.unvisited,
+    stoppedBecause: g.stoppedBecause,
+  };
+}
+
+/** 画状态流图要用的最小形状。 */
+export interface ReviewGraph {
+  entry?: string;
+  abstraction?: string;
+  states: Array<{ id: string; route?: string; title?: string; controls?: string[] }>;
+  transitions: Array<{
+    from: string;
+    to?: string;
+    walked?: boolean;
+    ok?: boolean;
+    kind?: string;
+    label?: string;
+  }>;
+  unvisited?: string[];
+  stoppedBecause?: string;
+}
+
 export interface ReviewBatch {
   wfRunId: string;
   projectId?: string;
@@ -120,6 +185,18 @@ export interface ReviewBatch {
   gaps: Gap[];
   /** 探索为什么停下来——它决定「没看到」那一类该不该怪探索，还是这个产品就这么大。 */
   exploreStoppedBecause?: string;
+  /**
+   * 探索画出来的状态流图，原样给界面画。
+   *
+   * 此前复核只拿到 `stoppedBecause` 一句话，于是缺口里那句
+   * 「/owners 走到 … → /owners/find」在界面上是一串没有落点的字符串——
+   * **人读到它，没有任何地图可以把它放上去**。整条链的地基是这张图，
+   * 而要复核的人从头到尾看不见它。
+   *
+   * 只送画图要用的字段：控件文案留着（点开某一屏要看它上面有什么），
+   * 其余（选择器、截图路径之类）不送——它们对读图的人没有意义，只是体积。
+   */
+  graph?: ReviewGraph;
   /**
    * 变异实验的结果——**没跑过时是 undefined，不是 0 分**。
    *
@@ -326,6 +403,7 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
         }
       : {}),
     exploreStoppedBecause: stoppedBecause(explore?.graph),
+    ...(explore?.graph ? { graph: trimGraph(explore.graph) } : {}),
   };
 }
 

@@ -1,5 +1,6 @@
 import { CasesBoard } from "@/pages/CasesBoard";
 import { ReviewPage } from "@/pages/Review";
+import { ProductMap } from "@/pages/ProductMap";
 import { TracePage } from "@/pages/Trace";
 import { CodeLinePage, ChangesPage } from "@/pages/CodeLine";
 import { Delivery } from "@/pages/Delivery";
@@ -25,6 +26,14 @@ import { EvalsPage } from "@/pages/Evals";
 /** 打开这张卡时，画布上正在看的是哪一次运行。 */
 export interface SurfaceContext {
   wfRunId?: string;
+  /**
+   * 打开这张卡时要落在哪一处（`edge:/a->/b`、`state:/a`）。
+   *
+   * 从缺口清单点进地图时带过来。放在 URL 里而不是全局状态里，
+   * 是因为**这个落点必须能被贴给别人**——「你看这条路没人验」这句话
+   * 不该只能靠口头描述。
+   */
+  focus?: string;
 }
 
 export interface Surface {
@@ -38,6 +47,16 @@ export interface Surface {
 }
 
 export const SURFACES: Surface[] = [
+  /**
+   * 探索这一组：它走出来的那张地图。
+   *
+   * 挂在 explore 卡上而不是塞进复核抽屉，是照这个界面自己的规矩办的——
+   * 「你通过正在处理的那个对象进入它」。地图是 explore 产出的，就从 explore 进。
+   * 但缺口在复核那一侧，所以复核里的缺口能点过来（见 Review 的 `mapHref`），
+   * 两边靠 URL 里的落点串起来，而不是把地图复制一份塞进复核。
+   */
+  { id: "map", group: "explore", title: "产品地图", render: (ctx) => <ProductMap focusRun={ctx.wfRunId} focus={ctx.focus} /> },
+
   // 用例这一组：同一批用例的三种看法——它是什么、要不要它、它凭什么这么写。
   { id: "cases", group: "cases", title: "用例看板", render: () => <CasesBoard />, needsProject: true },
   // 唯一一个吃上下文的：从某次运行的门禁卡点进来，就该停在那一批上。

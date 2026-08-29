@@ -186,21 +186,30 @@ const Divider = () => <span className="mx-0.5 h-5 w-px flex-none bg-border" />;
  * address of its own, because the card is something on top of the workspace, not a place
  * instead of it.
  */
-function useOpenSurface(): [string, (id: string) => void] {
-  const read = () => new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("open") ?? "";
+function useOpenSurface(): [string, string, (id: string) => void] {
+  const params = () => new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+  const read = () => params().get("open") ?? "";
+  const readFocus = () => params().get("at") ?? "";
   const [id, setId] = useState(read);
+  const [focus, setFocus] = useState(readFocus);
   useEffect(() => {
-    const onHash = () => setId(read());
+    const onHash = () => {
+      setId(read());
+      setFocus(readFocus());
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 手动换 tab 时把落点清掉：那个落点是上一张卡的事，留着它会让新打开的卡
+  // 停在一个跟这次点击无关的地方。
   const set = (next: string) => {
     const [path] = window.location.hash.split("?");
     window.location.hash = next ? `${path || "#/"}?open=${next}` : path || "#/";
     setId(next);
+    setFocus("");
   };
-  return [id, set];
+  return [id, focus, set];
 }
 
 /**
@@ -617,7 +626,7 @@ export function WorkspacePage() {
    * the rest of the time they are two more things on a screen that already had six. They
    * open themselves when a run starts and stay wherever the person last put them.
    */
-  const [openId, setOpenId] = useOpenSurface();
+  const [openId, openFocus, setOpenId] = useOpenSurface();
   const [traceOpen, setTraceOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1315,7 +1324,7 @@ export function WorkspacePage() {
           {openId === "spec" && wfRunId && <SpecDrawer wfRunId={wfRunId} onClose={() => setOpenId("")} />}
           {openId === "stories" && wfRunId && <StoriesDrawer wfRunId={wfRunId} onClose={() => setOpenId("")} />}
           {openId && openId !== "spec" && openId !== "stories" && (
-            <SurfacePanel surfaceId={openId} wfRunId={wfRunId} onClose={() => setOpenId("")} onSwitch={setOpenId} />
+            <SurfacePanel surfaceId={openId} wfRunId={wfRunId} focus={openFocus} onClose={() => setOpenId("")} onSwitch={setOpenId} />
           )}
           {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
           {diagnosing && (

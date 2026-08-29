@@ -78,6 +78,8 @@ interface Gap {
   kind: "transition" | "flow" | "module" | "link" | "blocked" | "unknown" | "mutant";
   what: string;
   detail?: string;
+  /** 它落在产品地图的哪一处。没有落点的缺口（规格疑问、变异盲区）不给可点样式。 */
+  anchor?: { kind: "edge"; from: string; to: string } | { kind: "state"; id: string };
 }
 
 interface Batch {
@@ -250,14 +252,50 @@ function GapList({ gaps }: { gaps: Gap[] }) {
   // ——一条全绿的用例守着一个它根本守不住的地方，比没写用例更值得先看。
   const blind = gaps.filter((g) => g.reach === "blind");
 
-  const row = (g: Gap, i: number) => (
-    <div key={i} className="rounded border border-dashed border-border/70 px-1.5 py-1">
-      <div className="text-[11px] leading-snug">{g.what}</div>
-      {g.detail && (
-        <div className="mt-0.5 break-words font-mono text-[10px] leading-snug text-muted-foreground">{g.detail}</div>
-      )}
-    </div>
-  );
+  /**
+   * 一条缺口。**带落点的可以点进地图**。
+   *
+   * 「这条路走过，没有用例验它：/owners 走到 … → /owners/find」——这句话原来是死的，
+   * 读它的人没有任何地图可以把它放上去。现在它跳到产品地图并高亮那条边。
+   *
+   * 没有落点的（规格疑问、缺故事的流程、活下来的变异体）**不做成可点的样子**：
+   * 一个点下去什么也不发生的东西，比一个明摆着不能点的东西更伤人。
+   */
+  const row = (g: Gap, i: number) => {
+    const at = g.anchor
+      ? g.anchor.kind === "edge"
+        ? `edge:${g.anchor.from}->${g.anchor.to}`
+        : `state:${g.anchor.id}`
+      : "";
+    const body = (
+      <>
+        <div className="text-[11px] leading-snug">{g.what}</div>
+        {g.detail && (
+          <div className="mt-0.5 break-words font-mono text-[10px] leading-snug text-muted-foreground">{g.detail}</div>
+        )}
+      </>
+    );
+    if (!at)
+      return (
+        <div key={i} className="rounded border border-dashed border-border/70 px-1.5 py-1">
+          {body}
+        </div>
+      );
+    return (
+      <button
+        key={i}
+        onClick={() => {
+          const [path] = window.location.hash.split("?");
+          window.location.hash = `${path || "#/"}?open=map&at=${encodeURIComponent(at)}`;
+        }}
+        title={t("review.gapLocate")}
+        className="w-full rounded border border-dashed border-border/70 px-1.5 py-1 text-left transition-colors hover:border-primary/60 hover:bg-primary/5"
+      >
+        {body}
+        <div className="mt-0.5 text-[10px] text-primary">{t("review.gapLocate")} →</div>
+      </button>
+    );
+  };
 
   return (
     <div className="mt-2 rounded-lg border border-dashed border-amber-300/70 bg-amber-50/40 p-2">

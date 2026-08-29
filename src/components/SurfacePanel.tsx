@@ -17,12 +17,15 @@ import { surfaceById, surfacesInGroup } from "@/lib/surfaces";
 export function SurfacePanel({
   surfaceId,
   wfRunId,
+  focus,
   onClose,
   onSwitch,
 }: {
   surfaceId: string;
   /** 画布上正在看的运行——从它的产物卡点进来的界面应当停在它上面。 */
   wfRunId?: string;
+  /** 打开时要落在这张卡里的哪一处。来自 URL 的 `at=`，所以链接可以发给别人。 */
+  focus?: string;
   onClose: () => void;
   onSwitch: (id: string) => void;
 }) {
@@ -45,7 +48,7 @@ export function SurfacePanel({
     >
       {/* The hosted pages each render their own TopBar; inside a drawer that would be a
           second header. The same flag the section shell used tells them to stand down. */}
-      <InSectionProvider>{surface.render({ wfRunId })}</InSectionProvider>
+      <InSectionProvider>{surface.render({ wfRunId, focus })}</InSectionProvider>
     </Drawer>
   );
 }

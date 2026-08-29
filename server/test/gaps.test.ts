@@ -195,3 +195,40 @@ describe("变异缺口的身份是「哪个缺陷」，不是「哪来的」", (
     expect(g).toHaveLength(1);
   });
 });
+
+describe("缺口要能在地图上定位", () => {
+  const graph = {
+    entry: "/",
+    states: [
+      { id: "/", controls: ["a: FIND OWNERS -> /owners/find", "a: 深处 -> /deep"] },
+      { id: "/owners/find", controls: [] },
+    ],
+    transitions: [
+      { from: "/", to: "/owners/find", walked: true, ok: true, action: { kind: "goto", target: "http://x/owners/find" } },
+    ],
+    unvisited: ["/deep"],
+  };
+
+  it("走过没验的转移，锚在那条边上", () => {
+    const g = computeGaps({ graph }).find((x) => x.kind === "transition");
+    expect(g?.anchor).toEqual({ kind: "edge", from: "/", to: "/owners/find" });
+  });
+
+  it("没进去的入口锚在**看见它的那一屏**上——它自己还不是图上的节点", () => {
+    const g = computeGaps({ graph }).find((x) => x.kind === "link");
+    expect(g?.anchor).toEqual({ kind: "state", id: "/" });
+  });
+
+  it("锚不到就不给锚点——宁可不可点，也不要点了跳到不相干的地方", () => {
+    const g = computeGaps({ graph: { ...graph, states: [], unvisited: ["/nowhere"] } }).find(
+      (x) => x.kind === "link",
+    );
+    expect(g?.anchor).toBeUndefined();
+  });
+
+  it("跳转目标只留路径：同一条边在图上和在清单里必须读起来一样", () => {
+    const g = computeGaps({ graph }).find((x) => x.kind === "transition");
+    expect(g?.detail).toContain("走到 /owners/find");
+    expect(g?.detail).not.toContain("http://");
+  });
+});
