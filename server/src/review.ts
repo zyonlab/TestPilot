@@ -713,8 +713,19 @@ export async function regenerate(
 }
 
 /** Runs that still have something waiting for a person. */
-export async function pendingRuns(limit = 20): Promise<Array<{ wfRunId: string; graphId: string; pending: number; total: number }>> {
-  const out: Array<{ wfRunId: string; graphId: string; pending: number; total: number }> = [];
+/**
+ * 可复核的批次。**带上开始时间**——列表里认哪一批，靠的是时间，不是那串哈希。
+ */
+export async function pendingRuns(
+  limit = 20,
+): Promise<Array<{ wfRunId: string; graphId: string; pending: number; total: number; startedAt?: string }>> {
+  const out: Array<{
+    wfRunId: string;
+    graphId: string;
+    pending: number;
+    total: number;
+    startedAt?: string;
+  }> = [];
   for (const row of outputStore.listRuns(limit)) {
     if (row.status !== "done") continue;
     try {
@@ -725,6 +736,7 @@ export async function pendingRuns(limit = 20): Promise<Array<{ wfRunId: string; 
           graphId: String(row.graphId),
           pending: batch.pending,
           total: batch.items.length,
+          startedAt: row.startedAt ? String(row.startedAt) : undefined,
         });
     } catch {
       /* a run whose outputs are gone is not reviewable; skip it rather than fail the list */

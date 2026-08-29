@@ -109,6 +109,21 @@ interface RunRow {
   graphId: string;
   pending: number;
   total: number;
+  startedAt?: string;
+}
+
+/**
+ * 批次的标识是**时间**，不是那串哈希。
+ *
+ * 一排 `wf-mtd7gcdk · 40/40` 里，人认不出哪一批是自己要复核的那一批，
+ * 也没法跟别人说「看第三个」。哈希留在 title 里，需要的人 hover 得到。
+ */
+function batchStamp(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(5, 16).replace("T", " ");
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 const TIER_LABEL: Record<number, string> = { 1: "t1 assert", 2: "t2 invariant", 3: "t3 judge" };
@@ -685,6 +700,7 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
             {runs.map((r) => (
               <button
                 key={r.wfRunId}
+                title={r.wfRunId}
                 onClick={() => void openRun(r.wfRunId)}
                 className={cn(
                   "rounded-md border px-2 py-1 font-mono text-[11px]",
@@ -693,7 +709,7 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                     : "border-border text-muted-foreground hover:bg-muted",
                 )}
               >
-                {r.wfRunId} · {r.pending}/{r.total}
+                {batchStamp(r.startedAt) || r.wfRunId} · {r.pending}/{r.total}
               </button>
             ))}
             {runs.length === 0 && <span className="text-[12px] text-muted-foreground">{t("review.noRuns")}</span>}

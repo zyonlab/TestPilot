@@ -45,6 +45,35 @@ export interface NodeRun {
   note?: string;
 }
 
+/**
+ * 正在看的是哪一次运行，**记在地址栏里**。
+ *
+ * 之前它只活在内存里，后果有两个，都很实在：
+ *   · 刷新一下就回到「最近那一次」，人正在读的那一批没了；
+ *   · **没法把「请复核这一次」发给人**——而这正是复核这件事的核心动作。
+ *     对方只能自己在几十个 `wf-mtczz1xw · done` 里猜。
+ *
+ * 只存运行 id 就够：图和项目都能从这一次运行本身推出来，
+ * 多存两个字段只会多两个能对不上的地方。
+ */
+export const runFromHash = (): string =>
+  new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("run") ?? "";
+
+export function writeRunToHash(wfRunId: string): void {
+  const [path, query] = window.location.hash.split("?");
+  const params = new URLSearchParams(query ?? "");
+  if (params.get("run") === wfRunId) return;
+  if (wfRunId) params.set("run", wfRunId);
+  else params.delete("run");
+  // 换了运行，上一处落点就作废了——它指的是上一次运行里的某条边。
+  params.delete("at");
+  const q = params.toString();
+  const next = `${path || "#/"}${q ? `?${q}` : ""}`;
+  // replaceState 而不是改 hash：换运行不该往后退历史里堆一层，
+  // 否则「返回」变成一次一次倒着走过所有看过的运行。
+  window.history.replaceState(null, "", next);
+}
+
 export interface WfRunSummary {
   id: string;
   graphId: string;
@@ -317,10 +346,18 @@ export const useWf = create<WfState>((set, get) => ({
         error: "",
         selectedGraph: get().selectedGraph || graphs[0]?.id || "",
       });
-      // Land on the newest run for the selected graph, so opening the page shows the last
-      // thing that happened rather than an empty canvas.
-      const latest = runs.find((r) => r.graphId === (get().selectedGraph || graphs[0]?.id));
-      if (latest && !get().wfRunId) await get().selectRun(latest.id);
+      // 地址栏里指名了哪一次，就停在那一次——这是别人发过来的链接该有的行为。
+      // 指名的那次不存在了（清过数据、换过机器）就退回默认，而不是留一张空画布。
+      const asked = runFromHash();
+      const pinned = asked && runs.some((r) => r.id === asked) ? asked : "";
+      if (pinned) {
+        await get().selectRun(pinned);
+      } else {
+        // Land on the newest run for the selected graph, so opening the page shows the last
+        // thing that happened rather than an empty canvas.
+        const latest = runs.find((r) => r.graphId === (get().selectedGraph || graphs[0]?.id));
+        if (latest && !get().wfRunId) await get().selectRun(latest.id);
+      }
     } catch (e) {
       set({ error: (e as Error).message });
     }
@@ -374,6 +411,7 @@ export const useWf = create<WfState>((set, get) => ({
       // A paused node never finished, so it has no record among `nodes`; without this the
       // canvas shows the run stopped but not where.
       if (pausedAt) nodeRuns[pausedAt] = { ...nodeRuns[pausedAt], state: "paused" };
+      writeRunToHash(wfRunId);
       set({
         wfRunId,
         runStatus: run.status,

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui";
 import { useT } from "@/lib/prefs";
 import { cn } from "@/lib/cn";
 import { API_BASE, IS_OVERRIDDEN, resetApiBase } from "@/lib/base";
-import { useWf, type Artifact, type GraphDef, type NodeRun, type NodeState, type Runtime, type TraceRow } from "@/lib/wf";
+import { runFromHash, useWf, type Artifact, type GraphDef, type NodeRun, type NodeState, type Runtime, type TraceRow } from "@/lib/wf";
 import { SurfacePanel } from "@/components/SurfacePanel";
 import { Drawer } from "@/components/overlay";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
@@ -174,6 +174,19 @@ function ArtifactCard({ data }: NodeProps) {
 }
 
 const nodeCards = { card: NodeCard, artifact: ArtifactCard };
+
+/**
+ * 运行的时间戳，短到能放进一个下拉框。
+ *
+ * 年份不写：同一个下拉里几乎不会跨年，而多出来的四个字符会把真正要比的
+ * 「几号几点」挤出可视范围。秒也不写——同一分钟内起两次运行的情况不存在。
+ */
+function runStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace("T", " ");
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 /** Separates one kind of control from another: scope, this run, this graph, this harness. */
 const Divider = () => <span className="mx-0.5 h-5 w-px flex-none bg-border" />;
@@ -751,6 +764,39 @@ export function WorkspacePage() {
     void syncToProject(activeProjectId);
   }, [activeProjectId, syncToProject]);
 
+  /**
+   * 跟住地址栏里的 `run=`。
+   *
+   * 光在启动时读一次不够：`#/review/<id>` 这个短写法要先被规整成 `run=`，
+   * 而规整发生在 App 的 effect 里，比这里的 `load()` 晚——实测的表现是
+   * 「打开别人发来的链接，停在完全不相干的一次运行上」。
+   * 改成跟着 `runs` 到位和 hash 变化走，两种时序都对。
+   *
+   * 写回地址栏用的是 replaceState，不触发 hashchange，所以这里不会自己咬自己。
+   */
+  useEffect(() => {
+    const sync = () => {
+      const want = runFromHash();
+      if (want && want !== wfRunId && runs.some((r) => r.id === want)) void selectRun(want);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [runs, wfRunId, selectRun]);
+
+  /**
+   * 反过来也要对上：**从链接进来时，项目跟着那次运行走**。
+   *
+   * 别人发来 `?run=wf-…`，那一次运行属于哪个项目由它自己说了算。
+   * 不跟着切的话，运行选中了、但项目选择器停在别处，于是运行下拉里
+   * 根本没有那一项——选择器显示空白，人以为链接坏了。
+   */
+  useEffect(() => {
+    if (!wfRunId) return;
+    const own = runs.find((r) => r.id === wfRunId)?.projectId;
+    if (own && own !== activeProjectId) void selectProject(own);
+  }, [wfRunId, runs, activeProjectId, selectProject]);
+
   // 抽屉里的东西导航走了，抽屉就该让位——否则新建项目成功后，人看到的还是设置。
   useEffect(() => {
     const onNav = () => setSettingsOpen(false);
@@ -895,8 +941,15 @@ export function WorkspacePage() {
               .filter((r) => r.graphId === selectedGraph)
               .filter((r) => !r.projectId || r.projectId === activeProjectId)
               .map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.id} · {r.status}
+                /*
+                  以**时间**为标识，不是以 id。
+                  同一个图、同一个项目下常年堆着几十次运行，全部长成
+                  `wf-mtczz1xw · done`——要复核的人从这个列表里认不出哪次是哪次，
+                  连口头告诉别人选哪个都做不到。哈希只有在时间撞了的时候才有用，
+                  所以它留在 title 里，让需要的人 hover 得到。
+                */
+                <option key={r.id} value={r.id} title={r.id}>
+                  {runStamp(r.startedAt)} · {r.status}
                   {!r.projectId ? ` · ${t("wf.runUnbound")}` : ""}
                 </option>
               ))}

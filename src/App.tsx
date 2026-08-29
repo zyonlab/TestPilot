@@ -38,6 +38,19 @@ function normalise(): void {
   const params = new URLSearchParams(query ?? "");
   if (params.get("open")) return;
 
+  /**
+   * `#/review/<runId>` 是给人发链接用的短写法。
+   *
+   * 这个应用只有一个地址，别的路径一律被规整回 `#/`——包括这一个，
+   * 于是「请复核这一次」这句话没有对应的链接可发。规整成
+   * `#/?open=review&run=<id>`，短写法照样能用，内部仍然只有一个地址。
+   */
+  const deep = /^\/review\/(wf-[A-Za-z0-9_-]+)$/.exec(path ?? "");
+  if (deep) {
+    window.location.hash = `#/?open=review&run=${deep[1]}`;
+    return;
+  }
+
   const section = params.get("s");
   const card = (section && LEGACY[`/${section}`]) || LEGACY[path];
   // 设置 is a drawer rather than a card, and the workspace itself is the address.
