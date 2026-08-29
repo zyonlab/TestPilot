@@ -145,6 +145,13 @@ export interface LaunchOpts {
   extraHeaders?: Record<string, string>; // fixed request headers (resolved, secrets injected)
   query?: Record<string, string>; // fixed query-string params appended to navigations
   storageState?: StorageState | null; // captured login state → cookies + localStorage injected
+  /**
+   * 变异体：往这一个浏览器会话里注入一个人造缺陷，看用例会不会叫。
+   *
+   * **被测应用一个字节都不改**——变的只是这个会话看到的那份 DOM。这一点是黑盒变异测试
+   * 成立的关键：两次运行之间被测对象仍然是同一个东西。见 `mutate/inject.ts`。
+   */
+  mutation?: { id: string; script: string };
 }
 
 // Launch Chrome for Testing (Puppeteer's default build) and wrap the page in a Midscene agent.
@@ -169,6 +176,12 @@ export async function launchSession(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     );
     const { address, sentTxs } = await setupInjectedWallet(page, cfg);
+    /**
+     * 变异体要在**第一次导航之前**装好，而且要用 `evaluateOnNewDocument`——
+     * 它对每一个新文档都重新执行。加载后再注入的话，第一屏是原样的，
+     * 而很多用例第一步就在第一屏上断言。
+     */
+    if (opts.mutation) await page.evaluateOnNewDocument(opts.mutation.script);
     await applyPreNav(page, opts);
     const navUrl = appendQuery(url, opts.query);
     await page.goto(navUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
