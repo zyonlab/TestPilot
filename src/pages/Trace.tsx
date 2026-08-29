@@ -83,6 +83,28 @@ export function TracePage() {
       .catch((e) => setError((e as Error).message));
   }, [activeProjectId]);
 
+  /**
+   * 空的时候要说清楚**为什么**空。
+   *
+   * 这一页追的是已经批准进套件的用例；一次运行刚生成的四十条还在复核队列里，
+   * 不算数。于是一次有四十条用例的运行，在这里显示 `CASES 0`——
+   * 而界面上只有那个 0，人只会得出「坏了」。
+   *
+   * 「没跑过」和「0 分」要分得开这条规矩，在别处贯彻了，这里漏了。
+   * 要分开就得知道队列里有没有东西，所以顺带问一次。
+   */
+  const [pending, setPending] = useState<number | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/api/review`)
+      .then((r) => r.json())
+      // 数**批次**，不数用例。用例总数是跨批次相加的，而同一批四十条被重复生成过十几次,
+      // 于是那个数会显示成「570 条正等着复核」——一个吓人且没有意义的数。
+      .then((d: { runs?: Array<{ pending: number }> }) =>
+        setPending((d.runs ?? []).filter((r) => (r.pending ?? 0) > 0).length),
+      )
+      .catch(() => setPending(null));
+  }, []);
+
   if (!activeProjectId) return <div className="p-4 text-sm text-muted-foreground">{t("assets.pickProject")}</div>;
   if (error) return <div className="p-4 text-[12.5px] text-rose-500">{error}</div>;
   if (!rep) return <div className="p-4 text-sm text-muted-foreground">…</div>;
@@ -152,6 +174,29 @@ export function TracePage() {
       <p className="border-b border-border px-4 py-2 text-[12.5px] text-muted-foreground">
         {side === "cases" ? t("trace.ledeCases") : t("trace.ledeStories")}
       </p>
+
+      {rep.rows.length === 0 && (
+        <div className="m-4 max-w-2xl space-y-2 rounded-xl border border-dashed border-border p-4 text-[12.5px]">
+          <div className="font-medium text-foreground">{t("trace.emptyTitle")}</div>
+          <p className="leading-relaxed text-muted-foreground">{t("trace.emptyWhy")}</p>
+          {pending !== null && pending > 0 ? (
+            <p className="text-muted-foreground">
+              {t("trace.emptyPending", { n: pending })}{" "}
+              <button
+                onClick={() => {
+                  const [path] = window.location.hash.split("?");
+                  window.location.hash = `${path || "#/"}?open=review`;
+                }}
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                {t("trace.emptyGoReview")}
+              </button>
+            </p>
+          ) : (
+            pending !== null && <p className="text-muted-foreground">{t("trace.emptyNoRuns")}</p>
+          )}
+        </div>
+      )}
 
       {side === "cases" ? (
         <table className="w-full text-[12.5px]">
