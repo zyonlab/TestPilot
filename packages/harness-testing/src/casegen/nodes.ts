@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { computeFlows, computeModules, describeFlows } from "../exec/flows.js";
 import { scanSmells } from "./smells.js";
+import { checkStories } from "./storyQuality.js";
 import { ABLATABLE, fitToBudget, type ModelClient, type NodeDef } from "@testpilot/harness-core";
 import {
   CASES_SCHEMA,
@@ -789,6 +790,19 @@ export function planStoriesNode(
           ? { ...st, activity: undefined }
           : st;
       });
+      /**
+       * 故事质量：对照 QUS 框架里能自动查、而且这条流水线真会犯的那几条。
+       * 见 `storyQuality.ts`。报，不拦。
+       */
+      const quality = checkStories(stories);
+      if (quality.findings.length)
+        ctx.emit("log", {
+          stream: "plan.stories",
+          text:
+            `${Math.round(quality.ratio * 100)}% 的故事有质量问题（${quality.findings.length} 处）：` +
+            quality.findings.slice(0, 4).map((f) => `${f.storyId} ${f.what.split("——")[0]}`).join("；"),
+        });
+
       const activities = new Set(stories.map((s) => s.activity).filter(Boolean));
       /**
        * 骨架和躯干一样粗，就等于没有骨架。报出来——故事图看起来正常，只是它不是图。
