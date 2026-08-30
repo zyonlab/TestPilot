@@ -772,6 +772,14 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
     expect(missing, `这些字段 zod 认、stories schema 不认：${missing.join(", ")}`).toEqual([]);
   });
 
+  it("规格里下游依赖的三个数组也得是 required——可选就等于不写", () => {
+    const req = new Set((COMPOSE_SCHEMA as { required: readonly string[] }).required);
+    // flows/modules/screens 分别是：故事挂流程的线、故事地图的横轴、产品地图上的业务名。
+    // 数组为空同样满足 required，所以这不会逼模型编——它只是不允许「装作没这回事」。
+    for (const k of ["flows", "modules", "screens"])
+      expect(req.has(k), `${k} 在 compose schema 里是可选的——这个模型会直接不写`).toBe(true);
+  });
+
   /** 规格那一步同理。`modules` 在这里漏过一次，`screens` 是最近加的。 */
   it("SpecDoc 的每个字段，要么在 compose schema 里，要么在豁免名单里", () => {
     const produced = (COMPOSE_SCHEMA as { properties: Record<string, unknown> }).properties;

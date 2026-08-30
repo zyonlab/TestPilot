@@ -593,5 +593,16 @@ export const COMPOSE_SCHEMA = {
     },
     unknowns: { type: "array", items: { type: "string" } },
   },
-  required: ["rules", "unknowns"],
+  /**
+   * 同一条教训的第四次：**可选等于不写**（在 qwen3-8-27b 上）。
+   *
+   * `flows` / `modules` / `screens` 是提示词里点名要的，也是下游三件东西的唯一来源——
+   * 故事地图的横轴、产品地图上的业务名、故事挂到流程上的那根线。它们此前是可选的。
+   *
+   * 这份 mock 材料是**文档**，没有状态转移图，所以这三样本来就该是空的（聚类是从图上
+   * 算出来的），从它身上看不出问题。但换成探索来的材料就会看出来——而那正是这三样
+   * 唯一有用的场合。要求它们不会逼模型编：数组为空同样满足 required，
+   * 而「算出来有五个模块、模型一个名字都不给」和「本来就没有模块」是两回事。
+   */
+  required: ["rules", "unknowns", "title", "flows", "modules", "screens"],
 } as const;
