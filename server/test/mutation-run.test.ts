@@ -114,6 +114,28 @@ describe("变异测试的入口", () => {
     expect(r.survived).toBeGreaterThan(0);
   });
 
+  /**
+   * 「score 0」有两种完全不同的意思，报告必须分得开：
+   *   用例上了场、什么都没叫  → 真盲区
+   *   用例根本没上场           → 这次实验是坏的
+   * 实测撞到过：8 条干净跑挂了 4 条，报告只写了 score 0 和七条「盲区」。
+   */
+  it("干净跑挂了几条要写进报告——那是读懂 0 分的第一个数字", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (c, m) => !m && c === "c1"; // c1 干净跑就挂
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.baselineFailed).toBe(1);
+    expect(r.usableCases).toBe(1); // 两条用例，剩一条有机会叫
+  });
+
+  it("干净跑全挂时直接报错——那时每条「盲区」都是假的", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (_c, m) => !m; // 干净跑全挂
+    await expect(runMutation({ wfRunId: "wf-1", limit: 1 })).rejects.toThrow(/没有一条用例有机会叫/);
+    expect(saved).toHaveLength(0);
+  });
+
   it("生成不出变异体时如实报错，而不是给一份 0 分的报告", async () => {
     outputs["wf-1:spec"] = { rules: [] };
     await expect(runMutation({ wfRunId: "wf-1", limit: 1 })).rejects.toThrow(/生成不出变异体/);

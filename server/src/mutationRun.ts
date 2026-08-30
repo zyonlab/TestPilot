@@ -37,7 +37,19 @@ import { bus } from "./procs.js";
  */
 
 export interface MutationRunRequest {
+  /**
+   * **产品模型来自哪一次运行**：图与规格在这里，变异体从它们生成，报告也挂在它名下
+   * （复核界面上的「验不住」缺口是按这个 id 找报告的）。
+   */
   wfRunId: string;
+  /**
+   * **可执行用例来自哪一次运行**，默认同上。
+   *
+   * 分开不是为了灵活，是因为流水线本来就是两段：g0/g1 产出图、规格与文本用例，
+   * g2 才把它们变成能跑的代码，两者落在不同的运行上。实测 `wf-mtd350su` 只有图和规格、
+   * `wf-mtd7gcdk` 只有代码——不允许分开指定的话，这两次运行谁也跑不了变异。
+   */
+  codeFrom?: string;
   /** 从哪个节点取可执行用例。默认 `repair`（阶段二修完之后的那一版）。 */
   node?: string;
   /** 每类算子最多产几个变异体。成本 = 变异体数 × 跑一遍用例集。 */
@@ -63,11 +75,12 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
   const { wfRunId } = req;
   const node = req.node ?? "repair";
 
-  const bundle = (await nodeOutput(wfRunId, node)) as
+  const codeFrom = req.codeFrom ?? wfRunId;
+  const bundle = (await nodeOutput(codeFrom, node)) as
     | { code?: CodeCase[]; fragments?: Array<{ name: string; actions: unknown[] }> }
     | undefined;
   const code = (bundle?.code ?? []).slice(0, req.cases ?? 12);
-  if (!code.length) throw new Error(`运行 ${wfRunId} 的 ${node} 节点里没有可执行用例`);
+  if (!code.length) throw new Error(`运行 ${codeFrom} 的 ${node} 节点里没有可执行用例`);
   const fragments = bundle?.fragments ?? [];
 
   /**
@@ -92,7 +105,11 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
         `或者规格里没有带引号的界面文案。变异体必须来自产品本身，不能从用例生成。`,
     );
 
-  const target = req.target ?? (outputStore.getRun(wfRunId)?.detail as { target?: RunTarget } | undefined)?.target;
+  // 目标地址跟着**代码**走：那是这批用例当初真的跑过的地方。
+  const target =
+    req.target ??
+    (outputStore.getRun(codeFrom)?.detail as { target?: RunTarget } | undefined)?.target ??
+    (outputStore.getRun(wfRunId)?.detail as { target?: RunTarget } | undefined)?.target;
   if (!target?.url) throw new Error(`运行 ${wfRunId} 没有记录目标地址，不知道该对谁注变异体`);
 
   const runCase = async (c: CodeCase, mutation?: { id: string; script: string }): Promise<CaseOutcome & { applied?: number }> => {
@@ -105,12 +122,28 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
     };
   };
 
-  emit("started", { wfRunId, mutants: mutants.length, cases: code.length });
+  emit("started", { wfRunId, codeFrom, mutants: mutants.length, cases: code.length });
 
   // ① 干净跑。它决定「这条用例本来就挂着」，没有它整个判决都不成立。
   const clean: CaseOutcome[] = [];
   for (const c of code) clean.push(await runCase(c));
-  emit("baseline", { wfRunId, failed: clean.filter((c) => c.status === "failed").length, of: clean.length });
+  const baselineFailed = clean.filter((c) => c.status === "failed").length;
+  const baselineInfra = clean.filter((c) => c.status === "failed" && c.failKind === "infra").length;
+  const usableCases = clean.length - baselineFailed;
+  emit("baseline", { wfRunId, failed: baselineFailed, infra: baselineInfra, usable: usableCases, of: clean.length });
+
+  /**
+   * 一条都没剩就别往下跑。
+   *
+   * 全部用例干净跑都挂着的时候，后面每一个变异体必然「活下来」——不是因为用例集有盲区，
+   * 是因为**没有一条用例上得了场**。那会产出一份 `score: 0`、七八条「盲区」的报告，
+   * 而每一条盲区都是假的。宁可报错。
+   */
+  if (!usableCases)
+    throw new Error(
+      `干净跑 ${clean.length} 条全部失败（其中 ${baselineInfra} 条是基础设施故障），` +
+        `没有一条用例有机会叫——这一轮变异测出来的任何「盲区」都是假的。先把用例修绿再跑。`,
+    );
 
   // ② 每个变异体一轮。
   const results: MutantResult[] = [];
@@ -140,6 +173,11 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
     notApplied: score.notApplied,
     score: score.score,
     cases: code.length,
+    baselineFailed,
+    baselineInfra,
+    usableCases,
+    // 用例是从哪一次运行来的，要跟着报告走：一次结果说不清它的输入，就不是一次结果。
+    codeFrom: codeFrom === wfRunId ? undefined : codeFrom,
     survivors: survivorsAsGaps(score),
   };
   saveMutationReport(report);

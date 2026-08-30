@@ -1934,7 +1934,7 @@ app.get("/api/wf/runs/:id/traceability", async (req, res) => {
  * 后台跑：一轮是「变异体数 × 跑一遍用例集」，几十分钟起步。进度走 `mutation.*` 事件。
  */
 app.post("/api/mutation/:wfRunId", (req, res) => {
-  const body = (req.body ?? {}) as { node?: string; limit?: number; cases?: number };
+  const body = (req.body ?? {}) as { node?: string; limit?: number; cases?: number; codeFrom?: string };
   const started = runMutation({ wfRunId: req.params.wfRunId, ...body });
   started.catch((e) => console.warn(`[testpilot] mutation ${req.params.wfRunId} failed:`, (e as Error).message));
   res.json({
