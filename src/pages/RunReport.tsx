@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Play } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
-import { Button, PriorityBadge, RunStatusPill } from "@/components/ui";
+import { Button, PriorityBadge as BoardPriorityBadge, RunStatusPill } from "@/components/ui";
 import { Drawer } from "@/components/overlay";
 import { RunDetail, fmtDuration } from "@/components/RunDetail";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useT } from "@/lib/prefs";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
@@ -38,6 +39,117 @@ function decidedBy(run: RunRecord): "machine" | "judge" | undefined {
   return checks.every((c) => c.decidedBy === "machine") ? "machine" : "judge";
 }
 
+/**
+ * 同一条用例的多次执行，收成一组。
+ *
+ * 「一行一次执行」这个存储决定是对的（见 graphs.ts 的注释：只留最后一次会抹掉修复循环
+ * 本身要展示的东西）。但**展示**照抄存储就出了问题：修复循环重跑三轮的用例在这张表里
+ * 是三行同名同状态的记录，读的人看不出哪一行是重试，只会以为这条用例失败了三次。
+ *
+ * 所以分组在这一层做：主行是最终结论，展开才看每一轮。
+ * 排序按最近一次执行的时间——人找的是「刚才那条」，不是「最早那条」。
+ */
+interface RunGroup {
+  caseId: string;
+  caseTitle: string;
+  attempts: RunRecord[];
+  latest: RunRecord;
+}
+
+function groupByCase(runs: RunRecord[]): RunGroup[] {
+  const byCase = new Map<string, RunRecord[]>();
+  for (const r of runs) {
+    // caseId 可能为空（早期的单跑记录），那就退回用 id 本身，让它自成一组——
+    // 强行按标题合并会把两条同名但不同来源的执行混成一条历史。
+    const key = r.caseId || r.id;
+    byCase.set(key, [...(byCase.get(key) ?? []), r]);
+  }
+  const groups: RunGroup[] = [];
+  for (const [caseId, list] of byCase) {
+    const attempts = [...list].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+    groups.push({ caseId, caseTitle: attempts[0]!.caseTitle, attempts, latest: attempts[0]! });
+  }
+  return groups.sort((a, b) => Date.parse(b.latest.startedAt) - Date.parse(a.latest.startedAt));
+}
+
+/**
+ * 一行上的那几枚标签。主行与展开的每一轮共用——两处各写一遍，迟早只在一处修 bug。
+ */
+function RowChips({ r, t }: { r: RunRecord; t: (k: string, v?: Record<string, string | number>) => string }) {
+  const by = decidedBy(r);
+  return (
+    <>
+      {/* Who settled it. A pass a program checked and a pass a model judged from a
+          screenshot are not the same kind of green, and the list is where that difference
+          has to be visible — opening thirty runs to find out is how "all green" gets believed. */}
+      {by && (
+        <span
+          title={t(`runs.decidedByWhy.${by}`)}
+          className={cn(
+            "shrink-0 rounded px-1.5 py-0.5 text-[10.5px]",
+            by === "machine"
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {t(`runs.decidedBy.${by}`)}
+        </span>
+      )}
+      {/* 环境失败不是产品缺陷。
+          这是这套东西里最贵的一次区分（见 failure.ts）：一次模型不可达或浏览器崩掉
+          造成的红，和一次断言没过造成的红，在这张表里必须分得开——否则「通过率 67%」
+          会被当成产品坏了三处，而实际上产品一处都没坏。 */}
+      {r.failKind === "infra" && (
+        <span
+          title={`${t("runs.infraWhy")}${r.failCode ? ` · ${r.failCode}` : ""}`}
+          className="shrink-0 rounded bg-slate-500/15 px-1.5 py-0.5 text-[10.5px] text-slate-600 dark:text-slate-300"
+        >
+          {t("runs.infra")}
+        </span>
+      )}
+      {/* A candidate's trial run is not an approved case's run. Saying so on the row is
+          what keeps the two from being read as one history. */}
+      {(r.origin ?? "case") === "workflow" && (
+        <span
+          title={`${t("runs.originWhy.workflow")}${r.wfRunId ? ` · ${r.wfRunId}` : ""}`}
+          className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10.5px] text-sky-700 dark:text-sky-400"
+        >
+          {t("runs.origin.workflow")}
+        </span>
+      )}
+      {r.attempts && r.attempts > 1 && (
+        <span
+          title={t("runs.retriedWhy")}
+          className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-700 dark:text-amber-400"
+        >
+          ×{r.attempts}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * 优先级那一格。
+ *
+ * 工作流来源的执行记录里存的是 `graphs.ts` 写死的 "P2"，而那行代码旁边的注释写得很清楚：
+ * 候选没有看板优先级，声称一个就是在编造事实。代码已经拒绝编造，界面不该替它编——
+ * 所以这里显示「—」，并说明为什么。
+ */
+function PriorityBadge({ run }: { run: RunRecord }) {
+  const t = useT();
+  if ((run.origin ?? "case") === "workflow")
+    return (
+      <span
+        title={t("artifact.noPriorityWhy")}
+        className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+      >
+        —
+      </span>
+    );
+  return <BoardPriorityBadge priority={run.priority} />;
+}
+
 export function RunReportPage() {
   const t = useT();
   const runs = useStore((s) => s.runs);
@@ -57,12 +169,19 @@ export function RunReportPage() {
     runs[0]?.id,
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const filtered = runs.filter(
-    (r) =>
-      (filter === "all" || r.status === filter) &&
-      (origin === "all" || (r.origin ?? "case") === origin),
-  );
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = runs.filter((r) => {
+    if (filter !== "all" && r.status !== filter) return false;
+    if (origin !== "all" && (r.origin ?? "case") !== origin) return false;
+    if (!words.length) return true;
+    // 失败原因一起搜：查一类失败（「找不到元素」）比查一条用例名更常见。
+    const hay = `${r.caseTitle} ${r.caseId} ${r.failureReason ?? ""} ${r.failCode ?? ""}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+  const groups = groupByCase(filtered);
 
   // Computed over what is actually shown, so the number always answers a question the
   // reader can state: "the pass rate of these rows". Averaged over a mixed set it would
@@ -159,6 +278,13 @@ export function RunReportPage() {
                 </Button>
               ))}
               <span className="mx-1 h-5 w-px bg-border" />
+              <input
+                className="w-56 rounded-md border border-border bg-card px-2 py-1 text-[12px]"
+                placeholder={t("runs.searchPlaceholder")}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              <span className="mx-1 h-5 w-px bg-border" />
               {origins.map((o) => (
                 <button
                   key={o.key}
@@ -179,83 +305,98 @@ export function RunReportPage() {
 
             {/* Run list — full width; clicking a run opens the detail Drawer. */}
             <div className="overflow-hidden rounded-xl border border-border bg-card">
-              {filtered.length === 0 ? (
+              {groups.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">
                   {t("runs.noRunsMatch")}
                 </p>
               ) : (
-                filtered.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => {
-                      setSelectedRunId(r.id);
-                      setDrawerOpen(true);
-                    }}
-                    className={cn(
-                      "flex w-full cursor-pointer items-center gap-3 border-b border-border px-3 py-2.5 text-left last:border-b-0 hover:bg-muted/60",
-                      r.id === selected?.id && drawerOpen && "bg-muted",
-                    )}
-                  >
-                    <RunStatusPill status={r.status} />
-                    <PriorityBadge priority={r.priority} />
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                      {r.caseTitle}
-                    </span>
-                    {/* Who settled it. A pass a program checked and a pass a model judged
-                        from a screenshot are not the same kind of green, and the list is
-                        where that difference has to be visible — opening thirty runs to
-                        find out is how "all green" gets believed. */}
-                    {decidedBy(r) && (
-                      <span
-                        title={t(`runs.decidedByWhy.${decidedBy(r)}`)}
+                groups.map((g) => {
+                  const open = expanded.has(g.caseId);
+                  return (
+                    <Fragment key={g.caseId}>
+                      <div
                         className={cn(
-                          "shrink-0 rounded px-1.5 py-0.5 text-[10.5px]",
-                          decidedBy(r) === "machine"
-                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                            : "bg-muted text-muted-foreground",
+                          "flex w-full items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0 hover:bg-muted/60",
+                          g.latest.id === selected?.id && drawerOpen && "bg-muted",
                         )}
                       >
-                        {t(`runs.decidedBy.${decidedBy(r)}`)}
-                      </span>
-                    )}
-                    {/* 环境失败不是产品缺陷。
-                        这是这套东西里最贵的一次区分（见 failure.ts）：一次模型不可达或
-                        浏览器崩掉造成的红，和一次断言没过造成的红，在这张表里必须分得开——
-                        否则「通过率 67%」会被当成产品坏了三处，而实际上产品一处都没坏。 */}
-                    {r.failKind === "infra" && (
-                      <span
-                        title={`${t("runs.infraWhy")}${r.failCode ? ` · ${r.failCode}` : ""}`}
-                        className="shrink-0 rounded bg-slate-500/15 px-1.5 py-0.5 text-[10.5px] text-slate-600 dark:text-slate-300"
-                      >
-                        {t("runs.infra")}
-                      </span>
-                    )}
-                    {/* A candidate's trial run is not an approved case's run. Saying so on
-                        the row is what keeps the two from being read as one history. */}
-                    {(r.origin ?? "case") === "workflow" && (
-                      <span
-                        title={`${t("runs.originWhy.workflow")}${r.wfRunId ? ` · ${r.wfRunId}` : ""}`}
-                        className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10.5px] text-sky-700 dark:text-sky-400"
-                      >
-                        {t("runs.origin.workflow")}
-                      </span>
-                    )}
-                    {r.attempts && r.attempts > 1 && (
-                      <span
-                        title={t("runs.retriedWhy")}
-                        className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-700 dark:text-amber-400"
-                      >
-                        ×{r.attempts}
-                      </span>
-                    )}
-                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                      {fmtDuration(r.durationMs)}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {new Date(r.startedAt).toLocaleTimeString()}
-                    </span>
-                  </button>
-                ))
+                        {/* 一组多轮时才给展开钮：只跑过一次的用例不该长出一个点了没反应的三角。 */}
+                        {g.attempts.length > 1 ? (
+                          <button
+                            onClick={() =>
+                              setExpanded((s) => {
+                                const n = new Set(s);
+                                n.has(g.caseId) ? n.delete(g.caseId) : n.add(g.caseId);
+                                return n;
+                              })
+                            }
+                            title={t("runs.attemptsWhy")}
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                          >
+                            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          </button>
+                        ) : (
+                          <span className="w-3.5 shrink-0" />
+                        )}
+                        <button
+                          onClick={() => {
+                            setSelectedRunId(g.latest.id);
+                            setDrawerOpen(true);
+                          }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+                        >
+                          <RunStatusPill status={g.latest.status} />
+                          <PriorityBadge run={g.latest} />
+                          <span className="min-w-0 flex-1 truncate font-medium text-foreground">{g.caseTitle}</span>
+                          <RowChips r={g.latest} t={t} />
+                          {g.attempts.length > 1 && (
+                            <span
+                              title={t("runs.attemptsWhy")}
+                              className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-700 dark:text-amber-400"
+                            >
+                              {t("runs.attemptsN", { n: g.attempts.length })}
+                            </span>
+                          )}
+                          <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                            {fmtDuration(g.latest.durationMs)}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {new Date(g.latest.startedAt).toLocaleTimeString()}
+                          </span>
+                        </button>
+                      </div>
+                      {open &&
+                        g.attempts.map((r, i) => (
+                          <button
+                            key={r.id}
+                            onClick={() => {
+                              setSelectedRunId(r.id);
+                              setDrawerOpen(true);
+                            }}
+                            className={cn(
+                              "flex w-full cursor-pointer items-center gap-3 border-b border-border bg-muted/30 py-2 pl-10 pr-3 text-left last:border-b-0 hover:bg-muted/60",
+                              r.id === selected?.id && drawerOpen && "bg-muted",
+                            )}
+                          >
+                            <span className="w-14 shrink-0 font-mono text-[11px] text-muted-foreground">
+                              {t("runs.roundN", { n: g.attempts.length - i })}
+                            </span>
+                            <RunStatusPill status={r.status} />
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                              {r.failureReason ?? ""}
+                            </span>
+                            <RowChips r={r} t={t} />
+                            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                              {fmtDuration(r.durationMs)}
+                            </span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {new Date(r.startedAt).toLocaleTimeString()}
+                            </span>
+                          </button>
+                        ))}
+                    </Fragment>
+                  );
+                })
               )}
             </div>
           </div>

@@ -320,42 +320,50 @@ export function RunDetail({ run }: { run: RunRecord }) {
         </div>
       )}
 
-      <div className="mt-4">
-        <h3 className="font-display text-xs font-medium text-foreground">
-          {t("runs.stepsLogs")}
-        </h3>
-        <div className="mt-1.5 space-y-0.5">
-          {run.logs.map((line, i) => (
-            <div key={i} className="font-mono text-xs text-muted-foreground">
-              {line}
-            </div>
-          ))}
+      {/*
+        空的时候说清楚为什么空，而不是画几个占位框。
+        此前这里在 `screenshots` 为空时回落成 `[null,null,null,null]`，画出四个灰块标着
+        「步骤 1..4」——读的人会以为图还在加载，事实是**这里永远不会有图**：
+        `ExecOutcome` 里就没有截图字段，`graphs.ts` 只能写死一个空数组。
+        一个画着假占位的空态，比一句诚实的「没有」更伤人：它让人等一件不会发生的事。
+      */}
+      {run.logs.length > 0 && (
+        <div className="mt-4">
+          <h3 className="font-display text-xs font-medium text-foreground">{t("runs.stepsLogs")}</h3>
+          <div className="mt-1.5 space-y-0.5">
+            {run.logs.map((line, i) => (
+              <div key={i} className="font-mono text-xs text-muted-foreground">
+                {line}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-4">
         <h3 className="flex items-center gap-1.5 font-display text-xs font-medium text-foreground">
           <Image className="h-3.5 w-3.5" /> {t("runs.screenshots")}
         </h3>
-        <div className="mt-1.5 grid grid-cols-2 gap-2">
-          {(run.screenshots && run.screenshots.length > 0
-            ? run.screenshots
-            : [null, null, null, null]
-          ).map((shot, i) => (
-            <div key={i}>
-              {shot ? (
+        {run.screenshots && run.screenshots.length > 0 ? (
+          <div className="mt-1.5 grid grid-cols-2 gap-2">
+            {run.screenshots.map((shot, i) => (
+              <div key={i}>
                 <img
                   src={shot}
-                  alt={`step ${i + 1}`}
+                  alt={`${t("runs.step")} ${i + 1}`}
                   className="aspect-video w-full rounded-md border border-border object-cover"
                 />
-              ) : (
-                <div className="aspect-video rounded-md bg-muted" />
-              )}
-              <span className="text-xs text-muted-foreground">{t("runs.step")} {i + 1}</span>
-            </div>
-          ))}
-        </div>
+                <span className="text-xs text-muted-foreground">
+                  {t("runs.step")} {i + 1}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1.5 rounded-md border border-dashed border-border p-2.5 text-xs text-muted-foreground">
+            {(run.origin ?? "case") === "workflow" ? t("runs.noShotsWorkflow") : t("runs.noShots")}
+          </p>
+        )}
       </div>
     </div>
   );

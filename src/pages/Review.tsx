@@ -10,7 +10,17 @@ import { stopReason } from "@/lib/stopReason";
 import { CaseMeta, CaseBody } from "@/lib/artifact/CaseCard";
 import { StoryTitle } from "@/lib/artifact/StoryCard";
 import { Findings } from "@/lib/artifact/Findings";
+import { METHOD_KEY, TIER_KEY } from "@/lib/artifact/types";
 import type { ArtifactCase, ArtifactFinding, ArtifactStory, CaseField } from "@/lib/artifact/types";
+import {
+  EMPTY_FILTERS,
+  activityIndex,
+  filtersFromParams,
+  filtersToParams,
+  isFiltering,
+  matches,
+  type ReviewFilters,
+} from "./reviewFilter";
 
 
 /**
@@ -221,6 +231,111 @@ function EditForm({
         )}
         <span className="text-[10px] text-muted-foreground">{t("review.editHint")}</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 筛选条。
+ *
+ * 这一页此前唯一的输入框是批量查找替换——一个**会改数据**的框，长得像搜索框。
+ * 于是 40 条时人靠滚动，2000 条时这一页就报废了；而报废的方式是安静的：
+ * 界面不会说「找不到」，人只会慢慢放弃在这里找东西。
+ *
+ * 下拉里的选项全部来自这一批的实际取值，不是写死的枚举：一批里没有负例就不该出现
+ * 「负例」这个选项，让人点进一个必然为空的结果，是在浪费他仅有的耐心。
+ */
+function FilterBar({
+  filters,
+  onChange,
+  stories,
+  items,
+  shown,
+}: {
+  filters: ReviewFilters;
+  onChange: (f: ReviewFilters) => void;
+  stories: Story[];
+  items: ReviewItem[];
+  shown: number;
+}) {
+  const t = useT();
+  const set = (patch: Partial<ReviewFilters>) => onChange({ ...filters, ...patch });
+  const uniq = (xs: Array<string | undefined>) => [...new Set(xs.filter(Boolean) as string[])].sort();
+  const activities = uniq(stories.map((s) => s.activity?.trim()));
+  const methods = uniq(items.map((i) => i.designMethod));
+  const tiers = uniq(items.map((i) => String(i.tier)));
+  const on = isFiltering(filters);
+
+  const sel = "rounded-md border border-border bg-card px-2 py-1 text-[11px]";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+      <input
+        className="w-52 rounded-md border border-border bg-card px-2 py-1 text-[12px]"
+        placeholder={t("review.searchPlaceholder")}
+        value={filters.q}
+        onChange={(e) => set({ q: e.target.value })}
+      />
+      {activities.length > 1 && (
+        <select className={sel} value={filters.activity} onChange={(e) => set({ activity: e.target.value })}>
+          <option value="">{t("review.filterActivity")}</option>
+          {activities.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+      )}
+      {methods.length > 1 && (
+        <select className={sel} value={filters.method} onChange={(e) => set({ method: e.target.value })}>
+          <option value="">{t("cases.filterMethod")}</option>
+          {methods.map((m) => (
+            <option key={m} value={m}>{t(METHOD_KEY[m] ?? "artifact.method.unknown")}</option>
+          ))}
+        </select>
+      )}
+      {tiers.length > 1 && (
+        <select className={sel} value={filters.tier} onChange={(e) => set({ tier: e.target.value })}>
+          <option value="">{t("cases.filterTier")}</option>
+          {tiers.map((x) => (
+            <option key={x} value={x}>{t(TIER_KEY[Number(x)] ?? "artifact.tier3")}</option>
+          ))}
+        </select>
+      )}
+      <select
+        className={sel}
+        value={filters.finding}
+        onChange={(e) => set({ finding: e.target.value as ReviewFilters["finding"] })}
+      >
+        <option value="">{t("review.filterFinding")}</option>
+        <option value="block">{t("review.filterBlock")}</option>
+        <option value="warn">{t("review.filterWarn")}</option>
+        <option value="none">{t("review.filterClean")}</option>
+      </select>
+      <select
+        className={sel}
+        value={filters.code}
+        onChange={(e) => set({ code: e.target.value as ReviewFilters["code"] })}
+      >
+        <option value="">{t("review.filterCode")}</option>
+        <option value="yes">{t("review.filterHasCode")}</option>
+        <option value="no">{t("review.filterNoCode")}</option>
+      </select>
+      <select
+        className={sel}
+        value={filters.decision}
+        onChange={(e) => set({ decision: e.target.value as ReviewFilters["decision"] })}
+      >
+        <option value="">{t("review.filterDecision")}</option>
+        <option value="pending">{t("review.filterPending")}</option>
+        <option value="approved">approved</option>
+        <option value="rejected">rejected</option>
+      </select>
+      {on && (
+        <>
+          <span className="text-[11px] text-muted-foreground">
+            {t("review.filterShown", { shown, total: items.length })}
+          </span>
+          <Button onClick={() => onChange(EMPTY_FILTERS)}>{t("cases.filterClear")}</Button>
+        </>
+      )}
     </div>
   );
 }
@@ -558,6 +673,15 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
   const [intoProject, setIntoProject] = useState("");
   /** 地图还是列表。默认地图——总览先于逐条，这是这一页存在的理由。 */
   const [view, setView] = useState<"map" | "list">("map");
+  /**
+   * 筛选条件从地址里来，也回地址里去。
+   *
+   * 复核是一件会被打断、会被交接的事：「你看一下这批里所有负例里门禁拦下的那几条」
+   * 这句话应该是一个可以发出去的链接，而不是一串口头的操作步骤。
+   */
+  const [filters, setFilters] = useState<ReviewFilters>(() =>
+    filtersFromParams(new URLSearchParams(window.location.hash.split("?")[1] ?? "")),
+  );
 
   const loadRuns = async () => {
     try {
@@ -713,7 +837,23 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
       return next;
     });
 
-  const pending = batch?.items.filter((i) => !i.decision) ?? [];
+  // 筛选条件写回地址。用 replaceState 而不是改 hash：每敲一个字都留一条历史，
+  // 会让浏览器的后退键变成一个删字键。
+  useEffect(() => {
+    const [path, query] = window.location.hash.replace(/^#/, "").split("?");
+    const params = filtersToParams(filters, new URLSearchParams(query ?? ""));
+    const next = `#${path || "/"}${params.toString() ? `?${params}` : ""}`;
+    if (next !== window.location.hash) window.history.replaceState(null, "", next);
+  }, [filters]);
+
+  const activityOf = activityIndex(batch?.stories);
+  /**
+   * 筛出来给人看的那一批。**只影响看到什么，不影响选中了什么**——
+   * 人先筛一批、全选、再换条件去看别的，之前选中的不该被悄悄丢掉：
+   * 批准的是他选的那批，不是他此刻看得见的那批。
+   */
+  const visible = (batch?.items ?? []).filter((i) => matches(i, filters, activityOf));
+  const pending = visible.filter((i) => !i.decision);
 
   return (
     <>
@@ -856,8 +996,13 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                   ))}
                 </div>
                 <span className="ml-auto" />
-                <Button onClick={() => setSelected(new Set(pending.map((i) => i.caseId)))}>
-                  {t("review.selectAll")}
+                {/* 选的是**看得见的**那些。筛过之后还说「全选 40 条」，选完却只有 3 条被勾上，
+                    是比不能筛更糟的事——所以把它真正会选中的条数写在按钮上。 */}
+                <Button
+                  disabled={!pending.length}
+                  onClick={() => setSelected(new Set(pending.map((i) => i.caseId)))}
+                >
+                  {t("review.selectAll")} ({pending.length})
                 </Button>
                 <Button
                   variant="success"
@@ -950,9 +1095,17 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                 </Button>
               </div>
 
+              <FilterBar
+                filters={filters}
+                onChange={setFilters}
+                stories={batch.stories ?? []}
+                items={batch.items}
+                shown={visible.length}
+              />
+
               {view === "map" ? (
                 <StoryMap
-                  batch={batch}
+                  batch={{ ...batch, items: visible }}
                   selected={selected}
                   onToggleCase={(id) =>
                     setSelected((s) => {
@@ -977,7 +1130,7 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                 />
               ) : (
               <div className="space-y-2">
-                {batch.items.map((item) => {
+                {visible.map((item) => {
                   const expanded = open.has(item.caseId);
                   const blocked = item.codeBlocked;
                   return (
