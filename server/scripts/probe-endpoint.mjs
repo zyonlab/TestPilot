@@ -34,7 +34,18 @@ const BASE = arg("base", "https://free.empero.org/v1").replace(/\/$/, "");
 const MODEL = arg("model", "Qwen/Qwen3.8-27B-FP8");
 const KEY = arg("key", "free");
 const IMAGE = arg("image", "");
-const TIMEOUT_MS = Number(arg("timeout", "60000"));
+const TIMEOUT_MS = Number(arg("timeout", "90000"));
+/**
+ * 给足预算。
+ *
+ * 这一条是踩出来的：第一版给 32，而 `qwen3-8-27b` 的思考模式**关不掉**——
+ * `enable_thinking:false` 和 `chat_template_kwargs` 都不认，56 个推理 token 把预算吃光，
+ * `content` 回来是空字符串。于是探针报了「收下了图片，答非所问」，
+ * 而那个模型**其实看得很清楚**。
+ *
+ * 一个把「预算不够」报成「不能看图」的探针，比没有探针更糟：它会让人划掉一个能用的模型。
+ */
+const MAX_TOKENS = Number(arg("max-tokens", "2048"));
 
 /** 随机挑一种颜色，模型猜不中。红/绿/蓝三选一，判词各自互斥。 */
 const COLORS = [
@@ -112,18 +123,43 @@ const text = await call("/chat/completions", {
   body: JSON.stringify({
     model: MODEL,
     messages: [{ role: "user", content: "Reply with exactly one word: ok" }],
-    max_tokens: 16,
+    max_tokens: MAX_TOKENS,
     stream: false,
     // 本地/自建的 Qwen 常常默认开思考模式，一开就是几秒起步且可能被 max_tokens 截断。
     // 这个字段不认识的端点会忽略它，认识的会关掉——两边都不会因此报错。
     enable_thinking: false,
   }),
 });
+/** 这次回复烧了多少推理 token。>0 就是思考模式开着，而它未必关得掉。 */
+const thinkingOf = (j) => Number(j?.usage?.reasoning_tokens ?? 0);
+const reasoningOf = (j) => j?.choices?.[0]?.message?.reasoning_content ?? "";
+
 if (!text.ok) {
   line("② 文本", "✗", `HTTP ${text.status} · ${(text.json?.error?.message ?? text.text).slice(0, 200)}`);
 } else {
   const c = contentOf(text.json).trim();
-  line("② 文本", "✓", `${text.ms}ms · 回复 ${JSON.stringify(c.slice(0, 60))}`);
+  const think = thinkingOf(text.json);
+  const ate = !c && !!reasoningOf(text.json);
+  line(
+    "② 文本",
+    ate ? "!" : "✓",
+    ate
+      ? `${text.ms}ms · content 是空的，但推理占了 ${think} token —— 预算被思考吃掉了，加大 --max-tokens`
+      : `${text.ms}ms · 回复 ${JSON.stringify(c.slice(0, 60))}`,
+  );
+  /**
+   * 思考模式开着要单独说一句。
+   *
+   * 本仓库 `docs/spec/00` 里那条边界写着「**必须关思考模式**」——实测同一个请求开思考
+   * 5.0s 且返回推理文本，关掉后 1.0s。关不掉的端点不是不能用，但它意味着：
+   * 每次调用都要多付一截推理 token，`max_tokens` 必须给够，而且延迟按秒计。
+   */
+  if (think > 0)
+    console.log(
+      `\n     · 思考模式开着（本次 ${think} 个推理 token）。` +
+        `试过 enable_thinking:false 与 chat_template_kwargs，这个端点都不认——` +
+        `所以 max_tokens 要给够，别按「答案有多长」估。`,
+    );
 }
 
 /* ---- ③ 图片 ---- */
@@ -146,7 +182,7 @@ const vision = await call("/chat/completions", {
         ],
       },
     ],
-    max_tokens: 32,
+    max_tokens: MAX_TOKENS,
     stream: false,
     enable_thinking: false,
   }),
@@ -177,8 +213,17 @@ if (!vision.ok) {
     console.log("\n文本那一发也没过，所以这一条什么都证明不了——先把上面那个错误解决掉再看图片。");
 } else {
   const answer = contentOf(vision.json).trim();
-  if (IMAGE) {
-    line("③ 图片", "?", `${vision.ms}ms · 回复 ${JSON.stringify(answer.slice(0, 80))}（用了真截图，对不对要人看）`);
+  const imgTokens = Number(vision.json?.usage?.prompt_tokens_details?.image_tokens ?? 0);
+  // 图片真的被当成图片处理了吗：`image_tokens > 0` 是最硬的证据，比模型答对更早、更直接。
+  // 有些端点会把 image_url 当成一段文本吃掉，那时它照样返回 200，照样胡答。
+  if (!answer && reasoningOf(vision.json)) {
+    line("③ 图片", "!", `${vision.ms}ms · content 是空的，推理吃光了预算 —— 加大 --max-tokens 再判`);
+  } else if (IMAGE) {
+    line(
+      "③ 图片",
+      "?",
+      `${vision.ms}ms · image_tokens=${imgTokens} · 回复 ${JSON.stringify(answer.slice(0, 80))}（用了真截图，对不对要人看）`,
+    );
   } else {
     const right = pick.words.some((w) => answer.toLowerCase().includes(w));
     const wrongOne = COLORS.find((c) => c !== pick && c.words.some((w) => answer.toLowerCase().includes(w)));
@@ -186,9 +231,13 @@ if (!vision.ok) {
       "③ 图片",
       right ? "✓" : "✗",
       right
-        ? `${vision.ms}ms · 认出了 ${pick.name}（随机指定，猜不中）`
-        : `${vision.ms}ms · 图是 ${pick.name}，它说 ${JSON.stringify(answer.slice(0, 40))}` +
-            (wrongOne ? " —— 收下了图片但没真看" : " —— 收下了图片，答非所问"),
+        ? `${vision.ms}ms · image_tokens=${imgTokens} · 认出了 ${pick.name}（随机指定，猜不中）`
+        : `${vision.ms}ms · image_tokens=${imgTokens} · 图是 ${pick.name}，它说 ${JSON.stringify(answer.slice(0, 40))}` +
+            (imgTokens === 0
+              ? " —— 而且没有 image_tokens：这一发根本没被当成图片处理"
+              : wrongOne
+                ? " —— 收下了图片但没真看"
+                : " —— 收下了图片，答非所问"),
     );
   }
 }
