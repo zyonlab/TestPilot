@@ -260,7 +260,18 @@ export function RunDetail({ run }: { run: RunRecord }) {
   return (
     <div className="p-4">
       <div className="flex items-center gap-2">
-        <PriorityBadge priority={run.priority} />
+        {/* 候选没有看板优先级，存的那个 P2 是 graphs.ts 的占位。列表上说「—」，
+            详情里再说一遍 P2，等于让人在两处看到两个互相矛盾的说法。 */}
+        {(run.origin ?? "case") === "workflow" ? (
+          <span
+            title={t("artifact.noPriorityWhy")}
+            className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+          >
+            —
+          </span>
+        ) : (
+          <PriorityBadge priority={run.priority} />
+        )}
         <RunStatusPill status={run.status} />
         {run.healed && (
           <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">

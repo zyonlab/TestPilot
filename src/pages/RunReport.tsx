@@ -2,7 +2,6 @@ import { Fragment, useState } from "react";
 import { Play } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import { Button, PriorityBadge as BoardPriorityBadge, RunStatusPill } from "@/components/ui";
-import { Drawer } from "@/components/overlay";
 import { RunDetail, fmtDuration } from "@/components/RunDetail";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useT } from "@/lib/prefs";
@@ -170,6 +169,7 @@ export function RunReportPage() {
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [q, setQ] = useState("");
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -211,6 +211,7 @@ export function RunReportPage() {
       ? fmtDuration(filtered.reduce((sum, r) => sum + r.durationMs, 0) / total)
       : "—";
 
+  const detailOpen = drawerOpen && !!selectedRunId;
   const selected: RunRecord | undefined =
     filtered.find((r) => r.id === selectedRunId) ??
     runs.find((r) => r.id === selectedRunId);
@@ -303,8 +304,18 @@ export function RunReportPage() {
               ))}
             </div>
 
-            {/* Run list — full width; clicking a run opens the detail Drawer. */}
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {/*
+              列表与详情并排，而不是详情再叠一层抽屉。
+              画布 → 执行记录抽屉 → 失败详情抽屉是三层，两个关闭按钮，没有面包屑，
+              背后那层还能滚——而复核失败时人要做的事恰恰是**来回比对十几条**，
+              每比一条开关一次抽屉。并排之后，点下一条就换右边，左边不动。
+              窄屏没有并排的余地，那时右边顶掉左边，并给一个「返回列表」。
+            */}
+            <div className="flex gap-3">
+            <div className={cn(
+              "min-w-0 overflow-hidden rounded-xl border border-border bg-card",
+              detailOpen ? "hidden flex-1 lg:block" : "flex-1",
+            )}>
               {groups.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">
                   {t("runs.noRunsMatch")}
@@ -399,17 +410,27 @@ export function RunReportPage() {
                 })
               )}
             </div>
+
+            {detailOpen && selected && (
+              <div className="min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-card lg:max-w-[46%]">
+                <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3 py-2">
+                  <button
+                    onClick={() => setDrawerOpen(false)}
+                    className="shrink-0 rounded-md border border-border px-2 py-0.5 text-[11.5px] text-muted-foreground hover:bg-muted"
+                  >
+                    ← {t("runs.backToList")}
+                  </button>
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{selected.caseTitle}</span>
+                </div>
+                <div className="p-3">
+                  <RunDetail run={selected} />
+                </div>
+              </div>
+            )}
+            </div>
           </div>
         )}
       </div>
-
-      <Drawer
-        open={drawerOpen && !!selected}
-        onClose={() => setDrawerOpen(false)}
-        title={selected?.caseTitle}
-      >
-        {selected && <RunDetail run={selected} />}
-      </Drawer>
     </>
   );
 }

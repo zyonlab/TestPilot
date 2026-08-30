@@ -214,11 +214,24 @@ function useOpenSurface(): [string, string, (id: string) => void] {
     return () => window.removeEventListener("hashchange", onHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // 手动换 tab 时把落点清掉：那个落点是上一张卡的事，留着它会让新打开的卡
-  // 停在一个跟这次点击无关的地方。
+  /**
+   * 换卡时保住 `run`，扔掉别的。
+   *
+   * 此前这里直接把整个查询串换成 `?open=xxx`，于是从产品地图切到复核队列，
+   * 地址里的 `run` 就没了——人正在看的那一次运行悄悄变回「最近那一次」。
+   * 一个只有一个地址的应用，地址里的那几个参数就是它全部的状态，不能顺手清空。
+   *
+   * `at`（地图落点）和筛选条件反过来要清掉：它们属于上一张卡，
+   * 留着会让新打开的卡停在一个跟这次点击无关的地方。
+   */
   const set = (next: string) => {
-    const [path] = window.location.hash.split("?");
-    window.location.hash = next ? `${path || "#/"}?open=${next}` : path || "#/";
+    const [path, query] = window.location.hash.split("?");
+    const keep = new URLSearchParams();
+    const run = new URLSearchParams(query ?? "").get("run");
+    if (run) keep.set("run", run);
+    if (next) keep.set("open", next);
+    const q = keep.toString();
+    window.location.hash = `${path || "#/"}${q ? `?${q}` : ""}`;
     setId(next);
     setFocus("");
   };
@@ -785,6 +798,17 @@ export function WorkspacePage() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, [runs, wfRunId, selectRun]);
+
+  /**
+   * 换运行时把设置抽屉关掉。
+   *
+   * 设置是「对这个项目/这台机器的配置」，不是「对这一次运行的阅读」。换了运行之后它
+   * 还盖在画布上，人会以为自己刚才那次点击没生效——实测就是这个反应：一直在点运行
+   * 下拉，看不到画布变，因为它被一张全屏抽屉挡着。
+   */
+  useEffect(() => {
+    if (wfRunId) setSettingsOpen(false);
+  }, [wfRunId]);
 
   /**
    * 反过来也要对上：**从链接进来时，项目跟着那次运行走**。

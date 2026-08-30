@@ -45,6 +45,7 @@ export const dict: Record<string, Entry> = {
   },
   "runs.noShots": { zh: "这次运行没有留下截图", en: "this run left no screenshots", ja: "この実行はスクリーンショットを残していない" },
   "runs.noShotsWorkflow": { zh: "工作流里的执行还没有把截图带出来——执行器落了盘，但产物类型里还没有这个字段，所以记录时只能存一个空数组", en: "workflow executions do not carry screenshots yet — the executor writes them to disk, but the outcome type has no field for them, so the record stores an empty array", ja: "ワークフロー実行はまだスクリーンショットを持ち出せない——実行器はディスクに保存するが、成果物の型に該当フィールドがなく、記録時は空配列になる" },
+  "runs.backToList": { zh: "返回列表", en: "back to list", ja: "一覧に戻る" },
   "runs.searchPlaceholder": { zh: "搜用例名 / 失败原因…", en: "search case or failure…", ja: "ケース名・失敗理由を検索…" },
   "runs.attemptsN": { zh: "{n} 轮", en: "{n} attempts", ja: "{n} 回" },
   "runs.roundN": { zh: "第 {n} 轮", en: "attempt {n}", ja: "第 {n} 回" },
