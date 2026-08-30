@@ -750,7 +750,7 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
    */
   it("提示词点名要的故事字段，schema 里必须是 required 而不只是可选", () => {
     const req = new Set(
-      (STORIES_SCHEMA as { properties: { stories: { items: { required: string[] } } } })
+      (STORIES_SCHEMA as unknown as { properties: { stories: { items: { required: readonly string[] } } } })
         .properties.stories.items.required,
     );
     // 这三个都是提示词里明确点名、且下游没有它就干不了活的：
@@ -773,7 +773,7 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
   });
 
   it("规格里下游依赖的三个数组也得是 required——可选就等于不写", () => {
-    const req = new Set((COMPOSE_SCHEMA as { required: readonly string[] }).required);
+    const req = new Set((COMPOSE_SCHEMA as unknown as { required: readonly string[] }).required);
     // flows/modules/screens 分别是：故事挂流程的线、故事地图的横轴、产品地图上的业务名。
     // 数组为空同样满足 required，所以这不会逼模型编——它只是不允许「装作没这回事」。
     for (const k of ["flows", "modules", "screens"])

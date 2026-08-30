@@ -295,16 +295,36 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    *
    * 写动作的词表里**不含**「提交 / submit」：「留空提交『Find Owner』」是一次查询，
    * 它什么也不写。第二版栽在这上面，四条误报全是查询。
+   *
+   * **但第三版收过头了。** 2026-08-30 的 case-cleanup 评测里，B 臂 36 条用例一条清理都
+   * 没有、其中一大半是登录用例，而这条规则一条都没抓到——因为词表里只有
+   * 「新增 / 保存 / 删除」这类**对数据**的写，没有「登录」。
+   *
+   * 登录不写数据，但它**留下会话**：下一条用例面对的是一个已登录的产品，而它自己不知道。
+   * 这跟留下一条 John Doe 是同一种毒——第二次跑面对的产品和第一次不同，
+   * 差别看不见，直到某个断言毫无道理地挂掉。
+   *
+   * 所以判据的正确说法不是「有没有写动作」，是「**跑完之后产品还在不在原来的状态**」。
+   * 会话与数据都算。而登录和查询的区别也正在这里：查询什么也不留下。
    */
   const TYPES_IN = /填入|输入|填写|勾选|选择|上传|type |enter |fill|input|upload|select /i;
   const COMMITS =
-    /保存|删除|移除|新增|创建|注册|添加|上传|下单|编辑|修改|add owner|save|delete|remove|create|register|sign up|upload|update/i;
+    /保存|删除|移除|新增|创建|注册|添加|上传|下单|编辑|修改|登录|登入|签入|add owner|save|delete|remove|create|register|sign up|sign in|log ?in|upload|update/i;
   const REFUSED =
     /错误|失败|拒绝|不允许|无效|非法|必填|不能为空|校验|不合法|停留在|仍在|未创建|没有新增|invalid|error|reject|must not|required|out of (bounds|range)|remains? on|not created/i;
+  /**
+   * 自己收拾干净的用例。
+   *
+   * 「有效登录后点击 Log out，不再显示个人面板」这条**在自己的步骤里就把状态还原了**——
+   * 跑完之后没有会话留下，不需要 postSteps。加宽词表之后这类被误报了 3 条，
+   * 而它们恰恰是**唯一真的在测清理路径**的那几条，报它们最伤人。
+   */
+  const UNDOES = /退出|登出|注销|删除刚|还原|恢复|log ?out|sign ?out|revert/i;
   for (const c of cases) {
     if ((c.postSteps ?? []).length) continue;
     // 负例多半是「产品应当拒绝」——被拒绝的写入没有留下任何东西要收拾。
     if (c.designMethod === "negative") continue;
+    if ([c.title, ...c.steps].some((s) => UNDOES.test(s))) continue;
     const typed = c.steps.some((s) => TYPES_IN.test(s));
     // 写动作在标题里说也算：「新增主人」这件事往往写在标题上，步骤里只写「点 Add Owner」。
     const committed = [c.title, ...c.steps].some((s) => COMMITS.test(s));

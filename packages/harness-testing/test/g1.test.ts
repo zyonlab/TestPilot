@@ -333,6 +333,45 @@ describe("gate ①", () => {
     expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(false);
   });
 
+  /**
+   * 词表最初没有「登录」，于是 2026-08-30 的 case-cleanup 评测里，B 臂 36 条用例
+   * 一条清理都没有、其中一大半是登录用例，这条规则**一条都没抓到**。
+   * 登录不写数据，但它留下会话——下一条用例面对的是一个已登录的产品，而它自己不知道。
+   */
+  it("登录也算改状态——它留下会话，下一条用例面对的产品就不一样了", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          title: "有效凭证登录后显示个人面板",
+          steps: ["在用户名输入框填入 ${env.USERNAME}", "在密码框填入 ${secret.PASSWORD}", "点击登录"],
+          expected: "页面显示「Welcome」",
+          postSteps: [],
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(true);
+  });
+
+  /**
+   * 但在自己步骤里就还原了的不能报——「登录后点 Log out」这条跑完什么也没留下，
+   * 而它恰恰是唯一真的在测清理路径的那几条。加宽词表之后这类误报过 3 条。
+   */
+  it("自己在步骤里登出的不报——报它们最伤人，那是唯一在测清理路径的用例", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          title: "有效登录后点击 Log out 不再显示个人面板",
+          steps: ["填入凭证并点击登录", "点击 `Log out` 按钮"],
+          expected: "页面不再显示「Welcome」",
+          postSteps: [],
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(false);
+  });
+
   it("给了清理步骤就不报", () => {
     const g = runGate(
       bundle([
