@@ -1757,14 +1757,26 @@ app.get("/api/graphs/:id/diff", (req, res) => {
 app.post("/api/wf/runs", async (req, res) => {
   try {
     const body = req.body ?? {};
-    res.json(
-      await startRun({
-        ...body,
-        // A run states what it ran against. Without that, "these cases passed" is a claim
-        // about nothing in particular.
-        target: body.target ?? { projectId: body.projectId, envRef: body.envRef, url: body.url },
-      }),
-    );
+    /**
+     * 目标只在**请求真的说了**的时候才拼出来。
+     *
+     * 此前这里写的是 `body.target ?? { projectId: body.projectId, ... }`——那个兜底对象
+     * **永远为真**，哪怕三个字段全是 undefined。于是 `startRun` 里那句
+     * 「Re-running one node of an existing run must use that run's target」被彻底废掉：
+     * `input.target ?? previous.target` 永远走第一支，拿到一个空对象。
+     *
+     * 实测后果（就在这次修它之前）：重跑 `wf-mtd7gcdk` 的一个节点，目标地址被静默擦成
+     * `{}`，三条用例在 12 毫秒内以 infra 失败，`record()` 因为没有 projectId 直接返回，
+     * 一条执行记录都没写——而运行状态是 `done`。**一次什么都没跑的运行，报告说它成功了。**
+     *
+     * 一个 run 说不清它跑的是谁，「这些用例过了」就是一句关于虚空的话。
+     */
+    const stated =
+      body.target ??
+      (body.projectId || body.envRef || body.url
+        ? { projectId: body.projectId, envRef: body.envRef, url: body.url }
+        : undefined);
+    res.json(await startRun({ ...body, ...(stated ? { target: stated } : {}) }));
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
