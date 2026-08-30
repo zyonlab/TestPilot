@@ -123,6 +123,14 @@ export const ExecOutcomeSchema = z.object({
    */
   screenshots: z.array(z.string()).optional(),
   logs: z.array(z.string()).optional(),
+  /**
+   * 这一轮注进去的变异体改了几处。
+   *
+   * `undefined` = 没注变异体；`0` = **注了但没生效**。后者绝不能当成「用例没抓到」
+   * ——那是把工具自己的失败伪装成用例集的盲区，会让杀掉率虚低，
+   * 而虚低的那部分看起来像真发现。判决时它走 `notApplied`，不进分母。
+   */
+  mutationApplied: z.number().optional(),
 });
 export type ExecOutcome = z.infer<typeof ExecOutcomeSchema>;
 

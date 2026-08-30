@@ -111,7 +111,12 @@ function resolveTarget(target: RunTarget): ResolvedTarget {
  * result. Filing those under the project's executions would mix "supposed to fail" with
  * "the product broke".
  */
-function makeExecutor(target: RunTarget, wfRunId?: string): CaseExecutor {
+function makeExecutor(
+  target: RunTarget,
+  wfRunId?: string,
+  /** 变异体：注进浏览器会话，被测应用不动。见 ExecSpec.opts.mutation。 */
+  mutation?: { id: string; script: string },
+): CaseExecutor {
   return {
   async run({ caseId, title, actions, oracle }) {
     const steps = actions
@@ -177,11 +182,14 @@ function makeExecutor(target: RunTarget, wfRunId?: string): CaseExecutor {
           extraHeaders: t.extraHeaders,
           query: t.query,
           storageState: t.storageState,
+          mutation,
         },
       });
       return record({
         caseId,
         status: exec.status,
+        // 「改了几处」要跟着结果走：0 处的那一轮不算数，判决时归 notApplied 而不是 survived。
+        mutationApplied: exec.mutationApplied,
         failKind: exec.failure?.attribution,
         failCode: exec.failure?.code,
         message: exec.failureReason,
@@ -216,9 +224,11 @@ export async function executeCaseDirect(
   target: RunTarget,
   kase: { caseId: string; title: string; actions: unknown[]; uses: string[] },
   fragments: Array<{ name: string; actions: unknown[] }>,
-): Promise<{ status: string; failKind?: string }> {
+  /** 注一个变异体进这一次的浏览器会话。不传就是干净跑。 */
+  mutation?: { id: string; script: string },
+): Promise<{ status: string; failKind?: string; mutationApplied?: number }> {
   const prologue = kase.uses.flatMap((n) => fragments.find((f) => f.name === n)?.actions ?? []);
-  return makeExecutor(target).run({
+  return makeExecutor(target, undefined, mutation).run({
     caseId: kase.caseId,
     title: kase.title,
     actions: [...prologue, ...kase.actions] as Parameters<CaseExecutor["run"]>[0]["actions"],

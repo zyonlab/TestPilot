@@ -85,6 +85,8 @@ import { applyGraphDraft, chat, checkPrompt, validRecipeOrThrow, type ChatContex
 import { changes, codeLine, codeProvenance } from "./codeline.js";
 import { traceability, traceabilityOfRun } from "./trace.js";
 import { allProjectOverviews, projectOverview } from "./overview.js";
+import { runMutation } from "./mutationRun.js";
+import { readMutationReport } from "./mutation.js";
 import { pendingBaselines } from "./pending.js";
 import { continuationsFor, continueRun } from "./continue.js";
 import {
@@ -1920,6 +1922,32 @@ app.get("/api/wf/runs/:id/traceability", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
+});
+
+/**
+ * 跑一次变异测试。
+ *
+ * 在这个接口之前，变异那条路径是**只读的**：模块齐全、报告能读、缺口能标在图上，
+ * 但 `saveMutationReport` 全仓库零调用——盘上那两份报告的生产者已经不在代码里了。
+ * 也就是说这个产品最强的一处能力不可重跑，那个 0.600 是一次性的、没人能验证的数字。
+ *
+ * 后台跑：一轮是「变异体数 × 跑一遍用例集」，几十分钟起步。进度走 `mutation.*` 事件。
+ */
+app.post("/api/mutation/:wfRunId", (req, res) => {
+  const body = (req.body ?? {}) as { node?: string; limit?: number; cases?: number };
+  const started = runMutation({ wfRunId: req.params.wfRunId, ...body });
+  started.catch((e) => console.warn(`[testpilot] mutation ${req.params.wfRunId} failed:`, (e as Error).message));
+  res.json({
+    ok: true,
+    wfRunId: req.params.wfRunId,
+    note: "running; 一轮是「变异体数 × 跑一遍用例集」，看 mutation.* 事件或轮询 GET",
+  });
+});
+
+/** 这次运行最近一份变异报告。没有就说没有——空报告和 0 分是两回事。 */
+app.get("/api/mutation/:wfRunId", (req, res) => {
+  const r = readMutationReport(req.params.wfRunId);
+  return r ? res.json({ report: r }) : res.status(404).json({ error: "这次运行还没有变异报告" });
 });
 
 app.get("/api/cases/:id/code", async (req, res) => {

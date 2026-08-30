@@ -52,6 +52,14 @@ export interface ExecSpec {
     storageState?: StorageState | null;
     /** A check a program settles. When present the model is never asked for the verdict. */
     oracle?: MachineOracle;
+    /**
+     * 这一次要注进浏览器的变异体。
+     *
+     * 注在**浏览器会话里**，不注在被测应用里——被测应用一个字节都不改，容器不重建，
+     * 两次运行之间它仍然是同一个东西。变的只是这一个会话看到的那一份 DOM。
+     * 执行器跑完会把「改了几处」放进 `mutationApplied`：0 处不是「活下来」，是**没生效**。
+     */
+    mutation?: { id: string; script: string };
     web3?: {
       chainAssertions: ChainAssertion[];
       rpcUrl: string;
