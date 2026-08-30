@@ -393,9 +393,9 @@ export const dict: Record<string, Entry> = {
   "code.candidatesTitle": { zh: "这次运行生成的 {n} 段（候选）", en: "{n} generated in this run (candidates)", ja: "この実行で生成された {n} 件（候補）" },
   "code.candidatesWhy": { zh: "属于这次运行，不在看板上——批准之后才跟着用例进来，届时才可编辑、才计入上面的数", en: "these belong to the run, not the board — approving is what brings them in, and only then are they editable and counted above", ja: "これらは実行に属し、ボードにはない——承認して初めてケースと共に入り、編集可能かつ上の集計に含まれる" },
   "code.layersTodo": {
-    zh: "还欠一格：cases / actions / flows 三层目录还没真正生成，现在是平铺语句加片段引用。",
-    en: "Still missing: the cases / actions / flows three-layer tree is not generated yet — today it is flat statements plus fragment references.",
-    ja: "未完：cases / actions / flows の三層構成はまだ生成されておらず、現状はフラットな文とフラグメント参照です。",
+    zh: "导出按 cases / actions / flows 三层生成：至少两条用例共用的前置进 flows，重复的单步进 actions，其余留在用例里。抽取只改组织不改语义——展开之后与原步骤逐字相同。复用率受措辞一致性限制：同一个目标写成两种话，就收敛不成一个动作（门禁②的 wording-drift 管这件事）。",
+    en: "The export is generated in three layers — cases / actions / flows: a prologue shared by at least two cases becomes a flow, a repeated single step becomes an action, the rest stays inline. Extraction changes organisation, not meaning: expanding it back yields the original steps verbatim. Reuse is capped by wording consistency — one target worded two ways cannot converge into one action (that is what gate ②'s wording-drift is for).",
+    ja: "エクスポートは cases / actions / flows の三層で生成：2 件以上で共有される前提は flow、繰り返す単一手順は action、残りはインライン。抽出は構成のみを変え意味は変えない——展開すれば元の手順と逐語一致。再利用率は表現の一貫性に制限される（ゲート②の wording-drift が扱う）。",
   },
   "changes.lede": {
     zh: "重生成不是覆盖：产物留着，改动是一条记录，两版并排可比。",

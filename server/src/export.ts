@@ -1,4 +1,5 @@
 import type { Project, TestCase, Environment } from "./db.js";
+import { buildLayers, type Layers } from "./exportLayers.js";
 
 /**
  * 文件名。
@@ -34,9 +35,32 @@ const TAG: Record<TestCase["type"], string> = {
  * @param up 从这个 spec 文件回到 `tests/` 要走几级。按模块建目录之后是 `../`，
  *           平铺时是 `./`——写死任何一个，另一种布局的导入路径就是坏的。
  */
-function specForCase(tc: TestCase, targetUrl: string, up = "./"): string {
+function specForCase(tc: TestCase, targetUrl: string, up = "./", layers?: Layers): string {
   const tags = `@${tc.priority} ${TAG[tc.type] ?? "@functional"}`;
-  const steps = tc.steps.map((s) => `  await aiAction(${lit(s.text)});`).join("\n");
+  /**
+   * 步骤分三层写：共享前置调 flow，重复的单步调 action，其余内联。
+   *
+   * 抽取只改组织不改语义——展开之后的序列和原来逐字相同（`expandPlan` 就是为了让这条
+   * 能被测试验证）。没有 `layers` 时退回全部内联：一个只有一条用例的项目抽什么都是负担。
+   */
+  const plan = layers?.plan.get(tc.id);
+  const usedFlows = new Set<string>();
+  const usedActions = new Set<string>();
+  const steps = plan
+    ? plan
+        .map((s) => {
+          if (s.kind === "flow") {
+            usedFlows.add(s.name);
+            return `  await ${s.name}(aiAction);`;
+          }
+          if (s.kind === "action") {
+            usedActions.add(s.name);
+            return `  await ${s.name}(aiAction);`;
+          }
+          return `  await aiAction(${lit(s.text)});`;
+        })
+        .join("\n")
+    : tc.steps.map((s) => `  await aiAction(${lit(s.text)});`).join("\n");
   const post = tc.postSteps.length
     ? "\n  // teardown\n" +
       tc.postSteps
@@ -62,8 +86,15 @@ function specForCase(tc: TestCase, targetUrl: string, up = "./"): string {
   // 只解构真的用到的 fixture。一条由程序判定的用例不该顺手把判定模型的 fixture 也拉起来——
   // 那既是多余的开销，也让「这条用例到底要不要模型」在源码上看不出来。
   const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(usesOracle ? [] : ["aiAssert"])];
+  // 只导入真的用到的：一个把整层都 import 进来的 spec，读的人分不清它到底依赖了什么。
+  const layerImports = [
+    usedFlows.size ? `import { ${[...usedFlows].sort().join(", ")} } from "${up}flows";` : "",
+    usedActions.size ? `import { ${[...usedActions].sort().join(", ")} } from "${up}actions";` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   return `import { test } from "${up}ai";
-${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "${up}oracle";\n` : ""}
+${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}
 // ${tc.priority} · ${tc.type}${trace} — ${tc.priorityReason || ""}
 test(${JSON.stringify(`[${tags}] ${tc.title}`)}, async ({ ${fixtures.join(", ")} }) => {
   await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
@@ -307,13 +338,50 @@ ${loginSteps}
    * 两条标题仍然可能塌成同一个名字（截断、或只差标点）。撞名就带上用例 id：
    * 一个静默覆盖掉另一条用例的导出，比导出失败更糟——它看起来是成功的。
    */
+  /**
+   * 三层：actions（具名单步）/ flows（具名前置）/ cases（每条用例一个 spec）。
+   *
+   * 此前导出是「平铺语句」——同一段前置在几十条用例里各写一遍，改一次要改几十处。
+   * 抽取门槛是**至少两条用例用它**：一个只有一个调用方的公共函数比内联更糟，
+   * 读的人多跳一次却什么也没省。名字由步骤原文 slug 化而来，不问模型——
+   * 导出必须可重复，同一批用例导两次要得到逐字节相同的工程，否则它进不了版本库。
+   */
+  const layers = buildLayers(cases);
+  const ACT_TYPE = "type Act = (text: string) => Promise<unknown>;";
+  if (layers.actions.length)
+    files["tests/actions/index.ts"] =
+      "// 具名的单步交互：同一句话在至少两条用例里出现过，才在这里有名字。\n" +
+      "// 名字来自步骤原文，所以同一批用例每次导出得到同一份文件。\n" +
+      `${ACT_TYPE}\n\n` +
+      layers.actions
+        .map(
+          (a) =>
+            `/** 用于 ${a.usedBy.length} 条用例。 */\n` +
+            `export const ${a.name} = (aiAction: Act) => aiAction(${lit(a.text)});\n`,
+        )
+        .join("\n");
+  if (layers.flows.length)
+    files["tests/flows/index.ts"] =
+      "// 具名的共享前置：到达某一屏要走的那几步，被至少两条用例共用。\n" +
+      "// 只认前缀，不认任意子序列——两条不相干的用例中间偶然相同的两步不是流程。\n" +
+      `${ACT_TYPE}\n\n` +
+      layers.flows
+        .map(
+          (f) =>
+            `/** 用于 ${f.usedBy.length} 条用例，共 ${f.steps.length} 步。 */\n` +
+            `export const ${f.name} = async (aiAction: Act) => {\n` +
+            f.steps.map((s) => `  await aiAction(${lit(s)});`).join("\n") +
+            "\n};\n",
+        )
+        .join("\n");
+
   const taken = new Set<string>();
   for (const tc of cases) {
     const dir = `tests/${tc.activity?.trim() ? slug(tc.activity) : "_"}`;
     let name = `${dir}/${tc.priority.toLowerCase()}-${slug(tc.title)}.spec.ts`;
     if (taken.has(name)) name = `${dir}/${tc.priority.toLowerCase()}-${slug(tc.title)}-${tc.id}.spec.ts`;
     taken.add(name);
-    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl, "../");
+    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl, "../", layers);
   }
 
   const envLines = [...envVarNames].sort().map((k) => {
