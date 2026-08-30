@@ -119,6 +119,8 @@ export const CASES_STABLE = [
   '    "P2" — cosmetic, informational, or reachable only by a rare path.',
   "  Judge the STORY's importance, not the case's difficulty: an edge case of a P0 story",
   "  is still worth more than the happy path of a P2 one. Most stories are not P0 —",
+  "  You MUST give every case a priority. Refusing to choose is itself a choice, and it",
+  "  lands every case in the same bucket, which is the same as having no priorities at all.",
   "  a batch where everything is P0 has said nothing.",
   /**
    * 清理步骤。
@@ -132,7 +134,9 @@ export const CASES_STABLE = [
   "  give the actions that undo it — delete what was added, restore what was changed.",
   "  A case that leaves a record behind poisons every later run of itself: the second run",
   "  starts from a different product than the first, and the difference is invisible until",
-  "  a count assertion fails for no reason anyone can see. Read-only cases leave it empty.",
+  "  a count assertion fails for no reason anyone can see.",
+  "  You MUST give every case a `postSteps` array. A read-only case gets an empty one —",
+  "  that is an answer, not a blank. Read-only cases leave it empty.",
   "",
   'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","priority":"P1",',
   '"precondition":["..."],"steps":["..."],"postSteps":[],"expected":"...","tier":1,',
@@ -398,7 +402,18 @@ export const CASES_SCHEMA = {
           priority: { type: "string", enum: ["P0", "P1", "P2"] },
           postSteps: { type: "array", items: { type: "string", minLength: 1 } },
         },
-        required: ["title", "designMethod", "steps", "expected", "tier", "key"],
+        /**
+         * **可选的键，这个模型直接不写。**
+         *
+         * 加进 `properties` 只是「允许」，不是「要求」。实测：priority 和 postSteps 进了
+         * properties 之后，8 条用例仍然一条都没带 priority——而同样可选的 `oracle` 与
+         * `covers` 却好好地产出来了。差别在提示词的语气：那两个写的是
+         * 「you MUST also give」「copy that id into」，是命令；priority 那一段是描述。
+         *
+         * 靠语气不如靠约束。判据本身也支持这么做：我**要求**每条用例都带一个优先级判断，
+         * 而 postSteps 空数组是一个真实的答案（「只读，没什么要收拾的」），不是缺省。
+         */
+        required: ["title", "designMethod", "steps", "expected", "tier", "key", "priority", "postSteps"],
       },
     },
   },
