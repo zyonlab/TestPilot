@@ -1032,6 +1032,11 @@ export const dict: Record<string, Entry> = {
   "wf.noEvents": { zh: "暂无事件", en: "no events yet", ja: "イベントはまだありません" },
   "wf.params": { zh: "节点参数", en: "Node params", ja: "ノードパラメータ" },
   "wf.save": { zh: "保存", en: "Save", ja: "保存" },
+  "wf.outputSearch": { zh: "搜键名或值…", en: "search keys or values…", ja: "キー・値を検索…" },
+  "wf.paramOptional": { zh: "可留空", en: "optional", ja: "任意" },
+  "wf.paramUnset": { zh: "没设", en: "unset", ja: "未設定" },
+  "wf.paramListHint": { zh: "逗号分隔", en: "comma separated", ja: "カンマ区切り" },
+  "wf.paramOnlyJson": { zh: "另有 {n} 个参数这个表单认不出形状，只能在下面的 JSON 里改", en: "{n} more parameters have a shape this form does not recognise — edit them in the JSON below", ja: "他に {n} 個のパラメータはこのフォームが形を認識できません——下の JSON で編集してください" },
   "wf.saveHint": {
     zh: "保存会产生新版本;已完成的运行仍指向它当时用的版本。改完可直接「只跑此节点」。",
     en: "Saving creates a new version; finished runs keep pointing at the version they used. After saving, 'Run this node' re-runs it alone.",

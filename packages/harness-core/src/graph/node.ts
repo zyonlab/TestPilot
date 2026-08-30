@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { describeParams, type ParamShape } from "./paramShape.js";
 import type { Scope } from "../obs/envelope.js";
 import type { Spend } from "../harness/protocol.js";
 
@@ -66,14 +67,29 @@ export class NodeRegistry {
     return this.defs.get(type);
   }
 
-  /** Everything the canvas may offer. A type that is not here cannot be placed. */
-  list(): Array<{ type: string; title: string; description?: string; inKind: string | null; outKind: string }> {
+  /**
+   * Everything the canvas may offer. A type that is not here cannot be placed.
+   *
+   * 参数的形状**要发出去**。此前这里把 `params` 裁掉了，于是节点检查器只能给一个 `{}`
+   * 裸文本框：每个节点类型都有完整的 zod schema，而用户无从知道能填什么键、什么类型、
+   * 默认是多少。上游有、下游要、中间那层为了「只留画图要用的字段」删掉了——
+   * 这个仓库里同一种形状出现过好几次（`covers` 与 `requirementId` 也是这么丢的）。
+   */
+  list(): Array<{
+    type: string;
+    title: string;
+    description?: string;
+    inKind: string | null;
+    outKind: string;
+    params: ParamShape;
+  }> {
     return [...this.defs.values()].map((d) => ({
       type: d.type,
       title: d.title,
       description: d.description,
       inKind: d.inKind,
       outKind: d.outKind,
+      params: describeParams(d.params),
     }));
   }
 }

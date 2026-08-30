@@ -3,6 +3,7 @@ import { tOutsideReact as tr } from "./prefs";
 import type { EventEnvelope } from "./types";
 import { connectEvents, type WsState } from "./ws";
 import { API_BASE } from "./base";
+import type { ParamShape } from "@/components/ParamForm";
 
 const API = API_BASE;
 
@@ -31,6 +32,8 @@ export interface NodeTypeDef {
   description?: string;
   inKind: string | null;
   outKind: string;
+  /** 这个节点收哪些参数。由 `NodeRegistry.list()` 从 zod schema 上读出来。 */
+  params?: ParamShape;
 }
 
 export type NodeState = "idle" | "running" | "done" | "failed" | "skipped" | "paused";

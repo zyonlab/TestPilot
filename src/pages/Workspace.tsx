@@ -26,6 +26,8 @@ import { runFromHash, useWf, type Artifact, type GraphDef, type NodeRun, type No
 import { SurfacePanel } from "@/components/SurfacePanel";
 import { Drawer } from "@/components/overlay";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
+import { ParamForm } from "@/components/ParamForm";
+import { JsonView } from "@/components/JsonView";
 import { DiagnoseDrawer, type DiagnoseScope } from "@/components/DiagnoseDrawer";
 import { BudgetDrawer } from "@/components/BudgetDrawer";
 import { MaterialPicker } from "@/components/MaterialPicker";
@@ -1301,6 +1303,33 @@ export function WorkspacePage() {
                     />
                   </div>
                 )}
+                {/* 有名字的字段先摆出来，JSON 留在下面。
+                    此前这里只有 JSON——每个节点类型明明都有完整的 zod schema，
+                    只是 `NodeRegistry.list()` 把它裁掉了没往前端发，
+                    于是人只能对着一个 `{}` 猜能填什么。 */}
+                {(() => {
+                  const shape = nodeTypes.find((nt) => nt.type === node.type)?.params;
+                  if (!shape) return null;
+                  let parsed: Record<string, unknown> = {};
+                  let broken = false;
+                  try {
+                    parsed = JSON.parse(draft || "{}") as Record<string, unknown>;
+                  } catch {
+                    // JSON 敲了一半时表单先退开，别把人正在打的字吃掉。
+                    broken = true;
+                  }
+                  if (broken) return null;
+                  return (
+                    <ParamForm
+                      shape={shape}
+                      value={parsed}
+                      onChange={(next) => {
+                        setDraft(JSON.stringify(next, null, 2));
+                        setDirty(true);
+                      }}
+                    />
+                  );
+                })()}
                 <textarea
                   className="h-32 w-full resize-y rounded-md border border-border bg-card p-2 font-mono text-[11px]"
                   value={draft}
@@ -1327,9 +1356,10 @@ export function WorkspacePage() {
               {nodeDetail === undefined ? (
                 <div className="text-[12px] text-muted-foreground">{t("wf.noOutput")}</div>
               ) : (
-                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground">
-                  {JSON.stringify(nodeDetail, null, 2).slice(0, 20000)}
-                </pre>
+                // 可折叠、可搜、不截断。此前这里是 stringify 之后砍到两万字符——
+                // 40 条用例的产物两千多行，想看第 17 条的判据只能滚；
+                // 而被砍掉的部分没有任何提示，读的人以为自己看到了全部。
+                <JsonView value={nodeDetail} />
               )}
             </div>
             <div className="max-h-56 overflow-auto border-t border-border bg-muted p-2">
