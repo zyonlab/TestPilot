@@ -67,6 +67,14 @@ export interface Project {
   createdAt: string;
   /** 看板上有多少条用例。列表接口填，单个项目的接口没有。 */
   cases?: number;
+  /**
+   * 规格来自哪几份文档（相对仓库根）。
+   *
+   * 空数组是一个结论，不是「还没填」：这个项目的规格只能从**观察**里来，
+   * 于是它的整套用例只可能发现「产品变了」，永远不可能发现「产品错了」
+   * ——观察不可能反驳被观察者。
+   */
+  materials?: string[];
 }
 
 export type Web3Mode = "" | "injected" | "metamask";

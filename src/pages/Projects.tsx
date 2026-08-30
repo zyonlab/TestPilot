@@ -6,6 +6,8 @@ import { Button } from "@/components/ui";
 import { useT } from "@/lib/prefs";
 import { closeCard, openCard } from "@/lib/open";
 import { api } from "@/lib/api";
+import { MaterialPicker } from "@/components/MaterialPicker";
+import { cn } from "@/lib/cn";
 import type { TargetPlatform } from "@/lib/types";
 
 export function ProjectsPage() {
@@ -24,6 +26,15 @@ export function ProjectsPage() {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://");
   const [platform, setPlatform] = useState<TargetPlatform>("web");
+  /**
+   * 这个项目的规格来自哪几份文档。
+   *
+   * 建项目时问一次，是因为这是唯一一个还来得及问的时刻——之后没有人会回头补。
+   * 不填不拦：一个只能从观察里得到规格的项目是完全正常的（很多产品就是没有文档），
+   * 但那意味着它的整套用例只可能发现「产品变了」，永远不可能发现「产品错了」。
+   * 这句话要在这里说，不是在二十分钟之后由一批答非所问的用例说。
+   */
+  const [materials, setMaterials] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [exBusy, setExBusy] = useState(false);
 
@@ -62,11 +73,12 @@ export function ProjectsPage() {
   const submit = async () => {
     if (!name.trim() || !/^https?:\/\/.+/.test(url)) return;
     setBusy(true);
-    await createProject(name.trim(), url.trim(), platform);
+    await createProject(name.trim(), url.trim(), platform, materials);
     setBusy(false);
     setAdding(false);
     setName("");
     setUrl("https://");
+    setMaterials([]);
     closeCard();
   };
 
@@ -170,6 +182,22 @@ export function ProjectsPage() {
                 </p>
               </div>
             </div>
+
+            {/*
+              规格从哪来，是建项目时唯一还来得及问的事——之后没有人会回头补。
+              不填不拦：很多产品就是没有文档。但那意味着规格只能从**观察**里来，
+              而由观察推出的用例只可能发现「产品变了」，永远不可能发现「产品错了」
+              ——观察不可能反驳被观察者。这句话要在这里说，不是在二十分钟之后
+              由一批答非所问的用例说。
+            */}
+            <div className="mt-3">
+              <div className="mb-1 text-xs text-muted-foreground">{t("projects.materials")}</div>
+              <MaterialPicker selected={materials} onChange={setMaterials} />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {materials.length ? t("projects.materialsPicked", { n: materials.length }) : t("projects.materialsNone")}
+              </p>
+            </div>
+
             <div className="mt-3 flex gap-2">
               <Button variant="primary" onClick={submit} disabled={busy}>
                 {t("projects.createProject")}
@@ -251,6 +279,18 @@ export function ProjectsPage() {
                       })}
                     </span>
                   )}
+                  {/* 规格从哪来，决定这套用例能说明什么——这件事该在卡片上，不该藏在设置里。 */}
+                  <span
+                    title={p.materials?.length ? t("projects.fromDocsWhy") : t("projects.fromExploreWhy")}
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10.5px]",
+                      p.materials?.length
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {p.materials?.length ? t("projects.fromDocs", { n: p.materials.length }) : t("projects.fromExplore")}
+                  </span>
                   <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase">
                     {p.targetPlatform ?? "web"}
                   </span>

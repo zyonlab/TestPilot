@@ -441,7 +441,31 @@ export async function startRun(input: {
         ? `unknown graph: ${input.graphId}`
         : `${input.graphId} has no version ${input.graphVersion}`,
     );
-  const def = applyParamOverrides(base, input.params);
+  /**
+   * 项目挂的材料，就是这次运行的 `source.spec` 的默认输入。
+   *
+   * 不这么做的话，「建项目时挂了三份 PRD」是一句纯装饰：材料躺在项目上，跑起来的图仍然
+   * 读的是节点参数里那个空的 `paths`，于是规格照旧只能从探索来——而探索得到的规格
+   * **永远不可能发现「产品错了」**，观察不可能反驳被观察者。
+   *
+   * 只在节点自己没说的时候注入：图上写死了 paths 或 text 的，那是这张图的决定，
+   * 不该被项目设置悄悄改掉。注入了什么会跟着 `paramOverrides` 记进运行——
+   * 一次运行读了哪几份材料，是解释它产出的第一件事。
+   */
+  const projectMaterials = input.target?.projectId
+    ? (getProject(input.target.projectId)?.materials ?? [])
+    : [];
+  const injected: Record<string, Record<string, unknown>> = { ...(input.params ?? {}) };
+  if (projectMaterials.length)
+    for (const n of base.nodes) {
+      if (n.type !== "source.spec") continue;
+      const p = (n.params ?? {}) as { paths?: unknown; path?: unknown; text?: unknown };
+      const alreadySaid =
+        (Array.isArray(p.paths) && p.paths.length) || !!p.path || !!p.text || !!injected[n.id];
+      if (!alreadySaid) injected[n.id] = { paths: projectMaterials };
+    }
+  const params = Object.keys(injected).length ? injected : input.params;
+  const def = applyParamOverrides(base, params);
 
   const wfRunId = input.wfRunId ?? `wf-${Date.now().toString(36)}`;
   const startedAt = new Date().toISOString();
@@ -475,7 +499,7 @@ export async function startRun(input: {
       // version, have been produced by different instructions, and be compared as if only
       // the arm differed. Recording the fingerprint is what closes that.
       prompts: runPromptDigest(),
-      paramOverrides: input.params ?? previous.paramOverrides,
+      paramOverrides: params ?? previous.paramOverrides,
       // It is running again, so where it stopped last time is history, not state.
       pausedAt: undefined,
     },

@@ -213,6 +213,19 @@ const projCols = new Set(
 );
 if (!projCols.has("targetPlatform"))
   db.exec("ALTER TABLE projects ADD COLUMN targetPlatform TEXT NOT NULL DEFAULT 'web'");
+/**
+ * 这个项目的规格来自哪几份文档。
+ *
+ * 建项目时只有名称、URL、目标端三格——没有地方交材料。可是 `spec.compose` 明确认两种
+ * 来源，而它们**能说明的事完全不同**：文档表达意图，所以对着它写的用例可能发现「产品错了」；
+ * 探索表达现状，对着它写的用例只可能发现「产品变了」，永远不可能发现「产品错了」
+ * ——观察不可能反驳被观察者。
+ *
+ * 一个从不交材料的项目，它的整套用例都只是回归网。这一列存在，是为了让这件事在建项目
+ * 那一刻就被问一次。
+ */
+if (!projCols.has("materialsJson"))
+  db.exec("ALTER TABLE projects ADD COLUMN materialsJson TEXT NOT NULL DEFAULT '[]'");
 
 // Where a generated case came from and what the harness thought of it. A case that entered
 // the board through review should still be able to answer "which run made me, from which
@@ -324,6 +337,13 @@ export interface Project {
   /** web | ios | android — web3 and chain assertions exist only on web. */
   targetPlatform: TargetPlatform;
   createdAt: string;
+  /**
+   * 这个项目的规格来自哪几份文档（相对仓库根的路径）。
+   *
+   * 空数组不是「还没填」，它是一个结论：这个项目的规格只能从**观察**里来，
+   * 于是它的整套用例只可能发现「产品变了」，永远不可能发现「产品错了」。
+   */
+  materials: string[];
 }
 export interface Step {
   order: number;
@@ -624,14 +644,22 @@ let seq = 1000;
 export const newId = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
 
 /* ---- projects ---- */
+type ProjectRow = Omit<Project, "materials"> & { materialsJson: string };
+const rowToProject = (r: ProjectRow): Project => ({
+  ...r,
+  materials: JSON.parse(r.materialsJson || "[]") as string[],
+});
 export const listProjects = (): Project[] =>
-  db.prepare("SELECT * FROM projects ORDER BY createdAt").all() as Project[];
-export const getProject = (id: string): Project | undefined =>
-  db.prepare("SELECT * FROM projects WHERE id=?").get(id) as Project | undefined;
+  (db.prepare("SELECT * FROM projects ORDER BY createdAt").all() as ProjectRow[]).map(rowToProject);
+export const getProject = (id: string): Project | undefined => {
+  const r = db.prepare("SELECT * FROM projects WHERE id=?").get(id) as ProjectRow | undefined;
+  return r ? rowToProject(r) : undefined;
+};
 export function createProject(
   name: string,
   targetUrl: string,
   targetPlatform: TargetPlatform = "web",
+  materials: string[] = [],
 ): Project {
   const p: Project = {
     id: newId("prj"),
@@ -639,22 +667,23 @@ export function createProject(
     targetUrl,
     targetPlatform,
     createdAt: new Date().toISOString(),
+    materials,
   };
   db.prepare(
-    "INSERT INTO projects (id,name,targetUrl,targetPlatform,createdAt) VALUES (?,?,?,?,?)",
-  ).run(p.id, p.name, p.targetUrl, p.targetPlatform, p.createdAt);
+    "INSERT INTO projects (id,name,targetUrl,targetPlatform,createdAt,materialsJson) VALUES (?,?,?,?,?,?)",
+  ).run(p.id, p.name, p.targetUrl, p.targetPlatform, p.createdAt, JSON.stringify(p.materials));
   return p;
 }
 export function updateProject(
   id: string,
-  patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>,
+  patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials">>,
 ): Project | undefined {
   const cur = getProject(id);
   if (!cur) return undefined;
   const next = { ...cur, ...patch };
-  db.prepare("UPDATE projects SET name=?, targetUrl=?, targetPlatform=? WHERE id=?").run(
-    next.name, next.targetUrl, next.targetPlatform, id,
-  );
+  db.prepare(
+    "UPDATE projects SET name=?, targetUrl=?, targetPlatform=?, materialsJson=? WHERE id=?",
+  ).run(next.name, next.targetUrl, next.targetPlatform, JSON.stringify(next.materials ?? []), id);
   return next;
 }
 // Delete a project and everything under it (cases, runs, baselines, envs, secrets, batches).

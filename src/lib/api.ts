@@ -178,9 +178,16 @@ export const api = {
 
   // ---- persistence (backend is the source of truth) ----
   getProjects: () => get<{ projects: Project[]; overviews?: Record<string, ProjectOverview> }>("/api/projects"),
-  createProject: (name: string, targetUrl: string, targetPlatform: TargetPlatform = "web") =>
-    post<{ project: Project }>("/api/projects", { name, targetUrl, targetPlatform }, 8000),
-  updateProject: (id: string, body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>) =>
+  createProject: (
+    name: string,
+    targetUrl: string,
+    targetPlatform: TargetPlatform = "web",
+    materials: string[] = [],
+  ) => post<{ project: Project }>("/api/projects", { name, targetUrl, targetPlatform, materials }, 8000),
+  updateProject: (
+    id: string,
+    body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials">>,
+  ) =>
     patch<{ project: Project }>(`/api/projects/${id}`, body),
   deleteProject: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
   getCases: (projectId?: string) =>

@@ -573,13 +573,21 @@ type Platform = (typeof PLATFORMS)[number];
 const asPlatform = (v: unknown): Platform | undefined =>
   PLATFORMS.includes(v as Platform) ? (v as Platform) : undefined;
 
+const asMaterials = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : [];
+
 app.post("/api/projects", (req, res) => {
-  const { name, targetUrl, targetPlatform } = req.body ?? {};
+  const { name, targetUrl, targetPlatform, materials } = req.body ?? {};
   if (!name || !targetUrl) return res.status(400).json({ error: "name and targetUrl required" });
   if (targetPlatform !== undefined && !asPlatform(targetPlatform))
     return res.status(400).json({ error: `targetPlatform must be one of ${PLATFORMS.join(", ")}` });
   res.json({
-    project: createProject(String(name), String(targetUrl), asPlatform(targetPlatform) ?? "web"),
+    project: createProject(
+      String(name),
+      String(targetUrl),
+      asPlatform(targetPlatform) ?? "web",
+      asMaterials(materials),
+    ),
   });
 });
 // Renaming, re-pointing, or switching ends. Switching to iOS/Android does not delete the
@@ -595,6 +603,7 @@ app.patch("/api/projects/:id", (req, res) => {
     ...(name !== undefined ? { name: String(name) } : {}),
     ...(targetUrl !== undefined ? { targetUrl: String(targetUrl) } : {}),
     ...(targetPlatform !== undefined ? { targetPlatform: asPlatform(targetPlatform)! } : {}),
+    ...(req.body?.materials !== undefined ? { materials: asMaterials(req.body.materials) } : {}),
   });
   res.json({ project });
 });

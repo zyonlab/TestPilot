@@ -36,7 +36,12 @@ interface StoreState {
   setQuarantine: (id: string, quarantined: boolean) => Promise<void>;
   selectProject: (id: string) => Promise<void>;
   exitProject: () => void;
-  createProject: (name: string, targetUrl: string, targetPlatform?: TargetPlatform) => Promise<void>;
+  createProject: (
+    name: string,
+    targetUrl: string,
+    targetPlatform?: TargetPlatform,
+    materials?: string[],
+  ) => Promise<void>;
   /** Rename / re-point / switch ends. */
   updateProject: (id: string, patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>) => Promise<void>;
   select: (id: string) => void;
@@ -163,9 +168,9 @@ export const useStore = create<StoreState>((set, get) => ({
       selectedId: "",
     }),
 
-  createProject: async (name, targetUrl, targetPlatform = "web") => {
+  createProject: async (name, targetUrl, targetPlatform = "web", materials = []) => {
     try {
-      const { project } = await api.createProject(name, targetUrl, targetPlatform);
+      const { project } = await api.createProject(name, targetUrl, targetPlatform, materials);
       set((s) => ({ projects: [...s.projects, project] }));
       await get().selectProject(project.id);
     } catch {
