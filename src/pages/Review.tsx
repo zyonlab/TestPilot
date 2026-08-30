@@ -7,6 +7,11 @@ import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { API_BASE } from "@/lib/base";
 import { stopReason } from "@/lib/stopReason";
+import { CaseMeta, CaseBody } from "@/lib/artifact/CaseCard";
+import { StoryTitle } from "@/lib/artifact/StoryCard";
+import { Findings } from "@/lib/artifact/Findings";
+import type { ArtifactCase, ArtifactFinding, ArtifactStory, CaseField } from "@/lib/artifact/types";
+
 
 /**
  * The review queue.
@@ -18,11 +23,14 @@ import { stopReason } from "@/lib/stopReason";
 
 const API = API_BASE;
 
-interface Finding {
-  rule: string;
-  severity: string;
-  message: string;
-}
+/**
+ * 产物的形状来自 `src/lib/artifact/types`，不在这里另立一份。
+ *
+ * 此前这个文件自己声明了一遍 `Finding` / `ReviewItem` / `Story`，只写了它当时想画的键。
+ * 结果是同一份接口数据，故事地图画得出角色与收益，故事抽屉画不出；用例的前置条件和
+ * 机器判据明明在响应里，四个阅读器一个都没画。少写一个字段，下游就永远不知道它存在过。
+ */
+type Finding = ArtifactFinding;
 
 interface ReviewEdit {
   by?: "human" | "model";
@@ -30,21 +38,7 @@ interface ReviewEdit {
   note?: string;
 }
 
-interface ReviewItem {
-  caseId: string;
-  title: string;
-  storyId: string;
-  designMethod: string;
-  tier: number;
-  precondition: string[];
-  steps: string[];
-  expected: string;
-  findings: Finding[];
-  code?: string;
-  codeBlocked?: boolean;
-  codeFindings?: Finding[];
-  degraded?: boolean;
-  decision?: "approved" | "rejected";
+interface ReviewItem extends ArtifactCase {
   createdCaseId?: string;
   /** What the harness produced, when an edit has been made on top of it. */
   original?: {
@@ -59,15 +53,7 @@ interface ReviewItem {
   editedFindings?: Finding[];
 }
 
-interface Story {
-  id: string;
-  title: string;
-  activity?: string;
-  flowId?: string;
-  role?: string;
-  benefit?: string;
-  acceptance: string[];
-}
+type Story = ArtifactStory;
 
 interface Gap {
   activity?: string;
@@ -128,7 +114,6 @@ function batchStamp(iso?: string): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-const TIER_LABEL: Record<number, string> = { 1: "t1 assert", 2: "t2 invariant", 3: "t3 judge" };
 
 /**
  * What changed, field by field.
@@ -204,17 +189,20 @@ function EditForm({
   return (
     <div className="space-y-1.5">
       <input
+        data-field="title"
         className="w-full rounded-md border border-border bg-card px-2 py-1 text-[12px]"
         value={draft.title}
         onChange={(e) => onChange({ ...draft, title: e.target.value })}
       />
       <textarea
+        data-field="steps"
         className="h-20 w-full resize-y rounded-md border border-border bg-card px-2 py-1 font-mono text-[11px]"
         value={draft.steps}
         spellCheck={false}
         onChange={(e) => onChange({ ...draft, steps: e.target.value })}
       />
       <textarea
+        data-field="expected"
         className="h-14 w-full resize-y rounded-md border border-border bg-card px-2 py-1 text-[12px]"
         value={draft.expected}
         spellCheck={false}
@@ -465,14 +453,7 @@ function StoryMap({
                         title={t("review.selectStory")}
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="font-mono text-[10px] text-muted-foreground">{st.id}</div>
-                        <div className="text-[12.5px] font-medium leading-snug">{st.title}</div>
-                        {/* 谁想要、能得到什么。说不出这两样的条目不是用户故事，是界面事实。 */}
-                        {(st.role || st.benefit) && (
-                          <div className="mt-1 text-[11px] text-muted-foreground">
-                            {st.role || "—"} · {st.benefit || "—"}
-                          </div>
-                        )}
+                        <StoryTitle story={st} compact />
                         {!st.flowId && (
                           <div className="mt-1 text-[10.5px] text-amber-700">{t("review.noFlow")}</div>
                         )}
@@ -537,6 +518,37 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
   const [replaceWith, setReplaceWith] = useState("");
   const [pre, setPre] = useState("");
   const [note, setNote] = useState("");
+
+  /**
+   * 点一条 finding，光标落到它挑毛病的那个字段。
+   *
+   * finding 此前是一行不能点的灰字：读的人得自己把 `[oracle-vague] … "到达 /owners/find 页面"`
+   * 和下面三个输入框中的哪一个对上。规则本来就知道自己在说哪个字段（`field`），
+   * 把这件事交给人做，是白白让每一条 finding 多花几秒。
+   */
+  const focusField = (caseId: string, field: CaseField) => {
+    setView("list");
+    setOpen((prev) => new Set(prev).add(caseId));
+    // 展开是下一帧的事，所以等一拍再找输入框。
+    setTimeout(() => {
+      const card = document.getElementById(`case-${caseId}`);
+      card?.scrollIntoView({ block: "center" });
+      const el = card?.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (el) {
+        el.focus();
+        // 前置/方法/覆盖目前没有对应的输入框——闪一下那一段，至少说明它指的是哪里。
+      } else {
+        const seg = card?.querySelector<HTMLElement>(`#field-${field}-${caseId}`);
+        seg?.animate?.([{ opacity: 1 }, { opacity: 0.35 }, { opacity: 1 }], { duration: 700, iterations: 2 });
+      }
+    }, 0);
+  };
+
+  /** 点一条覆盖的转移，跳到产品地图上那条边。用的是缺口那套锚点，不另发明一份。 */
+  const openTransition = (from: string, to: string) => {
+    const [path] = window.location.hash.split("?");
+    window.location.hash = `${path || "#/"}?open=map&at=${encodeURIComponent(`edge:${from}->${to}`)}`;
+  };
   // Regeneration is a model call per case and takes tens of seconds on a local model, so
   // it says how many are in flight rather than freezing the page with no explanation.
   const [regenerating, setRegenerating] = useState(0);
@@ -1009,59 +1021,57 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
                             )}
                             <span className="font-display text-[14px] text-foreground">{item.title}</span>
                           </div>
-                          <div className="ml-5 mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
-                            <span>{item.storyId}</span>
-                            <span>{item.designMethod}</span>
-                            <span>{TIER_LABEL[item.tier] ?? `t${item.tier}`}</span>
-                            {item.code && <span className="text-emerald-600">{t("review.hasCode")}</span>}
-                            {item.degraded && <span className="text-amber-600">{t("review.degraded")}</span>}
-                            {item.edit && (
-                              <span className="text-sky-600">
-                                {item.edit.by === "model" ? t("review.byModel") : t("review.edited")}
-                              </span>
-                            )}
-                            {item.edit?.priority && <span className="text-foreground">{item.edit.priority}</span>}
-                            {item.decision && <span className="text-foreground">{item.decision}</span>}
+                          <div className="ml-5 mt-1">
+                            <CaseMeta kase={{ ...item, priority: item.edit?.priority }} />
                           </div>
-                          <div className="ml-5 mt-1 text-[12px] text-muted-foreground">→ {item.expected}</div>
+                          {(item.edit || item.decision) && (
+                            <div className="ml-5 mt-1 flex flex-wrap gap-x-3 text-[11px]">
+                              {item.edit && (
+                                <span className="text-sky-600">
+                                  {item.edit.by === "model" ? t("review.byModel") : t("review.edited")}
+                                </span>
+                              )}
+                              {item.decision && <span className="text-muted-foreground">{item.decision}</span>}
+                            </div>
+                          )}
+                          {!expanded && (
+                            <div className="ml-5 mt-1 line-clamp-2 text-[12px] text-muted-foreground">
+                              → {item.expected}
+                            </div>
+                          )}
                         </button>
                       </div>
 
                       {(item.findings.length > 0 || (item.codeFindings?.length ?? 0) > 0) && (
-                        <ul className="ml-7 mt-2 space-y-0.5">
-                          {[...item.findings, ...(item.codeFindings ?? [])].map((f, i) => (
-                            <li
-                              key={i}
-                              className={cn(
-                                "text-[11px]",
-                                f.severity === "block"
-                                  ? "text-rose-600"
-                                  : f.severity === "warn"
-                                    ? "text-amber-600"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              [{f.rule}] {f.message}
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="ml-7 mt-2">
+                          <Findings
+                            findings={[...item.findings, ...(item.codeFindings ?? [])]}
+                            onFocusField={(f) => focusField(item.caseId, f)}
+                          />
+                        </div>
                       )}
 
                       {expanded && (
                         <div className="ml-7 mt-2 space-y-2">
+                          {/*
+                            四要素先摆出来，再给编辑框。
+                            此前这里直接是编辑框——于是复核者能改的三格就是他能看到的全部，
+                            前置条件和机器判据（判决真正的依据）在界面上根本不存在。
+                          */}
+                          <div className="rounded-lg border border-border/70 bg-muted/30 p-2.5">
+                            <CaseBody kase={item} onOpenTransition={openTransition} />
+                          </div>
                           <EditDiff item={item} />
                           {item.editedFindings && (
-                            <ul className="space-y-0.5">
-                              {item.editedFindings.length === 0 ? (
-                                <li className="text-[11px] text-emerald-600">{t("review.noFindingsNow")}</li>
-                              ) : (
-                                item.editedFindings.map((f, i) => (
-                                  <li key={i} className="text-[11px] text-muted-foreground">
-                                    {t("review.stillFlagged")} [{f.rule}] {f.message}
-                                  </li>
-                                ))
-                              )}
-                            </ul>
+                            item.editedFindings.length === 0 ? (
+                              <div className="text-[11px] text-emerald-600">{t("review.noFindingsNow")}</div>
+                            ) : (
+                              <Findings
+                                findings={item.editedFindings}
+                                prefix={t("review.stillFlagged")}
+                                onFocusField={(f) => focusField(item.caseId, f)}
+                              />
+                            )
                           )}
                           {item.decision ? (
                             <ol className="list-decimal space-y-0.5 pl-4 text-[12px] text-foreground">
