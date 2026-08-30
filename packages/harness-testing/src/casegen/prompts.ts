@@ -381,6 +381,22 @@ export const CASES_SCHEMA = {
           key: { type: "string", minLength: 1 },
           // 没写进 schema 的字段模型产不出来——`covers` 是结构覆盖率的全部来源。
           covers: { type: "array", items: { type: "string" } },
+          /**
+           * 2026-08-30：这两个字段我加进了提示词、加进了 zod，**独独漏了这里**。
+           *
+           * 后果不是「少了两个字段」，是一次跑完的配对评测**什么都没量到**：
+           * 约束解码只允许模型产出这份 schema 里有的键，于是 A 臂（提示词里明明写着
+           * 怎么定优先级）和 B 臂（写着不定）产出的用例**一条优先级都没有**——两臂
+           * 完全一样，McNemar 检验的是两组相同的数。8 条用例、一次模型调用、
+           * 白花的钱，而且如果不去数一下 priority 的分布，那份报告看起来完全正常。
+           *
+           * 同一个坑这个文件里已经记过两次（`covers` 一次、`modules` 一次），
+           * 我还在 `screens` 旁边亲手写下「两处必须同时改」，然后在下一个字段上又犯了。
+           * 所以从现在起不靠注释：`test/casegen.test.ts` 里有一条测试把 zod 的字段表
+           * 和这份 schema 对齐，漏一个就红。
+           */
+          priority: { type: "string", enum: ["P0", "P1", "P2"] },
+          postSteps: { type: "array", items: { type: "string", minLength: 1 } },
         },
         required: ["title", "designMethod", "steps", "expected", "tier", "key"],
       },

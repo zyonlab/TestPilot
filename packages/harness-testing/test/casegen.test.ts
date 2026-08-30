@@ -1,4 +1,5 @@
-import { CASES_STABLE, CASES_STABLE_PLAIN } from "../src/casegen/prompts.js";
+import { CASES_SCHEMA, CASES_STABLE, CASES_STABLE_PLAIN, COMPOSE_SCHEMA } from "../src/casegen/prompts.js";
+import { SpecDocSchema, TextCaseSchema } from "../src/casegen/types.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeModel } from "@testpilot/harness-core";
@@ -680,5 +681,68 @@ describe("消融臂必须只差一件事", () => {
     expect(CASES_STABLE_PLAIN).toContain('"kind":"noText"');
     expect(CASES_STABLE_PLAIN).toContain("all happy path is a bad suite");
     expect(CASES_STABLE_PLAIN).toContain("CASE BUDGET");
+  });
+});
+
+/**
+ * **约束解码的 schema 必须和 zod 说同一件事。**
+ *
+ * 这个坑踩过三次，每次形状一模一样：字段加进了提示词、加进了 zod，独独漏了
+ * `CASES_SCHEMA` / `COMPOSE_SCHEMA`。约束解码只允许模型产出 schema 里有的键，
+ * 于是模型**一个都产不出来**——而产出看起来完全正常：字段有值（是默认值）、
+ * 结构完整、门禁满分。
+ *
+ * 前两次是 `covers` 和 `modules`，都靠注释提醒下一个人。第三次（`priority` /
+ * `postSteps`）我在 `screens` 旁边亲手写下「两处必须同时改」之后，在下一个字段上
+ * 又犯了一遍，代价是一次跑完的配对评测两臂产出完全相同——它测的是两组一样的数。
+ *
+ * 注释拦不住这件事，所以改成测试拦。
+ */
+describe("给模型的 schema 与给我们的校验必须对齐", () => {
+  const modelProduces = (
+    (CASES_SCHEMA as { properties: { cases: { items: { properties: Record<string, unknown> } } } })
+      .properties.cases.items.properties
+  );
+
+  /**
+   * 模型不产、由 harness 自己填的字段。
+   *
+   * 只有这一份名单可以豁免，而且**每一个都要说得出为什么**——一个没有理由的豁免
+   * 就是把这条测试关掉。
+   */
+  const filledByHarness: Record<string, string> = {
+    id: "由 harness 从标题生成，模型给的 id 不稳定也不唯一",
+    storyId: "这次调用只处理一条故事，id 在调用方手上，问模型等于让它抄一遍",
+  };
+
+  it("TextCase 的每个字段，要么在 schema 里，要么在豁免名单里", () => {
+    const zodKeys = Object.keys(TextCaseSchema.shape);
+    const missing = zodKeys.filter((k) => !(k in modelProduces) && !(k in filledByHarness));
+    expect(missing, `这些字段 zod 认、schema 不认，模型一个都产不出来：${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("schema 里不该有 zod 不认的字段——那是模型白写的 token", () => {
+    const zodKeys = new Set(Object.keys(TextCaseSchema.shape));
+    const extra = Object.keys(modelProduces).filter((k) => !zodKeys.has(k));
+    expect(extra, `schema 允许但 zod 会丢掉：${extra.join(", ")}`).toEqual([]);
+  });
+
+  it("优先级与清理步骤确实在里面——这两个是踩出这条测试的那两个", () => {
+    expect(modelProduces.priority).toBeDefined();
+    expect(modelProduces.postSteps).toBeDefined();
+  });
+
+  /** 规格那一步同理。`modules` 在这里漏过一次，`screens` 是最近加的。 */
+  it("SpecDoc 的每个字段，要么在 compose schema 里，要么在豁免名单里", () => {
+    const produced = (COMPOSE_SCHEMA as { properties: Record<string, unknown> }).properties;
+    const assembled: Record<string, string> = {
+      text: "规格全文由节点自己拼（要把海拔、流程、模块写进正文），不是模型直接给的一个字段",
+      origin: "材料带来的，不是模型的判断",
+      derivedFrom: "材料带来的：文档 / 探索 / 代码库——这决定断言能说明什么，更不能让模型自称",
+    };
+    const missing = Object.keys(SpecDocSchema.shape).filter(
+      (k) => !(k in produced) && !(k in assembled),
+    );
+    expect(missing, `这些字段 zod 认、compose schema 不认：${missing.join(", ")}`).toEqual([]);
   });
 });
