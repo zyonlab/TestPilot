@@ -1,5 +1,11 @@
-import { CASES_SCHEMA, CASES_STABLE, CASES_STABLE_PLAIN, COMPOSE_SCHEMA } from "../src/casegen/prompts.js";
-import { SpecDocSchema, TextCaseSchema } from "../src/casegen/types.js";
+import {
+  CASES_SCHEMA,
+  CASES_STABLE,
+  CASES_STABLE_PLAIN,
+  COMPOSE_SCHEMA,
+  STORIES_SCHEMA,
+} from "../src/casegen/prompts.js";
+import { SpecDocSchema, StorySchema, TextCaseSchema } from "../src/casegen/types.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeModel } from "@testpilot/harness-core";
@@ -730,6 +736,40 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
   it("优先级与清理步骤确实在里面——这两个是踩出这条测试的那两个", () => {
     expect(modelProduces.priority).toBeDefined();
     expect(modelProduces.postSteps).toBeDefined();
+  });
+
+  /**
+   * 故事那一步。这里踩的不是「漏了字段」，是「字段在但可选」。
+   *
+   * 换到 qwen3-8-27b 之后，可选键一律不写：`plan.stories` 每次只回一条故事、
+   * 零条验收标准。上一个模型在同样的 schema 下产得出来——所以「可选键会被产出」
+   * 从来不是这套代码的保证，只是那个模型的性质。
+   *
+   * 所以这条测试查的是 required，不只是 properties：提示词**要求**的字段，
+   * schema 里必须也要求。
+   */
+  it("提示词点名要的故事字段，schema 里必须是 required 而不只是可选", () => {
+    const req = new Set(
+      (STORIES_SCHEMA as { properties: { stories: { items: { required: string[] } } } })
+        .properties.stories.items.required,
+    );
+    // 这三个都是提示词里明确点名、且下游没有它就干不了活的：
+    //   acceptance 是设计用例唯一的对照物；role/benefit 决定这条是不是用户故事。
+    for (const k of ["acceptance", "role", "benefit"])
+      expect(req.has(k), `${k} 在 schema 里是可选的——这个模型会直接不写`).toBe(true);
+  });
+
+  it("故事的字段也要两边对齐", () => {
+    const produced = (
+      STORIES_SCHEMA as { properties: { stories: { items: { properties: Record<string, unknown> } } } }
+    ).properties.stories.items.properties;
+    const filledByHarness: Record<string, string> = {
+      sourceBy: "出处是定位出来的还是模型自称的，由 harness 拿验收标准回材料里查出来的，不能问模型",
+    };
+    const missing = Object.keys(StorySchema.shape).filter(
+      (k) => !(k in produced) && !(k in filledByHarness),
+    );
+    expect(missing, `这些字段 zod 认、stories schema 不认：${missing.join(", ")}`).toEqual([]);
   });
 
   /** 规格那一步同理。`modules` 在这里漏过一次，`screens` 是最近加的。 */
