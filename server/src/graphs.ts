@@ -1,5 +1,5 @@
 import { dataPath } from "./datadir.js";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   NodeRegistry,
@@ -140,8 +140,9 @@ function makeExecutor(target: RunTarget, wfRunId?: string): CaseExecutor {
           durationMs: o.ms,
           startedAt,
           failureReason: o.message,
-          logs: [],
-          screenshots: [],
+          // 空数组是常量的时候，界面画出来的四个占位框就是凭空造的。见 ExecOutcome。
+          logs: o.logs ?? [],
+          screenshots: o.screenshots ?? [],
           failCode: o.failCode,
           failKind: o.failKind,
           infraError: o.failKind === "infra",
@@ -185,6 +186,13 @@ function makeExecutor(target: RunTarget, wfRunId?: string): CaseExecutor {
         failCode: exec.failure?.code,
         message: exec.failureReason,
         ms: Date.now() - started,
+        /**
+         * runner 已经把 PNG 写在 `${ARTIFACT_DIR}/exec/` 下了——此前只是没有人引用它们，
+         * 于是那些文件躺在盘上占了十几兆，而界面上一张图都没有。
+         * 这里记下相对路径；`/api/artifacts` 就是这个目录的静态服务。
+         */
+        screenshots: (exec.pngPaths ?? []).map((p) => relative(ARTIFACT_DIR, p)),
+        logs: exec.logs ?? [],
       });
     } catch (e) {
       // Dispatch itself failing is environmental: it says nothing about the case.

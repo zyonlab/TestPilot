@@ -110,6 +110,19 @@ export const ExecOutcomeSchema = z.object({
   failCode: z.string().optional(),
   message: z.string().optional(),
   ms: z.number().default(0),
+  /**
+   * 这次执行留下的截图，**存路径不存像素**。
+   *
+   * 此前这个字段不存在，于是 `graphs.ts` 记录执行时只能写死一个空数组，界面拿到空数组
+   * 又回落成四个灰色占位框——三个文件、三层，没有任何一层觉得自己在撒谎，而用户看到的是
+   * 「图还在加载」。事实是这里永远不会有图。
+   *
+   * 存的是相对 artifacts 目录的路径（`exec/<execId>-<i>.png`），不是 data URI：
+   * 后者会让 testpilot.db 从 192K 涨到几十 MB，而且截图进了 SQLite 之后就没法单独清理。
+   * 这些 PNG 本来就已经被 runner 写在盘上了——此前只是没有人引用它们。
+   */
+  screenshots: z.array(z.string()).optional(),
+  logs: z.array(z.string()).optional(),
 });
 export type ExecOutcome = z.infer<typeof ExecOutcomeSchema>;
 

@@ -255,6 +255,17 @@ function VisualSection({ run }: { run: RunRecord }) {
 // The full run-detail content (previously an inline right column). Relocated
 // unchanged into the Drawer body. Exported so both the Runs page and the Suite
 // drill-down render the identical detail UI.
+/**
+ * 一张截图怎么变成一个能加载的地址。
+ *
+ * 两种来源并存，而且会长期并存：看板上的单跑把截图存成 data URI（历史如此），
+ * 工作流里的执行存的是 `exec/<execId>-<i>.png` 这样的相对路径——存路径是对的，
+ * data URI 会让 testpilot.db 从 192K 涨到几十 MB。所以这里按形状分辨，
+ * 而不是给存储加一个「类型」字段：形状本身已经说清楚了。
+ */
+const shotSrc = (ref: string): string =>
+  ref.startsWith("data:") || ref.startsWith("http") ? ref : `${API_BASE}/api/artifacts/${ref}`;
+
 export function RunDetail({ run }: { run: RunRecord }) {
   const t = useT();
   return (
@@ -360,7 +371,7 @@ export function RunDetail({ run }: { run: RunRecord }) {
             {run.screenshots.map((shot, i) => (
               <div key={i}>
                 <img
-                  src={shot}
+                  src={shotSrc(shot)}
                   alt={`${t("runs.step")} ${i + 1}`}
                   className="aspect-video w-full rounded-md border border-border object-cover"
                 />

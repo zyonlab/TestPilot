@@ -44,7 +44,7 @@ export const dict: Record<string, Entry> = {
     ja: "リトライあり——再試行で初めて成功した合格は、その分だけ信頼度が下がります",
   },
   "runs.noShots": { zh: "这次运行没有留下截图", en: "this run left no screenshots", ja: "この実行はスクリーンショットを残していない" },
-  "runs.noShotsWorkflow": { zh: "工作流里的执行还没有把截图带出来——执行器落了盘，但产物类型里还没有这个字段，所以记录时只能存一个空数组", en: "workflow executions do not carry screenshots yet — the executor writes them to disk, but the outcome type has no field for them, so the record stores an empty array", ja: "ワークフロー実行はまだスクリーンショットを持ち出せない——実行器はディスクに保存するが、成果物の型に該当フィールドがなく、記録時は空配列になる" },
+  "runs.noShotsWorkflow": { zh: "这条执行记录里没有截图。它多半跑在「工作流执行把截图路径记下来」这个改动之前——那之前执行器虽然落了盘，产物类型里却没有承载它的字段，记录时只能存一个空数组。重跑一次就有了", en: "this execution has no screenshots. It most likely ran before workflow executions started recording screenshot paths — until then the executor wrote them to disk but the outcome type had no field to carry them. Re-run the case and they will be there", ja: "この実行にスクリーンショットはありません。ワークフロー実行がパスを記録するようになる前の実行と思われます——それ以前は実行器が保存しても成果物の型に該当フィールドがなく、空配列として記録されていました。再実行すれば取得されます" },
   "runs.backToList": { zh: "返回列表", en: "back to list", ja: "一覧に戻る" },
   "runs.searchPlaceholder": { zh: "搜用例名 / 失败原因…", en: "search case or failure…", ja: "ケース名・失敗理由を検索…" },
   "runs.attemptsN": { zh: "{n} 轮", en: "{n} attempts", ja: "{n} 回" },
