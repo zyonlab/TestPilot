@@ -233,6 +233,20 @@ if (!genCols.has("oracleJson")) db.exec("ALTER TABLE test_cases ADD COLUMN oracl
 // Whether this case only went green after its assertion was weakened during repair. It is
 // the one mark on the board that says "this pass is worth less than it looks".
 if (!genCols.has("degraded")) db.exec("ALTER TABLE test_cases ADD COLUMN degraded INTEGER NOT NULL DEFAULT 0");
+/**
+ * 模块与覆盖的转移：批准这一步此前把它们丢在门外。
+ *
+ * `activity` 在规格里是**算出来的**（`computeModules` 按路由聚类，模型只贡献名字），
+ * 故事的 activity 还被约束成模块名的枚举——一等实体，做得相当讲究。可是看板没有这一列，
+ * 于是它活不过 `approve()`：批准之后再也没人说得出这条用例属于哪个模块，
+ * 看板没法按模块分组，导出也没法按模块建目录。
+ *
+ * `covers` 同理：它是唯一一根**来自产品本身**的追溯线（一共 M 条转移，覆盖了几条），
+ * 丢掉之后结构覆盖率只能一批一批地算，没法在项目层累计。
+ */
+if (!genCols.has("activity")) db.exec("ALTER TABLE test_cases ADD COLUMN activity TEXT DEFAULT ''");
+if (!genCols.has("coversJson"))
+  db.exec("ALTER TABLE test_cases ADD COLUMN coversJson TEXT NOT NULL DEFAULT '[]'");
 
 // Review decisions live apart from the cases, because a rejection has no case to hang on:
 // the point of recording it is that the queue stops offering it again.
@@ -412,6 +426,8 @@ export interface TestCase {
   createdAt: string;
   /* ---- provenance, for a case that came out of a workflow ---- */
   storyId?: string; // the user story it was designed from
+  activity?: string; // 所属模块。规格里算出来的路由聚类，故事地图的横轴
+  covers?: string[]; // 走了哪些状态转移（`from->to`）——唯一来自产品本身的追溯线
   designMethod?: string; // equivalence / boundary / state-transition / decision-table / negative
   tier?: number; // how hard its verdict is: 1 assert, 2 invariant, 3 judge
   gateScore?: number; // what gate ① thought of the batch it arrived in
@@ -553,10 +569,11 @@ export interface BatchRun {
 /* ---- serialization ---- */
 type CaseRow = Omit<
   TestCase,
-  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions" | "oracle" | "degraded"
+  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions" | "oracle" | "degraded" | "covers"
 > & {
   steps: string;
   postSteps: string;
+  coversJson: string;
   hasCode: number;
   quarantined: number;
   chainAssertionsJson: string;
@@ -566,6 +583,7 @@ type CaseRow = Omit<
 const rowToCase = (r: CaseRow): TestCase => ({
   ...r,
   oracle: r.oracleJson ? (JSON.parse(r.oracleJson) as MachineOracle) : undefined,
+  covers: JSON.parse(r.coversJson || "[]"),
   degraded: !!r.degraded,
   hasCode: !!r.hasCode,
   quarantined: !!r.quarantined,
@@ -696,6 +714,8 @@ export function createCase(input: Partial<TestCase> & { projectId: string; title
     // Provenance travels with the case, or the board cannot answer the first question
     // anyone asks of a generated case: where did this come from?
     storyId: input.storyId,
+    activity: input.activity,
+    covers: input.covers ?? [],
     designMethod: input.designMethod,
     tier: input.tier,
     gateScore: input.gateScore,
@@ -704,11 +724,13 @@ export function createCase(input: Partial<TestCase> & { projectId: string; title
     degraded: input.degraded,
   };
   db.prepare(
-    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt,storyId,designMethod,tier,gateScore,sourceRunId,oracleJson,degraded)
-     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt,@storyId,@designMethod,@tier,@gateScore,@sourceRunId,@oracleJson,@degraded)`,
+    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt,storyId,designMethod,tier,gateScore,sourceRunId,oracleJson,degraded,activity,coversJson)
+     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt,@storyId,@designMethod,@tier,@gateScore,@sourceRunId,@oracleJson,@degraded,@activity,@coversJson)`,
   ).run({
     ...c,
     storyId: c.storyId ?? null,
+    activity: c.activity ?? "",
+    coversJson: JSON.stringify(c.covers ?? []),
     designMethod: c.designMethod ?? null,
     tier: c.tier ?? null,
     gateScore: c.gateScore ?? null,

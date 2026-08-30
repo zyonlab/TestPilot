@@ -3,6 +3,7 @@ import { AlertTriangle, FileCode2, GitCompare, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/prefs";
 import { API_BASE } from "@/lib/base";
+import { runFromHash } from "@/lib/wf";
 import { cn } from "@/lib/cn";
 
 /**
@@ -207,6 +208,13 @@ function Detail({ p, onClose }: { p: Provenance; onClose: () => void }) {
   );
 }
 
+/** 这次运行生成的代码。属于运行，不属于看板——所以只读，也不进 KPI。 */
+interface Candidate {
+  caseId: string;
+  title: string;
+  code: string;
+}
+
 export function CodeLinePage() {
   const t = useT();
   const activeProjectId = useStore((s) => s.activeProjectId);
@@ -214,6 +222,27 @@ export function CodeLinePage() {
   const [fragments, setFragments] = useState(0);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Provenance | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const candidateRun = runFromHash();
+
+  /**
+   * 地址栏里那次运行的候选代码。
+   *
+   * 读它是为了让这一页能同时说出两件事。画布上的产物卡说「用例代码 38」，点进来说 0——
+   * 两个数都对（一个数的是这次运行，一个数的是这个项目的看板），可是这一页此前只说后者，
+   * 于是那两个数看起来就是在互相打脸，而没有任何一处解释它们数的不是同一样东西。
+   */
+  useEffect(() => {
+    if (!candidateRun) return setCandidates([]);
+    let alive = true;
+    fetch(`${API_BASE}/api/wf/runs/${candidateRun}/nodes/repair`)
+      .then((r) => r.json())
+      .then((d: { output?: { code?: Candidate[] } }) => alive && setCandidates(d.output?.code ?? []))
+      .catch(() => alive && setCandidates([]));
+    return () => {
+      alive = false;
+    };
+  }, [candidateRun]);
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -236,7 +265,38 @@ export function CodeLinePage() {
       .catch(() => undefined);
   }, []);
 
-  if (!activeProjectId) return <div className="p-4 text-sm text-muted-foreground">{t("assets.pickProject")}</div>;
+  /**
+   * 没选项目也要能看这次运行的候选代码。
+   *
+   * 候选属于**运行**，不属于项目——一个 `#/?open=code&run=wf-xxx` 的链接发给别人，
+   * 对方那边没有「当前项目」，此前看到的就是一句「先在顶栏选一个项目」，
+   * 而他要看的那 38 段代码明明就在这次运行里。
+   */
+  if (!activeProjectId)
+    return (
+      <div className="flex-1 overflow-auto p-4">
+        <div className="text-sm text-muted-foreground">{t("assets.pickProject")}</div>
+        {!!candidates.length && (
+          <div className="mt-3 rounded-lg border border-border bg-card">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-[12px]">
+              <span className="font-medium">{t("code.candidatesTitle", { n: candidates.length })}</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{candidateRun}</span>
+              <span className="text-[11.5px] text-muted-foreground">{t("code.candidatesWhy")}</span>
+            </div>
+            <div className="max-h-[60vh] overflow-auto">
+              {candidates.map((c) => (
+                <div key={c.caseId} className="border-b border-border/50 px-3 py-2 last:border-b-0">
+                  <div className="text-[12.5px]">{c.title}</div>
+                  <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted p-1.5 font-mono text-[11px] text-muted-foreground">
+                    {c.code}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
 
   const withCode = rows.filter((r) => r.hasCode);
   const drifted = rows.filter((r) => r.drifted).length;
@@ -272,9 +332,35 @@ export function CodeLinePage() {
 
         {/* The honest empty state: not "no data", but which half of the pipeline never ran. */}
         {withCode.length === 0 && (
-          <div className="m-4 flex items-start gap-2 rounded-lg border border-dashed border-border bg-card/50 p-3 text-[12.5px] text-muted-foreground">
-            <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
-            <span>{t("code.emptyWhy")}</span>
+          <div className="m-4 space-y-2">
+            <div className="flex items-start gap-2 rounded-lg border border-dashed border-border bg-card/50 p-3 text-[12.5px] text-muted-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
+              <span>{t("code.emptyWhy")}</span>
+            </div>
+            {/*
+              画布上的产物卡说「用例代码 38」，点进来说 0——两个数都对，数的不是同一样东西，
+              可这一页此前不把另一样摆出来，于是那两个数看起来就是在互相打脸。
+              候选代码就地列出来：它属于那次运行，所以标签不同、只读、也不进上面那几个 KPI。
+            */}
+            {!!candidates.length && (
+              <div className="rounded-lg border border-border bg-card">
+                <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-[12px]">
+                  <span className="font-medium">{t("code.candidatesTitle", { n: candidates.length })}</span>
+                  <span className="font-mono text-[11px] text-muted-foreground">{candidateRun}</span>
+                  <span className="text-[11.5px] text-muted-foreground">{t("code.candidatesWhy")}</span>
+                </div>
+                <div className="max-h-80 overflow-auto">
+                  {candidates.map((c) => (
+                    <div key={c.caseId} className="border-b border-border/50 px-3 py-2 last:border-b-0">
+                      <div className="text-[12.5px]">{c.title}</div>
+                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted p-1.5 font-mono text-[11px] text-muted-foreground">
+                        {c.code}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

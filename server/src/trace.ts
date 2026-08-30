@@ -27,6 +27,8 @@ interface Story {
   title: string;
   acceptance?: string[];
   source?: string;
+  /** 指回规格里的哪一条需求。追溯的第三根轴——名字承诺了它，此前轴上没有它。 */
+  requirementId?: string;
 }
 
 /** Quoted UI text inside an assertion — the part that makes a claim about the product. */
@@ -67,6 +69,8 @@ export interface TraceRow {
   /** No quoted interface text at all — nothing to check, which is not the same as passing. */
   unanchored: boolean;
   sourceRunId?: string;
+  /** 这条用例最终指回哪一条需求。用例自己不知道，它继承自所属的故事。 */
+  requirementId?: string;
 }
 
 export interface StoryRow {
@@ -76,9 +80,18 @@ export interface StoryRow {
   source?: string;
 }
 
+/** 一条需求，以及它下面有几条故事、几条用例。追溯的第三根轴。 */
+export interface RequirementRow {
+  requirementId: string;
+  stories: number;
+  cases: number;
+}
+
 export interface TraceReport {
   rows: TraceRow[];
   stories: StoryRow[];
+  /** 需求 → 故事 → 用例。一条没有用例的需求，是覆盖率那个下界里最该被看见的一档。 */
+  requirements: RequirementRow[];
   orphans: number;
   /** Stories with no case at all. Coverage's lower bound, stated as a list rather than a %. */
   uncovered: number;
@@ -124,11 +137,50 @@ async function groundTruth(wfRunId: string): Promise<{ material: string; spec: s
   return { material, spec };
 }
 
+/**
+ * 追溯要的那点用例信息。
+ *
+ * 抽出来是为了让**还没批准的那一批**也能追溯。此前这一页只读 `listCases(projectId)`，
+ * 也就是已经进了看板的用例——于是复核者在复核这一批的时候，恰恰不能用追溯视图来复核它：
+ * 要看追溯得先批准，批准又需要先复核，顺序是反的。
+ */
+interface TraceableCase {
+  id: string;
+  title: string;
+  storyId?: string;
+  expected?: string;
+  sourceRunId?: string;
+}
+
 export async function traceability(projectId: string): Promise<TraceReport> {
-  const cases: TestCase[] = listCases(projectId);
+  return build(listCases(projectId) as TraceableCase[]);
+}
+
+/**
+ * 对一次运行刚生成、还没批准的那一批做追溯。
+ *
+ * 和已批准的走同一套判定：同一件事有两套算法，迟早会给出两个数，而没人说得清哪个对。
+ */
+export async function traceabilityOfRun(wfRunId: string): Promise<TraceReport> {
+  const gated = (await nodeOutput(wfRunId, "gate").catch(() => undefined)) as
+    | { cases?: Array<{ id: string; storyId?: string; title: string; expected?: string }> }
+    | undefined;
+  return build(
+    (gated?.cases ?? []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      storyId: c.storyId,
+      expected: c.expected,
+      sourceRunId: wfRunId,
+    })),
+  );
+}
+
+async function build(cases: TraceableCase[]): Promise<TraceReport> {
   const ctx = new Map<string, { stories: Story[]; material: string; spec: string }>();
   const rows: TraceRow[] = [];
   const perStory = new Map<string, number>();
+  const perReq = new Map<string, number>();
 
   for (const kase of cases) {
     const runId = kase.sourceRunId;
@@ -154,6 +206,7 @@ export async function traceability(projectId: string): Promise<TraceReport> {
     });
 
     if (kase.storyId) perStory.set(kase.storyId, (perStory.get(kase.storyId) ?? 0) + 1);
+    if (story?.requirementId) perReq.set(story.requirementId, (perReq.get(story.requirementId) ?? 0) + 1);
 
     rows.push({
       caseId: kase.id,
@@ -167,19 +220,43 @@ export async function traceability(projectId: string): Promise<TraceReport> {
       anchors,
       unanchored: anchors.length === 0,
       sourceRunId: runId,
+      requirementId: story?.requirementId,
     });
   }
 
-  const seen = new Map<string, StoryRow>();
-  for (const { stories } of ctx.values())
-    for (const s of stories)
-      if (!seen.has(s.id))
-        seen.set(s.id, { storyId: s.id, title: s.title, cases: perStory.get(s.id) ?? 0, source: s.source });
+  // 按 id 去重：几条用例可能来自同一次运行，也可能来自几次共享故事的运行。
+  const allStories = new Map<string, Story>();
+  for (const { stories } of ctx.values()) for (const s of stories) if (!allStories.has(s.id)) allStories.set(s.id, s);
+  const seen = new Map<string, StoryRow>(
+    [...allStories.values()].map((s) => [
+      s.id,
+      { storyId: s.id, title: s.title, cases: perStory.get(s.id) ?? 0, source: s.source },
+    ]),
+  );
 
   const storyRows = [...seen.values()].sort((a, b) => a.storyId.localeCompare(b.storyId));
+
+  /**
+   * 需求那一根轴。
+   *
+   * 故事数从**这次运行产出的全部故事**里数，不是从有用例的那些里数——一条需求下面
+   * 有三条故事而只有一条有用例，正是这张表要说的话。
+   */
+  const reqStories = new Map<string, number>();
+  for (const s of allStories.values())
+    if (s.requirementId) reqStories.set(s.requirementId, (reqStories.get(s.requirementId) ?? 0) + 1);
+  const requirements: RequirementRow[] = [...new Set([...reqStories.keys(), ...perReq.keys()])]
+    .sort()
+    .map((requirementId) => ({
+      requirementId,
+      stories: reqStories.get(requirementId) ?? 0,
+      cases: perReq.get(requirementId) ?? 0,
+    }));
+
   return {
     rows,
     stories: storyRows,
+    requirements,
     orphans: rows.filter((r) => r.orphan).length,
     uncovered: storyRows.filter((s) => s.cases === 0).length,
     ungrounded: rows.reduce((n, r) => n + r.anchors.filter((a) => !a.grounded).length, 0),

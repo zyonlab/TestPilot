@@ -132,6 +132,65 @@ describe("review batch", () => {
   });
 });
 
+/**
+ * 字段贯通。
+ *
+ * 一个字段要过五道关：模型产出 → 过网线（ReviewItem）→ 落盘（approve）→ 导出 → 画在屏上。
+ * 每一道都可能悄悄丢它，而丢了**不报错**——这正是它能在库里躺很久没人发现的原因。
+ * 实测过一次：covers 36/40 条有值，DTO 里没带；requirementId 8/8 条有值，approve 没传；
+ * 结果是「需求追溯」那一页的两根轴上没有需求，谁也说不出为什么。
+ *
+ * 所以这一组测试钉的不是某个功能，是**别再丢**。
+ */
+describe("产物字段一路传到底", () => {
+  beforeEach(() => {
+    outputs["wf-1:gate"] = {
+      stories: [
+        {
+          id: "US-01",
+          title: "登录",
+          acceptance: ["错误密码必须被拒绝"],
+          requirementId: "R-07",
+          activity: "账号与登录",
+          role: "注册用户",
+          benefit: "能知道密码错在哪",
+          source: "docs/prd.md",
+          sourceBy: "located",
+        },
+      ],
+      cases: [textCase("c1", { covers: ["/login->/login", "/login->/home"] })],
+      gate: { score: 1, stats: { cases: 1 }, findings: [] },
+    };
+  });
+
+  it("covers 与 requirementId 过得了网线", async () => {
+    const batch = await reviewBatch("wf-1");
+    expect(batch.items[0].covers).toEqual(["/login->/login", "/login->/home"]);
+    // 用例本身没有 requirementId：它继承自所属的故事，那是这根线唯一的来源。
+    expect(batch.items[0].requirementId).toBe("R-07");
+  });
+
+  it("故事把角色、收益、模块、出处一起带过网线", async () => {
+    const batch = await reviewBatch("wf-1");
+    const st = batch.stories[0]!;
+    expect(st.role).toBe("注册用户");
+    expect(st.benefit).toBe("能知道密码错在哪");
+    expect(st.activity).toBe("账号与登录");
+    expect(st.requirementId).toBe("R-07");
+    expect(st.sourceBy).toBe("located");
+  });
+
+  it("批准时 requirementId / activity / covers 三样都落盘", async () => {
+    await approve({ wfRunId: "wf-1", caseIds: ["c1"] });
+    expect(created).toHaveLength(1);
+    const kase = created[0]!;
+    expect(kase.requirementId).toBe("R-07");
+    // 模块来自故事，不是用例——用例自己不知道它属于哪个模块。
+    expect(kase.activity).toBe("账号与登录");
+    expect(kase.covers).toEqual(["/login->/login", "/login->/home"]);
+  });
+});
+
 describe("editing in the queue", () => {
   it("keeps the product beside the edit, and re-scores the batch as the same gate would", async () => {
     // c2's assertion is what the gate objected to; replacing it with an observable one

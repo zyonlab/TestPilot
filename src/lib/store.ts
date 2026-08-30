@@ -5,6 +5,7 @@ import type {
   ModelConfig,
   Priority,
   Project,
+  ProjectOverview,
   RunRecord,
   TargetPlatform,
   TestCase,
@@ -19,6 +20,8 @@ interface StoreState {
   selectedId: string;
   runs: RunRecord[];
   projects: Project[];
+  /** 每个项目的两套账：已批准的资产 与 还没人看的候选。见 ProjectOverview 的注释。 */
+  overviews: Record<string, ProjectOverview>;
   activeProjectId: string;
   backendUp: boolean;
   model: ModelConfig;
@@ -51,6 +54,7 @@ export const useStore = create<StoreState>((set, get) => ({
   selectedId: "",
   runs: [],
   projects: [],
+  overviews: {},
   activeProjectId: "",
   backendUp: false,
   model: {
@@ -72,7 +76,7 @@ export const useStore = create<StoreState>((set, get) => ({
   // built-in mock data if the backend is offline, so the UI still works standalone.
   loadData: async () => {
     try {
-      const { projects } = await api.getProjects();
+      const { projects, overviews } = await api.getProjects();
       if (!projects.length) {
         // Backend is up but has no projects → a genuinely empty state. Clear the
         // built-in mock data (which is only a fallback for when the backend is OFFLINE),
@@ -80,6 +84,7 @@ export const useStore = create<StoreState>((set, get) => ({
         set({
           backendUp: true,
           projects: [],
+          overviews: {},
           activeProjectId: "",
           cases: [],
           runs: [],
@@ -92,7 +97,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       // Backend is up and has projects. Do NOT auto-select — Level 0 (the portfolio)
       // is the default landing. Cases/runs load lazily on enter (selectProject).
-      set({ projects, activeProjectId: "", backendUp: true });
+      set({ projects, overviews: overviews ?? {}, activeProjectId: "", backendUp: true });
     } catch {
       set({ backendUp: false }); // keep mock data
     }

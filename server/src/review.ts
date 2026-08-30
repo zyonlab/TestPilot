@@ -48,6 +48,21 @@ export interface ReviewItem {
   findings: Array<{ rule: string; severity: string; message: string }>;
   /** The machine-checkable form of the outcome, when stage one produced one. */
   oracle?: MachineOracle;
+  /**
+   * 这条用例走了哪些状态转移（`from->to`）。
+   *
+   * 此前它到不了界面：DTO 里没有它。于是「这条用例覆盖了产品的哪一段」——全套物料里
+   * 最硬的一根追溯线，而且是唯一一根**来自产品本身**而不是来自模型自述的线——
+   * 在给人看的那一层根本不存在。
+   */
+  covers?: string[];
+  /**
+   * 指回哪一条需求。
+   *
+   * 故事上有（实测 8/8），用例继承自它所属的故事。同样此前到不了界面，
+   * 于是「需求追溯」那一页的两根轴上没有需求。
+   */
+  requirementId?: string;
   /** Present once stage two has run. */
   code?: string;
   /**
@@ -91,6 +106,9 @@ export interface ReviewStory {
   role?: string;
   benefit?: string;
   acceptance: string[];
+  requirementId?: string;
+  source?: string;
+  sourceBy?: "located" | "claimed";
 }
 
 /**
@@ -236,6 +254,10 @@ interface GatedBundleShape {
     flowId?: string;
     role?: string;
     benefit?: string;
+    /** 指回规格里的哪一条需求。用例从它所属的故事继承这一条。 */
+    requirementId?: string;
+    source?: string;
+    sourceBy?: "located" | "claimed";
   }>;
   cases?: Array<{
     oracle?: MachineOracle;
@@ -323,6 +345,9 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
   const anyEdits = Object.keys(edits).length > 0;
   const rescored = anyEdits ? rescore(run, gated, edits) : undefined;
 
+  const storyReq = new Map<string, string | undefined>(
+    (gated?.stories ?? []).map((s) => [s.id, s.requirementId]),
+  );
   const items: ReviewItem[] = (gated?.cases ?? []).map((c) => {
     const mine = codeFindings.filter((f) => f.caseId === c.id);
     const mineCode = coded?.code?.find((x) => x.caseId === c.id);
@@ -338,6 +363,9 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       steps: shown.steps,
       expected: shown.expected,
       oracle: c.oracle,
+      covers: c.covers,
+      // 用例本身没有 requirementId——它继承自所属的故事，那是这条追溯线唯一的来源。
+      requirementId: storyReq.get(c.storyId),
       findings: gateFindings.filter((f) => f.caseId === c.id).map(({ rule, severity, message }) => ({ rule, severity, message })),
       code: mineCode?.code,
       codeSteps: mineCode ? stepsFromActions(mineCode, coded?.fragments ?? []) : undefined,
@@ -378,6 +406,9 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       role: st.role,
       benefit: st.benefit,
       acceptance: st.acceptance ?? [],
+      requirementId: st.requirementId,
+      source: st.source,
+      sourceBy: st.sourceBy,
     })),
     projectId: target?.projectId,
     gateScore: gated?.gate?.score,
@@ -487,6 +518,18 @@ export async function approve(input: ApproveInput): Promise<TestCase[]> {
   if (!projectId)
     throw new Error("this run was not bound to a project, so there is no board to approve into");
 
+  /**
+   * 故事的模块，批准时要跟着用例一起落盘。
+   *
+   * 这三个字段（requirementId / activity / covers）此前在 `createCase` 的调用里
+   * 一个都没写——十七个键里漏掉的三个，各自造成一处可见后果：需求追溯那一页永远没有
+   * 「需求」这根轴；批准之后模块归属丢失，看板与导出都没法按模块分组；结构覆盖率
+   * 只能一批一批地算，没法在项目层累计。三处症状看起来毫不相干，根因是同一个函数。
+   */
+  const storyActivity = new Map<string, string | undefined>(
+    batch.stories.map((s) => [s.id, s.activity]),
+  );
+
   const created: TestCase[] = [];
   for (const caseId of input.caseIds) {
     const item = batch.items.find((i) => i.caseId === caseId);
@@ -506,6 +549,9 @@ export async function approve(input: ApproveInput): Promise<TestCase[]> {
       }`,
       expected: edit.expected ?? item.expected,
       precondition: item.precondition.join("; "),
+      requirementId: item.requirementId,
+      activity: storyActivity.get(item.storyId),
+      covers: item.covers,
       type: METHOD_TO_TYPE[item.designMethod] ?? "functional",
       /**
        * 步骤的来源，按优先级：人在队列里的编辑 → **阶段二真的跑过的动作** → 阶段一的文本。

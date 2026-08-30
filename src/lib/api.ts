@@ -2,6 +2,7 @@ import type {
   ApiLoginConfig,
   ModelConfig,
   Project,
+  ProjectOverview,
   TargetPlatform,
   TestCase,
   RunRecord,
@@ -176,7 +177,7 @@ export const api = {
     post<{ code: string }>("/api/generate-code", payload, 30000),
 
   // ---- persistence (backend is the source of truth) ----
-  getProjects: () => get<{ projects: Project[] }>("/api/projects"),
+  getProjects: () => get<{ projects: Project[]; overviews?: Record<string, ProjectOverview> }>("/api/projects"),
   createProject: (name: string, targetUrl: string, targetPlatform: TargetPlatform = "web") =>
     post<{ project: Project }>("/api/projects", { name, targetUrl, targetPlatform }, 8000),
   updateProject: (id: string, body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>) =>

@@ -83,7 +83,8 @@ import {
 } from "./procs.js";
 import { applyGraphDraft, chat, checkPrompt, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
 import { changes, codeLine, codeProvenance } from "./codeline.js";
-import { traceability } from "./trace.js";
+import { traceability, traceabilityOfRun } from "./trace.js";
+import { allProjectOverviews, projectOverview } from "./overview.js";
 import { pendingBaselines } from "./pending.js";
 import { continuationsFor, continueRun } from "./continue.js";
 import {
@@ -550,10 +551,23 @@ app.post("/api/run", async (req, res) => {
  * 是进入工作台。一个说得像按钮的东西如果不是按钮，读的人要试一次才知道。换成条数——
  * 那是一个事实，而且正好是决定要不要进这个项目时最想先知道的一件事。
  */
-app.get("/api/projects", (_req, res) =>
+app.get("/api/projects", async (_req, res) =>
   res.json({
     projects: listProjects().map((p) => ({ ...p, cases: listCases(p.id).length })),
+    // 两套账各带各的标签。合成一个数是更糟的做法：那会让「40 条用例」这句话继续骗人，
+    // 只是骗得更圆滑。见 overview.ts 的注释。
+    overviews: await allProjectOverviews(),
   }));
+
+/** 单个项目的两套账。项目首屏用它。 */
+app.get("/api/projects/:id/overview", async (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  try {
+    res.json(await projectOverview(req.params.id));
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
 const PLATFORMS = ["web", "ios", "android"] as const;
 type Platform = (typeof PLATFORMS)[number];
 const asPlatform = (v: unknown): Platform | undefined =>
@@ -1881,6 +1895,19 @@ app.get("/api/projects/:id/traceability", async (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   try {
     res.json(await traceability(req.params.id));
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * 一次运行刚生成、还没批准的那一批的追溯。
+ *
+ * 复核这一批的时候恰恰需要它：要看追溯得先批准，批准又需要先复核——那个顺序是反的。
+ */
+app.get("/api/wf/runs/:id/traceability", async (req, res) => {
+  try {
+    res.json(await traceabilityOfRun(req.params.id));
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

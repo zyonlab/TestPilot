@@ -4,6 +4,7 @@ import { Button } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/prefs";
 import { API_BASE } from "@/lib/base";
+import { openCard } from "@/lib/open";
 
 /**
  * 交付：这套用例怎么进到客户已有的仓库与流水线里。
@@ -17,6 +18,7 @@ export function Delivery() {
   const t = useT();
   const activeProjectId = useStore((s) => s.activeProjectId);
   const cases = useStore((s) => s.cases);
+  const overview = useStore((s) => s.overviews[s.activeProjectId]);
   const [files, setFiles] = useState<string[]>([]);
   const [error, setError] = useState("");
 
@@ -37,6 +39,9 @@ export function Delivery() {
   }
 
   const withCode = cases.filter((c) => c.hasCode).length;
+  // 导出的是**已批准**的那一批，不是工作流刚跑出来的候选。这一页此前不说这件事，
+  // 于是「0 条用例」和画布上的「用例代码 38」并存，谁也说不清哪个是真的。
+  const candidates = overview?.candidates.cases ?? 0;
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -70,9 +75,16 @@ export function Delivery() {
           )}
           {error && <p className="mt-2 text-[12px] text-rose-500">{error}</p>}
 
-          <div className="mt-3">
+          {/*
+            0 条用例时按钮不可点，并且说清楚为什么。
+            此前它一直可点，点下去拿到的是一个只有骨架、一条测试都没有的 zip——
+            而同一屏上就写着「0 条用例」。一个明知会给出空结果却仍然亮着的按钮，
+            比一个灰着的按钮更伤人：它让人以为是导出坏了。
+          */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
+              disabled={cases.length === 0}
               onClick={() => {
                 window.location.href = `${API_BASE}/api/projects/${activeProjectId}/export`;
               }}
@@ -80,6 +92,21 @@ export function Delivery() {
               <FileCode2 className="h-3.5 w-3.5" />
               {t("deliver.download")}
             </Button>
+            {cases.length === 0 && (
+              <span className="text-[12px] text-muted-foreground">
+                {candidates
+                  ? t("deliver.emptyButCandidates", { n: candidates })
+                  : t("deliver.emptyNoCandidates")}
+                {candidates > 0 && (
+                  <button
+                    className="ml-1 text-primary hover:underline"
+                    onClick={() => openCard("review")}
+                  >
+                    {t("deliver.goReview")} →
+                  </button>
+                )}
+              </span>
+            )}
           </div>
         </div>
 

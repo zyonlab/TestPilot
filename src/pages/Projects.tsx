@@ -11,6 +11,7 @@ import type { TargetPlatform } from "@/lib/types";
 export function ProjectsPage() {
   const t = useT();
   const projects = useStore((s) => s.projects);
+  const overviews = useStore((s) => s.overviews);
   const activeId = useStore((s) => s.activeProjectId);
   const selectProject = useStore((s) => s.selectProject);
   const createProject = useStore((s) => s.createProject);
@@ -222,14 +223,34 @@ export function ProjectsPage() {
                 </div>
                 {/* 事实，不是第二个按钮。整张卡就是一个按钮，点哪儿都是进入工作台——
                     这一行以前写着「打开测试用例」，一个说得像按钮却不是按钮的东西，
-                    读的人要试一次才知道。条数正好是决定要不要进来时最想先知道的事。 */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ListChecks className="h-3.5 w-3.5" />
-                  {p.cases === undefined
-                    ? "—"
-                    : p.cases === 0
-                      ? t("projects.noCasesYet")
-                      : t("projects.caseCount").replace("{n}", String(p.cases))}
+                    读的人要试一次才知道。
+
+                    两套账各说各的：**已批准**是「我们的套件」，**待复核**是「等着被看的
+                    东西」。此前这里只数前者，于是一个有 68 次运行、40 条待复核用例的项目
+                    在卡片上写着「还没有用例」——那句话字面上没错，但它让人以为这里什么
+                    都没发生。合成一个数不是修法，那只会把同一句谎话说得更圆滑。 */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <ListChecks className="h-3.5 w-3.5" />
+                    {overviews[p.id]
+                      ? t("projects.approvedN", { n: overviews[p.id]!.approved.cases })
+                      : p.cases === undefined
+                        ? "—"
+                        : p.cases === 0
+                          ? t("projects.noCasesYet")
+                          : t("projects.caseCount").replace("{n}", String(p.cases))}
+                  </span>
+                  {!!overviews[p.id]?.candidates.cases && (
+                    <span
+                      title={t("projects.candidatesWhy")}
+                      className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-400"
+                    >
+                      {t("projects.candidatesN", {
+                        n: overviews[p.id]!.candidates.cases,
+                        runs: overviews[p.id]!.candidates.runsWithCases,
+                      })}
+                    </span>
+                  )}
                   <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase">
                     {p.targetPlatform ?? "web"}
                   </span>

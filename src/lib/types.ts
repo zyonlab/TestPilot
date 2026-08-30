@@ -320,3 +320,28 @@ export interface LogLine {
   stream: string;
   text: string;
 }
+
+/**
+ * 一个项目此刻有什么，两套账各带各的标签。
+ *
+ * 候选产物挂在运行上，已批准资产挂在项目上——代码里一直分得很清楚，界面上此前两者都叫
+ * 「用例」。于是项目卡写着「还没有用例」，而库里有 68 次运行、40 条待复核；画布说
+ * 「用例代码 38」，代码线说 0。合成一个数不是修法，那只会让同一句谎话说得更圆滑。
+ */
+export interface ProjectOverview {
+  projectId: string;
+  approved: {
+    cases: number;
+    withCode: number;
+    byPriority: Record<Priority, number>;
+    machineDecidable: number;
+  };
+  candidates: {
+    runs: number;
+    runsWithCases: number;
+    cases: number;
+    code: number;
+    latestRunId?: string;
+    latestAt?: string;
+  };
+}
