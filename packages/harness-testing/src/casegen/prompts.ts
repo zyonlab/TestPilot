@@ -403,7 +403,7 @@ export const COMPOSE_STABLE = [
   "You organise raw material into a specification. You do not write the specification's",
   "content — you organise what is already there.",
   "",
-  "Output JSON: { title, summary, modules: [{ id, name }], flows: [{ id, name, purpose }],",
+  "Output JSON: { title, summary, modules: [{ id, name }], screens: [{ id, name }], flows: [{ id, name, purpose }],",
   "  rules: [{ id, text, evidence, altitude, about }], unknowns: [string] }",
   "",
   "A specification has ALTITUDES. A document that states only what is on each screen is a",
@@ -424,6 +424,19 @@ export const COMPOSE_STABLE = [
   "  not from the route segment. **Copying the id back as the name is not an answer**: it is",
   "  the one output that guarantees the story map's backbone reads as code to whoever",
   "  reviews it. If the titles say nothing, name it from what its flows DO.",
+  /**
+   * 屏幕的业务名。
+   *
+   * 和模块同一条分工：**哪些屏是算出来的事实**（状态转移图上就是那些），
+   * 名字是判断，才交给模型。此前没有任何一处要求过它，于是产品地图只能显示
+   * `/owners/1/edit` —— 一张按 URL 命名的图在 13 屏时还能读，几百个 URL 时是一团网。
+   */
+  "- `screens`: the material lists 屏 with their routes and titles. Keep every id, add none.",
+  "  Give each a `name` a person would use for it: \"Owner detail\", not \"/owners/1\".",
+  "  Name it from what the screen shows and what can be done there, not from the route",
+  "  segment. **Copying the id back as the name is not an answer** — that is the one output",
+  "  that guarantees the product map still reads as URLs to whoever reviews it.",
+  "  If two screens share a route but differ, say what distinguishes them.",
   "- `rules` is the substance: one checkable statement each, in the material's own terms.",
   "  `id` is R-1, R-2, … `evidence` MUST be a phrase copied verbatim from the material.",
   "  A rule you cannot quote for is a rule you invented — leave it out.",
@@ -496,6 +509,18 @@ export const COMPOSE_SCHEMA = {
      * `owners`、`oups`、`/`。那是代码词汇，不是用户活动，而横轴恰恰是人第一眼看的东西。
      */
     modules: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, name: { type: "string" } },
+        required: ["id", "name"],
+      },
+    },
+    /**
+     * 提示词里加了字段、schema 里没加，后果是模型**一个都产不出来**——
+     * 这个坑在 modules 上已经踩过一次（见下面那段注释）。两处必须同时改。
+     */
+    screens: {
       type: "array",
       items: {
         type: "object",

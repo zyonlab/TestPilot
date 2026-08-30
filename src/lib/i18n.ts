@@ -1770,6 +1770,8 @@ export const dict: Record<string, Entry> = {
   "map.stoppedBecause": { zh: "探索停下来是因为：", en: "Exploration stopped because: ", ja: "探索が止まった理由：" },
   "map.stoppedMeaning": { zh: "停在这里，意味着虚线之外还有没画出来的地方。", en: "Stopping here means there is more beyond the dashed edges than this map shows.", ja: "ここで止まったということは、破線の先に描かれていない部分がある。" },
   "map.variant": { zh: "状态 {n}", en: "state {n}", ja: "状態 {n}" },
+  "map.searchPlaceholder": { zh: "搜路由或标题…", en: "search route or title…", ja: "ルート・タイトルを検索…" },
+  "map.modules": { zh: "模块", en: "modules", ja: "モジュール" },
   "map.variantWhy": { zh: "同一个地址下的第二种页面状态——探索把它们分开了，因为上面的控件不一样", en: "A second page state at the same address — exploration split them because their controls differ", ja: "同じアドレスの別の画面状態——コントロールが違うため探索が分けた" },
   "map.controls": { zh: "{n} 控件", en: "{n} controls", ja: "{n} コントロール" },
   "map.missedOut": { zh: "{n} 条路没验", en: "{n} paths unchecked", ja: "{n} 経路が未検証" },

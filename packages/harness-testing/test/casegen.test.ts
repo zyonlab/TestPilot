@@ -39,7 +39,7 @@ describe("a specification that is several documents", () => {
     const logs: Array<Record<string, unknown>> = [];
     const node = planStoriesNode({ model: new FakeModel(() => JSON.stringify(reply)) });
     const out = await node.run(
-      { text: twoDocs, origin, title: "", rules: [], unknowns: [], flows: [], modules: [] },
+      { text: twoDocs, origin, title: "", rules: [], unknowns: [], flows: [], modules: [], screens: [] },
       { maxStories: 12 },
       {
         nodeId: "stories",
@@ -103,7 +103,7 @@ describe("when the stories do not say where they came from", () => {
       model: new FakeModel(() => JSON.stringify({ stories: [{ id: "US-01", title: "a", acceptance: [] }] })),
     });
     await node.run(
-      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules: [], unknowns: [], flows: [], modules: [] },
+      { text: "x", origin: "docs/a.md, docs/b.md", title: "", rules: [], unknowns: [], flows: [], modules: [], screens: [] },
       { maxStories: 12 },
       {
         nodeId: "stories",
@@ -550,7 +550,7 @@ describe("故事图的骨架必须比躯干粗", () => {
     }));
   const spec = (n: number, mods: Array<{ id: string; name: string; flowIds: string[] }>) => ({
     text: "x", title: "", origin: "explore", rules: [], unknowns: [],
-    flows: flows(n), modules: mods.map((m) => ({ ...m, routes: [] })),
+    flows: flows(n), modules: mods.map((m) => ({ ...m, routes: [] })), screens: [],
   });
   const reply = (n: number) => ({
     stories: Array.from({ length: n }, (_, i) => ({
@@ -617,6 +617,7 @@ describe("挂不到流程的故事，活动名也要归一到模块", () => {
         text: "x", title: "", origin: "explore", rules: [], unknowns: [],
         flows: [{ id: "F-1", name: "f", purpose: "", steps: [], transitions: [], endsAt: "/x" }],
         modules: [{ id: "search", name: "搜索与浏览商品", flowIds: ["F-1"], routes: [] }],
+        screens: [],
       },
       { maxStories: 12 },
       {
@@ -648,7 +649,7 @@ describe("活动名只能是已知模块——一个瞎编的列头比没有列�
     const out = await node.run(
       {
         text: "x", title: "", origin: "explore", rules: [], unknowns: [], flows: [],
-        modules: [{ id: "owners", name: "管理主人", flowIds: [], routes: [] }],
+        modules: [{ id: "owners", name: "管理主人", flowIds: [], routes: [] }], screens: [],
       },
       { maxStories: 12 },
       {

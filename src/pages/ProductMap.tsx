@@ -86,6 +86,35 @@ const variantOf = (id: string): number => {
 const edgeKey = (from: string, to: string): string => `${from}->${to}`;
 
 /**
+ * 一个状态属于哪个模块。
+ *
+ * 和规格里 `computeModules` 用的是同一条规则：路由的第一段。哈希路由（`/#/search`）
+ * 的第一段在 `#/` 之后——不剥掉它，整个单页应用会聚成一个叫 `#` 的模块。
+ *
+ * 复制这条规则而不是从服务端取聚类结果，是因为这张图要在**没有规格**的时候也画得出来：
+ * 探索刚跑完、规格还没生成时，模块归属仍然是算得出来的事实。规格能提供的是**名字**，
+ * 那才是要去服务端取的东西。
+ */
+const moduleOf = (route: string): string => {
+  const s = route
+    .replace(/^\/?#\//, "")
+    .replace(/^\//, "")
+    .split(/[/.\-]/)[0];
+  return s || "/";
+};
+
+/**
+ * 模块的配色。
+ *
+ * 十档循环，取自同一个色相环上等距的几个点——不是随机色：随机色会让相邻的两个模块
+ * 撞成看不出差别的两种蓝，而人正是靠「这两块颜色不一样」来判断边界在哪的。
+ * 只染节点的左边一条竖杠，不染整块：整块着色会盖过「走过 / 没走过」这条更要紧的区分。
+ */
+const MODULE_HUES = [210, 145, 35, 280, 0, 190, 95, 320, 55, 255];
+const hueOf = (mod: string, all: string[]): number =>
+  MODULE_HUES[Math.max(0, all.indexOf(mod)) % MODULE_HUES.length]!;
+
+/**
  * 按「离入口几步」分层。
  *
  * 用 BFS 而不是力导向：力导向每次刷新布局都不一样，而**一张每次打开都长得不一样的图
@@ -141,6 +170,14 @@ interface StateData extends Record<string, unknown> {
   /** 在这一屏上看见、但一次都没进去的入口有几个。 */
   unseen: number;
   focused: boolean;
+  /** 这一屏的业务名。规格给的，可能没有——没有就只显示路由。 */
+  name?: string;
+  /** 属于哪个模块，以及它的色相。按路由第一段算，和规格里的 computeModules 同一条规则。 */
+  module: string;
+  moduleName?: string;
+  hue: number;
+  /** 筛掉了：仍然画，但压暗。整块消失会让人以为图变小了，而实际上是他自己筛的。 */
+  dimmed: boolean;
 }
 
 function StateNode({ data, selected }: NodeProps) {
@@ -149,16 +186,30 @@ function StateNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "w-[168px] rounded-xl border-2 px-2.5 py-1.5 shadow-sm transition-colors",
-        d.isEntry
-          ? "border-primary/60 bg-primary/5"
-          : "border-border bg-card",
+        "relative w-[168px] overflow-hidden rounded-xl border-2 px-2.5 py-1.5 shadow-sm transition-opacity",
+        d.isEntry ? "border-primary/60 bg-primary/5" : "border-border bg-card",
         (selected || d.focused) && "ring-2 ring-primary",
+        d.dimmed && "opacity-25",
       )}
     >
+      {/* 模块只染左边一条竖杠。整块着色会盖过「走过 / 没走过」——那条区分更要紧。 */}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ background: `hsl(${d.hue} 65% 55%)` }}
+        title={d.moduleName ?? d.module}
+      />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2" />
       <div className="flex items-baseline gap-1.5">
-        <span className="truncate font-mono text-[12px] font-medium text-foreground">{d.route}</span>
+        <span
+          className={cn(
+            "truncate font-medium text-foreground",
+            d.name ? "text-[12px]" : "font-mono text-[12px]",
+          )}
+          title={d.name ? d.route : undefined}
+        >
+          {d.name ?? d.route}
+        </span>
         {d.variant > 0 && (
           <span
             className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground"
@@ -168,6 +219,9 @@ function StateNode({ data, selected }: NodeProps) {
           </span>
         )}
       </div>
+      {d.name && (
+        <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{d.route}</div>
+      )}
       {d.title && <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{d.title}</div>}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px]">
         <span className="text-muted-foreground">{t("map.controls", { n: d.controls })}</span>
@@ -364,6 +418,24 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
     null,
   );
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
+  /**
+   * 找东西的两个手段：按模块看，和搜。
+   *
+   * 13 屏时靠拖拽还行，几百个 URL 的真实产品不行——而这张图的价值恰恰在产品大的时候。
+   * 筛掉的节点压暗而不是移除：整块消失会让人以为图变小了，而实际上是他自己筛的。
+   */
+  const [pickedModule, setPickedModule] = useState("");
+  const [q, setQ] = useState("");
+  /** 模块的人话名字。规格节点里有（聚类是算的，名字才交给模型）——没有就退回代码词。 */
+  const [moduleNames, setModuleNames] = useState<Record<string, string>>({});
+  /**
+   * 每一屏的人话名字。
+   *
+   * 路由是**地址**，不是名字：`/owners/1/edit` 说得出它在哪，说不出它是什么。
+   * 13 屏时靠路由还读得下去，几百个 URL 的产品上，一张按地址命名的图没人读得完。
+   * 名字有就用，没有就仍然显示路由——不显示假名字，也不因为没名字就不画。
+   */
+  const [screenNames, setScreenNames] = useState<Record<string, string>>({});
 
   useEffect(() => setRunId(focusRun), [focusRun]);
 
@@ -397,6 +469,50 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
       live = false;
     };
   }, [runId]);
+
+  /**
+   * 模块的名字来自规格节点。
+   *
+   * 图上算得出模块**归属**（路由第一段），算不出它叫什么——「owners」是代码词，
+   * 「查找、查看与新增/编辑宠物主人」才是人话。规格里这件事的分工是对的：
+   * 聚类由程序算，名字交给模型。这里只是把那个名字取回来。
+   */
+  useEffect(() => {
+    if (!runId) return;
+    let live = true;
+    fetch(`${API}/api/wf/runs/${runId}/nodes/spec`)
+      .then((r) => r.json())
+      .then(
+        (d: {
+          output?: {
+            modules?: Array<{ id: string; name?: string }>;
+            screens?: Array<{ id: string; name?: string }>;
+          };
+        }) => {
+          if (!live) return;
+          const m: Record<string, string> = {};
+          for (const x of d.output?.modules ?? []) if (x.name && x.name !== x.id) m[x.id] = x.name;
+          setModuleNames(m);
+          const s: Record<string, string> = {};
+          for (const x of d.output?.screens ?? []) if (x.name && x.name !== x.id) s[x.id] = x.name;
+          setScreenNames(s);
+        },
+      )
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [runId]);
+
+  /** 图上出现过的模块，按第一次出现的顺序——顺序稳定，配色才稳定。 */
+  const moduleList = useMemo(() => {
+    const seen: string[] = [];
+    for (const s of graph?.states ?? []) {
+      const m = moduleOf(plainRoute(s.id));
+      if (!seen.includes(m)) seen.push(m);
+    }
+    return seen;
+  }, [graph]);
 
   // 从缺口点过来的落点。解析一次就好，之后由人自己点。
   useEffect(() => {
@@ -458,12 +574,23 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
       data: {
         route: plainRoute(s.id),
         variant: variantOf(s.id),
+        // 有业务名就把它放在第一行，路由退到第二行——路由仍然要在，它是找回这一屏的唯一凭据。
+        name: screenNames[s.id],
         title: titleTells ? s.title : undefined,
         controls: s.controls?.length ?? 0,
         isEntry: s.id === graph.entry,
         missed: missedOut.get(s.id) ?? 0,
         unseen: stateGaps.get(s.id)?.length ?? 0,
         focused: sel?.kind === "state" && sel.id === s.id,
+        module: moduleOf(plainRoute(s.id)),
+        moduleName: moduleNames[moduleOf(plainRoute(s.id))],
+        hue: hueOf(moduleOf(plainRoute(s.id)), moduleList),
+        dimmed:
+          (!!pickedModule && moduleOf(plainRoute(s.id)) !== pickedModule) ||
+          (!!q.trim() &&
+            !`${plainRoute(s.id)} ${s.title ?? ""} ${screenNames[s.id] ?? ""}`
+              .toLowerCase()
+              .includes(q.trim().toLowerCase())),
       } satisfies StateData,
     }));
 
@@ -515,7 +642,7 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
       });
     }
     return { nodes: ns, edges: es };
-  }, [graph, pos, missedEdges, stateGaps, sel]);
+  }, [graph, pos, missedEdges, stateGaps, sel, moduleNames, moduleList, pickedModule, q, screenNames]);
 
   const onNodeClick = useCallback((_: unknown, n: Node) => setSel({ kind: "state", id: n.id }), []);
   const onEdgeClick = useCallback((_: unknown, e: Edge) => setSel({ kind: "edge", id: e.id }), []);
@@ -568,8 +695,63 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
   const selState = sel?.kind === "state" ? graph.states.find((s) => s.id === sel.id) : undefined;
   const selEdgeGaps = sel?.kind === "edge" ? (missedEdges.get(sel.id) ?? []) : [];
 
+  const moduleCount = new Map<string, number>();
+  for (const s of graph.states) {
+    const m = moduleOf(plainRoute(s.id));
+    moduleCount.set(m, (moduleCount.get(m) ?? 0) + 1);
+  }
+
   return (
-    <div className="flex h-full min-h-[520px] w-full">
+    <div className="flex h-full min-h-[520px] w-full flex-col">
+      {/*
+        模块条 + 搜索。
+        13 屏时靠拖拽还行，几百个 URL 的真实产品不行——而这张图的价值恰恰在产品大的时候。
+        模块不是这里发明的：它是规格里按路由聚出来的一等实体，这里只是把同一条规则用在图上，
+        并把规格给它起的人话名字取回来（「owners」是代码词，「查找宠物主人」才是人话）。
+      */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
+        <input
+          className="w-44 rounded-md border border-border bg-card px-2 py-1 text-[11.5px]"
+          placeholder={t("map.searchPlaceholder")}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {t("map.modules")}
+        </span>
+        {moduleList.map((m) => (
+          <button
+            key={m}
+            onClick={() => setPickedModule(pickedModule === m ? "" : m)}
+            title={moduleNames[m] ? `${moduleNames[m]} · ${m}` : m}
+            className={cn(
+              "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px]",
+              pickedModule === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+            )}
+          >
+            <span
+              aria-hidden
+              className="h-2 w-2 rounded-sm"
+              style={{ background: `hsl(${hueOf(m, moduleList)} 65% 55%)` }}
+            />
+            <span className="max-w-[140px] truncate">{moduleNames[m] ?? m}</span>
+            <span className="font-mono opacity-70">{moduleCount.get(m)}</span>
+          </button>
+        ))}
+        {(pickedModule || q) && (
+          <button
+            className="rounded border border-border px-1.5 py-0.5 text-[10.5px] text-muted-foreground hover:bg-muted"
+            onClick={() => {
+              setPickedModule("");
+              setQ("");
+            }}
+          >
+            {t("cases.filterClear")}
+          </button>
+        )}
+      </div>
+
+    <div className="flex min-h-0 flex-1">
       <div className="min-w-0 flex-1">
         <ReactFlow
           nodes={nodes}
@@ -611,6 +793,7 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
           onClose={() => setSel(null)}
         />
       )}
+    </div>
     </div>
   );
 }

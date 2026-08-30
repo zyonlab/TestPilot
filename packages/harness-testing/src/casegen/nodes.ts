@@ -466,6 +466,7 @@ export function composeSpecNode(
             .array(z.object({ id: z.string(), name: z.string().default(""), purpose: z.string().default("") }))
             .default([]),
           modules: z.array(z.object({ id: z.string(), name: z.string().default("") })).default([]),
+          screens: z.array(z.object({ id: z.string(), name: z.string().default("") })).default([]),
           unknowns: z.array(z.string()).default([]),
         }),
         "spec.compose",
@@ -536,6 +537,23 @@ export function composeSpecNode(
        * ——横轴上写着 `oups`、`vets` 时，复核的人第一眼看到的是代码词汇。
        * 报出来，因为这件事从产出上看完全正常：字段有值、结构完整。
        */
+      /**
+       * 屏幕名同理：哪些屏是图上的事实，名字才交给模型。
+       *
+       * 只留图上真有的 id——模型编一个 `/checkout` 出来，产品地图上没有那个节点，
+       * 那个名字就无处可挂，而它会让「这个产品有几屏」这个数悄悄多一个。
+       */
+      const knownStates = new Set(material.graph?.states.map((s) => s.id) ?? []);
+      const screens = parsed.screens
+        .filter((s) => knownStates.has(s.id) && s.name && s.name !== s.id)
+        .map((s) => ({ id: s.id, name: s.name }));
+      const unnamedScreens = knownStates.size - screens.length;
+      if (knownStates.size && unnamedScreens > 0)
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text: `${unnamedScreens} 个屏没起出人话名字——产品地图上它们会显示成路由`,
+        });
+
       const unnamed = modules.filter((m) => m.name === m.id).map((m) => m.id);
       if (unnamed.length)
         ctx.emit("log", {
@@ -653,6 +671,7 @@ export function composeSpecNode(
         rules: located,
         flows,
         modules,
+        screens,
         unknowns: parsed.unknowns,
         origin: material.origin,
         derivedFrom: material.derivedFrom,

@@ -30,7 +30,11 @@ const TAG: Record<TestCase["type"], string> = {
   e2e: "@e2e",
 };
 
-function specForCase(tc: TestCase, targetUrl: string): string {
+/**
+ * @param up 从这个 spec 文件回到 `tests/` 要走几级。按模块建目录之后是 `../`，
+ *           平铺时是 `./`——写死任何一个，另一种布局的导入路径就是坏的。
+ */
+function specForCase(tc: TestCase, targetUrl: string, up = "./"): string {
   const tags = `@${tc.priority} ${TAG[tc.type] ?? "@functional"}`;
   const steps = tc.steps.map((s) => `  await aiAction(${lit(s.text)});`).join("\n");
   const post = tc.postSteps.length
@@ -58,8 +62,8 @@ function specForCase(tc: TestCase, targetUrl: string): string {
   // 只解构真的用到的 fixture。一条由程序判定的用例不该顺手把判定模型的 fixture 也拉起来——
   // 那既是多余的开销，也让「这条用例到底要不要模型」在源码上看不出来。
   const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(usesOracle ? [] : ["aiAssert"])];
-  return `import { test } from "./ai";
-${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "./oracle";\n` : ""}
+  return `import { test } from "${up}ai";
+${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "${up}oracle";\n` : ""}
 // ${tc.priority} · ${tc.type}${trace} — ${tc.priorityReason || ""}
 test(${JSON.stringify(`[${tags}] ${tc.title}`)}, async ({ ${fixtures.join(", ")} }) => {
   await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
@@ -290,14 +294,26 @@ ${loginSteps}
 `;
   }
 
-  // 两条标题仍然可能塌成同一个名字（截断、或只差标点）。撞名就带上用例 id：
-  // 一个静默覆盖掉另一条用例的导出，比导出失败更糟——它看起来是成功的。
+  /**
+   * 按模块建目录，模块内按优先级命名。
+   *
+   * 此前是全部平铺在 `tests/` 下，前缀是优先级——而优先级此前恒为 P1（设计节点从不产出，
+   * 批准时默认），于是两千条用例就是两千个 `p1-*.spec.ts` 挤在一个目录里。
+   * 模块是规格里**算出来**的路由聚类，用例批准时跟着落了盘，拿它建目录不用再发明什么。
+   *
+   * 没有模块的用例放 `tests/_`：一个说不出自己属于哪儿的用例，不该被塞进某个模块里
+   * 假装它有归属——那会让「这个模块测到什么程度」这个数悄悄变得不可信。
+   *
+   * 两条标题仍然可能塌成同一个名字（截断、或只差标点）。撞名就带上用例 id：
+   * 一个静默覆盖掉另一条用例的导出，比导出失败更糟——它看起来是成功的。
+   */
   const taken = new Set<string>();
   for (const tc of cases) {
-    let name = `tests/${tc.priority.toLowerCase()}-${slug(tc.title)}.spec.ts`;
-    if (taken.has(name)) name = `tests/${tc.priority.toLowerCase()}-${slug(tc.title)}-${tc.id}.spec.ts`;
+    const dir = `tests/${tc.activity?.trim() ? slug(tc.activity) : "_"}`;
+    let name = `${dir}/${tc.priority.toLowerCase()}-${slug(tc.title)}.spec.ts`;
+    if (taken.has(name)) name = `${dir}/${tc.priority.toLowerCase()}-${slug(tc.title)}-${tc.id}.spec.ts`;
     taken.add(name);
-    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl);
+    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl, "../");
   }
 
   const envLines = [...envVarNames].sort().map((k) => {

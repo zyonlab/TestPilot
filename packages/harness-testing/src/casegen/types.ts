@@ -256,6 +256,14 @@ export const SpecDocSchema = z.object({
   flows: z.array(SpecFlowSchema).default([]),
   /** 这个产品分几块。聚类算出来，名字模型给。故事图的横轴就是它。 */
   modules: z.array(SpecModuleSchema).default([]),
+  /**
+   * 每一屏的业务名。屏是图上的事实，名字才交给模型——和流程、模块同一条分工。
+   *
+   * 没有它，产品地图只能按 URL 命名节点：13 屏时还能读，几百个 URL 时是一团谁也读不了的网。
+   * 只留图上真有的 id：模型编一个不存在的屏出来，那个名字无处可挂，
+   * 却会让「这个产品有几屏」这个数悄悄多一个。
+   */
+  screens: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
   /** 材料里没有答案的地方：够不到的界面、缺凭证、没提到的规则。 */
   unknowns: z.array(z.string()).default([]),
   /** 材料从哪来，逐份列出。 */
