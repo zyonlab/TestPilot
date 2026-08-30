@@ -275,12 +275,39 @@ export const CaseBundleSchema = z.object({
 });
 export type CaseBundle = z.infer<typeof CaseBundleSchema>;
 
+
+/**
+ * 一条 finding 挑的是哪个字段的毛病。界面据此把光标送过去。
+ *
+ * 不是所有规则都指得出一个字段（「这批用例全是正常路径」说的是整批），指不出就留空——
+ * 硬填一个会让「去改」按钮跳到一个跟它无关的输入框。
+ */
+export const FindingFieldSchema = z.enum([
+  "title",
+  "steps",
+  "expected",
+  "precondition",
+  "designMethod",
+  "covers",
+]);
+export type FindingField = z.infer<typeof FindingFieldSchema>;
+
 /** Gate ① output: the same bundle, plus what the gate thought of it. */
 export const GateFindingSchema = z.object({
   caseId: z.string().optional(),
   rule: z.string(),
   severity: z.enum(["warn", "info"]),
   message: z.string(),
+  /**
+   * 句子里要填的洞。
+   *
+   * 领域层**只产 rule + args**，一句给人看的话都不拼。此前这里拼死的那句英文过了河就是
+   * 一个常量：中文界面上原样显示 `[oracle-vague] assertion names no observable phenomenon`，
+   * 没有 key 也就没法译、没法配「为什么」和「怎么改」。`message` 仍然生成，
+   * 因为报告、评测与日志要一句能读的话——但界面不该拿它当唯一的来源。
+   */
+  args: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  field: FindingFieldSchema.optional(),
 });
 export type GateFinding = z.infer<typeof GateFindingSchema>;
 

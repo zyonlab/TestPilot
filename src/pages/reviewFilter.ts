@@ -22,6 +22,8 @@ export interface ReviewFilters {
   tier: string;
   /** 门禁：block 只看被拦的，warn 看有告警的，none 只看干净的。 */
   finding: "" | "block" | "warn" | "none";
+  /** 只看命中某一条规则的。门禁分是一个数，规则才是能拿去改的东西。 */
+  rule: string;
   /** 有没有阶段二的代码。 */
   code: "" | "yes" | "no";
   /** 已决策的要不要看。默认全看——藏起来会让「这一批处理完了没有」变得说不清。 */
@@ -34,6 +36,7 @@ export const EMPTY_FILTERS: ReviewFilters = {
   method: "",
   tier: "",
   finding: "",
+  rule: "",
   code: "",
   decision: "",
 };
@@ -48,6 +51,7 @@ const PARAM: Record<keyof ReviewFilters, string> = {
   method: "fm",
   tier: "ft",
   finding: "fg",
+  rule: "fr",
   code: "fc",
   decision: "fd",
 };
@@ -91,6 +95,11 @@ export function matches(
   if ((f.decision === "approved" || f.decision === "rejected") && kase.decision !== f.decision) return false;
 
   if (f.activity && (activityOf(kase.storyId) ?? "") !== f.activity) return false;
+
+  if (f.rule) {
+    const all = [...kase.findings, ...(kase.codeFindings ?? [])];
+    if (!all.some((x) => x.rule === f.rule)) return false;
+  }
 
   if (f.finding) {
     const all = [...kase.findings, ...(kase.codeFindings ?? [])];

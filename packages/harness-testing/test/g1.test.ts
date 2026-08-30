@@ -237,6 +237,53 @@ describe("gate ①", () => {
     expect(g.stats.negativeRatio).toBe(0);
   });
 
+  /**
+   * 方法标签是模型自己填的，此前没有任何一条规则去校验它。实测的后果：
+   * 「主人列表页包含 Pets 列标题」被标成 boundary——检查一个列标题存不存在，
+   * 跟边界值分析没有关系。一条错标会让评审者连带怀疑其余每一条。
+   */
+  it("挑出标成边界值、内容里却找不到任何边界痕迹的用例", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          designMethod: "boundary" as never,
+          title: "主人列表页包含 Pets 列标题",
+          steps: ["查看表格最右侧列标题"],
+          expected: "最右侧列标题为 Pets",
+        },
+      ]),
+    );
+    const f = g.findings.find((x) => x.rule === "method-mismatch");
+    expect(f?.args?.method).toBe("boundary");
+    expect(f?.field).toBe("designMethod");
+    // 只提醒，不拦：判断一条用例用的是哪种方法，最终要人来看。
+    expect(f?.severity).toBe("info");
+  });
+
+  it("真的在验边界的用例不报——一个经常误报的门禁会被关掉，然后它什么也保护不了", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          designMethod: "boundary" as never,
+          title: "电话字段留空提交",
+          steps: ["telephone 留空", "点击「Add Owner」"],
+          expected: "telephone 字段显示「must not be empty」",
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "method-mismatch")).toBe(false);
+  });
+
+  it("每条 finding 都带 args 与 field，界面才译得出、才点得动", () => {
+    const g = runGate(bundle([{ ...base, expected: "页面显示正常" }]));
+    const f = g.findings.find((x) => x.rule === "oracle-vague")!;
+    // 领域层只产 rule + args，不拼给人看的句子——拼死的句子过了河没有 key，没法译。
+    expect(f.args?.expected).toContain("正常");
+    expect(f.field).toBe("expected");
+  });
+
   it("marks a credential written into a step instead of a placeholder", () => {
     const g = runGate(bundle([{ ...base, steps: ["输入 password: s3cr3t-pass"] }]));
     expect(g.findings.some((f) => f.rule === "secret")).toBe(true);

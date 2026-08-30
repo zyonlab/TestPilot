@@ -903,6 +903,7 @@ export const dict: Record<string, Entry> = {
   "review.filterNoCode": { zh: "还没有", en: "not yet", ja: "未生成" },
   "review.filterDecision": { zh: "处置", en: "decision", ja: "処理" },
   "review.filterPending": { zh: "只看待复核", en: "pending only", ja: "未処理のみ" },
+  "review.ruleBreakdown": { zh: "门禁规则", en: "gate rules", ja: "ゲート規則" },
   "review.filterShown": { zh: "看到 {shown} / 共 {total}", en: "showing {shown} of {total}", ja: "{total} 件中 {shown} 件" },
   "review.hasCode": { zh: "已生成代码", en: "code ready", ja: "コード生成済み" },
   "review.degraded": { zh: "断言被改松过", en: "assertion was weakened", ja: "アサーションが緩められた" },

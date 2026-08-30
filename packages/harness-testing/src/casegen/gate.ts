@@ -1,5 +1,5 @@
 import { tierOf } from "../exec/oracle.js";
-import type { CaseBundle, GateFinding, GateReport, TextCase } from "./types.js";
+import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from "./types.js";
 
 /**
  * Gate ① — does this batch of text cases meet the test-design rules?
@@ -46,25 +46,47 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   const storyIds = new Set(bundle.stories.map((s) => s.id));
   const cases = bundle.cases;
 
-  const add = (rule: string, message: string, caseId?: string, severity: GateFinding["severity"] = "warn") =>
-    findings.push({ rule, message, caseId, severity });
+  /**
+   * 记一条 finding。
+   *
+   * `message` 仍然生成——报告、评测与日志要一句能读的话。但界面不该拿它当唯一来源：
+   * 那句话在这里就拼死了，过了河是个常量，没有 key 也就没法译、没法配「为什么」和
+   * 「怎么改」。所以每条规则同时给 `args`（句子里的洞）与 `field`（它在挑哪个字段的毛病）。
+   */
+  const add = (
+    rule: string,
+    message: string,
+    caseId?: string,
+    severity: GateFinding["severity"] = "warn",
+    extra?: { args?: Record<string, string | number>; field?: FindingField },
+  ) => findings.push({ rule, message, caseId, severity, ...extra });
 
   // 1. Traceability — a case nobody can trace back to a story is a case nobody can review.
   let orphans = 0;
   for (const c of cases)
     if (!storyIds.has(c.storyId)) {
       orphans += 1;
-      add("traceability", `${c.title} points at story ${c.storyId}, which does not exist`, c.id);
+      add("traceability", `${c.title} points at story ${c.storyId}, which does not exist`, c.id, "warn", {
+        args: { storyId: c.storyId },
+      });
     }
 
   // 2. Structure and granularity.
   for (const c of cases) {
     if (c.steps.length > cfg.maxSteps)
-      add("granularity", `${c.steps.length} steps — a case that verifies one thing needs few`, c.id);
-    if (c.steps.length < cfg.minSteps) add("granularity", "no steps", c.id);
-    if (!c.expected.trim()) add("structure", "no expected outcome: nothing to pass or fail on", c.id);
+      add("granularity", `${c.steps.length} steps — a case that verifies one thing needs few`, c.id, "warn", {
+        args: { n: c.steps.length },
+        field: "steps",
+      });
+    if (c.steps.length < cfg.minSteps)
+      add("granularity", "no steps", c.id, "warn", { args: { n: 0 }, field: "steps" });
+    if (!c.expected.trim())
+      add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
     if (cfg.gradeOracles && VAGUE.test(c.expected))
-      add("oracle-vague", `assertion promises nothing checkable: "${c.expected.slice(0, 60)}"`, c.id);
+      add("oracle-vague", `assertion promises nothing checkable: "${c.expected.slice(0, 60)}"`, c.id, "warn", {
+        args: { expected: c.expected.slice(0, 60) },
+        field: "expected",
+      });
     else if (cfg.gradeOracles && !CONCRETE.test(c.expected))
       add(
         "oracle-vague",
@@ -73,7 +95,10 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
         "info",
       );
     if (cfg.gradeOracles && c.tier === 3)
-      add("tier", "judged by a model — reserve tier 3 for what nothing else can decide", c.id, "info");
+      add("tier", "judged by a model — reserve tier 3 for what nothing else can decide", c.id, "info", {
+        args: {},
+        field: "expected",
+      });
     // The tier used to be a label nobody could check, so every case could claim 1 and be
     // judged by a model anyway. Now it is a claim with a fact behind it: either there is an
     // oracle a program can settle, or the case is tier 3 whatever it says about itself.
@@ -92,7 +117,10 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       );
     for (const s of c.steps)
       if (/密码\s*[:：=]\s*\S|password\s*[:=]\s*\S/i.test(s) && !s.includes("${"))
-        add("secret", `credential written into a step instead of a placeholder: "${s.slice(0, 50)}"`, c.id);
+        add("secret", `credential written into a step instead of a placeholder: "${s.slice(0, 50)}"`, c.id, "warn", {
+          args: { step: s.slice(0, 50) },
+          field: "steps",
+        });
   }
 
   // 3. Duplicates — same key, same case in different words.
@@ -102,7 +130,10 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     const prev = seen.get(c.key);
     if (prev) {
       duplicates += 1;
-      add("duplicate", `same coverage as "${prev.title}" (key ${c.key})`, c.id);
+      add("duplicate", `same coverage as "${prev.title}" (key ${c.key})`, c.id, "warn", {
+        args: { other: prev.title, key: c.key },
+        field: "title",
+      });
     } else seen.set(c.key, c);
   }
 
@@ -119,7 +150,8 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
 
   // 5. Stories nobody wrote a case for.
   for (const s of bundle.stories)
-    if (!cases.some((c) => c.storyId === s.id)) add("story-uncovered", `story ${s.id} has no cases`);
+    if (!cases.some((c) => c.storyId === s.id))
+      add("story-uncovered", `story ${s.id} has no cases`, undefined, "warn", { args: { storyId: s.id } });
 
   /**
    * 6. 这条「故事」是不是一条故事。
@@ -186,15 +218,58 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     for (const c of cases)
       for (const cv of c.covers ?? [])
         if (!known.has(cv))
-          add("covers-unknown", `声称覆盖 ${cv}，但规格里没有这条转移`, c.id, "warn");
+          add("covers-unknown", `claims to cover ${cv}, which the specification does not contain`, c.id, "warn", {
+            args: { transition: cv },
+            field: "covers",
+          });
   for (const c of cases)
     if (!(c.covers ?? []).length && c.designMethod === "state-transition")
+      add("no-transition", "claims to be a state-transition case but names no transition", c.id, "info", {
+        args: {},
+        field: "covers",
+      });
+
+  /**
+   * 方法标签与内容对不对得上。
+   *
+   * 提示词把五种设计方法定义得很清楚，可没有任何一条规则去校验模型有没有照做——
+   * 于是「主人列表页包含 Pets 列标题」被标成了 `boundary`。检查一个列标题存不存在，
+   * 跟边界值分析没有任何关系，它是等价类里最平凡的一条。
+   *
+   * 一条错标的代价不止这一条：评审者只要看到一条明显对不上的标签，
+   * 就会连带怀疑其余每一条，而那批标签本身是有用的。
+   *
+   * 判据是确定性的、粗的、只往一个方向报：**只有当一条用例里找不到任何该方法的痕迹时
+   * 才记一条 info**。宁可漏，不可错杀——一个经常误报的门禁会被关掉，然后它什么也保护不了。
+   */
+  const TRACE: Record<string, RegExp> = {
+    // 边界：空、最小、最大、刚越界、长度、位数、超出范围，或者出现具体数字
+    boundary:
+      /空|留空|最小|最大|上限|下限|超出|越界|临界|长度|位数|超过|不足|0|零|负|小数|溢出|empty|blank|min|max|limit|boundary|exceed|over|length|digits|negative|decimal|\d/i,
+    // 负例：产品必须拒绝，并且说出来
+    negative:
+      /错误|失败|拒绝|不允许|无效|非法|不存在|查不到|未找到|必填|不能为空|提示|报错|校验|不合法|不符合|超出范围|invalid|error|reject|refuse|fail|not found|must (not|be)|required|forbidden|denied|out of (bounds|range)|not allowed/i,
+    // 状态迁移：一次状态改变，以及改变之后必须成立的东西
+    "state-transition":
+      /跳转|到达|进入|返回|停留|变成|切换|之后|然后|导航|navigat|redirect|goes? to|arrives?|returns?|remains? on|then/i,
+    // 判定表：多个条件的组合
+    "decision-table": /同时|组合|且|并且|与.*都|when .* and |both|combination/i,
+  };
+  for (const c of cases) {
+    const probe = TRACE[c.designMethod];
+    if (!probe) continue; // equivalence 没有可判的痕迹——任何一条用例都可能是等价类的代表
+    const hay = [c.title, c.expected, ...c.steps, ...(c.precondition ?? [])].join(" ");
+    // 状态迁移已经有 `no-transition` 在管它说不说得出转移，这里只补「连叙述上都没有变化」。
+    if (c.designMethod === "state-transition" && (c.covers ?? []).length) continue;
+    if (!probe.test(hay))
       add(
-        "no-transition",
-        `声称是状态转移用例，却说不出它走了哪条转移`,
+        "method-mismatch",
+        `labelled "${c.designMethod}", but nothing in the case shows that method at work`,
         c.id,
         "info",
+        { args: { method: c.designMethod }, field: "designMethod" },
       );
+  }
 
   const tiers: Record<string, number> = {};
   for (const c of cases) tiers[String(c.tier)] = (tiers[String(c.tier)] ?? 0) + 1;

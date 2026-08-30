@@ -3,6 +3,7 @@ import { ClipboardCheck, Check, X, ChevronDown, ChevronRight, Wand2, Undo2, Repl
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui";
 import { useT } from "@/lib/prefs";
+import { hasKey } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 import { API_BASE } from "@/lib/base";
@@ -265,6 +266,12 @@ function FilterBar({
   const methods = uniq(items.map((i) => i.designMethod));
   const tiers = uniq(items.map((i) => String(i.tier)));
   const on = isFiltering(filters);
+  // 规则的命中数，按命中数排——最该先看的是最常犯的那一条。
+  const counts = new Map<string, number>();
+  for (const it of items)
+    for (const f of [...it.findings, ...(it.codeFindings ?? [])])
+      counts.set(f.rule, (counts.get(f.rule) ?? 0) + 1);
+  const ruleCounts = [...counts.entries()].sort((a, b) => b[1] - a[1]);
 
   const sel = "rounded-md border border-border bg-card px-2 py-1 text-[11px]";
   return (
@@ -335,6 +342,35 @@ function FilterBar({
           </span>
           <Button onClick={() => onChange(EMPTY_FILTERS)}>{t("cases.filterClear")}</Button>
         </>
+      )}
+
+      {/*
+        门禁分是一个数，规则才是能拿去改的东西。
+        「门禁① 100%」点不动的时候，人知道的只有「没问题」或者「有点问题」——
+        而他真正要问的是「哪一类问题、有几条、是哪几条」。这一行把它摊开，
+        每一条都是一个筛选器。
+      */}
+      {!!ruleCounts.length && (
+        <div className="flex w-full flex-wrap items-center gap-1.5 border-t border-border pt-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {t("review.ruleBreakdown")}
+          </span>
+          {ruleCounts.map(([rule, n]) => (
+            <button
+              key={rule}
+              onClick={() => set({ rule: filters.rule === rule ? "" : rule })}
+              title={hasKey(`gate.${rule}.why`) ? t(`gate.${rule}.why`) : undefined}
+              className={cn(
+                "rounded px-1.5 py-0.5 font-mono text-[10.5px]",
+                filters.rule === rule
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:brightness-95",
+              )}
+            >
+              {rule} · {n}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

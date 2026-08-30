@@ -35,6 +35,15 @@ import {
  * showing what you already declined is a queue people stop opening.
  */
 
+/** 一条门禁 finding，过网线的形状。 */
+export interface Finding {
+  rule: string;
+  severity: string;
+  message: string;
+  args?: Record<string, string | number>;
+  field?: string;
+}
+
 export interface ReviewItem {
   caseId: string;
   title: string;
@@ -44,8 +53,14 @@ export interface ReviewItem {
   precondition: string[];
   steps: string[];
   expected: string;
-  /** What gate ① said about this specific case. */
-  findings: Array<{ rule: string; severity: string; message: string }>;
+  /**
+   * What gate ① said about this specific case.
+   *
+   * `args` 与 `field` 是给界面用的：领域层只产 rule + 参数，句子在界面按 i18n key 组装。
+   * `message` 留着，因为报告、评测与日志要一句能读的话——但它是英文的、拼死的，
+   * 界面拿它当唯一来源就等于放弃翻译。
+   */
+  findings: Finding[];
   /** The machine-checkable form of the outcome, when stage one produced one. */
   oracle?: MachineOracle;
   /**
@@ -72,7 +87,7 @@ export interface ReviewItem {
    */
   codeSteps?: string[];
   codeBlocked?: boolean;
-  codeFindings?: Array<{ rule: string; severity: string; message: string }>;
+  codeFindings?: Finding[];
   /** Set if this case only went green after its assertion was weakened. */
   degraded?: boolean;
   decision?: "approved" | "rejected";
@@ -94,7 +109,7 @@ export interface ReviewItem {
   };
   edit?: ReviewEdit;
   /** What gate ① says about the edited case. Absent when nothing was edited. */
-  editedFindings?: Array<{ rule: string; severity: string; message: string }>;
+  editedFindings?: Finding[];
 }
 
 /** 复核界面画故事地图需要的那一份故事。 */
@@ -272,13 +287,13 @@ interface GatedBundleShape {
     /** 这条用例走了哪些转移。重写时要带上，否则它挂在产品模型上的那根线会断。 */
     covers?: string[];
   }>;
-  gate?: { score?: number; stats?: Record<string, unknown>; findings?: Array<{ caseId?: string; rule: string; severity: string; message: string }> };
+  gate?: { score?: number; stats?: Record<string, unknown>; findings?: Array<Finding & { caseId?: string }> };
 }
 
 interface CodeBundleShape {
   code?: Array<{ caseId: string; code: string; uses?: string[]; actions?: Action[] }>;
   fragments?: Array<{ name: string; actions: Action[] }>;
-  gate?: { findings?: Array<{ caseId?: string; rule: string; severity: string; message: string }> };
+  gate?: { findings?: Array<Finding & { caseId?: string }> };
   repair?: { degraded?: string[] };
 }
 
@@ -366,11 +381,11 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       covers: c.covers,
       // 用例本身没有 requirementId——它继承自所属的故事，那是这条追溯线唯一的来源。
       requirementId: storyReq.get(c.storyId),
-      findings: gateFindings.filter((f) => f.caseId === c.id).map(({ rule, severity, message }) => ({ rule, severity, message })),
+      findings: gateFindings.filter((f) => f.caseId === c.id).map(({ rule, severity, message, args, field }) => ({ rule, severity, message, args, field })),
       code: mineCode?.code,
       codeSteps: mineCode ? stepsFromActions(mineCode, coded?.fragments ?? []) : undefined,
       codeBlocked: mine.some((f) => f.severity === "block"),
-      codeFindings: mine.map(({ rule, severity, message }) => ({ rule, severity, message })),
+      codeFindings: mine.map(({ rule, severity, message, args, field }) => ({ rule, severity, message, args, field })),
       degraded: degraded.has(c.id),
       decision: decisions.get(c.id)?.decision,
       createdCaseId: decisions.get(c.id)?.createdCaseId,
@@ -389,7 +404,7 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
             } } : {}),
             editedFindings: (rescored?.findings ?? [])
               .filter((f) => f.caseId === c.id)
-              .map(({ rule, severity, message }) => ({ rule, severity, message })),
+              .map(({ rule, severity, message, args, field }) => ({ rule, severity, message, args, field })),
           }
         : {}),
     };

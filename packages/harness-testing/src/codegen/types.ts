@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FindingFieldSchema } from "../casegen/types.js";
 import { TextCaseSchema } from "../casegen/types.js";
 
 /**
@@ -67,6 +68,16 @@ export const CodeFindingSchema = z.object({
   rule: z.string(),
   severity: z.enum(["block", "warn", "info"]),
   message: z.string(),
+  /**
+   * 句子里要填的洞。
+   *
+   * 领域层**只产 rule + args**，一句给人看的话都不拼。此前这里拼死的那句英文过了河就是
+   * 一个常量：中文界面上原样显示 `[oracle-vague] assertion names no observable phenomenon`，
+   * 没有 key 也就没法译、没法配「为什么」和「怎么改」。`message` 仍然生成，
+   * 因为报告、评测与日志要一句能读的话——但界面不该拿它当唯一的来源。
+   */
+  args: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  field: FindingFieldSchema.optional(),
 });
 export type CodeFinding = z.infer<typeof CodeFindingSchema>;
 

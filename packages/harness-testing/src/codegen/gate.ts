@@ -20,6 +20,16 @@ const DEFAULTS: Required<CodeGateOptions> = { maxActions: 12, minReuseRatio: 0 }
 
 /** A sleep is a guess about timing that will be wrong on a slower machine. */
 const RAW_SLEEP = /setTimeout\s*\(|sleep\s*\(|waitForTimeout\s*\(|delay\s*\(/i;
+
+/**
+ * 一句动作是不是一个「目标」而不是一次交互。
+ *
+ * 提示词里明确禁止过它。判据往窄了写：`navigate to` / `go to` / `that leads to` /
+ * `wait for … to`（等一屏加载完）/ `complete the …`，以及「进入…页面」这种中文写法。
+ * 只报 warn——一个经常误报的门禁会被关掉，然后它什么也保护不了。
+ */
+const GOAL_ACTION =
+  /\b(navigate to|go to|proceed to|complete the|finish the)\b|\bthat leads to\b|\bwait for\b[^,.;]*\bto (load|appear|be (fully )?(rendered|displayed|visible))|进入[^，。；]{0,12}(页面|页)|完成整个|导航到/i;
 /** Credentials written into the source instead of referenced. */
 // Matches both `password: "s3cr3t"` and `'password: s3cr3t'`. A `${...}` placeholder right
 // after the separator is the correct form and must not trip it.
@@ -84,11 +94,20 @@ export function runCodeGate(
 ): CodeGateReport {
   const cfg = { ...DEFAULTS, ...opts };
   const findings: CodeFinding[] = [];
-  const add = (rule: string, message: string, severity: CodeFinding["severity"], caseId?: string) =>
-    findings.push({ rule, message, severity, caseId });
+  /**
+   * `message` 仍然生成（报告、评测与日志要一句能读的话），但界面不该拿它当唯一来源：
+   * 那句话在这里就拼死了，过了河是个常量，没有 key 也就没法译。所以同时给 `args`。
+   */
+  const add = (
+    rule: string,
+    message: string,
+    severity: CodeFinding["severity"],
+    caseId?: string,
+    args?: Record<string, string | number>,
+  ) => findings.push({ rule, message, severity, caseId, ...(args ? { args } : {}) });
 
   for (const f of bundle.failed)
-    add("codegen-failed", `no code was produced: ${f.message}`, "block", f.caseId);
+    add("codegen-failed", `no code was produced: ${f.message}`, "block", f.caseId, { reason: f.message });
 
   let withoutAssertion = 0;
   let parameterized = 0;
@@ -96,7 +115,7 @@ export function runCodeGate(
   for (const c of bundle.code) {
     const parsed = parseCode(c.code);
     // Blocking, because it is a fact rather than an opinion: something in here cannot run.
-    for (const u of parsed.unsupported) add("unsupported-call", u, "block", c.caseId);
+    for (const u of parsed.unsupported) add("unsupported-call", u, "block", c.caseId, { call: u });
     if (!parsed.actions.length) add("empty", "the code performs no action", "block", c.caseId);
 
     const all = [...c.actions];
@@ -121,7 +140,9 @@ export function runCodeGate(
       add("no-assertion", "nothing is asserted: this case can never fail", "block", c.caseId);
     }
     if (all.length > cfg.maxActions)
-      add("granularity", `${all.length} actions — a case this long verifies nothing in particular`, "warn", c.caseId);
+      add("granularity", `${all.length} actions — a case this long verifies nothing in particular`, "warn", c.caseId, {
+        n: all.length,
+      });
 
     if (RAW_SLEEP.test(c.code))
       add("raw-sleep", "waits on a timer instead of on a condition", "warn", c.caseId);
@@ -136,6 +157,23 @@ export function runCodeGate(
           "block",
           c.caseId,
         );
+    /**
+     * 目标式动作。
+     *
+     * `CODEGEN_STABLE` 里已经写明禁止它：「never a goal ('navigate to the product list
+     * page')」「never a wait-for-a-page」。但没有任何一条规则去校验模型有没有照做——
+     * 实测产出里就有 `'click the navigation link or menu item that leads to the owners
+     * list page'`。规律很清晰：**凡是有门禁的要求模型就照做，凡是没有的就漂**。
+     *
+     * 代价很实在：驱动界面的模型会把目标自己拆成动作，拆不动就放弃——于是这条用例
+     * 因为措辞失败，却被报成产品坏了。这类失败最难查，因为报告上看不出它跟产品无关。
+     */
+    for (const a of all)
+      if (a.kind !== "assert" && GOAL_ACTION.test(a.text))
+        add("goal-action", `this is a goal, not an action: "${a.text.slice(0, 80)}"`, "warn", c.caseId, {
+          action: a.text.slice(0, 80),
+        });
+
     if (c.params.length) parameterized += 1;
     if (!c.uses.length && bundle.fragments.length)
       add("reuse", "repeats setup that other cases share as a fragment", "info", c.caseId);
@@ -145,11 +183,56 @@ export function runCodeGate(
   const fragmentActions = bundle.fragments.reduce((n, f) => n + f.actions.length * f.usedBy.length, 0);
   const reuseRatio = totalActions + fragmentActions ? fragmentActions / (totalActions + fragmentActions) : 0;
   if (bundle.code.length > 1 && reuseRatio < cfg.minReuseRatio)
-    add("reuse", `only ${Math.round(reuseRatio * 100)}% of steps come from shared fragments`, "warn");
+    add("reuse", `only ${Math.round(reuseRatio * 100)}% of steps come from shared fragments`, "warn", undefined, {
+      pct: Math.round(reuseRatio * 100),
+    });
+
+  /**
+   * 同一个目标，在同一条故事里被写成了几种不同的话。
+   *
+   * 实测：`'Click the "FIND OWNERS" link in the navigation bar'` 与
+   * `'click the "FIND OWNERS" link in the navigation bar'` 是相邻两条用例里的同一次导航；
+   * 兽医页那次更明显，五条用例五种写法。代价有三个：收敛不成公共片段（复用率 3/38
+   * 就是这么来的）、缓存命中率下降、以及同一个动作可能被驱动模型定位到不同的元素上。
+   *
+   * 判据只认**引号里的东西**——`"FIND OWNERS"`、`「Add Owner」`。那串字是界面上真实
+   * 存在的文案，也是这句动作真正指向的目标；两句都指着它、写法却不同，就是措辞漂了。
+   *
+   * 第一版按关键词重合度分组，实测把「点查找链接」和「点提交按钮」并成了一组——
+   * 去掉停用词之后它们都只剩下 click 和 owner。一个会报假货的门禁会被关掉，
+   * 然后它什么也保护不了，所以判据换成了这个窄得多、但不会认错的。
+   */
+  const LITERAL = /["'“”「『]([^"'“”」』\n]{2,40})["'“”」』]/g;
+  const literalsOf = (s: string): string[] =>
+    [...s.matchAll(LITERAL)].map((m) => m[1]!.trim().toLowerCase()).filter((x) => x.length > 1);
+
+  const byTarget = new Map<string, Set<string>>();
+  for (const c of bundle.code) {
+    const story = bundle.cases.find((t) => t.id === c.caseId)?.storyId;
+    if (!story) continue;
+    for (const a of c.actions) {
+      if (a.kind === "assert") continue;
+      for (const lit of new Set(literalsOf(a.text))) {
+        const key = `${story}\u0000${lit}`;
+        byTarget.set(key, (byTarget.get(key) ?? new Set()).add(a.text.trim()));
+      }
+    }
+  }
+  for (const [key, texts] of byTarget) {
+    // 只差大小写与首尾空白的也算不同写法：它们同样收敛不成一个片段，也同样打不中缓存。
+    if (texts.size < 2) continue;
+    const lit = key.split("\u0000")[1]!;
+    const samples = [...texts].slice(0, 2).map((s) => `"${s.slice(0, 48)}"`).join(" / ");
+    add("wording-drift", `"${lit}" is acted on ${texts.size} different ways: ${samples}`, "info", undefined, {
+      n: texts.size,
+      target: lit,
+      samples,
+    });
+  }
 
   const dupes = duplicateRuns(bundle.code);
   if (dupes > 0)
-    add("duplication", `${dupes} step sequences are still repeated across cases`, "info");
+    add("duplication", `${dupes} step sequences are still repeated across cases`, "info", undefined, { n: dupes });
 
   const blocked = new Set(findings.filter((f) => f.severity === "block" && f.caseId).map((f) => f.caseId));
   const cases = bundle.code.length + bundle.failed.length;
