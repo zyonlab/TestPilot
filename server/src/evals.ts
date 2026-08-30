@@ -565,9 +565,29 @@ export interface DetectionEvalResult {
   /** Cases that failed on the healthy build. Every one of them is a false alarm. */
   falseAlarms: string[];
   falseAlarmRate: number;
-  /** One row per injected fault: did any case notice? */
-  mutants: Array<{ defect: string; title: string; killed: boolean; killedBy: string[]; ran: number }>;
+  /**
+   * One row per injected fault: did any case notice?
+   *
+   * `applied` 是第三态，也是这一版加的那个：**变异到底注进去了没有**。
+   * `?defect=` 这套注入只有内置 fixture 认；把它指向任何真实产品，参数会被忽略，
+   * 于是每一轮跑的都是健康版、每条用例都通过、每个变异体都「活下来」——
+   * 报出来是一个干干净净的 `mutationScore: 0`。
+   *
+   * 实测撞到过：拿 PetClinic 那次运行跑这条评测，5 个变异体全部「活下来」，
+   * 而 `curl` 一比就知道 `/` 和 `/?defect=no-error` 的响应**逐字节相同**。
+   * 一个「0 分」读起来是「这套用例什么都抓不到」，事实是「这次实验根本没发生」。
+   */
+  mutants: Array<{
+    defect: string;
+    title: string;
+    killed: boolean;
+    killedBy: string[];
+    ran: number;
+    applied: "yes" | "no" | "unknown";
+  }>;
+  /** 注不进去的那些**不进分母**：没发生的实验不该拉低分数。 */
   mutationScore: number;
+  notApplied: number;
   cases: number;
   note: string;
   startedAt: string;
@@ -603,6 +623,34 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
   const run = async (caseEntry: (typeof code)[number], url: string) =>
     executeCase({ ...req.target, url }, caseEntry, (bundle?.fragments ?? []) as never);
 
+  const withDefect = (d: string) => `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}defect=${d}`;
+
+  /**
+   * 这个变异到底注进去了没有。
+   *
+   * 判据是确定性的、不问模型的：把健康版取两遍，再取一遍注入版。
+   *   两遍健康版就不一样  → 页面本身每次都在变，这个判据用不了，报 `unknown`
+   *   健康 == 注入        → 参数被忽略了，变异**没注进去**
+   *   健康 != 注入        → 注进去了
+   *
+   * 先比两遍健康版这一步不能省：少了它，一个每次渲染都带时间戳的页面会被判成
+   * 「注进去了」，然后它的存活会被当成用例集的盲区——那正是这个检查要防的错误方向。
+   */
+  const fetchText = async (url: string): Promise<string | undefined> => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      return res.ok ? await res.text() : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const probeApplied = async (defect: string): Promise<"yes" | "no" | "unknown"> => {
+    const [h1, h2, mutated] = [await fetchText(baseUrl), await fetchText(baseUrl), await fetchText(withDefect(defect))];
+    if (h1 === undefined || h2 === undefined || mutated === undefined) return "unknown";
+    if (h1 !== h2) return "unknown";
+    return h1 === mutated ? "no" : "yes";
+  };
+
   // 1. The healthy build. A failure here says nothing about the product.
   const falseAlarms: string[] = [];
   for (const c of code) {
@@ -614,17 +662,24 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
   const wanted = req.defects?.length ? req.defects : Object.keys(DEFECT_TITLES);
   const mutants: DetectionEvalResult["mutants"] = [];
   for (const defect of wanted) {
+    const applied = await probeApplied(defect);
+    // 注不进去就别跑：一整轮用例跑在健康版上，除了烧钱什么也说明不了。
+    if (applied === "no") {
+      mutants.push({ defect, title: DEFECT_TITLES[defect] ?? defect, killed: false, killedBy: [], ran: 0, applied });
+      bus.publish("eval.mutant", { id, defect, killed: false, applied }, {});
+      continue;
+    }
     const killedBy: string[] = [];
     let ran = 0;
     for (const c of code) {
       // A case that already cries wolf on the healthy build cannot be credited with a kill.
       if (falseAlarms.includes(c.caseId)) continue;
       ran += 1;
-      const outcome = await run(c, `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}defect=${defect}`);
+      const outcome = await run(c, withDefect(defect));
       if (outcome.status === "failed" && outcome.failKind !== "infra") killedBy.push(c.caseId);
     }
-    mutants.push({ defect, title: DEFECT_TITLES[defect] ?? defect, killed: killedBy.length > 0, killedBy, ran });
-    bus.publish("eval.mutant", { id, defect, killed: killedBy.length > 0 }, {});
+    mutants.push({ defect, title: DEFECT_TITLES[defect] ?? defect, killed: killedBy.length > 0, killedBy, ran, applied });
+    bus.publish("eval.mutant", { id, defect, killed: killedBy.length > 0, applied }, {});
   }
 
   const result: DetectionEvalResult = {
@@ -633,12 +688,17 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
     falseAlarms,
     falseAlarmRate: code.length ? Number((falseAlarms.length / code.length).toFixed(3)) : 0,
     mutants,
-    mutationScore: mutants.length
-      ? Number((mutants.filter((m) => m.killed).length / mutants.length).toFixed(3))
-      : 0,
+    // 分母只算真的注进去了的。没发生的实验不该拉低分数——那会把工具自己的失败
+    // 伪装成用例集的盲区，而虚低的那部分看起来像真发现。
+    mutationScore: (() => {
+      const graded = mutants.filter((m) => m.applied !== "no");
+      return graded.length ? Number((graded.filter((m) => m.killed).length / graded.length).toFixed(3)) : 0;
+    })(),
+    notApplied: mutants.filter((m) => m.applied === "no").length,
     cases: code.length,
     note:
       "mutation score is a suite-level number: a fault counts as caught if any case notices it. " +
+      "Faults that could not be injected are excluded from the denominator, not counted as survivors. " +
       "Per-case precision/recall would need labels that do not exist for these cases.",
     startedAt,
     finishedAt: new Date().toISOString(),
