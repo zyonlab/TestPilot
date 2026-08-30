@@ -5,10 +5,66 @@
   "graphId": "g1-text-cases",
   "goldPath": "fixtures/mock-spec/gold-checklist.json",
   "casesNode": "gate",
-  "a": { "label": "问优先级（现状）", "ablate": [] },
-  "b": { "label": "不问优先级", "ablate": ["case-priority"] },
+  "a": {
+    "label": "问优先级（现状）",
+    "ablate": []
+  },
+  "b": {
+    "label": "不问优先级",
+    "ablate": [
+      "case-priority"
+    ]
+  },
   "expect": {
     "direction": "unknown",
     "note": "预判：覆盖率两臂基本持平——这一段不改变「测什么」，只改变「先测什么」，所以它不该动覆盖率。真正要看的是 A 臂的优先级分布：P0 占比落在 5%–25% 才算模型真的在判；全 P0 或全 P2 都说明它在敷衍，那样这段话就该重写而不是保留。如果 A 的覆盖率反而更低，说明提示词变长确实稀释了注意力，那要把这段压缩到两行。"
+  },
+  "result": {
+    "ranAt": "2026-08-30T10:15:13Z",
+    "evalId": "eval-mtfnl97r",
+    "model": "qwen3-8-27b @ api.runinfra.ai（思考模式关不掉）",
+    "a": {
+      "label": "问优先级（现状）",
+      "coverage": 0.5556,
+      "cases": 8,
+      "tokens": 60063,
+      "ms": 571310,
+      "priorityMix": {
+        "P0": 2,
+        "P1": 5,
+        "P2": 1
+      },
+      "withPostSteps": 7
+    },
+    "b": {
+      "label": "不问优先级",
+      "coverage": 0.1111,
+      "cases": 5,
+      "tokens": 40013,
+      "ms": 265736,
+      "priorityMix": {
+        "P1": 4,
+        "P2": 1
+      },
+      "withPostSteps": 0
+    },
+    "mcnemar": {
+      "aOnly": 4,
+      "bOnly": 0,
+      "bothPassed": 1,
+      "bothFailed": 7,
+      "p": 0.125
+    },
+    "observed": "a-better",
+    "significant": false,
+    "readings": [
+      "P0 占比 2/8 = 25%，落在动手前写下的 5%–25% 判据上沿，且判得对：两条 P0 是登录成功这条核心正常流，P2 是「首次进入不显示错误」这种装饰性断言。这一条通过。",
+      "**预判的推理被推翻了。** 我写的是「这一段不改变测什么，只改变先测什么」。实际 A 在测登录流程（有效凭证登录成功、密码错误被拒），B 在测登录页渲染（访问 /testlogin 时显示登录表单、地址为 /testlogin）。覆盖率 0.556 vs 0.111。",
+      "推测的机制：那 9 行里写着「P0 — authentication, payment, checkout, and the core happy path」——它顺带告诉了模型**什么重要**。所以这一段不是纯粹的优先级说明，夹带了对「该测什么」的引导。自变量比设计时以为的宽。",
+      "**不显著。** p=0.125，一臂一次，12 条黄金项里只有 4 条分歧。要下结论得重复跑几轮。",
+      "**这次跑法本身有一个新混淆，来自修 bug 时的选择：** 为了让模型真的产出优先级，priority 被放进了 CASES_SCHEMA 的 required，于是 B 臂照样产出 P1/P2（约束解码强制），只是没人告诉它怎么定。所以 B 臂准确的名字不是「不问优先级」，是「要这个字段但不说怎么定」——下面的 label 与 why 描述的是改之前的意图。",
+      "成本：A 比 B 多花 50% token、2.1 倍墙钟时间。这个端点思考模式关不掉，一次 design.cases 调用里 88% 的输出 token 是推理。"
+    ],
+    "nextIfPursued": "重复跑 3–5 轮取分布；并把优先级那一段里「什么算 P0」的举例换成与被测产品无关的措辞，看覆盖率差是否随之消失——那能分辨「优先级本身有用」和「例子在指路」。"
   }
 }
