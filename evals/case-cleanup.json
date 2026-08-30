@@ -1,0 +1,14 @@
+{
+  "id": "case-cleanup",
+  "title": "要求用例收拾自己，会不会把用例设计挤坏",
+  "why": "看板有 postSteps 列、导出器有 teardown 分支，只有生成侧一直没产出过——于是一批「新增主人」的用例反复跑，PetClinic 的冻结基线从 10 个 owner 涨到 13 个。冻结基线校验是事后拦住它的，源头在提示词。加这一段的风险是它会占掉用例预算：模型可能为了写清理步骤而少设计一条用例，或者把清理动作混进正式步骤里。",
+  "graphId": "g1-text-cases",
+  "goldPath": "fixtures/mock-spec/gold-checklist.json",
+  "casesNode": "gate",
+  "a": { "label": "要求清理（现状）", "ablate": [] },
+  "b": { "label": "不要求清理", "ablate": ["case-cleanup"] },
+  "expect": {
+    "direction": "unknown",
+    "note": "预判：覆盖率持平或 A 略低（这一段占了预算）。要看的是 B 臂门禁里 no-cleanup 的条数应当明显多于 A——如果两臂一样多，说明模型压根没读这一段，那要么换写法，要么承认这件事只能靠门禁事后标记。另外要检查 A 臂有没有把清理动作写进了正式 steps：那会让用例的步骤数虚高，也会让「用例在验什么」变模糊。"
+  }
+}

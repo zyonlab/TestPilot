@@ -17,6 +17,10 @@ export const ABLATABLE = {
   fragments: "fragments",
   /** repair.loop executes but never tries to fix. */
   repair: "repair",
+  /** design.cases stops asking for a priority; every case comes back without one. */
+  casePriority: "case-priority",
+  /** design.cases stops asking for cleanup steps; write cases leave their records behind. */
+  caseCleanup: "case-cleanup",
 } as const;
 
 export type Ablatable = (typeof ABLATABLE)[keyof typeof ABLATABLE];

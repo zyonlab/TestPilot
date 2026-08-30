@@ -72,6 +72,15 @@ export interface ReviewItem {
    */
   covers?: string[];
   /**
+   * 设计节点给出的优先级。
+   *
+   * 和人在队列里设的那个（`edit.priority`）分开：前者是「机器认为这条有多重要」，
+   * 后者是「人决定它以什么优先级进看板」。合成一个字段，就再也说不清这条 P0 是谁定的。
+   */
+  priority?: string;
+  /** 把产品放回去的动作。写操作的用例没有它，就会毒化它自己以后的每一次运行。 */
+  postSteps?: string[];
+  /**
    * 指回哪一条需求。
    *
    * 故事上有（实测 8/8），用例继承自它所属的故事。同样此前到不了界面，
@@ -284,6 +293,8 @@ interface GatedBundleShape {
     steps: string[];
     expected: string;
     tier: number;
+    priority?: string;
+    postSteps?: string[];
     /** 这条用例走了哪些转移。重写时要带上，否则它挂在产品模型上的那根线会断。 */
     covers?: string[];
   }>;
@@ -379,6 +390,8 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       expected: shown.expected,
       oracle: c.oracle,
       covers: c.covers,
+      priority: c.priority,
+      postSteps: c.postSteps,
       // 用例本身没有 requirementId——它继承自所属的故事，那是这条追溯线唯一的来源。
       requirementId: storyReq.get(c.storyId),
       findings: gateFindings.filter((f) => f.caseId === c.id).map(({ rule, severity, message, args, field }) => ({ rule, severity, message, args, field })),
@@ -555,7 +568,13 @@ export async function approve(input: ApproveInput): Promise<TestCase[]> {
     const kase = createCase({
       projectId,
       title: edit.title ?? item.title,
-      priority: edit.priority ?? "P1",
+      /**
+       * 人的决定 > 机器的判断 > 默认。
+       *
+       * 中间那一档是补上的：设计节点此前不产出优先级（提示词里根本没这个键），
+       * 于是每一条批准进来的用例都是 P1，看板的三列永远空着，导出的文件名全是 `p1-*`。
+       */
+      priority: edit.priority ?? (item.priority as Priority | undefined) ?? "P1",
       priorityReason: `approved from ${input.wfRunId}${item.findings.length ? ` (${item.findings.length} gate findings)` : ""}${
         // Only content edits are worth saying: setting a priority in the queue is a
         // decision about the board, not a change to the case, and reporting it as one
@@ -567,6 +586,7 @@ export async function approve(input: ApproveInput): Promise<TestCase[]> {
       requirementId: item.requirementId,
       activity: storyActivity.get(item.storyId),
       covers: item.covers,
+      postSteps: (item.postSteps ?? []).map((text, i) => ({ order: i + 1, text })),
       type: METHOD_TO_TYPE[item.designMethod] ?? "functional",
       /**
        * 步骤的来源，按优先级：人在队列里的编辑 → **阶段二真的跑过的动作** → 阶段一的文本。
@@ -745,6 +765,8 @@ export async function regenerate(
           // 重写一条用例时，它原本走了哪些转移要带上——否则重写出来的版本会丢掉它挂在
           // 产品模型上的那根线，结构覆盖率上凭空少一条。
           covers: product?.covers ?? [],
+          // 清理步骤同理：重写不该顺手把「跑完要把产品放回去」这件事丢掉。
+          postSteps: product?.postSteps ?? [],
           precondition: item.precondition,
           steps: item.steps,
           expected: item.expected,

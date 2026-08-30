@@ -75,6 +75,8 @@ export interface ArtifactCase {
   covers?: string[];
   /** 指回哪一条需求。 */
   requirementId?: string;
+  /** 把产品放回去的动作。写操作的用例没有它，就会毒化它自己以后的每一次运行。 */
+  postSteps?: string[];
   findings: ArtifactFinding[];
   code?: string;
   codeBlocked?: boolean;

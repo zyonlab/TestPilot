@@ -156,6 +156,25 @@ export function CaseBody({
         )}
       </Field>
 
+      {/*
+        清理步骤单独一段，而且**空的时候也画**。
+        一条会写数据的用例如果不收拾自己，它会毒化它以后的每一次运行——第二次跑面对的
+        产品和第一次不同，而这个差别一直看不见，直到某个计数断言毫无道理地挂掉。
+        实测踩过：一批「新增主人」的用例反复跑，冻结基线从 10 个 owner 涨到 13 个。
+      */}
+      <Field label={t("artifact.cleanup")} empty={t("artifact.noCleanup")} tone="muted">
+        {!!kase.postSteps?.length && (
+          <ol className="space-y-0.5">
+            {kase.postSteps.map((s, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="w-4 shrink-0 text-right font-mono text-[11px] text-muted-foreground">{i + 1}</span>
+                <span className="min-w-0 flex-1">{s}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Field>
+
       {kase.requirementId && (
         <Field label={t("artifact.requirement")}>
           <span className="font-mono text-[11.5px]">{kase.requirementId}</span>

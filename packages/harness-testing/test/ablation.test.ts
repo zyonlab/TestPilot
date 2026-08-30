@@ -12,6 +12,11 @@ import {
   type GraphDef,
 } from "@testpilot/harness-core";
 import { caseGenNodes } from "../src/casegen/nodes.js";
+import {
+  CASES_STABLE,
+  CASES_STABLE_NO_CLEANUP,
+  CASES_STABLE_NO_PRIORITY,
+} from "../src/casegen/prompts.js";
 import { codeGenNodes, type CaseExecutor } from "../src/codegen/nodes.js";
 import type { GatedBundle } from "../src/casegen/types.js";
 import type { GatedCodeBundle } from "../src/codegen/types.js";
@@ -33,7 +38,7 @@ const casesReply = JSON.stringify({
       steps: ["输入 ${env.USERNAME}", "点击 Sign in"],
       expected: "页面显示正常",
       tier: 3,
-      key: "login|valid|dashboard", covers: [],
+      key: "login|valid|dashboard", covers: [], postSteps: [],
     },
     {
       title: "同一件事换个说法",
@@ -41,7 +46,7 @@ const casesReply = JSON.stringify({
       steps: ["输入 ${env.USERNAME}", "点击 Sign in"],
       expected: "页面显示正常",
       tier: 3,
-      key: "login|valid|dashboard", covers: [],
+      key: "login|valid|dashboard", covers: [], postSteps: [],
     },
   ],
 });
@@ -91,12 +96,32 @@ describe("the ablation list", () => {
 
   it("lists exactly the switches this harness can prove", () => {
     expect(ALL_ABLATABLE.sort()).toEqual(
-      ["dedupe", "design-methods", "fragments", "oracle-grading", "repair"].sort(),
+      ["case-cleanup", "case-priority", "dedupe", "design-methods", "fragments", "oracle-grading", "repair"].sort(),
     );
   });
 });
 
 describe("switches that change what a node does", () => {
+  /**
+   * 两个新开关走的是同一条纪律：消融臂由**原文减去那一段**生成，不是手写第二份。
+   * 手写必然漂移——第一次做消融时就是这么把「完整 vs 短得多」当成
+   * 「点名方法 vs 不点名」跑了一遍。
+   */
+  it("case-priority: 只去掉「优先级怎么定」那一段，别的一个字不动", () => {
+    expect(CASES_STABLE).toContain("`priority` says how much it costs");
+    expect(CASES_STABLE_NO_PRIORITY).not.toContain("`priority` says how much it costs");
+    // 别的段落必须原样还在，否则这次消融比的是两件事。
+    expect(CASES_STABLE_NO_PRIORITY).toContain("Apply test design methods explicitly");
+    expect(CASES_STABLE_NO_PRIORITY).toContain("`postSteps` puts the product back");
+    expect(CASES_STABLE_NO_PRIORITY).toContain("you MUST also give `oracle`");
+  });
+
+  it("case-cleanup: 只去掉「跑完把产品放回去」那一段", () => {
+    expect(CASES_STABLE_NO_CLEANUP).not.toContain("`postSteps` puts the product back");
+    expect(CASES_STABLE_NO_CLEANUP).toContain("`priority` says how much it costs");
+    expect(CASES_STABLE_NO_CLEANUP).toContain("Apply test design methods explicitly");
+  });
+
   it("design-methods: the prompt stops naming the methods", async () => {
     const on = g1Harness();
     await runGraph(on.def, { registry: on.registry, bus: on.bus, store: on.store });
@@ -163,7 +188,7 @@ describe("stage-two switches", () => {
         steps: ["输入用户名", "点击 Sign in"],
         expected: "显示面板",
         tier: 1,
-        key: "k1", covers: [],
+        key: "k1", covers: [], postSteps: [],
       },
       {
         id: "c2",
@@ -174,7 +199,7 @@ describe("stage-two switches", () => {
         steps: ["输入用户名", "点击 Sign in", "点击 Log out"],
         expected: "显示登录表单",
         tier: 1,
-        key: "k2", covers: [],
+        key: "k2", covers: [], postSteps: [],
       },
     ],
     gate: { score: 1, findings: [], stats: { cases: 2, tiers: {}, tiersBacked: {}, methods: {}, negativeRatio: 0, orphans: 0, duplicates: 0 } },

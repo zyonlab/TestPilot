@@ -271,6 +271,54 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       );
   }
 
+  /**
+   * 会写数据、却不收拾自己的用例。
+   *
+   * 这条规则的下游是一次真事故：一批「新增主人」的用例反复跑，每跑一遍留一条 John Doe，
+   * PetClinic 的冻结基线从 10 个 owner 涨到 13 个。冻结基线校验是**事后**拦住它的；
+   * 这里是源头。
+   *
+   * 一条留下记录的用例会毒化它自己以后的每一次运行——第二次跑面对的产品和第一次不同，
+   * 而这个差别一直看不见，直到某个计数断言毫无道理地挂掉，然后被当成产品缺陷去查。
+   *
+   * 判据看步骤里有没有写动作的痕迹。只记 info：有些「新增」提交之后被产品自己拒绝了，
+   * 那种用例什么也没留下，硬拦会误伤。
+   */
+  /**
+   * 判据分两步，因为「看起来像写」和「真的留下了东西」差得很远。
+   *
+   * 第一版只看动词，把「查找主人页包含 lastName 输入框、Find Owner 按钮与 **Add Owner** 链接」
+   * 也报了——那个 Add Owner 是一个链接的名字，不是这条用例干的事。16 条里一多半是这种。
+   *
+   * 现在要求同时满足：**往表单里填过东西** + **做了一次写动作**，而且断言不是
+   * 「产品拒绝了它」——被拒绝的写入什么也没留下，硬报会误伤。
+   *
+   * 写动作的词表里**不含**「提交 / submit」：「留空提交『Find Owner』」是一次查询，
+   * 它什么也不写。第二版栽在这上面，四条误报全是查询。
+   */
+  const TYPES_IN = /填入|输入|填写|勾选|选择|上传|type |enter |fill|input|upload|select /i;
+  const COMMITS =
+    /保存|删除|移除|新增|创建|注册|添加|上传|下单|编辑|修改|add owner|save|delete|remove|create|register|sign up|upload|update/i;
+  const REFUSED =
+    /错误|失败|拒绝|不允许|无效|非法|必填|不能为空|校验|不合法|停留在|仍在|未创建|没有新增|invalid|error|reject|must not|required|out of (bounds|range)|remains? on|not created/i;
+  for (const c of cases) {
+    if ((c.postSteps ?? []).length) continue;
+    // 负例多半是「产品应当拒绝」——被拒绝的写入没有留下任何东西要收拾。
+    if (c.designMethod === "negative") continue;
+    const typed = c.steps.some((s) => TYPES_IN.test(s));
+    // 写动作在标题里说也算：「新增主人」这件事往往写在标题上，步骤里只写「点 Add Owner」。
+    const committed = [c.title, ...c.steps].some((s) => COMMITS.test(s));
+    if (!typed || !committed) continue;
+    if (REFUSED.test(c.expected)) continue;
+    add(
+      "no-cleanup",
+      "creates or changes something and never puts it back — it poisons every later run of itself",
+      c.id,
+      "info",
+      { args: {}, field: "steps" },
+    );
+  }
+
   const tiers: Record<string, number> = {};
   for (const c of cases) tiers[String(c.tier)] = (tiers[String(c.tier)] ?? 0) + 1;
   // Two distributions, deliberately: what the batch claims, and what it can actually

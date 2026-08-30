@@ -99,9 +99,44 @@ export const CASES_STABLE = [
   "- Design at most the number of cases stated as CASE BUDGET in the material. Beyond that",
   "  you are splitting hairs, and the reply gets truncated — a truncated reply loses the",
   "  whole story's work.",
+  /**
+   * 优先级。
+   *
+   * 此前这份提示词的返回格式里**根本没有这个键**——模型从没被问过，于是设计节点不产出
+   * 优先级，看板的 P0/P1/P2 三列恒空，批准时只能默认 P1，导出的文件名全变成 `p1-*`，
+   * 「先跑 P0 冒烟」这条本该最有用的路径不存在。一个 JSON 键的缺席，
+   * 一路传到了执行记录的徽章上。
+   *
+   * 口径不是新发明的：`server/src/settings.ts` 里早就有一份写好的（登录/支付/结账/
+   * 核心正常流 = P0），它服务于另一条老路径。同一个概念在两处用两套标准，
+   * 迟早会得到两批对不上的优先级，所以这里抄的是那一份。
+   */
+  "- `priority` says how much it costs to ship this broken, not how likely it is to break:",
+  '    "P0" — authentication, payment, checkout, and the core happy path of the story.',
+  "           If this is broken the product cannot be used for what it exists to do.",
+  '    "P1" — important secondary flows, and the refusals that protect data (validation',
+  "           that prevents bad records, permissions).",
+  '    "P2" — cosmetic, informational, or reachable only by a rare path.',
+  "  Judge the STORY's importance, not the case's difficulty: an edge case of a P0 story",
+  "  is still worth more than the happy path of a P2 one. Most stories are not P0 —",
+  "  a batch where everything is P0 has said nothing.",
+  /**
+   * 清理步骤。
+   *
+   * 看板上有 `postSteps` 列，导出器里有 teardown 分支，可这份提示词从没要求过它——
+   * 于是生成的用例一条清理步骤都没有。下游就是基准库被污染的那次事故：一批「新增主人」
+   * 的用例反复跑，每跑一遍留一条 John Doe，冻结基线从 10 个 owner 涨到 13 个。
+   * 冻结基线校验是**事后**拦住它的；源头在这里。
+   */
+  "- `postSteps` puts the product back. If the case creates, edits or deletes anything,",
+  "  give the actions that undo it — delete what was added, restore what was changed.",
+  "  A case that leaves a record behind poisons every later run of itself: the second run",
+  "  starts from a different product than the first, and the difference is invisible until",
+  "  a count assertion fails for no reason anyone can see. Read-only cases leave it empty.",
   "",
-  'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","precondition":["..."],',
-  '"steps":["..."],"expected":"...","tier":1,"key":"login|valid-credentials|dashboard-shown"}]}',
+  'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","priority":"P1",',
+  '"precondition":["..."],"steps":["..."],"postSteps":[],"expected":"...","tier":1,',
+  '"key":"login|valid-credentials|dashboard-shown"}]}',
 ].join("\n");
 
 /**
@@ -127,6 +162,39 @@ export const CASES_STABLE = [
  */
 const METHOD_BLOCK_START = "Apply test design methods explicitly";
 const METHOD_BLOCK_END = '- "negative": an error path';
+
+/**
+ * 从原文里减掉一段，而不是手写第二份。
+ *
+ * 这条纪律是买来的：第一次做消融时手写了第二份提示词，46 行只留了 26 行，
+ * 除了要测的那一段还顺手砍掉了整段判据规范——于是那次比的是「完整提示词 vs 短得多的
+ * 提示词」，回答不了它声称的问题。单变量要由**构造**保证，不能靠人记得同步。
+ */
+function subtract(text: string, startsWith: string, endsWith: string): string {
+  const lines = text.split("\n");
+  const from = lines.findIndex((l) => l.includes(startsWith));
+  const to = lines.findIndex((l, i) => i >= from && l.includes(endsWith));
+  if (from < 0 || to < 0)
+    throw new Error(`提示词里找不到「${startsWith}」那一段——消融臂会变成和现状一样，那比跑不起来更糟`);
+  const rest = lines.slice(to + 1);
+  // 连同后面那个空行一起去掉，免得留下两个连续空行——那是文本上的差异，不是变量。
+  const skip = rest[0]?.trim() === "" ? 1 : 0;
+  return [...lines.slice(0, from), ...rest.slice(skip)].join("\n");
+}
+
+/** 消融臂：只去掉「优先级怎么定」那一段。 */
+export const CASES_STABLE_NO_PRIORITY = subtract(
+  CASES_STABLE,
+  "- `priority` says how much it costs",
+  "a batch where everything is P0 has said nothing.",
+);
+
+/** 消融臂：只去掉「跑完要把产品放回去」那一段。 */
+export const CASES_STABLE_NO_CLEANUP = subtract(
+  CASES_STABLE,
+  "- `postSteps` puts the product back",
+  "Read-only cases leave it empty.",
+);
 
 export const CASES_STABLE_PLAIN = (() => {
   const lines = CASES_STABLE.split("\n");

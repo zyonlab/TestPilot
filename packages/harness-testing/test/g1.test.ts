@@ -55,7 +55,7 @@ function fakeModel() {
               steps: ["输入 ${env.USERNAME}", "输入 ${secret.PASSWORD}", "点击 Sign in"],
               expected: "页面显示 Welcome, ${env.USERNAME} 与 Your dashboard is ready.",
               tier: 1,
-              key: "login|valid|dashboard-shown", covers: [],
+              key: "login|valid|dashboard-shown", covers: [], postSteps: [],
             },
           ],
         }),
@@ -71,7 +71,7 @@ function fakeModel() {
             steps: ["输入 ${env.USERNAME}", "输入错误密码 wrong-pass", "点击 Sign in"],
             expected: "显示 Invalid username or password，停留在登录页",
             tier: 1,
-            key: "login|wrong-password|error-shown", covers: [],
+            key: "login|wrong-password|error-shown", covers: [], postSteps: [],
           },
           {
             title: "空用户名登录被拒绝",
@@ -80,7 +80,7 @@ function fakeModel() {
             steps: ["用户名留空", "输入 ${secret.PASSWORD}", "点击 Sign in"],
             expected: "显示 Invalid username or password",
             tier: 1,
-            key: "login|empty-username|error-shown", covers: [],
+            key: "login|empty-username|error-shown", covers: [], postSteps: [],
           },
         ],
       });
@@ -144,7 +144,7 @@ describe("G1: specification → text cases", () => {
             steps: ["点击 Sign in"],
             expected: "显示 Your dashboard is ready.",
             tier: 1,
-            key: "login|valid|dashboard", covers: [],
+            key: "login|valid|dashboard", covers: [], postSteps: [],
           },
         ],
       });
@@ -213,7 +213,7 @@ describe("gate ①", () => {
     // says so, which is the whole point of the rule.
     oracle: { kind: "text" as const, value: "Your dashboard is ready." },
     tier: 1 as const,
-    key: "login|valid|dashboard", covers: [],
+    key: "login|valid|dashboard", covers: [], postSteps: [],
   };
 
   it("marks an assertion that promises nothing checkable", () => {
@@ -282,6 +282,70 @@ describe("gate ①", () => {
     // 领域层只产 rule + args，不拼给人看的句子——拼死的句子过了河没有 key，没法译。
     expect(f.args?.expected).toContain("正常");
     expect(f.field).toBe("expected");
+  });
+
+  /**
+   * 这条规则的下游是一次真事故：一批「新增主人」的用例反复跑，PetClinic 的冻结基线
+   * 从 10 个 owner 涨到 13 个。冻结基线校验是事后拦住它的；门禁是源头。
+   */
+  it("挑出会写数据、却不收拾自己的用例", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          title: "新增主人成功后出现在列表里",
+          steps: ["在 firstName 填入 John", "在 lastName 填入 Doe", "点击「Add Owner」提交按钮"],
+          expected: "主人列表里出现 John Doe",
+          postSteps: [],
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(true);
+  });
+
+  it("查询不算写——第二版栽在这上面，四条误报全是「填姓氏 + 提交 Find Owner」", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          title: "填入查不到的姓氏提交后显示未找到提示",
+          steps: ["在 lastName 输入框填入 zzzznotaproduct", "点击「Find Owner」提交按钮"],
+          expected: "页面显示「has not been found」",
+          postSteps: [],
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(false);
+  });
+
+  it("被产品拒绝的写入不算——它什么也没留下", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          title: "新增主人页电话填入字母触发数值校验",
+          steps: ["在 telephone 填入 abcdefghij", "点击「Add Owner」提交按钮"],
+          expected: "telephone 字段旁显示「numeric value out of bounds」",
+          postSteps: [],
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(false);
+  });
+
+  it("给了清理步骤就不报", () => {
+    const g = runGate(
+      bundle([
+        {
+          ...base,
+          title: "新增主人成功后出现在列表里",
+          steps: ["在 lastName 填入 Doe", "点击「Add Owner」提交按钮"],
+          expected: "主人列表里出现 John Doe",
+          postSteps: ["删除刚新增的主人 John Doe"],
+        },
+      ]),
+    );
+    expect(g.findings.some((x) => x.rule === "no-cleanup")).toBe(false);
   });
 
   it("marks a credential written into a step instead of a placeholder", () => {
@@ -377,7 +441,7 @@ describe("gate ① on the stories themselves", () => {
     expected: "页面显示 Checkout: Your Information",
     tier: 1 as const,
     oracle: { kind: "text" as const, value: "Checkout: Your Information" },
-    key: "checkout|cart|step-one", covers: [],
+    key: "checkout|cart|step-one", covers: [], postSteps: [],
   };
   const withStories = (stories: unknown[]) =>
     runGate({ origin: "x", flows: [], stories: stories as never, cases: [kase] as never });
@@ -430,6 +494,7 @@ describe("gate ① on what a case exercises", () => {
     oracle: { kind: "text" as const, value: "X" },
     key: "a|b|c",
     covers: [],
+    postSteps: [],
     ...over,
   });
   const gate = (cases: unknown[]) =>

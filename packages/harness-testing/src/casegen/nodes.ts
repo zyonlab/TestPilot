@@ -8,6 +8,8 @@ import {
   CASES_SCHEMA,
   CASES_STABLE,
   CASES_STABLE_PLAIN,
+  CASES_STABLE_NO_PRIORITY,
+  CASES_STABLE_NO_CLEANUP,
   ORACLE_STRICT,
   storiesSchema,
   STORIES_STABLE,
@@ -953,7 +955,16 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
             // Ablation: without the method instructions the model still writes cases, it
             // just stops being told how to think about them. That is the comparison.
             stable:
-              (ctx.ablated.has(ABLATABLE.designMethods) ? CASES_STABLE_PLAIN : CASES_STABLE) +
+              /**
+               * 三个开关各减各的那一段，全部由 `subtract` 从原文生成——手写第二份必然漂移。
+               * 同时开两个时按顺序减，减完还是同一份原文的子集。
+               */
+              (() => {
+                if (ctx.ablated.has(ABLATABLE.designMethods)) return CASES_STABLE_PLAIN;
+                if (ctx.ablated.has(ABLATABLE.casePriority)) return CASES_STABLE_NO_PRIORITY;
+                if (ctx.ablated.has(ABLATABLE.caseCleanup)) return CASES_STABLE_NO_CLEANUP;
+                return CASES_STABLE;
+              })() +
               (params.oracleGuidance === "strict" ? ORACLE_STRICT : ""),
             variable: casesVariable(specForCall.text, story, params.lang, params.maxCasesPerStory),
             schema: CASES_SCHEMA,

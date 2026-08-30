@@ -75,6 +75,27 @@ export const TextCaseSchema = z.object({
   designMethod: DesignMethod,
   precondition: z.array(z.string()).default([]),
   steps: z.array(z.string().min(1)).min(1),
+  /**
+   * 坏了要付多大代价。**不是**这条用例有多难写。
+   *
+   * 此前设计节点根本不产出它——提示词的返回格式里没有这个键，模型从没被问过。后果一路
+   * 往下传：看板 P0/P1/P2 三列恒空 → 批准时只能默认 P1 → 导出的文件名全是 `p1-*` →
+   * 「先跑 P0 冒烟」这条本该最有用的路径不存在 → 执行记录为了有东西显示，
+   * 把 graphs.ts 里那个占位的 P2 画成了真徽章。
+   *
+   * 可选而不是给默认值：给默认值等于替模型答一遍，而「它没说」和「它说是 P1」
+   * 在复核时是两件事。
+   */
+  priority: z.enum(["P0", "P1", "P2"]).optional(),
+  /**
+   * 把产品放回去的动作。
+   *
+   * 看板有这一列、导出器有 teardown 分支，只有生成侧一直没产出过——于是一批「新增主人」
+   * 的用例反复跑，每跑一遍留一条 John Doe，冻结基线从 10 个 owner 涨到 13 个。
+   * 一条留下记录的用例会毒化它自己以后的每一次运行：第二次跑面对的产品和第一次不同，
+   * 而这个差别一直看不见，直到某个计数断言毫无道理地挂掉。
+   */
+  postSteps: z.array(z.string().min(1)).default([]),
   /** One concrete, checkable outcome. The pass/fail oracle. */
   expected: z.string().min(1),
   /**
