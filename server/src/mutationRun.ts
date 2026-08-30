@@ -124,13 +124,42 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
 
   emit("started", { wfRunId, codeFrom, mutants: mutants.length, cases: code.length });
 
-  // ① 干净跑。它决定「这条用例本来就挂着」，没有它整个判决都不成立。
+  /**
+   * ① 干净跑。它决定「这条用例本来就挂着」，没有它整个判决都不成立。
+   *
+   * **基线里的 infra 失败要重试一次。** 这条界线跟着本项目的失败分档走——
+   * infra 是可重试的，判决不是——但在这里它的代价比别处大得多：基线挂掉的用例会进
+   * `baselineFailures`，此后**每一个变异体那一轮都不再算它**。也就是说一次模型抖动
+   * 不是让这条用例这次不算，是让它整场都不算。
+   *
+   * 实测：8 条基线挂了 4 条，其中 2 条是 infra——等于一次抖动就把 25% 的用例集
+   * 移出了场，而报告只会显示「score 0，七条盲区」。
+   *
+   * 只重试 infra，只重试一次：判决失败重试一次多半还是同样的判决，重试它只是把同一个
+   * 问题再问一遍，还掩盖了它。
+   */
   const clean: CaseOutcome[] = [];
-  for (const c of code) clean.push(await runCase(c));
+  let baselineRetried = 0;
+  for (const c of code) {
+    let out = await runCase(c);
+    if (out.status === "failed" && out.failKind === "infra") {
+      baselineRetried += 1;
+      emit("baselineRetry", { wfRunId, caseId: c.caseId });
+      out = await runCase(c);
+    }
+    clean.push(out);
+  }
   const baselineFailed = clean.filter((c) => c.status === "failed").length;
   const baselineInfra = clean.filter((c) => c.status === "failed" && c.failKind === "infra").length;
   const usableCases = clean.length - baselineFailed;
-  emit("baseline", { wfRunId, failed: baselineFailed, infra: baselineInfra, usable: usableCases, of: clean.length });
+  emit("baseline", {
+    wfRunId,
+    failed: baselineFailed,
+    infra: baselineInfra,
+    usable: usableCases,
+    of: clean.length,
+    retried: baselineRetried,
+  });
 
   /**
    * 一条都没剩就别往下跑。
@@ -176,6 +205,7 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
     baselineFailed,
     baselineInfra,
     usableCases,
+    baselineRetried,
     // 用例是从哪一次运行来的，要跟着报告走：一次结果说不清它的输入，就不是一次结果。
     codeFrom: codeFrom === wfRunId ? undefined : codeFrom,
     survivors: survivorsAsGaps(score),

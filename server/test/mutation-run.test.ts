@@ -18,6 +18,9 @@ const calls: Array<{ caseId: string; mutantId?: string }> = [];
 let appliesFor = new Set<string>();
 /** 测试指定哪条用例在带某个变异体时会挂。 */
 let failsWhen: (caseId: string, mutantId?: string) => boolean = () => false;
+/** 哪些用例第一次跑会以 infra 失败（第二次就好）。用来验基线重试。 */
+let infraOnce = new Set<string>();
+const infraSeen = new Set<string>();
 
 vi.mock("../src/graphs.js", () => ({
   nodeOutput: async (wfRunId: string, nodeId: string) => outputs[`${wfRunId}:${nodeId}`],
@@ -29,6 +32,10 @@ vi.mock("../src/graphs.js", () => ({
     mutation?: { id: string },
   ) => {
     calls.push({ caseId: k.caseId, mutantId: mutation?.id });
+    if (!mutation && infraOnce.has(k.caseId) && !infraSeen.has(k.caseId)) {
+      infraSeen.add(k.caseId);
+      return { status: "failed", failKind: "infra" };
+    }
     return {
       status: failsWhen(k.caseId, mutation?.id) ? "failed" : "passed",
       mutationApplied: mutation ? (appliesFor.has(mutation.id) ? 3 : 0) : undefined,
@@ -47,6 +54,8 @@ beforeEach(() => {
   saved.length = 0;
   appliesFor = new Set();
   failsWhen = () => false;
+  infraOnce = new Set();
+  infraSeen.clear();
   for (const k of Object.keys(outputs)) delete outputs[k];
   outputs["wf-1:repair"] = {
     code: [
@@ -134,6 +143,30 @@ describe("变异测试的入口", () => {
     failsWhen = (_c, m) => !m; // 干净跑全挂
     await expect(runMutation({ wfRunId: "wf-1", limit: 1 })).rejects.toThrow(/没有一条用例有机会叫/);
     expect(saved).toHaveLength(0);
+  });
+
+  /**
+   * 基线里一次 infra 抖动的代价不是「这次不算」，是「这条用例整场都不上场」——
+   * 它进了 baselineFailures，之后每个变异体那一轮都不再算它。实测 8 条基线挂 4 条、
+   * 其中 2 条是 infra，等于一次抖动移走了 25% 的用例集。
+   */
+  it("基线里的 infra 失败重试一次；重试成功的照常上场", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    infraOnce = new Set(["c1"]); // c1 第一次 infra，第二次好
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.baselineRetried).toBe(1);
+    expect(r.baselineFailed).toBe(0); // 重试成功，不该留在基线失败集里
+    expect(r.usableCases).toBe(2);
+  });
+
+  it("重试之后仍然挂的，照旧算基线失败——只重试一次，不掩盖问题", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (c, m) => !m && c === "c1"; // c1 干净跑一直挂（非 infra）
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.baselineRetried).toBe(0); // 不是 infra，不重试
+    expect(r.baselineFailed).toBe(1);
   });
 
   it("生成不出变异体时如实报错，而不是给一份 0 分的报告", async () => {
