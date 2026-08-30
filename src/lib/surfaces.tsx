@@ -1,6 +1,7 @@
 import { CasesBoard } from "@/pages/CasesBoard";
 import { ReviewPage } from "@/pages/Review";
 import { ProductMap } from "@/pages/ProductMap";
+import { DatasetsPage } from "@/pages/Datasets";
 import { TracePage } from "@/pages/Trace";
 import { CodeLinePage, ChangesPage } from "@/pages/CodeLine";
 import { Delivery } from "@/pages/Delivery";
@@ -69,6 +70,11 @@ export const SURFACES: Surface[] = [
   // 唯一一个吃上下文的：从某次运行的门禁卡点进来，就该停在那一批上。
   { id: "review", group: "cases", title: "surface.review", render: (ctx) => <ReviewPage focusRun={ctx.wfRunId} /> },
   { id: "trace", group: "cases", title: "surface.trace", render: () => <TracePage />, needsProject: true },
+  /**
+   * 数据和用例同一组：一条数据驱动的用例，「测什么」和「拿什么测」是同一件事的两半，
+   * 分到两个地方看，人就得自己在脑子里把它们拼起来。
+   */
+  { id: "data", group: "cases", title: "surface.data", render: () => <DatasetsPage />, needsProject: true },
 
   // 代码这一组：生成的、能跑的、被改过的，以及怎么进客户的仓库。
   { id: "code", group: "code", title: "surface.code", render: () => <CodeLinePage />, needsProject: true },

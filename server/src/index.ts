@@ -87,6 +87,17 @@ import { traceability, traceabilityOfRun } from "./trace.js";
 import { allProjectOverviews, projectOverview } from "./overview.js";
 import { runMutation } from "./mutationRun.js";
 import { readMutationReport } from "./mutation.js";
+import {
+  checkBinding,
+  deleteDataset,
+  getDataset,
+  inspectRows,
+  listDatasets,
+  parseRows,
+  runSuffix,
+  saveDataset,
+  uniquify,
+} from "./datasets.js";
 import { pendingBaselines } from "./pending.js";
 import { continuationsFor, continueRun } from "./continue.js";
 import {
@@ -914,9 +925,26 @@ async function runCaseDataDriven(
   maxRetries: number,
 ): Promise<{ run: RunRecord; attempts: number; healed: boolean; rows?: number; rowsPassed?: number }> {
   const env = resolveEnvironment(c.projectId, body?.env || c.envRef);
-  const dataset = c.dataKey ? env?.vars?.[c.dataKey] : undefined;
-  const rows = Array.isArray(dataset) ? dataset : null;
-  if (!rows || !rows.length) return runCaseWithHeal(c, body, maxRetries);
+  /**
+   * 数据先找**数据集**，找不到再退回环境变量里的数组。
+   *
+   * 退回那一支是为了兼容：`dataKey` 本来就指向 `env.vars[k]`，已有的用例还绑在那儿。
+   * 但新的数据应该进数据集——环境变量是「这个环境怎么连」，数据是「拿什么去试」，
+   * 两件事混在一个口袋里，改哪个都要担心碰到另一个。
+   */
+  const ds = c.dataKey ? getDataset(c.projectId, c.dataKey) : undefined;
+  const envArr = c.dataKey ? env?.vars?.[c.dataKey] : undefined;
+  const raw = ds?.rows ?? (Array.isArray(envArr) ? envArr : null);
+  if (!raw || !raw.length) return runCaseWithHeal(c, body, maxRetries);
+  /**
+   * 标了唯一的列，这一次运行整批加同一个后缀。
+   *
+   * 同一批用同一个后缀，是为了让同一次运行里的多行仍然可以互相引用；
+   * 而两次运行后缀不同，第二遍才不会撞唯一约束——「跑第二遍撞已存在」是 E2E 最常
+   * 复发的一种失败，而它每次看起来都像产品坏了。
+   */
+  const suffix = runSuffix();
+  const rows = ds?.uniqueCols.length ? ds.rows.map((r) => uniquify(r, ds.uniqueCols, suffix)) : raw;
 
   let last: { run: RunRecord; attempts: number; healed: boolean } | undefined;
   let passed = 0;
@@ -1960,6 +1988,79 @@ app.post("/api/mutation/:wfRunId", (req, res) => {
 app.get("/api/mutation/:wfRunId", (req, res) => {
   const r = readMutationReport(req.params.wfRunId);
   return r ? res.json({ report: r }) : res.status(404).json({ error: "这次运行还没有变异报告" });
+});
+
+/* ---- 测试数据集 ---- */
+
+app.get("/api/projects/:id/datasets", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  const sets = listDatasets(req.params.id);
+  // 「谁在用它」要跟着列表走：一个不知道被谁用着的数据集，没人敢删。
+  const cases = listCases(req.params.id);
+  res.json({
+    datasets: sets.map((d) => ({
+      ...d,
+      usedBy: cases.filter((c) => c.dataKey === d.name).map((c) => ({ id: c.id, title: c.title })),
+    })),
+  });
+});
+
+/**
+ * 解析但**不落库**——导入的第一步是让人看一眼解析成了什么。
+ *
+ * 一份列名解析错的数据集，症状不是报错，是二十分钟后一批「断言没通过」，
+ * 而错的是数据不是产品。所以预览是必经的一步，不是可选的便利。
+ */
+app.post("/api/datasets/preview", (req, res) => {
+  const { text } = (req.body ?? {}) as { text?: string };
+  if (!text?.trim()) return res.status(400).json({ error: "没有内容可解析" });
+  try {
+    const { rows, format } = parseRows(text);
+    const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+    res.json({ format, columns, rows: rows.slice(0, 50), total: rows.length, warnings: inspectRows(rows) });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.post("/api/projects/:id/datasets", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  const { name, text, rows, uniqueCols } = (req.body ?? {}) as {
+    name?: string;
+    text?: string;
+    rows?: Array<Record<string, string>>;
+    uniqueCols?: string[];
+  };
+  if (!name?.trim()) return res.status(400).json({ error: "数据集要有名字——用例靠名字引它" });
+  try {
+    const parsed = rows ?? parseRows(String(text ?? "")).rows;
+    if (!parsed.length) return res.status(400).json({ error: "一行数据都没有" });
+    res.json({
+      dataset: saveDataset({ projectId: req.params.id, name: name.trim(), rows: parsed, uniqueCols }),
+      warnings: inspectRows(parsed),
+    });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+app.delete("/api/datasets/:id", (req, res) => {
+  deleteDataset(req.params.id);
+  res.json({ ok: true });
+});
+
+/**
+ * 这条用例引的列，绑的数据集有没有。
+ *
+ * `${row.emial}` 现在会**原样留在步骤里**——那串字会被当成字面量输进表单，
+ * 而没有任何一层会喊一声。这个接口就是那一声。
+ */
+app.get("/api/cases/:id/data-binding", (req, res) => {
+  const c = getCase(req.params.id);
+  if (!c) return res.status(404).json({ error: "case not found" });
+  const ds = c.dataKey ? getDataset(c.projectId, c.dataKey) : undefined;
+  const steps = [...c.steps.map((s) => s.text), c.precondition ?? "", c.expected ?? ""];
+  res.json({ dataKey: c.dataKey ?? "", dataset: ds ? { name: ds.name, columns: ds.columns, rows: ds.rows.length, uniqueCols: ds.uniqueCols } : undefined, ...checkBinding(steps, ds) });
 });
 
 app.get("/api/cases/:id/code", async (req, res) => {

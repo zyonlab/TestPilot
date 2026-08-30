@@ -1144,9 +1144,35 @@ function DetailPanel({ tc, flake }: { tc: TestCase; flake?: Flakiness }) {
   const setQuarantine = useStore((s) => s.setQuarantine);
   const patchCase = useStore((s) => s.patchCase);
   const [copied, setCopied] = useState(false);
-  // Data-driven binding draft (patched on blur to avoid a request per keystroke).
-  const [dataKeyDraft, setDataKeyDraft] = useState(tc.dataKey ?? "");
-  useEffect(() => setDataKeyDraft(tc.dataKey ?? ""), [tc.id, tc.dataKey]);
+  /**
+   * 数据驱动的绑定。
+   *
+   * 原来这里是个自由输入框：名字打错没有任何提示，而后果是导出的工程里
+   * `${row.x}` 原样进了表单——一个看起来像占位符的字符串被当成字面量输进去，
+   * 三层里没有一层会喊。所以改成两件事：
+   *   · **从已有数据集里选**，名字不再靠手打；
+   *   · 选完当场对一遍列：步骤引了数据集没有的列，这里就说出来。
+   */
+  const [datasets, setDatasets] = useState<Array<{ name: string; columns: string[]; rows: number }>>([]);
+  const [binding, setBinding] = useState<{ missing: string[]; unused: string[]; rows?: number } | null>(null);
+  useEffect(() => {
+    if (!tc.projectId) return;
+    void fetch(`${API}/api/projects/${tc.projectId}/datasets`)
+      .then((r) => r.json())
+      .then((d: { datasets?: Array<{ name: string; columns: string[]; rows: unknown[] }> }) =>
+        setDatasets((d.datasets ?? []).map((x) => ({ name: x.name, columns: x.columns, rows: x.rows.length }))),
+      )
+      .catch(() => setDatasets([]));
+  }, [tc.projectId]);
+  useEffect(() => {
+    setBinding(null);
+    void fetch(`${API}/api/cases/${tc.id}/data-binding`)
+      .then((r) => r.json())
+      .then((d: { missing?: string[]; unused?: string[]; dataset?: { rows: number } }) =>
+        setBinding({ missing: d.missing ?? [], unused: d.unused ?? [], rows: d.dataset?.rows }),
+      )
+      .catch(() => setBinding(null));
+  }, [tc.id, tc.dataKey, tc.steps]);
   const [debugOpen, setDebugOpen] = useState(false);
   // Last run of THIS case (single or suite) — shown inline. The Runs page is the
   // suite ledger; single-case forensics live here with the case.
@@ -1283,22 +1309,41 @@ function DetailPanel({ tc, flake }: { tc: TestCase; flake?: Flakiness }) {
             <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
               {t("cases.dataDriven")}
             </span>
-            {tc.dataKey && (
+            {tc.dataKey && binding?.rows !== undefined && (
               <span className="rounded bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                {"${env." + tc.dataKey + "}"}
+                {t("cases.dataRuns", { n: binding.rows })}
               </span>
             )}
           </div>
-          <input
-            value={dataKeyDraft}
-            onChange={(e) => setDataKeyDraft(e.target.value)}
-            onBlur={() => {
-              const v = dataKeyDraft.trim();
-              if (v !== (tc.dataKey ?? "")) void patchCase(tc.id, { dataKey: v });
-            }}
-            placeholder={t("cases.dataDrivenPlaceholder")}
+          <select
+            value={tc.dataKey ?? ""}
+            onChange={(e) => void patchCase(tc.id, { dataKey: e.target.value })}
             className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
-          />
+          >
+            <option value="">{t("cases.dataNone")}</option>
+            {datasets.map((d) => (
+              <option key={d.name} value={d.name}>
+                {d.name}（{d.rows} 行）
+              </option>
+            ))}
+            {/* 绑的名字不在数据集里（老的环境变量数组，或者数据集被删了）也要留着，
+                否则打开一次抽屉就把人家的绑定悄悄清了。 */}
+            {tc.dataKey && !datasets.some((d) => d.name === tc.dataKey) && (
+              <option value={tc.dataKey}>{t("cases.dataLegacy", { key: tc.dataKey })}</option>
+            )}
+          </select>
+          {/* 引了但数据集里没有的列。这是这一层唯一会静默出错的地方，所以它要显眼。 */}
+          {!!binding?.missing.length && (
+            <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              {t("cases.dataMissing", { cols: binding.missing.join("、") })}
+            </p>
+          )}
+          {!binding?.missing.length && !!binding?.unused.length && tc.dataKey && (
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              {t("cases.dataUnused", { cols: binding.unused.join("、") })}
+            </p>
+          )}
           <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
             {t("cases.dataDrivenHelp")}
           </p>

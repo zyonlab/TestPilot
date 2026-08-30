@@ -113,3 +113,20 @@ describe("导出的工程结构", () => {
     expect(files["tests/_/p1-单条.spec.ts"]).toContain("打开首页");
   });
 });
+
+/**
+ * 数据驱动的导出。
+ *
+ * 判据只有两条，都关乎「失败的时候看得懂吗」和「离开平台还跑得起来吗」：
+ * 一行一个 test（报告直接说是第几行），数据随工程走（不回平台取）。
+ */
+describe("数据驱动的导出", () => {
+  const project = { id: "p1", name: "X", targetUrl: "http://x.invalid", targetPlatform: "web", createdAt: "" } as Project;
+
+  it("没绑数据集就是普通的一个 test", () => {
+    const files = buildExportFiles(project, [kase("c1", ["点 A"], { title: "普通" })]);
+    const spec = files["tests/_/p1-普通.spec.ts"]!;
+    expect(spec).not.toContain("for (const");
+    expect(Object.keys(files).some((f) => f.startsWith("tests/data/"))).toBe(false);
+  });
+});

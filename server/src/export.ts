@@ -1,5 +1,6 @@
 import type { Project, TestCase, Environment } from "./db.js";
 import { buildLayers, type Layers } from "./exportLayers.js";
+import { getDataset, type Dataset } from "./datasets.js";
 
 /**
  * 文件名。
@@ -31,11 +32,44 @@ const TAG: Record<TestCase["type"], string> = {
   e2e: "@e2e",
 };
 
+/** 循环体里的代码多缩一级。缩进不影响执行，但一份缩进是错的导出没人愿意读第二眼。 */
+const indent = (s: string): string => s.replace(/^(?=.)/gm, "  ");
+
 /**
  * @param up 从这个 spec 文件回到 `tests/` 要走几级。按模块建目录之后是 `../`，
  *           平铺时是 `./`——写死任何一个，另一种布局的导入路径就是坏的。
  */
-function specForCase(tc: TestCase, targetUrl: string, up = "./", layers?: Layers): string {
+/**
+ * 把一段可能引用了数据行的文本，变成一个 JS 表达式。
+ *
+ * 用**字符串拼接**而不是模板字符串：模板字符串要转义反引号和 `${`，而步骤原文里这两样
+ * 都可能有。少一层转义，就少一类只在某几条用例上才犯的错。
+ *
+ * 第一版是拿正则去改写**已经生成好的代码**（把 `${row.x}` 换成 `${r.x}`），那条路本身
+ * 就错：`lit()` 已经把步骤包进了 JSON 双引号，改完得到的是
+ * `aiAction("在 firstName 填入 ${r.firstName}")`——双引号不插值，那串字会被原样输进表单，
+ * 而且没有任何一层会报错。生成代码这件事上，字符串替换分不清代码、注释和字面量。
+ */
+function rowExpr(text: string): string {
+  const parts: string[] = [];
+  let last = 0;
+  for (const m of text.matchAll(/\$\{row(?:\.([A-Za-z0-9_]+))?\}/g)) {
+    if (m.index! > last) parts.push(lit(text.slice(last, m.index!)));
+    parts.push(m[1] ? `r[${JSON.stringify(m[1])}]` : "JSON.stringify(r)");
+    last = m.index! + m[0].length;
+  }
+  if (!parts.length) return lit(text);
+  if (last < text.length) parts.push(lit(text.slice(last)));
+  return parts.join(" + ");
+}
+
+function specForCase(
+  tc: TestCase,
+  targetUrl: string,
+  up = "./",
+  layers?: Layers,
+  dataset?: Dataset,
+): string {
   const tags = `@${tc.priority} ${TAG[tc.type] ?? "@functional"}`;
   /**
    * 步骤分三层写：共享前置调 flow，重复的单步调 action，其余内联。
@@ -43,6 +77,10 @@ function specForCase(tc: TestCase, targetUrl: string, up = "./", layers?: Layers
    * 抽取只改组织不改语义——展开之后的序列和原来逐字相同（`expandPlan` 就是为了让这条
    * 能被测试验证）。没有 `layers` 时退回全部内联：一个只有一条用例的项目抽什么都是负担。
    */
+  // 绑了数据集才把 `${row.x}` 当引用解析。没绑数据集的用例里出现 `${row.x}` 是个 bug，
+  // 不该在这里被偷偷「修好」——`checkBinding` 会把它作为 missing 报出来。
+  const dd = !!dataset?.rows.length;
+  const T = (s: string): string => (dd ? rowExpr(s) : lit(s));
   const plan = layers?.plan.get(tc.id);
   const usedFlows = new Set<string>();
   const usedActions = new Set<string>();
@@ -57,14 +95,14 @@ function specForCase(tc: TestCase, targetUrl: string, up = "./", layers?: Layers
             usedActions.add(s.name);
             return `  await ${s.name}(aiAction);`;
           }
-          return `  await aiAction(${lit(s.text)});`;
+          return `  await aiAction(${T(s.text)});`;
         })
         .join("\n")
-    : tc.steps.map((s) => `  await aiAction(${lit(s.text)});`).join("\n");
+    : tc.steps.map((s) => `  await aiAction(${T(s.text)});`).join("\n");
   const post = tc.postSteps.length
     ? "\n  // teardown\n" +
       tc.postSteps
-        .map((s) => `  await aiAction(${lit(s.text)}).catch(() => {});`)
+        .map((s) => `  await aiAction(${T(s.text)}).catch(() => {});`)
         .join("\n")
     : "";
   /**
@@ -78,7 +116,7 @@ function specForCase(tc: TestCase, targetUrl: string, up = "./", layers?: Layers
     ? `  await checkOracle(page, ${JSON.stringify(tc.oracle)}${tc.oracle.kind === "delta" ? ", before" : ""});` +
       (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
     : tc.expected
-      ? `  await aiAssert(${lit(tc.expected)});`
+      ? `  await aiAssert(${T(tc.expected)});`
       : `  await aiAssert("the page reached the expected state");`;
   const trace = tc.requirementId ? ` — req ${tc.requirementId}` : "";
   const usesOracle = !!tc.oracle;
@@ -93,14 +131,43 @@ function specForCase(tc: TestCase, targetUrl: string, up = "./", layers?: Layers
   ]
     .filter(Boolean)
     .join("\n");
-  return `import { test } from "${up}ai";
-${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}
-// ${tc.priority} · ${tc.type}${trace} — ${tc.priorityReason || ""}
-test(${JSON.stringify(`[${tags}] ${tc.title}`)}, async ({ ${fixtures.join(", ")} }) => {
-  await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
+  const head = `import { test } from "${up}ai";
+${usesOracle ? `import { checkOracle${needsBefore ? ", bodyText" : ""} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
+  const body = `  await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
 ${needsBefore ? "  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await bodyText(page);\n" : ""}${steps}
-${assert}${post}
+${assert}${post}`;
+  const title = `[${tags}] ${tc.title}`;
+
+  /**
+   * 绑了数据集的用例：**一行一个 test**，不是一个 test 里跑一个循环。
+   *
+   * 差别在失败的时候：一个 test 里循环，报告只说「这条用例挂了」，是哪一行要去翻日志；
+   * 一行一个 test，报告直接说「第 2 行 Jane/Roe 挂了」。E2E 的失败定位成本几乎全在这里。
+   *
+   * 数据随工程走（`tests/data/<name>.json`），不是运行时去平台上取——导出的工程要能
+   * 离开平台自己跑，而一份留在服务器上的数据集会让它在别人的 CI 上第一天就挂。
+   */
+  if (!dataset?.rows.length) {
+    return `${head}
+// ${tc.priority} · ${tc.type}${trace} — ${tc.priorityReason || ""}
+test(${JSON.stringify(title)}, async ({ ${fixtures.join(", ")} }) => {
+${body}
 });
+`;
+  }
+  const cols = dataset.columns;
+  return `${head}import rows from "${up}data/${dataset.name}.json";
+
+// ${tc.priority} · ${tc.type}${trace} — ${tc.priorityReason || ""}
+// 数据驱动：${dataset.rows.length} 行各跑一次${dataset.uniqueCols.length ? `；${dataset.uniqueCols.join("/")} 每次运行加唯一后缀` : ""}
+${dataset.uniqueCols.length ? `const suffix = process.env.RUN_SUFFIX || \`r\${Date.now().toString(36).slice(-4)}\`;\nconst uniq = (v: string) => { const at = v.indexOf("@"); return at > 0 ? \`\${v.slice(0, at)}-\${suffix}\${v.slice(at)}\` : \`\${v}-\${suffix}\`; };\n` : ""}
+for (const [i, row] of (rows as Array<Record<string, string>>).entries()) {
+${dataset.uniqueCols.length ? `  const r = { ...row${cols.map((c) => (dataset.uniqueCols.includes(c) ? `, ${JSON.stringify(c)}: uniq(row[${JSON.stringify(c)}] ?? "")` : "")).join("")} };\n` : "  const r = row;\n"}\
+  // 一行一个 test：失败时报告直接说是第几行，不用去翻日志。
+  test(${JSON.stringify(title)} + \` — 第 \${i + 1} 行\`, async ({ ${fixtures.join(", ")} }) => {
+${indent(body)}
+  });
+}
 `;
 }
 
@@ -381,7 +448,9 @@ ${loginSteps}
     let name = `${dir}/${tc.priority.toLowerCase()}-${slug(tc.title)}.spec.ts`;
     if (taken.has(name)) name = `${dir}/${tc.priority.toLowerCase()}-${slug(tc.title)}-${tc.id}.spec.ts`;
     taken.add(name);
-    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl, "../", layers);
+    const ds = tc.dataKey ? getDataset(project.id, tc.dataKey) : undefined;
+    if (ds?.rows.length) files[`tests/data/${ds.name}.json`] = JSON.stringify(ds.rows, null, 2) + "\n";
+    files[name] = specForCase(tc, defaultEnv?.baseUrl || project.targetUrl, "../", layers, ds);
   }
 
   const envLines = [...envVarNames].sort().map((k) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildExportFiles } from "../src/export.js";
 import type { Project, TestCase } from "../src/db.js";
+import { saveDataset } from "../src/datasets.js";
 
 /**
  * 导出的工程是这条流水线的最后一格，也是唯一一格离开平台之后还要自己跑得起来的。
@@ -112,5 +113,65 @@ describe("导出的目录按模块分", () => {
     const spec = files["tests/账号与登录/p0-登录成功.spec.ts"]!;
     expect(spec).toContain('from "../ai"');
     expect(spec).toContain('from "../oracle"');
+  });
+});
+
+describe("绑了数据集的用例导出成什么", () => {
+  const ds = {
+    id: "ds1",
+    projectId: "p1",
+    name: "新增主人",
+    columns: ["firstName", "telephone"],
+    rows: [
+      { firstName: "John", telephone: "6085551023" },
+      { firstName: "Jane", telephone: "6085559999" },
+    ],
+    uniqueCols: ["telephone"],
+    createdAt: "",
+  };
+  const dd = kase({
+    id: "cd",
+    title: "新增主人成功后出现在列表里",
+    dataKey: "新增主人",
+    steps: [
+      { order: 1, text: "在 firstName 填入 ${row.firstName}" },
+      { order: 2, text: "在 telephone 填入 ${row.telephone}" },
+    ],
+    expected: "主人列表里出现 ${row.firstName}",
+  } as Partial<TestCase>);
+
+  /**
+   * 这条钉的是一个真犯过的 bug：第一版拿正则去改写**已经生成好的代码**，
+   * 而 `lit()` 早就把步骤包进了 JSON 双引号，于是导出的是
+   * `aiAction("在 firstName 填入 ${r.firstName}")`——双引号不插值，
+   * 那串字会被原样输进表单，没有任何一层会报错。
+   */
+  it("占位符要变成真的取值，不能原样留在字符串里", () => {
+    saveDataset({ projectId: "p1", name: ds.name, rows: ds.rows, uniqueCols: ds.uniqueCols });
+    const files = buildExportFiles(project, [dd]);
+    const spec = files["tests/_/p0-新增主人成功后出现在列表里.spec.ts"]!;
+    expect(spec).toContain('aiAction("在 firstName 填入 " + r["firstName"])');
+    expect(spec).toContain('aiAssert("主人列表里出现 " + r["firstName"])');
+    // 反过来：整个文件里不许再出现「占位符被当成字面量」的形态。
+    expect(spec).not.toMatch(/"[^"\n]*\$\{(row|r)\./);
+    // 数据随工程走，不是运行时去平台上取。
+    expect(files["tests/data/新增主人.json"]).toContain("6085551023");
+  });
+
+  it("一行一个 test，且标了唯一的列才加后缀", () => {
+    saveDataset({ projectId: "p1", name: ds.name, rows: ds.rows, uniqueCols: ds.uniqueCols });
+    const spec = buildExportFiles(project, [dd])["tests/_/p0-新增主人成功后出现在列表里.spec.ts"]!;
+    // 失败时报告要能直接说是第几行。
+    expect(spec).toContain("第 ${i + 1} 行");
+    expect(spec).toContain('"telephone": uniq(row["telephone"] ?? "")');
+    // firstName 没标唯一，就不许被动过——加后缀会改变值。
+    expect(spec).not.toContain('"firstName": uniq');
+  });
+
+  it("没绑数据集时占位符原样保留：那是 checkBinding 该报的 bug，不是导出该偷偷修的", () => {
+    const spec = buildExportFiles(project, [kase({ ...dd, id: "c2", dataKey: undefined } as Partial<TestCase>)])[
+      "tests/_/p0-新增主人成功后出现在列表里.spec.ts"
+    ]!;
+    expect(spec).toContain('aiAction("在 firstName 填入 ${row.firstName}")');
   });
 });
