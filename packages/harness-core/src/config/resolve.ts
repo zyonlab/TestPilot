@@ -5,6 +5,8 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   execution: { queueConcurrency: 1, runnerCount: 1 },
   events: { keepLast: 200_000, trimMs: 10 * 60_000 },
   budget: { calls: 500, usd: 0, ms: 4 * 60 * 60_000 },
+  // 与 harness-testing/src/baselines/perf.ts 的 DEFAULT_BUDGETS 一致。
+  perfBudget: { ttfbMs: 800, fcpMs: 1800, domContentLoadedMs: 3000, loadMs: 5000 },
   ablate: [],
   guard: { allowHosts: ["localhost", "127.0.0.1", "::1"], blockIrreversible: true, allowlistOnly: false },
   capabilities: [],
@@ -31,6 +33,7 @@ export function resolveHarnessConfig(
     execution: { ...DEFAULT_CONFIG.execution, ...file.execution },
     events: { ...DEFAULT_CONFIG.events, ...file.events },
     budget: { ...DEFAULT_CONFIG.budget, ...file.budget },
+    perfBudget: { ...DEFAULT_CONFIG.perfBudget, ...file.perfBudget },
     ablate: file.ablate ?? DEFAULT_CONFIG.ablate,
     guard: { ...DEFAULT_CONFIG.guard, ...file.guard },
     capabilities: file.capabilities ?? DEFAULT_CONFIG.capabilities,

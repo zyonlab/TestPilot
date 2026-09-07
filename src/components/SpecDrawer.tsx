@@ -53,20 +53,18 @@ export function SpecDrawer({ wfRunId, onClose }: { wfRunId: string; onClose: () 
         onSelect: () => setActive(i),
       }))}
     >
-      {error && <div className="p-4 text-[12.5px] text-rose-500">{error}</div>}
+      {error && <div className="p-4 text-[0.8125rem] text-bad">{error}</div>}
       {doc && (
         <>
-          <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-[11.5px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-[0.75rem] text-muted-foreground">
             <span className="font-mono">{doc.name}</span>
-            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-400">
-              {t("spec.wasInput")}
-            </span>
+            <span className="rounded bg-ok-soft px-1.5 py-0.5 text-ok">{t("spec.wasInput")}</span>
             <span className="ml-auto font-mono">{doc.text.length} chars</span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
             <Markdown text={doc.text} />
           </div>
-          <p className="border-t border-border px-4 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+          <p className="border-t border-border px-4 py-2 text-[0.75rem] leading-relaxed text-muted-foreground">
             {t("spec.footnote")}
           </p>
         </>

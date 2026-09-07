@@ -3,7 +3,6 @@ import type { EventEnvelope, LogLine, ProcStatus } from "./types";
 import { connectEvents, type WsState } from "./ws";
 import { API_BASE } from "./base";
 
-
 /** Log tail kept in memory. Full logs live in lineage on the server, not here. */
 const LOG_CAP = 400;
 

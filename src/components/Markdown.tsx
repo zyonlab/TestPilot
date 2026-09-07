@@ -24,7 +24,7 @@ function inline(text: string, keyBase: string): React.ReactNode[] {
     const key = `${keyBase}-${i++}`;
     if (tok.startsWith("`"))
       out.push(
-        <code key={key} className="rounded bg-muted px-1 py-0.5 font-mono text-[11.5px]">
+        <code key={key} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.75rem]">
           {tok.slice(1, -1)}
         </code>,
       );
@@ -57,7 +57,7 @@ export function Markdown({ text, className }: { text: string; className?: string
     if (table.length) {
       blocks.push(
         <div key={`tw-${blocks.length}`} className="my-2 overflow-x-auto">
-          <table className="w-full border-collapse text-[12px]">
+          <table className="w-full border-collapse text-[0.75rem]">
             <tbody>
               {table.map((row, r) => (
                 <tr key={r} className="border-b border-border/60">
@@ -84,7 +84,7 @@ export function Markdown({ text, className }: { text: string; className?: string
         blocks.push(
           <pre
             key={`code-${idx}`}
-            className="my-2 overflow-x-auto rounded-lg bg-muted p-2.5 font-mono text-[11.5px] leading-relaxed"
+            className="my-2 overflow-x-auto rounded-lg bg-muted p-2.5 font-mono text-[0.75rem] leading-relaxed"
           >
             {code.join("\n")}
           </pre>,
@@ -115,9 +115,9 @@ export function Markdown({ text, className }: { text: string; className?: string
           key={`h-${idx}`}
           className={cn(
             "mt-3 font-display font-medium text-foreground",
-            depth === 1 && "text-[16px]",
-            depth === 2 && "text-[14px]",
-            depth >= 3 && "text-[12.5px] text-muted-foreground",
+            depth === 1 && "text-[1.0625rem]",
+            depth === 2 && "text-[0.875rem]",
+            depth >= 3 && "text-[0.8125rem] text-muted-foreground",
           )}
         >
           {inline(heading[2], `h${idx}`)}
@@ -131,7 +131,7 @@ export function Markdown({ text, className }: { text: string; className?: string
       blocks.push(
         <blockquote
           key={`q-${idx}`}
-          className="my-1.5 border-l-2 border-primary/40 pl-2.5 text-[12.5px] text-muted-foreground"
+          className="my-1.5 border-l-2 border-primary/40 pl-2.5 text-[0.8125rem] text-muted-foreground"
         >
           {inline(line.replace(/^>\s?/, ""), `q${idx}`)}
         </blockquote>,
@@ -142,7 +142,12 @@ export function Markdown({ text, className }: { text: string; className?: string
     if (line.startsWith("|")) {
       // The |---|---| separator row carries no content.
       if (/^\|[-\s|:]+\|$/.test(line)) return;
-      table.push(line.split("|").slice(1, -1).map((c) => c.trim()));
+      table.push(
+        line
+          .split("|")
+          .slice(1, -1)
+          .map((c) => c.trim()),
+      );
       return;
     }
 
@@ -161,5 +166,5 @@ export function Markdown({ text, className }: { text: string; className?: string
   });
   flush();
 
-  return <div className={cn("text-[13px] text-foreground", className)}>{blocks}</div>;
+  return <div className={cn("text-[0.8125rem] text-foreground", className)}>{blocks}</div>;
 }

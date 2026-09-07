@@ -22,7 +22,11 @@ export function describeOracle(
       return t("artifact.oracle.url", { v: o.value });
     case "count":
       return t(
-        o.op === "gte" ? "artifact.oracle.countGte" : o.op === "lte" ? "artifact.oracle.countLte" : "artifact.oracle.countEq",
+        o.op === "gte"
+          ? "artifact.oracle.countGte"
+          : o.op === "lte"
+            ? "artifact.oracle.countLte"
+            : "artifact.oracle.countEq",
         { v: o.value, n: o.n },
       );
     case "delta":

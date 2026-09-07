@@ -5,8 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./casegen": "./src/casegen/index.ts",
     "./exec": "./src/exec/index.ts",
-    "./baselines": "./src/baselines/index.ts"
+    "./baselines": "./src/baselines/index.ts",
+    "./retrieve": "./src/retrieve/index.ts"
   },
   "scripts": {
     "test": "vitest run",

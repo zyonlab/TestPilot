@@ -17,8 +17,10 @@ import {
   lendGate,
   resolveHarnessConfig,
   setModelLease,
+  shutdownTracing,
   SqliteEventStore,
   startRetention,
+  startTracing,
   Supervisor,
   type CapabilityRecipe,
   type ProcStatus,
@@ -28,9 +30,18 @@ import harnessFile from "../harness.config.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
 
+/**
+ * 追踪在这里起，因为**这个模块是导入图里最早被求值的那个**（index → exec → procs），
+ * 而它上面那行 `import "dotenv/config"` 保证密钥这时候已经在环境里了。
+ *
+ * 顺序错了的后果是文档里点名的那个经典错误：Langfuse 在环境变量加载之前初始化，
+ * 于是它带着空密钥起来，然后一声不响地什么都不发。
+ */
+export const tracing = startTracing({ service: "gateway" });
+
 // Events live next to the app DB but in their own file: lineage is append-heavy and
 // pruned on a different schedule than the product tables.
-const eventStore = new SqliteEventStore(resolve(DATA_DIR, "events.db"));
+export const eventStore = new SqliteEventStore(resolve(DATA_DIR, "events.db"));
 
 export const bus = new EventBus(eventStore, {
   coalesceMs: 100,
@@ -55,9 +66,35 @@ const lending = lendGate(modelGate);
  * replay (and, later, for fine-tuning): the point is that the file cannot grow forever,
  * not that history is cheap.
  */
+/** 还没跑完的运行。它们的事件不参与淘汰——见 RetentionOptions.protectRuns。 */
+let unfinishedRuns: () => string[] = () => [];
+export const setUnfinishedRuns = (fn: () => string[]): void => {
+  unfinishedRuns = fn;
+};
+
 export const retention = startRetention(eventStore, {
   keepLast: config.events.keepLast,
   everyMs: config.events.trimMs,
+  /*
+   * 正在跑的那些一行都不删。
+   *
+   * 这是「三天运行」那四个洞里最外围、也最容易被忽略的一个：保留窗口按条数算，
+   * 一个忙碌的小时比一个安静的星期产生更多行——于是一次长运行会在自己还没跑完的时候
+   * 被自己产生的日志挤出窗口。失败的样子是轨迹变空，而不是任何一处报错。
+   */
+  protectRuns: () => unfinishedRuns(),
+  /*
+   * 日志和进程状态各自一个小窗口。
+   *
+   * 实测 200,014 行事件里：`log` 148,523（74.3%）、`process.status` 40,464（20.2%）、
+   * **真正的工作流血缘 2,938（1.47%）**——而血缘是「一次运行发生了什么」的唯一记录。
+   * 按总条数裁的时候，一个吵闹的子进程会把上一次运行的血缘整段挤出去，
+   * 而症状是那次运行的轨迹变成空的，没有任何一处报错。
+   *
+   * 数字的来历：日志 2 万行够覆盖最近几次运行的输出；进程状态是**级**不是事件，
+   * 留 2000 行只是为了还能画出最近的抖动。
+   */
+  keepByKind: { log: 20_000, "process.status": 2_000 },
 });
 
 /**
@@ -78,6 +115,12 @@ export const setAgentObserver = (fn: (input: unknown) => Promise<unknown>): void
   observeForAgent = fn;
 };
 
+let askForChild: ((input: unknown) => Promise<unknown>) | undefined;
+/** 让子进程能问模型。见 `extendParentApi` 里的 `askModel`。 */
+export const setChildAsk = (fn: (input: unknown) => Promise<unknown>): void => {
+  askForChild = fn;
+};
+
 export const supervisor = new Supervisor(bus, {
   extendParentApi: (processId) => ({
     ...(lending.api(processId) as unknown as Record<string, (...args: never[]) => unknown>),
@@ -88,6 +131,19 @@ export const supervisor = new Supervisor(bus, {
     observeProduct: async (input: never) => {
       if (!observeForAgent) throw new Error("the gateway has no observer wired up yet");
       return (await observeForAgent(input)) as never;
+    },
+    /**
+     * 子进程问模型。
+     *
+     * 探索跑在 runner 里，而那个进程**没有 `ModelClient`**（它只向网关领模型票），
+     * 端点还被改写成了 Midscene 的 no-think 代理。所以"探索之前先问一次业务场景"
+     * 这件事只能由 runner 发起、由网关执行——
+     * 一个函数是过不了 RPC 边界的，第一版把 `ask` 直接塞进 spec，
+     * 序列化时被丢掉，表现成"计划永远是 null"。
+     */
+    askModel: async (input: never) => {
+      if (!askForChild) throw new Error("the gateway has no model wired up for children yet");
+      return (await askForChild(input)) as never;
     },
   }),
 });
@@ -243,6 +299,33 @@ export function addCapability(recipe: CapabilityRecipe): CapabilityRecipe {
   return recipe;
 }
 
+/**
+ * 改一条能力的工作目录。
+ *
+ * 唯一可以在运行时改的字段，因为它是唯一**会因为换一台机器而失效**的：
+ * 命令与参数是这条配方的定义，而 cwd 是一个本机事实。基准应用装在
+ * `/Users/xxx/bench/...` 下，配置文件里写死的那个路径在别人的机器上一定不存在，
+ * 而症状是「启动了、立刻退出」——去改源码里的一行常量不是那个人该做的事。
+ *
+ * 改完重新注册（supervisor 认 spec，不认配方），并落盘：下次启动网关还得是这个目录。
+ */
+export function setCapabilityCwd(id: string, cwd: string): CapabilityRecipe {
+  const recipe = capabilities.find((c) => c.id === id);
+  if (!recipe) throw new Error(`${id} 不是一条已知的能力`);
+  if (supervisor.statusOf(id)?.state === "alive")
+    throw new Error(`${id} 正在跑——先停掉它再改工作目录，否则改的是下一次启动的事，界面却像是这一次`);
+  if (!existsSync(cwd)) throw new Error(`${cwd} 不存在`);
+  recipe.cwd = cwd;
+  registerCapability(recipe);
+  // 配置文件里声明的那些不写盘也能改（内存里已经生效），但写下来才跨得过重启。
+  const saved = loadSaved();
+  const at = saved.findIndex((c) => c.id === id);
+  if (at >= 0) saved[at] = recipe;
+  else saved.push(recipe);
+  writeFileSync(SAVED_CAPS, JSON.stringify(saved, null, 2));
+  return recipe;
+}
+
 /** Which ids are taken, so a draft can be told before it is saved rather than after. */
 export const takenProcessIds = (): string[] => supervisor.status().map((s) => s.id);
 
@@ -290,7 +373,25 @@ export async function startProcesses(log: (msg: string) => void): Promise<void> 
     return;
   }
   supervisor.attachExitHooks();
+  /**
+   * 退出时冲刷追踪。
+   *
+   * `attachExitHooks` 管的是子进程，管不到这里的 span 缓冲。不接这一段，网关自己发出的
+   * 调用（chat 起草、critic、语义判官、复核重写）在每次重启时都会丢掉最后一批——
+   * 而开发期重启是最频繁的事件。
+   *
+   * `once` 而不是 `on`：SIGINT 连按两次不该排队两次冲刷。
+   */
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.once(sig, () => {
+      void shutdownTracing();
+    });
+  }
+  process.once("beforeExit", () => {
+    void shutdownTracing();
+  });
   bus.publish(EventKind.log, { stream: "gateway", text: "gateway up" }, { processId: "gateway" });
+  log(tracing.enabled ? "Langfuse 追踪已开（gateway）" : `Langfuse 追踪关闭：${tracing.reason ?? "未配置"}`);
   const autostart = new Set(
     capabilities.filter((c) => c.autostart).map((c) => c.id),
   );

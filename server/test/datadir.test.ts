@@ -20,7 +20,16 @@ afterEach(() => {
 });
 
 describe("where an instance keeps its state", () => {
+  /**
+   * 这一条要**自己控制环境**，不能依赖「外面恰好没设」。
+   *
+   * 2026-09-01 起 `vitest.config.ts` 会给整个测试进程注入 `TP_DATA_DIR=.data-test`
+   * ——那是为了不让测试往真实的 `server/.data/workflows.db` 里塞假运行（实测一次
+   * `pnpm test` 会多出十几条永远停在 `running` 的 g1-text-cases，混进运行下拉和 ⌘K）。
+   * 于是这条断言的前提没了。断言本身仍然成立，只是它得先把变量清掉。
+   */
   it("defaults to the gateway's own .data, so nothing changes for a normal run", async () => {
+    delete process.env.TP_DATA_DIR;
     const { DATA_DIR } = await load();
     expect(DATA_DIR.endsWith("/.data")).toBe(true);
   });

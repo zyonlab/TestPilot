@@ -39,7 +39,7 @@ import type { Mutant } from "./operators.js";
 
 export interface RunOutcome {
   caseId: string;
-  status: "passed" | "failed";
+  status: "passed" | "failed" | "unobservable";
   failKind?: string;
   /** 判据求值时页面停在哪。用来分辨「判错」和「没走到」。 */
   endedAt?: string;
@@ -85,7 +85,7 @@ const NOTICEABLE_BY: Record<string, readonly string[]> = {
 
 export interface DetectionCase {
   caseId: string;
-  predicted: "passed" | "failed";
+  predicted: "passed" | "failed" | "unobservable";
   actual: "passed" | "failed";
   excluded?: boolean;
   excludeReason?: string;
@@ -127,6 +127,7 @@ const neverArrived = (o: RunOutcome): boolean => {
 
 const excludeOf = (o: RunOutcome): { excluded: true; excludeReason: string } | Record<string, never> => {
   if (infraExcluded(o)) return { excluded: true, excludeReason: "基础设施故障：没有判决，不是判错" };
+  if (o.status === "unobservable") return { excluded: true, excludeReason: "判据没量到：没有判决，不是判错也不是通过" };
   if (neverArrived(o))
     return {
       excluded: true,

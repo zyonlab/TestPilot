@@ -12,8 +12,17 @@ import {
   toDataUrls,
 } from "./exec.js";
 import { checkRun, classifyFailure, MachineOracleSchema } from "@testpilot/harness-testing";
-import { ALL_ABLATABLE, validateGraph, describeDiff } from "@testpilot/harness-core";
-import { approve, batchAdjust, editCase, pendingRuns, regenerate, reject, reviewBatch } from "./review.js";
+import { ALL_ABLATABLE, validateGraph, describeDiff, trimMiddle } from "@testpilot/harness-core";
+import {
+  approve,
+  batchAdjust,
+  caseFromGap,
+  editCase,
+  pendingRuns,
+  regenerate,
+  reject,
+  reviewBatch,
+} from "./review.js";
 import {
   DEFECT_TITLES,
   evalSubject,
@@ -26,12 +35,16 @@ import {
   runPairedEval,
   setCaseExecutor,
 } from "./evals.js";
-import { getEvalSpec, listEvalSpecs } from "./evalspecs.js";
+import { getEvalSpec, listEvalSpecs, specFromSuggestion } from "./evalspecs.js";
 import { listMaterials } from "./materials.js";
 import {
   activeRuns,
   allOutputs,
   cancelRun,
+  missingUpstream,
+  unfinishedRunIds,
+  resumePoint,
+  runDetail,
   getGraph,
   listGraphs,
   nodeOutput,
@@ -46,6 +59,9 @@ import {
   startRun,
   resumeRun,
   setRunBudget,
+  model,
+  reconfigureModel,
+  setRunBreakpoints,
 } from "./graphs.js";
 
 // The guard runs where the whole picture is known (url + login + steps + teardown), i.e.
@@ -73,14 +89,15 @@ import {
   addCapability,
   bus,
   setAgentObserver,
+  setUnfinishedRuns,
   capabilities,
+  setCapabilityCwd,
   config,
   modelGate,
   processStatuses,
   startProcesses,
   supervisor,
-  takenProcessIds,
-} from "./procs.js";
+  takenProcessIds, eventStore, setChildAsk } from "./procs.js";
 import { applyGraphDraft, chat, checkPrompt, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
 import { changes, codeLine, codeProvenance } from "./codeline.js";
 import { traceability, traceabilityOfRun } from "./trace.js";
@@ -105,8 +122,11 @@ import {
   resolveModelConfig,
   resolveChainConfig,
   setChainConfig,
+  resolveModelRuntime,
+  applyModelEnv,
 } from "./config.js";
 import { probeModel, generateCode, refineCase } from "./model.js";
+import { describeModelConfig, saveModelConfig } from "./modelconfig.js";
 // The executor moved to the domain package (it runs in the runner process now). The
 // gateway still imports it directly for the paths that have not been migrated yet:
 // explore, live debug and the wallet/dapp checks.
@@ -161,6 +181,9 @@ import {
   deleteSecret,
   computeFlakiness,
   getFlakiness,
+  logQuarantine,
+  recordBaselineVerdict,
+  listQuarantineLog,
   listFlakiness,
   updateRunHealing,
   createBatch,
@@ -189,6 +212,24 @@ import {
   LLM_DEBUG_DIR,
 } from "./settings.js";
 import { resolveText, resolveMap, redact, type ResolveContext } from "@testpilot/harness-core";
+import {
+  startRun as penguinStartRun,
+  cancelRun as penguinCancelRun,
+  workspaceOf as penguinWorkspaceOf,
+  reconcilePenguinRuns,
+} from "./penguinRun.js";
+import { writeDecisions, type Decision } from "./penguin.js";
+import { NotFound, appendLabels, calibration, diff as auditDiff, scan as auditScan, holdsOf } from "./audit.js";
+
+/**
+ * 哪套 harness 在跑。
+ *
+ * `penguin`（默认）= v3 的那条路：起一个 Penguin session，产物落 `runs/<runId>/*.json`。
+ * `graph` = 旧的图运行时，**Phase 3 才退役**——在那之前它是回滚开关，也是
+ * `server/test/**` 里六个用真 `startRun` 的测试跑的那条路。两条并存的代价是一个 if；
+ * 少了它，一次 Penguin 侧的故障就没有退路，而 `:5301` 上挂着已经完成的 Phase 2 前端。
+ */
+const RUNTIME = process.env.TP_RUNTIME === "graph" ? "graph" : "penguin";
 import { seedIfEmpty } from "./seed.js";
 import { buildExportFiles } from "./export.js";
 import {
@@ -507,6 +548,99 @@ app.post("/api/wallet/check", async (req, res) => {
   }
 });
 
+/**
+ * 生效中的模型配置。**永不回密钥，也永不回 `****`。**
+ *
+ * 「永不回 `****`」这一条是有来历的：此前界面把 `MIDSCENE_MODEL_API_KEY=****`
+ * 拼进一段可复制的 env 文本，粘进 `server/.env` 之后每一次调用都 401，
+ * 而 401 读起来像模型服务坏了。**界面永远不交出它拿不到的东西。**
+ *
+ * `sources` 逐字段说明这一项来自落盘 / env / 默认——落盘优先于 env，
+ * 所以「我改了 .env 怎么没反应」是这次改造必然会制造的一类困惑，
+ * 唯一的解法是把它说出来，而不是让人去猜优先级。
+ */
+app.get("/api/model/config", (_req, res) => {
+  const r = resolveModelRuntime();
+  const meta = describeModelConfig();
+  res.json({
+    effective: {
+      baseUrl: r.baseUrl,
+      modelName: r.modelName,
+      think: !r.noThink,
+      thinkBudget: r.thinkBudget ?? null,
+      timeoutMs: r.timeoutMs ?? null,
+      useQwenVL: r.useQwenVL,
+    },
+    sources: r.sources,
+    apiKey: meta.apiKey,
+    savedAt: meta.saved.updatedAt ?? null,
+    /**
+     * 执行层（runner）里 Midscene 打的地址**可能不是这里显示的那个**：
+     * `MIDSCENE_PROXY_URL` 在 runner 的 baseUrl 上是第一优先级。
+     * 不说出来的话，这次改造只是把误诊挪了个位置。
+     */
+    proxyInUse: process.env.MIDSCENE_PROXY_URL || null,
+  });
+});
+
+/**
+ * 存一份模型配置。
+ *
+ * **字段白名单 + 逐项校验**，而不是把 `req.body` 原样塞进去——
+ * 设置那条路上就有一个反例（`patch.prompts = req.body.prompts` 不校验 key，
+ * 任意键都会永久落进 settings.json）。
+ */
+app.post("/api/model/config", (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Parameters<typeof saveModelConfig>[0] = {};
+  try {
+    if (b.baseUrl !== undefined) {
+      const v = String(b.baseUrl).trim();
+      if (v && !/^https?:\/\//.test(v)) throw new Error("baseUrl 必须以 http:// 或 https:// 开头");
+      patch.baseUrl = v;
+    }
+    if (b.modelName !== undefined) patch.modelName = String(b.modelName).trim();
+    if (b.think !== undefined) patch.think = !!b.think;
+    if (b.useQwenVL !== undefined) patch.useQwenVL = !!b.useQwenVL;
+    for (const k of ["thinkBudget", "timeoutMs"] as const) {
+      if (b[k] === undefined) continue;
+      if (b[k] === "" || b[k] === null) {
+        (patch as Record<string, unknown>)[k] = "";
+        continue;
+      }
+      const n = Number(b[k]);
+      if (!Number.isInteger(n) || n <= 0) throw new Error(`${k} 必须是正整数`);
+      (patch as Record<string, unknown>)[k] = n;
+    }
+    // 三态：不传 = 不动；空串 = 清除落盘密钥回落 env；非空 = 加密写入。
+    if (b.apiKey !== undefined) patch.apiKey = String(b.apiKey);
+
+    saveModelConfig(patch);
+    applyModelEnv();
+    const r = resolveModelRuntime();
+    // 网关自己那份客户端是模块顶层常量，写 env 对它无效——显式让它跟上。
+    reconfigureModel({
+      baseUrl: r.baseUrl,
+      apiKey: r.apiKey,
+      model: r.modelName,
+      noThink: r.noThink,
+      ...(r.thinkBudget !== undefined ? { thinkBudget: r.thinkBudget } : {}),
+      ...(r.timeoutMs !== undefined ? { timeoutMs: r.timeoutMs } : {}),
+    });
+    res.json({
+      ok: true,
+      /**
+       * agent / runner 是在 spawn 那一刻拿到 env 快照的，所以它们要重启才生效。
+       * **不自动重启**：重启 agent 会 abort 正在跑的图，那是一个人该做的决定。
+       */
+      needsRestart: ["agent", "runner"],
+      activeRuns: activeRuns().length,
+    });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
 app.post("/api/model/test", async (req, res) => {
   const result = await probeModel(req.body ?? {});
   res.json(result);
@@ -735,10 +869,96 @@ app.post("/api/cases/:id/baselines/approve", (req, res) => {
 
 // Export a project's cases as a standalone runnable Playwright + Midscene project.
 // ?format=json returns the file map; otherwise streams a .zip download.
+/**
+ * 下载之前的自检。
+ *
+ * 每一条都是**已经查过的事实**，不是一句提醒——「记得检查登录有没有带走」这种话
+ * 谁都写得出来，而它对读的人没有任何帮助：他还是得自己去翻。
+ * 这里回答的是：隔离的有几条、断言被改松的有几条、登录环节这次到底带没带走、
+ * 环境的 query 参数有没有真的拼进 baseURL。
+ */
+app.get("/api/projects/:id/export-preflight", (req, res) => {
+  const project = getProject(req.params.id);
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const all = listCases(project.id);
+  const envs = listEnvironments(project.id);
+  const env = envs.find((e) => e.isDefault) ?? envs[0];
+
+  const quarantined = all.filter((c) => c.quarantined);
+  const degraded = all.filter((c) => c.degraded);
+  const noCode = all.filter((c) => !c.code?.trim());
+
+  // 登录到底带没带走：看**生成出来的文件里**有没有那个 setup，而不是看环境上写着什么。
+  const files = buildExportFiles(project, all, {
+    environments: envs,
+    secretKeys: listSecretMeta(project.id).map((s) => s.key),
+  });
+  const authFile = Object.keys(files).find((f) => f.includes("auth.setup"));
+  const configText = files["playwright.config.ts"] ?? "";
+  const queryKeys = Object.keys(env?.query ?? {});
+  /*
+   * query 参数有没有真的拼进 baseURL。
+   *
+   * 这里查的是生成出来的 config 文本本身：环境上配着 `?lang=zh`，而 `baseURL` 那一行
+   * 只写了 `defaultEnv.baseUrl`——导出的工程会打在一个没有这些参数的地址上，
+   * 而症状是「本地跑得好好的，导出去就找不到元素」。
+   */
+  const queryCarried = queryKeys.length === 0 || queryKeys.every((k) => configText.includes(k));
+
+  res.json({
+    checks: [
+      {
+        id: "quarantined",
+        ok: quarantined.length === 0,
+        n: quarantined.length,
+        cases: quarantined.map((c) => ({ id: c.id, title: c.title })),
+        excludedByDefault: true,
+      },
+      {
+        id: "degraded",
+        ok: degraded.length === 0,
+        n: degraded.length,
+        cases: degraded.map((c) => ({ id: c.id, title: c.title })),
+        excludedByDefault: true,
+      },
+      { id: "noCode", ok: noCode.length === 0, n: noCode.length, cases: noCode.map((c) => ({ id: c.id, title: c.title })) },
+      {
+        id: "login",
+        ok: !env?.login?.authRequired || !!authFile,
+        detail: env?.login?.authRequired
+          ? authFile
+            ? `登录会随导出带走：${authFile}`
+            : "这个环境声明了需要登录，但导出的工程里没有登录环节——它会以未登录状态跑"
+          : "这个环境不需要登录",
+      },
+      {
+        id: "query",
+        ok: queryCarried,
+        detail: queryKeys.length
+          ? queryCarried
+            ? `环境的 query 参数（${queryKeys.join(", ")}）在导出的配置里出现了`
+            : `环境配了 query 参数（${queryKeys.join(", ")}），但导出的 baseURL 里没有它们——导出的工程会打在一个不带参数的地址上`
+          : "这个环境没有 query 参数",
+      },
+    ],
+  });
+});
+
 app.get("/api/projects/:id/export", (req, res) => {
   const project = getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "project not found" });
-  const files = buildExportFiles(project, listCases(project.id), {
+  /*
+   * 默认把隔离的和断言被改松的排除掉。
+   *
+   * 两者都是**已知不可信**的用例：隔离的那条红不再拦门禁，改松的那条是靠删断言变绿的。
+   * 把它们打进交给客户的工程，等于把这套东西最不该交出去的两样东西一起交出去。
+   * `?include=all` 可以要回来——那是一个明确的决定，不是默认。
+   */
+  const includeAll = req.query.include === "all";
+  const cases = includeAll
+    ? listCases(project.id)
+    : listCases(project.id).filter((c) => !c.quarantined && !c.degraded);
+  const files = buildExportFiles(project, cases, {
     environments: listEnvironments(project.id),
     secretKeys: listSecretMeta(project.id).map((s) => s.key),
   });
@@ -855,7 +1075,16 @@ async function runAndPersistCase(
   const pngBuffers = readPngs(exec.pngPaths);
   const result = { ...exec, pngBuffers, screenshots: toDataUrls(pngBuffers) };
 
-  const perf = comparePerf(result.perfMetrics, getPerfBaseline(c.id), {});
+  /*
+   * 性能预算传进去，不再传 `{}`。
+   *
+   * `comparePerf` 一直支持它（超预算即判回归），但调用处一直给的是空对象，
+   * 于是只有 `DEFAULT_BUDGETS` 生效、而且没有任何地方配得到——AC-11 的
+   * 「与基线**和预算**比对」看起来像没做，其实是接线没接上。
+   *
+   * 两条线各管一件事：基线保「别变得更慢」，预算保「本来就不该这么慢」。
+   */
+  const perf = comparePerf(result.perfMetrics, getPerfBaseline(c.id), config.perfBudget);
   if (perf.status === "new_baseline" && Object.keys(result.perfMetrics).length > 0) {
     upsertPerfBaseline(c.id, result.perfMetrics);
   }
@@ -1196,6 +1425,7 @@ function observeLaunch(projectId: string, envRef?: string): {
   extraHeaders: Record<string, string>;
   query: Record<string, string>;
   storageState: StorageState | null;
+  viewport?: { width?: number; height?: number };
 } {
   const env = resolveEnvironment(projectId, envRef);
   const ctx: ResolveContext = { env: env?.vars ?? {}, secrets: getSecretValues(projectId) };
@@ -1204,6 +1434,13 @@ function observeLaunch(projectId: string, envRef?: string): {
     extraHeaders: { ...resolveMap(env?.headers ?? {}, ctx), ...(session?.headers ?? {}) },
     query: resolveMap(env?.query ?? {}, ctx),
     storageState: session,
+    /*
+     * 视口跟着被测对象走（U-69）。
+     *
+     * 探索是最需要它的那一处：视口不够宽时，一整块面板根本不渲染，
+     * 而探索**不会报错**——它只是采不到那半个产品，然后照常产出一份看起来正常的材料。
+     */
+    ...(env?.viewport?.width || env?.viewport?.height ? { viewport: env.viewport } : {}),
   };
 }
 
@@ -1214,8 +1451,40 @@ function observeLaunch(projectId: string, envRef?: string): {
  * 这里只负责把界面上看得见的东西取回来。观察与解读分开，是因为它们会各自变化——
  * 换一套观察方式不该重写提示词，改一句提示词也不该重开浏览器。
  */
+/**
+ * 子进程要问模型时，由网关执行。
+ *
+ * 放在网关而不是 runner，有两条硬理由：runner 没有 `ModelClient`，
+ * 而且它的 `OPENAI_BASE_URL` 被改写成了 Midscene 的 no-think 代理；
+ * 另外这里走 `traced()`，这次调用在 Langfuse 上看得见——
+ * 用 Midscene 自己的 `ai*` 问，成本和效果都量不出来。
+ */
+setChildAsk(async (input) => {
+  const req = (input ?? {}) as { prompt?: string; imageDataUrl?: string; schema?: unknown; maxTokens?: number };
+  const r = await model.chat({
+    stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。",
+    variable: String(req.prompt ?? ""),
+    ...(req.imageDataUrl ? { images: [req.imageDataUrl] } : {}),
+    ...(req.schema ? { schema: req.schema as Record<string, unknown> } : {}),
+    maxTokens: req.maxTokens ?? 2400,
+    label: "explore.scenario",
+  });
+  return r.text;
+});
+
+/*
+ * 血缘保留：还没跑完的那些运行，事件一行都不删。
+ *
+ * 保留窗口按条数算，而一次跑三天的运行会被自己产生的日志挤出窗口——
+ * 「这次运行到底发生了什么」于是永远失去答案，界面上看不出任何异常：轨迹只是空的。
+ */
+setUnfinishedRuns(() => unfinishedRunIds());
+
 setAgentObserver(async (input) => {
-  const { url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId, envRef } = (input ?? {}) as {
+  const {
+    url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId, envRef,
+    scenarioFirst, inPageFirst, groupCap,
+  } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
     settleMs?: number;
@@ -1224,6 +1493,9 @@ setAgentObserver(async (input) => {
     stateAbstraction?: string;
     projectId?: string;
     envRef?: string;
+    scenarioFirst?: boolean;
+    inPageFirst?: "auto" | "on" | "off";
+    groupCap?: number;
   };
   const project = projectId ? getProject(projectId) : undefined;
   // 地址的来源按「越具体越优先」：节点参数 → 运行声明的环境 → 项目的目标端。
@@ -1243,6 +1515,18 @@ setAgentObserver(async (input) => {
       maxScreens,
       dryRounds,
       stateAbstraction,
+      /**
+       * 探索之前先问一次业务场景。
+       *
+       * 注入而不是让探索自己去问：探索跑在 runner 进程里，那边没有 ModelClient，
+       * 端点还被改写成了 no-think 代理。这里给的是网关自己那一份，
+       * 经过 `traced()`，所以这次调用在 Langfuse 上看得见。
+       */
+      scenarioFirst,
+      inPageFirst,
+      groupCap,
+      // ask 不在这里传——**函数过不了 RPC 边界**（探索跑在 runner 进程里）。
+      // 它由 runner 侧用 `child.parent.askModel` 组装，见 setChildAsk。
       /**
        * 环境配好的登录步骤，连同解析上下文一起交给探索。
        *
@@ -1269,8 +1553,16 @@ setAgentObserver(async (input) => {
    */
   if (result.notes.length > 240000)
     console.warn(`[explore] 材料 ${result.notes.length} 字，超过护栏 240000——按屏分配的预算算错了`);
+  /*
+   * 护栏这一刀**掐中间**，不从尾巴切。
+   *
+   * `slice(0, N)` 会把最后几屏整段切掉，而材料是按屏追加的——被切掉的正好是探索
+   * 走得最深的那几屏。症状是材料里既没有那几屏的文字，也没有任何痕迹说它们被切过，
+   * 看起来就像探索没走到那儿。`trimMiddle` 保留头尾并留下一行标记：
+   * 一次被截断的材料，从此说得出自己是被截断的。
+   */
   return {
-    notes: result.notes.slice(0, 240000),
+    notes: trimMiddle(result.notes, Math.floor(240000 / 4)),
     url: result.url,
     screens: result.screens,
     stoppedBecause: result.stoppedBecause,
@@ -1602,6 +1894,20 @@ app.delete("/api/projects/:id/secrets/:key", (req, res) => {
 /* ---- scale: suite runs through the concurrency queue + CI gate ---- */
 // Run a suite (filter: "P0" | "P1" | "P2" | "all") via the bounded queue, self-healing
 // each case. Quarantined cases run but are excluded from the pass/fail gate (CI门禁).
+/**
+ * 被要求停下的批次。
+ *
+ * 进行中的那一条**中断不了**（用例执行没有取消点，这一点服务端别处的注释早写着），
+ * 但队列里还没开始的可以一条都不发。二十条用例按错了参数，此前人没有任何办法
+ * 让它在二十分钟内停下——现在能停在第 n 条上，而且界面会说清「已停 · 跑了 n/20」。
+ */
+const cancelledBatches = new Set<string>();
+
+app.post("/api/batches/:id/cancel", (req, res) => {
+  cancelledBatches.add(req.params.id);
+  res.json({ ok: true, note: "队列里没开始的不再发出；当前这一条跑完就停" });
+});
+
 app.post("/api/projects/:id/suite", async (req, res) => {
   const project = getProject(req.params.id);
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -1618,6 +1924,8 @@ app.post("/api/projects/:id/suite", async (req, res) => {
   await Promise.all(
     cases.map((c) =>
       enqueue(async () => {
+        // 停下的判断放在**取活的那一刻**，不是入队时——入队时还没人按停止。
+        if (cancelledBatches.has(batch.id)) return;
         try {
           const { run, attempts, healed } = await runCaseDataDriven(c, req.body ?? {}, retries);
           const quarantined = !!getCase(c.id)?.quarantined;
@@ -1655,10 +1963,16 @@ app.post("/api/projects/:id/suite", async (req, res) => {
   const quarantined = items.filter((i) => i.status === "quarantined").length;
   const healed = items.filter((i) => i.healed).length;
   const flaky = cases.filter((c) => getFlakiness(c.id)?.verdict === "flaky").length;
-  const gate: Batch["gate"] = failed > 0 || errored > 0 ? "fail" : "pass";
+  const stopped = cancelledBatches.delete(batch.id);
+  /**
+   * 被停下的批次**不能给绿灯**——没跑完的用例不是「没问题」，是「不知道」。
+   * total 也保留原计划的条数：把它改写成实跑条数，一个停在第 8 条的批次
+   * 会显示成「8/8 全过」，那是在撒谎。
+   */
+  const gate: Batch["gate"] = stopped || failed > 0 || errored > 0 ? "fail" : "pass";
   updateBatch(batch.id, {
     status: "done",
-    total: items.length,
+    total: stopped ? cases.length : items.length,
     passed,
     failed,
     healed,
@@ -1668,7 +1982,7 @@ app.post("/api/projects/:id/suite", async (req, res) => {
     gate,
     finishedAt: new Date().toISOString(),
   });
-  res.json({ batch: getBatch(batch.id), items, gate });
+  res.json({ batch: getBatch(batch.id), items, gate, stopped });
 });
 
 app.get("/api/queue", (_req, res) => res.json({ ...queueStatus(), model: modelGate.stats() }));
@@ -1683,6 +1997,88 @@ app.get("/api/batches/:id", (req, res) => {
 app.get("/api/projects/:id/flakiness", (req, res) =>
   res.json({ flakiness: listFlakiness(req.params.id) }),
 );
+/**
+ * 隔离一条用例，或解除隔离。
+ *
+ * 走一个自己的端点而不是 `PATCH /api/cases/:id`，因为它不是一次普通的字段修改：
+ * **它会改变门禁的结论**。一条被隔离的用例照跑，但它的红不再拦门禁——
+ * 所以理由必填，动作进台账，事后一个绿灯说得清自己是怎么绿的。
+ */
+app.post("/api/cases/:id/quarantine", (req, res) => {
+  const kase = getCase(req.params.id);
+  if (!kase) return res.status(404).json({ error: "case not found" });
+  const on = !!req.body?.on;
+  const reason = String(req.body?.reason ?? "");
+  const by = String(req.body?.by ?? "unknown");
+  try {
+    // 当时门禁是什么判决：隔离影响的就是它。取这个项目最近一次批次的判决。
+    const gateAtTime = listBatches(kase.projectId)[0]?.gate;
+    const entry = logQuarantine({
+      caseId: kase.id,
+      projectId: kase.projectId,
+      on,
+      reason,
+      by,
+      ...(gateAtTime ? { gateAtTime } : {}),
+    });
+    const updated = updateCase(kase.id, { quarantined: on });
+    res.json({ case: updated, entry });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * 基线待办的另外两个出口：**判为回归**、**承认是环境噪声**。
+ *
+ * 「接受为新基线」此前是唯一一个出口——于是一次真回归和一次改版走同一个按钮，
+ * 而按下去之后回归就变成了新的正确答案，这条用例从此绿着。
+ * 这两个出口都不动基线：回归让这条用例继续红，噪声只是把这一条从待办里划掉。
+ */
+app.post("/api/cases/:id/baseline-verdict", (req, res) => {
+  const kase = getCase(req.params.id);
+  if (!kase) return res.status(404).json({ error: "case not found" });
+  const body = (req.body ?? {}) as {
+    kind?: "visual" | "perf";
+    stepIdx?: number;
+    runId?: string;
+    verdict?: "regression" | "noise";
+    note?: string;
+    by?: string;
+  };
+  if (body.verdict !== "regression" && body.verdict !== "noise")
+    return res.status(400).json({ error: "verdict 只能是 regression 或 noise" });
+  if (body.kind !== "visual" && body.kind !== "perf")
+    return res.status(400).json({ error: "kind 只能是 visual 或 perf" });
+  if (!body.runId) return res.status(400).json({ error: "要说清是哪一次运行的差异" });
+  // 环境噪声这一档只给性能：一张截图差了 8.5% 不会是"网络当时有点抖"。
+  if (body.verdict === "noise" && body.kind !== "perf")
+    return res.status(400).json({ error: "「环境噪声」只适用于性能基线——界面的差异不会是噪声" });
+  try {
+    res.json({
+      verdict: recordBaselineVerdict({
+        caseId: kase.id,
+        projectId: kase.projectId,
+        kind: body.kind,
+        ...(body.stepIdx !== undefined ? { stepIdx: body.stepIdx } : {}),
+        runId: body.runId,
+        verdict: body.verdict,
+        note: String(body.note ?? ""),
+        by: String(body.by ?? "unknown"),
+      }),
+    });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/** 隔离台账：谁 · 什么时候 · 为什么 · 当时门禁是什么判决。 */
+app.get("/api/projects/:id/quarantine-log", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  const caseId = typeof req.query.caseId === "string" ? req.query.caseId : undefined;
+  res.json({ entries: listQuarantineLog(req.params.id, caseId) });
+});
+
 app.post("/api/cases/:id/recompute-flakiness", (req, res) => {
   if (!getCase(req.params.id)) return res.status(404).json({ error: "case not found" });
   res.json({ flakiness: computeFlakiness(req.params.id) });
@@ -1727,13 +2123,30 @@ app.get("/api/llm-debug", (_req, res) => {
 // The event table is the lineage; this is its read side. The UI uses it to hydrate the
 // log tail on first paint (the WS only carries what happens after you connect), and it
 // is the same read that `replay` will use for a workflow run.
+/**
+ * 事件。**按运行取，或者取最近的**——两者都不再是"先取最旧一万条再切尾"。
+ *
+ * 原来这里是 `bus.replay(sinceId, 10_000).slice(-limit)`，而 store 的 `since` 是
+ * `WHERE id > ? ORDER BY id ASC LIMIT ?`。两者合起来的效果：一旦库里事件超过一万条，
+ * 拿到的永远是**最旧一万条里的第 9001–10000 条**。于是历史运行的轨迹永远是空的，
+ * 而界面把这个取数缺陷说成了一句关于这次运行的事实陈述——「这次运行还没有留下轨迹」。
+ */
 app.get("/api/events", (req, res) => {
   const sinceId = Math.max(0, Number(req.query.sinceId) || 0);
-  const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 200));
+  const limit = Math.min(2000, Math.max(1, Number(req.query.limit) || 200));
   const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
-  let events = bus.replay(sinceId, 10_000);
+  const wfRunId = typeof req.query.wfRunId === "string" ? req.query.wfRunId : undefined;
+  let events = wfRunId ? eventStore.byRun(wfRunId, sinceId, limit) : eventStore.latest(limit);
   if (kind) events = events.filter((e) => e.kind === kind);
-  res.json({ head: bus.head(), events: events.slice(-limit) });
+  // 被截断了就说出来。静默截断和取错数据是同一个失败模式：报告看起来完全正常。
+  const total = wfRunId ? eventStore.countByRun(wfRunId) : undefined;
+  const nextSince = events.length ? events[events.length - 1].id : sinceId;
+  res.json({
+    head: bus.head(),
+    events,
+    scoped: !!wfRunId,
+    ...(total !== undefined ? { total, truncated: total > sinceId + events.length, nextSince } : {}),
+  });
 });
 
 /* ---- workflows (the graph runtime) ---- */
@@ -1804,7 +2217,10 @@ app.post("/api/wf/runs", async (req, res) => {
       (body.projectId || body.envRef || body.url
         ? { projectId: body.projectId, envRef: body.envRef, url: body.url }
         : undefined);
-    res.json(await startRun({ ...body, ...(stated ? { target: stated } : {}) }));
+    const input = { ...body, ...(stated ? { target: stated } : {}) };
+    // 同一个请求体、同一个返回形状，两条 harness。前端只读 `wfRunId`，
+    // 但两条路的返回不一样的话，这个开关就不是一个开关而是两套接口。
+    res.json(RUNTIME === "penguin" ? await penguinStartRun(input) : await startRun(input));
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
@@ -1834,13 +2250,37 @@ app.post("/api/wf/runs/:id/nodes/:nodeId/run", async (req, res) => {
   const run = outputStore.getRun(req.params.id);
   if (!run) return res.status(404).json({ error: "unknown run" });
   const mode = req.query.mode === "from" ? "from" : "only";
+  const detail = runDetail(req.params.id);
+  /**
+   * 上游产物不在就不许起跑。
+   *
+   * 此前这里照跑不误，而 runtime 遇到 `no stored output from …` 会直接 finish("failed")，
+   * 网关照写进运行记录——**一次点错的重跑会把一次 done 的运行改写成 failed**，
+   * 而两个重跑按钮在任何一个节点上都是亮的。这不是提示语能解决的，得拦在起跑前。
+   */
+  const missing = await missingUpstream(req.params.id, req.params.nodeId).catch(() => undefined);
+  if (missing)
+    return res.status(409).json({
+      error: `${missing} 还没有产出，${req.params.nodeId} 重跑不了——先跑 ${missing}，或者从它那里往下重跑。`,
+      missing,
+    });
   try {
     res.json(
       await startRun({
         graphId: String(run.graphId),
         wfRunId: req.params.id,
         mode: { kind: mode, node: req.params.nodeId },
-        seed: req.body?.seed,
+        // 续跑起来的运行，根节点的输入来自它的种子出处；重跑请求体是空的，
+        // 此前于是 runtime 拿到 undefined，zod 当场报错。
+        seed:
+          req.body?.seed ??
+          (detail.seedFrom
+            ? await nodeOutput(detail.seedFrom.runId, detail.seedFrom.node).catch(() => undefined)
+            : undefined),
+        // 预算与已花费都要带：resumeRun 早就这么做了，而这条路上没有——
+        // 于是一次部分重跑会把预算计数清零，上限悄悄变成"每一段一次"。
+        budget: detail.budget,
+        spent: detail.spend,
       }),
     );
   } catch (e) {
@@ -1884,6 +2324,20 @@ app.patch("/api/wf/runs/:id/budget", (req, res) => {
   }
 });
 
+/**
+ * 断点属于这次运行。前端点亮一个红点，就要落到这里——
+ * 否则那个红点只是浏览器里的一个装饰，而「这次会不会停」由运行记录里的另一份说了算。
+ */
+app.patch("/api/wf/runs/:id/breakpoints", (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.breakpoints) ? req.body.breakpoints.map(String) : [];
+    const detail = setRunBreakpoints(req.params.id, list);
+    res.json({ ok: true, breakpoints: detail.breakpoints ?? [] });
+  } catch (e) {
+    res.status(404).json({ error: (e as Error).message });
+  }
+});
+
 app.post("/api/wf/runs/:id/resume", async (req, res) => {
   try {
     res.json(await resumeRun(req.params.id));
@@ -1892,8 +2346,24 @@ app.post("/api/wf/runs/:id/resume", async (req, res) => {
   }
 });
 
-app.post("/api/wf/runs/:id/cancel", async (req, res) =>
-  res.json({ cancelled: await cancelRun(req.params.id) }));
+app.post("/api/wf/runs/:id/cancel", async (req, res) => {
+  // Penguin 起的那些由 penguinRun 收：那边没有 agent 子进程可以 RPC，
+  // 停的是看门狗，session 留给 Penguin 自己收（红线之外的一条老规矩：不杀别人起的进程）。
+  if ((runDetail(req.params.id) as { runtime?: string }).runtime === "penguin") {
+    const p = penguinCancelRun(req.params.id);
+    if (p.result === "unknown-run") return res.status(404).json({ error: "unknown run" });
+    return res.json(p);
+  }
+  const r = await cancelRun(req.params.id);
+  if (r.result === "unknown-run") return res.status(404).json({ error: "unknown run" });
+  res.json(r);
+});
+
+/** 这次运行能不能接上、已经跑完了哪几步。界面用它把"接上"这个按钮点亮。 */
+app.get("/api/wf/runs/:id/resume-point", async (req, res) => {
+  const point = await resumePoint(req.params.id).catch(() => undefined);
+  res.json({ point: point ?? null });
+});
 
 /** Big node outputs are summarized for the list view; the detail endpoint returns them whole. */
 function summarize(value: unknown): unknown {
@@ -1939,7 +2409,14 @@ app.get("/api/projects/:id/changes", async (req, res) => {
 // this is the list that says which runs to open.
 app.get("/api/projects/:id/pending-baselines", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
-  res.json(pendingBaselines(req.params.id));
+  /*
+   * 预算跟着待审批一起发出去。
+   *
+   * 判一次性能回归的人要同时看到三个数：现在多少、基线多少、**预算是多少**。
+   * 少了第三个，「TTFB 从 620 涨到 780」说不出该按「确认回归」还是「只是抖动」——
+   * 780 还在 800 的预算里，那多半是抖动；如果预算是 700，那就是真回归。
+   */
+  res.json({ ...pendingBaselines(req.params.id), perfBudget: config.perfBudget });
 });
 
 app.get("/api/projects/:id/traceability", async (req, res) => {
@@ -2025,16 +2502,32 @@ app.post("/api/datasets/preview", (req, res) => {
 
 app.post("/api/projects/:id/datasets", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
-  const { name, text, rows, uniqueCols } = (req.body ?? {}) as {
+  const { name, text, rows, uniqueCols, keepCols } = (req.body ?? {}) as {
     name?: string;
     text?: string;
     rows?: Array<Record<string, string>>;
     uniqueCols?: string[];
+    /** 只落这几列。不给就是全落——旧调用方的行为一个字不变。 */
+    keepCols?: string[];
   };
   if (!name?.trim()) return res.status(400).json({ error: "数据集要有名字——用例靠名字引它" });
   try {
-    const parsed = rows ?? parseRows(String(text ?? "")).rows;
+    const all = rows ?? parseRows(String(text ?? "")).rows;
+    /*
+     * 没勾的列**不进库**。
+     *
+     * 关键的是那几个看起来像凭证的列：数据集会跟着导出的工程进版本库，
+     * 一列 `password` 落进去就是一次凭证泄漏，而它在界面上看起来只是一列普通数据。
+     * 前端把它们默认取消勾选并且要人明确解锁；这里做的是同一件事的另一半——
+     * 不勾就是真的不存，而不是存下来再在界面上藏起来。
+     */
+    const parsed =
+      keepCols?.length
+        ? all.map((r) => Object.fromEntries(keepCols.filter((c) => c in r).map((c) => [c, r[c]])))
+        : all;
     if (!parsed.length) return res.status(400).json({ error: "一行数据都没有" });
+    if (keepCols?.length && !Object.keys(parsed[0] ?? {}).length)
+      return res.status(400).json({ error: "一列都没勾——那存下来的会是一批空行" });
     res.json({
       dataset: saveDataset({ projectId: req.params.id, name: name.trim(), rows: parsed, uniqueCols }),
       warnings: inspectRows(parsed),
@@ -2071,6 +2564,20 @@ app.get("/api/cases/:id/code", async (req, res) => {
   }
 });
 
+/**
+ * 把用例的代码换成给定的那一段。
+ *
+ * 「退回到第 N 轮」用它：写回的是修复循环当时存下来的代码，不是重新生成的一段。
+ * 重生成会得到另一段代码，那就不叫退回了。
+ */
+app.patch("/api/cases/:id/code", (req, res) => {
+  const code = req.body?.code;
+  if (typeof code !== "string") return res.status(400).json({ error: "code must be a string" });
+  const c = updateCase(req.params.id, { code });
+  if (!c) return res.status(404).json({ error: "case not found" });
+  res.json({ case: c });
+});
+
 app.get("/api/review", async (_req, res) => {
   try {
     res.json({ runs: await pendingRuns() });
@@ -2090,6 +2597,7 @@ app.get("/api/review/:wfRunId", async (req, res) => {
 app.post("/api/review/:wfRunId/approve", async (req, res) => {
   try {
     const created = await approve({ wfRunId: req.params.wfRunId, ...(req.body ?? {}) });
+    mirrorDecisions(req.params.wfRunId, (req.body?.caseIds ?? []) as string[], "approved");
     res.json({ created, count: created.length });
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
@@ -2131,9 +2639,127 @@ app.post("/api/review/:wfRunId/regenerate", async (req, res) => {
   }
 });
 
+/**
+ * 把一条缺口补成一条用例。
+ *
+ * 缺口分析此前**停在显示上**：算得出、画得出、然后没有下一步。这条路由是那个下一步——
+ * 补出来的用例过一遍门禁①，进复核队列，等的是和别的候选同一个决定。
+ *
+ * `blind`（连看都没看见）那一类会被拒：一条对着没人见过的界面写出来的用例，
+ * 它的绿色说明不了任何事，而它会**看起来**像覆盖率涨了一格。
+ */
+app.post("/api/review/:wfRunId/gap-case", async (req, res) => {
+  try {
+    const { gap, lang } = (req.body ?? {}) as { gap?: Parameters<typeof caseFromGap>[1]; lang?: string };
+    if (!gap?.what) return res.status(400).json({ error: "要给出是哪条缺口" });
+    res.json(await caseFromGap(req.params.wfRunId, gap, { ...(lang ? { lang } : {}) }));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
 app.post("/api/review/:wfRunId/reject", (req, res) => {
   try {
-    res.json({ rejected: reject({ wfRunId: req.params.wfRunId, ...(req.body ?? {}) }) });
+    const n = reject({ wfRunId: req.params.wfRunId, ...(req.body ?? {}) });
+    mirrorDecisions(req.params.wfRunId, (req.body?.caseIds ?? []) as string[], "rejected", req.body?.note);
+    res.json({ rejected: n });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/* ---- 审计台（docs/v3/01 §1–§3；形状由 src/lib/audit.ts 定死） ---- */
+
+/**
+ * 决定同时落一份到 `runs/<runId>/decisions.json`。
+ *
+ * 契约 §1：下一个 session 的 `read_decisions` 读的是**那个文件**，不是这个库。
+ * 只写库，「已批准的用例进 g2」这条链就断在这里；只写文件，看板与队列立刻失忆。
+ * 所以两处都写，方向是库 → 文件（库那份仍是复核的真相，文件那份是给下一次运行的输入）。
+ *
+ * 写失败不拦请求：一次批准已经生效了，把它回滚成 400 只会让人以为没批准。
+ */
+function mirrorDecisions(
+  wfRunId: string,
+  caseIds: string[],
+  decision: Decision["decision"],
+  reason?: string,
+): void {
+  if (!caseIds?.length) return;
+  if ((runDetail(wfRunId) as { runtime?: string }).runtime !== "penguin") return;
+  try {
+    const at = new Date().toISOString();
+    writeDecisions(
+      penguinWorkspaceOf(wfRunId),
+      wfRunId,
+      caseIds.map((caseId) => ({
+        caseId,
+        decision,
+        by: "review",
+        at,
+        ...(reason ? { reason: String(reason) } : {}),
+      })),
+    );
+  } catch (e) {
+    log(`decisions.json 没写成（${wfRunId}）：${(e as Error).message}`);
+  }
+}
+
+/** 404 与 5xx 分开：`src/lib/audit.ts` 的 `get()` 只吞 404，5xx 照抛。 */
+function auditFail(res: express.Response, e: unknown): void {
+  if (e instanceof NotFound) {
+    res.status(404).json({ error: e.message });
+    return;
+  }
+  res.status(500).json({ error: (e as Error).message });
+}
+
+/** `GET /api/audit/:runId/calibration` → `{ sample, labels, kappa? }` */
+app.get("/api/audit/:runId/calibration", async (req, res) => {
+  try {
+    res.json(await calibration(req.params.runId));
+  } catch (e) {
+    auditFail(res, e);
+  }
+});
+
+/** `GET /api/audit/:runId/scan` → `ScanReport` */
+app.get("/api/audit/:runId/scan", (req, res) => {
+  try {
+    res.json(auditScan(req.params.runId));
+  } catch (e) {
+    auditFail(res, e);
+  }
+});
+
+/** `GET /api/audit/:runId/holds` → `{ total, byGate, holds }`：这次运行被门禁拦了几次、被哪道门拦的。 */
+app.get("/api/audit/:runId/holds", (req, res) => {
+  try {
+    res.json(holdsOf(req.params.runId));
+  } catch (e) {
+    auditFail(res, e);
+  }
+});
+
+/** `GET /api/audit/:runId/diff` → `{ added, removed, changed }` */
+app.get("/api/audit/:runId/diff", async (req, res) => {
+  try {
+    res.json(await auditDiff(req.params.runId));
+  } catch (e) {
+    auditFail(res, e);
+  }
+});
+
+/**
+ * `POST /api/audit/:runId/labels`，body 是 `HumanLabel[]`。
+ *
+ * 400 而不是 404：body 不是数组是**调用方错了**，前端不该把它当成「端点还没建」
+ * 而静默退回假数据——那会让一次标注凭空消失。
+ */
+app.post("/api/audit/:runId/labels", (req, res) => {
+  try {
+    if (!Array.isArray(req.body)) return res.status(400).json({ error: "body 要是一个 HumanLabel[]" });
+    res.json(appendLabels(req.params.runId, req.body));
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
@@ -2175,6 +2801,24 @@ app.get("/api/materials", (_req, res) => res.json(listMaterials()));
 
 // 按 id 跑一份定义好的评测。参数只有 target —— 其余全部来自文件，这是它进仓库的意义：
 // 一次可以被随手改掉的评测，量到的是改它的人想看到的东西。
+/**
+ * 从一条 critic 建议造一份可以直接跑的评测定义。
+ *
+ * critic 提得出建议，产物却是给人读的文字；而 `evals/*.json` 全部手写。
+ * 两头都在，中间没有路——这条路由是那条路。
+ * 只有说得出怎么证伪的建议造得出来：一条 manual 的建议造不出两条只差一处的臂。
+ */
+app.post("/api/evals/specs/from-critique", (req, res) => {
+  const body = (req.body ?? {}) as Parameters<typeof specFromSuggestion>[0];
+  if (!body?.suggestion?.title) return res.status(400).json({ error: "要给出是哪条建议" });
+  if (!body.graphId) return res.status(400).json({ error: "要说清这份评测跑哪张图" });
+  try {
+    res.json({ spec: specFromSuggestion(body) });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
 app.post("/api/evals/specs/:id/run", (req, res) => {
   const spec = getEvalSpec(req.params.id);
   if (!spec) return res.status(404).json({ error: `没有这份评测定义：${req.params.id}` });
@@ -2241,14 +2885,202 @@ app.get("/api/ablatable", (_req, res) => res.json({ ablatable: ALL_ABLATABLE }))
 /* ---- capabilities (declared external services) ---- */
 // A capability is a recipe plus whatever the supervisor knows about the process running
 // it. Start/stop go through the process endpoints below — same lifecycle, one owner.
+/**
+ * 接入就绪清单：**从零到第一批可复核用例，还差哪几条。**
+ *
+ * 在服务端算而不是让前端拼六次请求，理由是真相在这一侧——守卫的白名单、环境的登录态、
+ * 能力的健康检查、预算的默认值，四样都只有网关知道。前端拼的话会长出第二套口径，
+ * 而两套口径最后总会给出两个不同的答案。
+ *
+ * 每一条只回答两件事：**它现在是什么状态**，以及**为什么是这个状态**。
+ * 状态只有四种，因为人要的是「还差几条」，不是一个连续的健康分——
+ * 一个 73% 的就绪度，没人知道该先修哪一样。
+ *
+ * 冷启动那条也在这里回答：库里可能一个项目都没有，而磁盘上躺着几十次历史运行。
+ * 界面必须同时说出这两件事，否则第一屏就在自相矛盾。
+ */
+app.get("/api/readiness", (req, res) => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
+  const project = projectId ? getProject(projectId) : undefined;
+  const projects = listProjects();
+  type State = "none" | "unverified" | "ok" | "broken";
+  /*
+   * `detail` / `hint` 是**词条 key 加参数**，不是拼好的句子。
+   *
+   * 此前它们是服务端拼的中文，前端直接 `{it.detail}` 渲染出来——于是英文界面上
+   * 会出现「6 个能力，一个都没起」「demo.binance.com 不在白名单里」。
+   * `03 §9.5` 的断言点是「切换语言后无硬编码残留」，而这条路绕过了整个 i18n。
+   *
+   * 纯数据的那几条（项目名 · 地址、模型名 @ 端点）仍然直接给字符串：
+   * 它们里面没有一个字需要翻译。
+   */
+  type Msg = string | { key: string; params?: Record<string, string | number> };
+  const items: Array<{ id: string; state: State; detail: Msg; hint?: Msg }> = [];
+
+  items.push(
+    project
+      ? { id: "project", state: "ok", detail: `${project.name} · ${project.targetUrl}` }
+      : {
+          id: "project",
+          state: "none",
+          detail: projects.length ? { key: "ready.projectUnpicked", params: { n: projects.length } } : { key: "ready.projectNone" },
+        },
+  );
+
+  // 被测对象：地址 + 登录态。地址为空是「坏了」而不是「没配」——环境存在却没有地址，
+  // 是一条会在二十分钟后才暴露的失败。
+  const envs = projectId ? listEnvironments(projectId) : [];
+  const env = envs.find((e) => e.isDefault) ?? envs[0];
+  if (!env) items.push({ id: "sut", state: "none", detail: { key: "ready.sutNone" } });
+  else if (!env.baseUrl?.trim())
+    items.push({
+      id: "sut",
+      state: "broken",
+      detail: { key: "ready.sutNoUrl", params: { name: env.name } },
+      hint: { key: "ready.sutNoUrlWhy" },
+    });
+  else {
+    const hasSession = !!env.login?.session;
+    items.push({
+      id: "sut",
+      state: env.login?.authRequired && !hasSession ? "unverified" : "ok",
+      detail: hasSession
+        ? { key: "ready.sutOkSession", params: { name: env.name, url: env.baseUrl } }
+        : `${env.name} · ${env.baseUrl}`,
+      hint: env.login?.authRequired && !hasSession ? { key: "ready.sutNeedLogin" } : undefined,
+    });
+  }
+
+  /**
+   * 模型：**把「测的参数」和「跑的参数」摆在一起**。
+   *
+   * 这两者今天不是同一套：探活那条通道写死 `enable_thinking:false`
+   * （`server/src/model.ts` 的 `chatNow`），而图运行时的 `ModelClient` 默认**开**思考
+   * （`openai.ts` 的 `noThink: env.TP_MODEL_THINK === "0" ? true : false`）。
+   * 于是「绿色的连接通过」与「一整场失败的运行」可以同时成立，
+   * 而人没有任何线索去怀疑这两件事测的不是一回事。
+   *
+   * 在参数装配路径被统一之前，至少要把这个差别说出来。
+   */
+  const model = resolveModelConfig();
+  const runThinks = process.env.TP_MODEL_THINK !== "0";
+  items.push(
+    model.baseUrl && model.modelName
+      ? {
+          id: "model",
+          state: "unverified",
+          detail: `${model.modelName} @ ${model.baseUrl}`,
+          hint: { key: runThinks ? "ready.modelThinkMismatch" : "ready.modelThinkOff" },
+        }
+      : { id: "model", state: "none", detail: { key: "ready.modelNone" } },
+  );
+
+  /**
+   * 运行时：**绿色只留给健康检查通过**。
+   *
+   * `spawning` 不算就绪——这一页此前把它画成绿的，而 supervisor 的就绪超时只写
+   * `lastError` 不改 state，于是一个健康检查从没通过的服务看起来是健康的。
+   */
+  const alive = capabilities.filter((c) => supervisor.statusOf(c.id)?.state === "alive");
+  const bad = capabilities.filter((c) => {
+    const s = supervisor.statusOf(c.id);
+    return !!s?.lastError && s.state !== "alive";
+  });
+  items.push(
+    bad.length
+      ? {
+          id: "runtime",
+          state: "broken",
+          detail: { key: "ready.runtimeBroken", params: { id: bad[0]!.id } },
+          // lastError 是子进程自己说的话，原样带出去：它是给人拿去搜的那一截。
+          hint: String(supervisor.statusOf(bad[0]!.id)?.lastError ?? "").slice(0, 160),
+        }
+      : alive.length
+        ? { id: "runtime", state: "ok", detail: { key: "ready.runtimeOk", params: { a: alive.length, n: capabilities.length } } }
+        : { id: "runtime", state: "none", detail: { key: "ready.runtimeNone", params: { n: capabilities.length } } },
+  );
+
+  /**
+   * 守卫白名单：被测地址在不在名单里。
+   *
+   * 不在名单里**不拦运行**（`allowlistOnly` 是关的），但这个域名下命中删除/支付/结账
+   * 等词的步骤会被一律拒绝。这件事必须在跑之前说出来，否则人会在执行报告里
+   * 看到一堆没有理由的失败。
+   */
+  const host = (() => {
+    try {
+      return new URL(env?.baseUrl || project?.targetUrl || "").hostname;
+    } catch {
+      return "";
+    }
+  })();
+  items.push(
+    !host
+      ? { id: "guard", state: "none", detail: { key: "ready.guardNoHost" } }
+      : config.guard.allowHosts.includes(host)
+        ? { id: "guard", state: "ok", detail: { key: "ready.guardOk", params: { host } } }
+        : {
+            id: "guard",
+            state: "unverified",
+            detail: { key: "ready.guardNo", params: { host } },
+            hint: { key: "ready.guardWhy" },
+          },
+  );
+
+  const b = config.budget;
+  items.push({
+    id: "budget",
+    state: "ok",
+    detail: {
+      key: b.usd ? "ready.budget" : "ready.budgetNoCap",
+      params: { calls: b.calls ?? "—", usd: b.usd ?? 0, min: Math.round((b.ms ?? 0) / 60000) },
+    },
+    hint: { key: "ready.budgetHint" },
+  });
+
+  res.json({
+    items,
+    okCount: items.filter((i) => i.state === "ok").length,
+    total: items.length,
+    // 冷启动要同时说出这两件事，否则第一屏会自相矛盾。
+    projects: projects.length,
+    historicalRuns: outputStore.listRuns(500).length,
+  });
+});
+
 app.get("/api/capabilities", (_req, res) => {
   res.json({
     capabilities: capabilities.map((c) => ({
       ...c,
       env: undefined, // a recipe's env may carry credentials; the UI never needs it
       status: supervisor.statusOf(c.id) ?? null,
+      /*
+       * 工作目录在不在。
+       *
+       * 它是这条配方里唯一**换一台机器就会失效**的字段：基准应用装在某个人的
+       * `~/bench/...` 下，而症状是「启动了、立刻退出」——一个没有任何线索指向路径的症状。
+       * 先说出来，比让人去读退出码强。
+       */
+      cwdMissing: !!c.cwd && !existsSync(c.cwd),
     })),
   });
+});
+
+/**
+ * 改一条能力的工作目录。
+ *
+ * 只开放这一个字段：命令与参数是配方的定义，改它们等于换一条能力；
+ * 而 cwd 是一个本机事实，配置文件里那个写死的路径在别人的机器上一定不对。
+ */
+app.patch("/api/capabilities/:id/cwd", (req, res) => {
+  const cwd = req.body?.cwd;
+  if (typeof cwd !== "string" || !cwd.trim())
+    return res.status(400).json({ error: "cwd 得是一个非空路径" });
+  try {
+    res.json({ capability: setCapabilityCwd(req.params.id, cwd.trim()) });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
 });
 
 /**
@@ -2364,4 +3196,6 @@ attachWs(httpServer, bus, log);
 // module, or the two import each other and neither finishes initialising.
 reconcileOrphanedRuns(log);
 reconcileOrphanedEvals(log);
+// Penguin 那条路的同一件事：session 在 :7364 上还跑着，看门狗却随网关一起没了。
+reconcilePenguinRuns(log);
 void startProcesses(log);

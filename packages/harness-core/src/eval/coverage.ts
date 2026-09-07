@@ -64,14 +64,28 @@ export interface CoverageResult {
 
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, " ").trim();
 
-const caseText = (c: CandidateCase): string => norm([c.title, ...c.steps].join(" "));
+const caseText = (c: CoverableCase): string => norm([c.title, ...(c.steps ?? [])].join(" "));
 
-function matches(item: GoldItem, c: CandidateCase): boolean {
+/** The subset of a case the matcher reads. `steps` is optional because the audit desk hands in cases from disk that may have none. */
+export interface CoverableCase {
+  title: string;
+  steps?: string[];
+  expected?: string;
+}
+
+/**
+ * Does this one case cover this one checklist item?
+ *
+ * This is **the** deterministic judge — `scoreCoverage` folds it over a whole suite, and the
+ * audit desk's calibration (`server/src/audit.ts`) asks it one pair at a time so that the κ it
+ * reports measures agreement between a human and *this* rule, not a second copy of it.
+ * Every clause that is present must hold: a case about the right thing that asserts nothing
+ * relevant has not covered the item, it has only mentioned it.
+ */
+export function covers(item: { match?: GoldMatch }, c: CoverableCase): boolean {
   const body = caseText(c);
   const assertion = norm(c.expected ?? "");
-  const { anyOf, allOf, assertAnyOf } = item.match;
-  // Every clause that is present must hold: a case about the right thing that asserts
-  // nothing relevant has not covered the item, it has only mentioned it.
+  const { anyOf, allOf, assertAnyOf } = item.match ?? {};
   if (anyOf?.length && !anyOf.some((k) => body.includes(norm(k)))) return false;
   if (allOf?.length && !allOf.every((k) => body.includes(norm(k)))) return false;
   if (assertAnyOf?.length && !assertAnyOf.some((k) => assertion.includes(norm(k)))) return false;
@@ -87,7 +101,7 @@ export function scoreCoverage(gold: GoldChecklist, cases: CandidateCase[]): Cove
   const usedCases = new Set<string>();
 
   for (const item of gold.items) {
-    const by = cases.filter((c) => matches(item, c)).map((c, i) => label(c, i));
+    const by = cases.filter((c) => covers(item, c)).map((c, i) => label(c, i));
     if (by.length) {
       hits.push({ goldId: item.id, by });
       covered.add(item.id);

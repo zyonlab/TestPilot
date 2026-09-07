@@ -31,6 +31,9 @@ export function g1Graph(params: G1Params): GraphDef {
   return {
     id: "g1-text-cases",
     version: params.version ?? 1,
+    title: "读文档 · 出文本用例",
+    description:
+      "文档是材料不是规格：先整理成那份唯一的标准规格，再拆故事、设计用例、过文本门禁。对着意图写的用例挂了，可能意味着产品错了。",
     nodes: [
       // 用户给的文档是**材料**，不是规格。它先被整理成那份唯一的标准规格，下游才开始工作——
       // 否则「用户这次给的是什么格式」这个问题会被复制到每一个下游节点里。

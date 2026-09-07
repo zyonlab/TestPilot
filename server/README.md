@@ -164,7 +164,7 @@ pnpm test:fork-swap     # inject an EIP-6963 provider (no MetaMask) + drive app.
 
 ### General capability: injected wallet, configurable RPC
 
-The injected virtual wallet is a first-class TestPilot capability ([src/injectedWallet.ts](src/injectedWallet.ts)),
+The injected virtual wallet is a first-class TestPilot capability ([src/injectedWallet.ts](../packages/harness-testing/src/exec/injectedWallet.ts)),
 with the **chain RPC fully configurable** — point it at a local Anvil fork, a Tenderly Virtual
 TestNet public RPC, or a public testnet.
 
@@ -195,7 +195,7 @@ Then `launchSession(url, { wallet: true })`:
 
 > **MV3 gotcha:** MetaMask's decrypted vault lives only in the service worker's memory.
 > If every extension page closes, the SW is killed and the wallet re-locks. So the unlock
-> page is deliberately kept open for the session's lifetime ([src/wallet.ts](src/wallet.ts)).
+> page is deliberately kept open for the session's lifetime ([src/wallet.ts](../packages/harness-testing/src/exec/wallet.ts)).
 
 Verify the wallet boots ready + unlocked:
 
@@ -210,7 +210,7 @@ expect to re-run it if MetaMask changes its onboarding.
 
 ### Connecting a dapp + signing (auto-approve popups)
 
-`startPopupApprover(browser)` ([src/wallet.ts](src/wallet.ts)) runs a background loop that
+`startPopupApprover(browser)` ([src/wallet.ts](../packages/harness-testing/src/exec/wallet.ts)) runs a background loop that
 approves MetaMask's connect / signature / tx popups (unlock-in-popup if locked, dismiss
 passkey, click confirm — by testid `confirm-btn` with a text fallback). Start it, drive the
 dapp, stop it. Full smoke test against the built-in [/testdapp](src/index.ts):

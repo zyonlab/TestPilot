@@ -77,7 +77,7 @@ Unlike record-and-replay or hand-written selectors, cases are expressed in natur
 ## Feature tour (with screenshots)
 
 ### Project portfolio
-Point TestPilot at multiple sites, each with its own E2E suite. Two-level nav: portfolio (Level 0) ↔ in-project (Level 1).
+Point TestPilot at multiple sites, each with its own E2E suite. The sidebar holds 11 entries in four groups (Work / Orchestrate / Quality / Config); the active project sits at its foot.
 
 ![Portfolio](docs/screenshots/en/01-projects.png)
 

@@ -45,12 +45,10 @@ export function BudgetDrawer({ onClose }: { onClose: () => void }) {
 
   const spent = runtime.spend;
   const row = (label: string, value: string, hit: boolean) => (
-    <div className="flex items-baseline gap-2 text-[12.5px]">
+    <div className="flex items-baseline gap-2 text-[0.8125rem]">
       <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
-      <span className={hit ? "font-medium text-amber-600 dark:text-amber-400" : "text-foreground"}>
-        {value}
-      </span>
-      {hit && <span className="text-[11px] text-amber-600 dark:text-amber-400">{t("wf.capHit")}</span>}
+      <span className={hit ? "font-medium text-warn" : "text-foreground"}>{value}</span>
+      {hit && <span className="text-[0.6875rem] text-warn">{t("wf.capHit")}</span>}
     </div>
   );
 
@@ -62,13 +60,13 @@ export function BudgetDrawer({ onClose }: { onClose: () => void }) {
       defaultWidth={460}
       title={
         <span className="flex items-center gap-1.5">
-          <CircleDollarSign className="h-4 w-4 text-amber-500" />
+          <CircleDollarSign className="h-4 w-4 text-warn" />
           {t("wf.capTitle")}
         </span>
       }
     >
       <div className="min-h-0 flex-1 overflow-auto p-4">
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">{t("wf.capWhy")}</p>
+        <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">{t("wf.capWhy")}</p>
 
         <div className="mt-3 space-y-1 rounded-lg bg-muted p-3">
           {row(
@@ -88,7 +86,7 @@ export function BudgetDrawer({ onClose }: { onClose: () => void }) {
           )}
         </div>
         {/* 已经跑出来的产物还在：续跑是接着往下走，不是从头再来。 */}
-        <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">{t("wf.capKept")}</p>
+        <p className="mt-2 text-[0.75rem] leading-relaxed text-muted-foreground">{t("wf.capKept")}</p>
 
         <div className="mt-4 space-y-2">
           {[
@@ -96,19 +94,19 @@ export function BudgetDrawer({ onClose }: { onClose: () => void }) {
             { label: "usd", value: usd, set: setUsd, unit: "$" },
             { label: t("wf.rtTime"), value: min, set: setMin, unit: "min" },
           ].map((f) => (
-            <label key={f.label} className="flex items-center gap-2 text-[12.5px]">
+            <label key={f.label} className="flex items-center gap-2 text-[0.8125rem]">
               <span className="w-20 shrink-0 text-muted-foreground">{f.label}</span>
               <input
-                className="w-32 rounded-md border border-border bg-background px-2 py-1 font-mono text-[12px]"
+                className="w-32 rounded-md border border-border bg-background px-2 py-[0.1875rem] font-mono text-[0.75rem]"
                 value={f.value}
                 inputMode="numeric"
                 placeholder={t("wf.capNone")}
                 onChange={(e) => f.set(e.target.value)}
               />
-              <span className="text-[11px] text-muted-foreground">{f.unit}</span>
+              <span className="text-[0.6875rem] text-muted-foreground">{f.unit}</span>
             </label>
           ))}
-          <p className="text-[11px] text-muted-foreground">{t("wf.capBlank")}</p>
+          <p className="text-[0.6875rem] text-muted-foreground">{t("wf.capBlank")}</p>
         </div>
       </div>
 

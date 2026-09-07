@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { TrendingUp, Wand2, Zap, Ban } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
+import { NeedProject } from "@/components/NeedProject";
 import { useT } from "@/lib/prefs";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -37,11 +38,9 @@ function KpiCard({
 }) {
   return (
     <div className="rounded-xl bg-muted p-4">
-      <div className="text-[13px] text-muted-foreground">{label}</div>
-      <div className={cn("font-display text-2xl font-medium text-foreground", tone)}>
-        {value}
-      </div>
-      {hint && <div className="mt-0.5 text-[11px] text-muted-foreground">{hint}</div>}
+      <div className="text-[0.8125rem] text-muted-foreground">{label}</div>
+      <div className={cn("font-display text-2xl font-medium text-foreground", tone)}>{value}</div>
+      {hint && <div className="mt-0.5 text-[0.6875rem] text-muted-foreground">{hint}</div>}
     </div>
   );
 }
@@ -107,11 +106,7 @@ function PassRateChart({ batches }: { batches: TrendsBatch[] }) {
               width={barW}
               height={Math.max(1, bh)}
               rx={3}
-              className={cn(
-                pass
-                  ? "fill-emerald-500 dark:fill-emerald-500"
-                  : "fill-red-500 dark:fill-red-500",
-              )}
+              className={cn(pass ? "fill-ok" : "fill-bad")}
             >
               <title>
                 {`${b.label}\n${fmtDate(b.startedAt)}\npass rate ${pct(
@@ -125,14 +120,7 @@ function PassRateChart({ batches }: { batches: TrendsBatch[] }) {
       })}
 
       {/* x-axis baseline */}
-      <line
-        x1={padL}
-        x2={W - padR}
-        y1={y(0)}
-        y2={y(0)}
-        className="stroke-border"
-        strokeWidth={1}
-      />
+      <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} className="stroke-border" strokeWidth={1} />
     </svg>
   );
 }
@@ -146,15 +134,20 @@ function StackedBars({ batches }: { batches: TrendsBatch[] }) {
     tkey: string;
     cls: string;
   }> = [
-    { key: "passed", label: "passed", tkey: "trends.legendPassed", cls: "bg-emerald-500" },
-    { key: "failed", label: "failed", tkey: "trends.legendFailed", cls: "bg-red-500" },
-    { key: "healed", label: "healed", tkey: "trends.legendHealed", cls: "bg-violet-500" },
-    { key: "quarantined", label: "quarantined", tkey: "trends.legendQuarantined", cls: "bg-slate-400" },
+    { key: "passed", label: "passed", tkey: "trends.legendPassed", cls: "bg-ok" },
+    { key: "failed", label: "failed", tkey: "trends.legendFailed", cls: "bg-bad" },
+    { key: "healed", label: "healed", tkey: "trends.legendHealed", cls: "bg-chat" },
+    {
+      key: "quarantined",
+      label: "quarantined",
+      tkey: "trends.legendQuarantined",
+      cls: "bg-muted-foreground",
+    },
   ];
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-muted-foreground">
         {segs.map((s) => (
           <span key={s.label} className="flex items-center gap-1">
             <span className={cn("h-2 w-2 rounded-sm", s.cls)} />
@@ -162,24 +155,21 @@ function StackedBars({ batches }: { batches: TrendsBatch[] }) {
           </span>
         ))}
         <span className="flex items-center gap-1">
-          <Wand2 className="h-3 w-3 text-violet-500" /> {t("trends.legendHeal")}
+          <Wand2 className="h-3 w-3 text-chat" /> {t("trends.legendHeal")}
         </span>
         <span className="flex items-center gap-1">
-          <Zap className="h-3 w-3 text-amber-500" /> {t("trends.legendFlaky")}
+          <Zap className="h-3 w-3 text-warn" /> {t("trends.legendFlaky")}
         </span>
         <span className="flex items-center gap-1">
-          <Ban className="h-3 w-3 text-slate-400" /> {t("trends.legendQuarantine")}
+          <Ban className="h-3 w-3 text-ink2" /> {t("trends.legendQuarantine")}
         </span>
       </div>
       <div className="space-y-1.5">
         {batches.map((b) => {
-          const total =
-            b.passed + b.failed + b.healed + b.quarantined || 1;
+          const total = b.passed + b.failed + b.healed + b.quarantined || 1;
           return (
             <div key={b.id} className="flex items-center gap-2">
-              <span className="w-28 shrink-0 truncate text-[11px] text-muted-foreground">
-                {b.label}
-              </span>
+              <span className="w-28 shrink-0 truncate text-[0.6875rem] text-muted-foreground">{b.label}</span>
               <div className="flex h-3 min-w-0 flex-1 overflow-hidden rounded-sm bg-muted">
                 {segs.map((s) => {
                   const v = b[s.key] as number;
@@ -226,9 +216,7 @@ export function TrendsPage() {
       .catch((e) => {
         if (!cancelled) {
           setTrends(null);
-          setError(
-            `Couldn't load trends: ${(e as Error).message}. Check the backend at localhost:5301.`,
-          );
+          setError(`Couldn't load trends: ${(e as Error).message}. Check the backend at localhost:5301.`);
         }
       })
       .finally(() => {
@@ -243,23 +231,16 @@ export function TrendsPage() {
 
   return (
     <>
-      <TopBar />
+      <TopBar title={t("surface.trends")} />
       <div className="flex-1 overflow-auto p-4">
         {!activeProjectId ? (
-          <div className="rounded-xl border border-border bg-card p-8 text-center">
-            <h2 className="font-display text-sm font-medium">{t("common.noProjectSelected")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("trends.seeTrends")}
-            </p>
-          </div>
+          <NeedProject />
         ) : loading && !trends ? (
           <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
             {t("trends.loading")}
           </div>
         ) : error ? (
-          <div className="rounded-lg bg-red-100 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
-            {error}
-          </div>
+          <div className="rounded-lg bg-bad-soft px-3 py-2 text-xs text-bad">{error}</div>
         ) : !trends || trends.batches.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             {t("trends.empty")}
@@ -273,13 +254,7 @@ export function TrendsPage() {
                 label={t("trends.flakeRate")}
                 value={pct(trends.kpis.flakeRate)}
                 hint={t("trends.flakeTarget")}
-                tone={
-                  flakeOver
-                    ? trends.kpis.flakeRate > 0.05
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-amber-600 dark:text-amber-400"
-                    : undefined
-                }
+                tone={flakeOver ? (trends.kpis.flakeRate > 0.05 ? "text-bad" : "text-warn") : undefined}
               />
               <KpiCard label={t("trends.mttr")} value={fmtMttr(trends.kpis.mttrMs)} />
               <KpiCard label={t("trends.coverage")} value={pct(trends.kpis.coverage)} />
@@ -290,7 +265,7 @@ export function TrendsPage() {
             <div className="rounded-xl border border-border bg-card p-4">
               <h2 className="mb-3 flex items-center gap-1.5 font-display text-sm font-medium">
                 <TrendingUp className="h-3.5 w-3.5" /> {t("trends.passRateOverTime")}
-                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                <span className="ml-1 text-[0.6875rem] font-normal text-muted-foreground">
                   {trends.batches.length}{" "}
                   {trends.batches.length > 1 ? t("trends.suiteRuns") : t("trends.suiteRun")} ·{" "}
                   {t("trends.gateHint")}
@@ -301,9 +276,7 @@ export function TrendsPage() {
 
             {/* Stacked breakdown */}
             <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="mb-3 font-display text-sm font-medium">
-                {t("trends.outcomeBreakdown")}
-              </h2>
+              <h2 className="mb-3 font-display text-sm font-medium">{t("trends.outcomeBreakdown")}</h2>
               <StackedBars batches={trends.batches} />
             </div>
           </div>

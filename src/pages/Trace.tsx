@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
+import { openCard } from "@/lib/open";
+import { Button, EmptyState } from "@/components/ui";
 import { Link2, Unlink } from "lucide-react";
+import { NeedProject } from "@/components/NeedProject";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/prefs";
+import { TopBar } from "@/components/TopBar";
 import { API_BASE } from "@/lib/base";
 import { cn } from "@/lib/cn";
 
@@ -49,13 +53,114 @@ interface Report {
   error?: string;
 }
 
+/** 一层可展开的故事树：故事 → 用例 → 测试点。 */
+function StoryTree({ stories, rows }: { stories: StoryRow[]; rows: Row[] }) {
+  const t = useT();
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpen((o) => {
+      const n = new Set(o);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+
+  /*
+   * 一条故事都没有时，这块区域不能是空白。
+   *
+   * 换成树之前它至少还有一行表头，人知道「这里本该有东西」。一片什么都没有的空白
+   * 读起来像页面没加载完——而实际情况是「这个项目还没有已批准的故事」，
+   * 那是一句话就能说清、而且有下一步的事。
+   */
+  if (!stories.length)
+    return (
+      <EmptyState
+        className="m-3"
+        title={t("trace.noStoriesTitle")}
+        body={t("trace.noStoriesWhy")}
+        actions={
+          <Button variant="primary" onClick={() => openCard("review")}>
+            {t("trace.emptyGoReview")}
+          </Button>
+        }
+      />
+    );
+
+  return (
+    <div role="tree" aria-label={t("trace.ledeStories")}>
+      {stories.map((s) => {
+        const mine = rows.filter((r) => r.storyId === s.storyId);
+        const isOpen = open.has(s.storyId);
+        return (
+          <div key={s.storyId} role="treeitem" aria-expanded={isOpen}>
+            <button
+              type="button"
+              onClick={() => toggle(s.storyId)}
+              /* 0 条用例的故事整行标黄——它是这张表存在的第一个理由。 */
+              className={cn(
+                "flex w-full items-baseline gap-2 border-b border-border/50 px-4 py-1.5 text-left text-[0.8125rem] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                s.cases === 0 ? "bg-warn-soft hover:bg-warn-soft" : "hover:bg-muted/50",
+              )}
+            >
+              <span className="w-3 flex-none font-mono text-[0.6875rem] text-muted-foreground">
+                {mine.length ? (isOpen ? "▾" : "▸") : ""}
+              </span>
+              <span className="w-[7rem] flex-none truncate font-mono text-[0.75rem]">{s.storyId}</span>
+              <span className="min-w-0 flex-1">{s.title}</span>
+              <span className="flex-none font-mono tabular-nums">
+                {s.cases === 0 ? (
+                  <span className="text-warn">{t("trace.noCase")}</span>
+                ) : (
+                  t("trace.nCases", { n: s.cases })
+                )}
+              </span>
+              <span className="w-[8rem] flex-none truncate text-right font-mono text-[0.6875rem] text-muted-foreground">
+                {s.source ?? "—"}
+              </span>
+            </button>
+
+            {isOpen &&
+              mine.map((r) => (
+                <div key={r.caseId} role="group" className="border-b border-border/50 bg-muted/20 py-1.5 pl-[2.4rem] pr-4">
+                  <div className="flex items-baseline gap-2 text-[0.8125rem]">
+                    <span className="w-[7rem] flex-none truncate font-mono text-[0.6875rem] text-muted-foreground">
+                      {r.caseId}
+                    </span>
+                    <span className="min-w-0 flex-1 text-ink2">{r.title}</span>
+                    {r.unanchored && (
+                      <span
+                        className="flex-none rounded bg-warn-soft px-1.5 text-[0.6875rem] text-warn"
+                        title={t("trace.ungroundedWhy")}
+                      >
+                        {t("trace.noLiteral")}
+                      </span>
+                    )}
+                  </div>
+                  {/* 第三层：测试点。这是 AC-03.1 那半句话的所指——
+                      没有它，「这条故事有 4 条用例」说不出那 4 条测的是不是同一件事。 */}
+                  {r.acceptance.length > 0 && (
+                    <ul className="mt-1 flex flex-col gap-0.5 pl-[7.5rem]">
+                      {r.acceptance.map((a, i) => (
+                        <li key={i} className="flex gap-1.5 text-[0.75rem] text-muted-foreground">
+                          <span className="flex-none text-faint">·</span>
+                          <span className="min-w-0">{a}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Kpi({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className="min-w-[92px]">
-      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">{label}</div>
-      <div className={cn("mt-0.5 font-mono text-[15px] tabular-nums", warn && "text-amber-600 dark:text-amber-400")}>
-        {value}
-      </div>
+    <div className="min-w-[5.75rem]">
+      <div className="font-mono text-[0.6875rem] uppercase tracking-wider text-muted-foreground/70">{label}</div>
+      <div className={cn("mt-0.5 font-mono text-[1.0625rem] tabular-nums", warn && "text-warn")}>{value}</div>
     </div>
   );
 }
@@ -105,9 +210,27 @@ export function TracePage() {
       .catch(() => setPending(null));
   }, []);
 
-  if (!activeProjectId) return <div className="p-4 text-sm text-muted-foreground">{t("assets.pickProject")}</div>;
-  if (error) return <div className="p-4 text-[12.5px] text-rose-500">{error}</div>;
-  if (!rep) return <div className="p-4 text-sm text-muted-foreground">…</div>;
+  if (!activeProjectId)
+    return (
+      <>
+        <TopBar title={t("surface.trace")} />
+        <div className="p-4"><NeedProject /></div>
+      </>
+    );
+  if (error)
+    return (
+      <>
+        <TopBar title={t("surface.trace")} />
+        <div className="p-4 text-[0.8125rem] text-bad">{error}</div>
+      </>
+    );
+  if (!rep)
+    return (
+      <>
+        <TopBar title={t("surface.trace")} />
+        <div className="p-4 text-sm text-muted-foreground">…</div>
+      </>
+    );
 
   const shown = rep.rows.filter((r) =>
     only === "all"
@@ -126,176 +249,169 @@ export function TracePage() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div className="flex flex-wrap items-center gap-5 border-b border-border px-4 py-3">
-        <Kpi label={t("trace.kpiCases")} value={String(rep.rows.length)} />
-        <Kpi label={t("trace.kpiOrphans")} value={String(rep.orphans)} warn={rep.orphans > 0} />
-        <Kpi
-          label={t("trace.kpiCovered")}
-          value={`${rep.stories.length - rep.uncovered} / ${rep.stories.length}`}
-          warn={rep.uncovered > 0}
-        />
-        <Kpi label={t("trace.kpiUngrounded")} value={String(rep.ungrounded)} warn={rep.ungrounded > 0} />
-        {side === "cases" && (
-          <div className="flex flex-wrap gap-1">
-            {(["all", "ungrounded", "unanchored", "orphan"] as const).map((k) => (
+    <>
+      <TopBar title={t("surface.trace")} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+        <div className="flex flex-wrap items-center gap-5 border-b border-border px-4 py-3">
+          <Kpi label={t("trace.kpiCases")} value={String(rep.rows.length)} />
+          <Kpi label={t("trace.kpiOrphans")} value={String(rep.orphans)} warn={rep.orphans > 0} />
+          <Kpi
+            label={t("trace.kpiCovered")}
+            value={`${rep.stories.length - rep.uncovered} / ${rep.stories.length}`}
+            warn={rep.uncovered > 0}
+          />
+          <Kpi label={t("trace.kpiUngrounded")} value={String(rep.ungrounded)} warn={rep.ungrounded > 0} />
+          {side === "cases" && (
+            <div className="flex flex-wrap gap-1">
+              {(["all", "ungrounded", "unanchored", "orphan"] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setOnly(k)}
+                  title={k === "all" ? undefined : t(`trace.only.${k}Why`)}
+                  className={cn(
+                    "cursor-pointer rounded-full border px-2.5 py-0.5 text-[0.75rem]",
+                    only === k
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {t(`trace.only.${k}`)} · {counts[k]}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="ml-auto flex gap-1">
+            {(["cases", "stories"] as const).map((k) => (
               <button
                 key={k}
-                onClick={() => setOnly(k)}
-                title={k === "all" ? undefined : t(`trace.only.${k}Why`)}
+                onClick={() => setSide(k)}
                 className={cn(
-                  "cursor-pointer rounded-full border px-2.5 py-0.5 text-[11.5px]",
-                  only === k
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:bg-muted",
+                  "cursor-pointer rounded px-2 py-1 text-[0.75rem]",
+                  side === k
+                    ? "bg-primary/10 font-medium text-primary"
+                    : "text-muted-foreground hover:bg-muted",
                 )}
               >
-                {t(`trace.only.${k}`)} · {counts[k]}
+                {t(`trace.side.${k}`)}
               </button>
             ))}
           </div>
+        </div>
+
+        <p className="border-b border-border px-4 py-2 text-[0.8125rem] text-muted-foreground">
+          {side === "cases" ? t("trace.ledeCases") : t("trace.ledeStories")}
+        </p>
+
+        {rep.rows.length === 0 && (
+          <div className="m-4 max-w-2xl space-y-2 rounded-xl border border-dashed border-border p-4 text-[0.8125rem]">
+            <div className="font-medium text-foreground">{t("trace.emptyTitle")}</div>
+            <p className="leading-relaxed text-muted-foreground">{t("trace.emptyWhy")}</p>
+            {pending !== null && pending > 0 ? (
+              <p className="text-muted-foreground">
+                {t("trace.emptyPending", { n: pending })}{" "}
+                <button
+                  onClick={() => {
+                    const [path] = window.location.hash.split("?");
+                    window.location.hash = `${path || "#/"}?open=review`;
+                  }}
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  {t("trace.emptyGoReview")}
+                </button>
+              </p>
+            ) : (
+              pending !== null && <p className="text-muted-foreground">{t("trace.emptyNoRuns")}</p>
+            )}
+          </div>
         )}
-        <div className="ml-auto flex gap-1">
-          {(["cases", "stories"] as const).map((k) => (
-            <button
-              key={k}
-              onClick={() => setSide(k)}
-              className={cn(
-                "cursor-pointer rounded px-2 py-1 text-[12px]",
-                side === k ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {t(`trace.side.${k}`)}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <p className="border-b border-border px-4 py-2 text-[12.5px] text-muted-foreground">
-        {side === "cases" ? t("trace.ledeCases") : t("trace.ledeStories")}
-      </p>
-
-      {rep.rows.length === 0 && (
-        <div className="m-4 max-w-2xl space-y-2 rounded-xl border border-dashed border-border p-4 text-[12.5px]">
-          <div className="font-medium text-foreground">{t("trace.emptyTitle")}</div>
-          <p className="leading-relaxed text-muted-foreground">{t("trace.emptyWhy")}</p>
-          {pending !== null && pending > 0 ? (
-            <p className="text-muted-foreground">
-              {t("trace.emptyPending", { n: pending })}{" "}
-              <button
-                onClick={() => {
-                  const [path] = window.location.hash.split("?");
-                  window.location.hash = `${path || "#/"}?open=review`;
-                }}
-                className="text-primary underline-offset-2 hover:underline"
-              >
-                {t("trace.emptyGoReview")}
-              </button>
-            </p>
-          ) : (
-            pending !== null && <p className="text-muted-foreground">{t("trace.emptyNoRuns")}</p>
-          )}
-        </div>
-      )}
-
-      {side === "cases" ? (
-        <table className="w-full text-[12.5px]">
-          <thead className="bg-muted/50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-4 py-1.5 font-medium">{t("trace.colCase")}</th>
-              <th className="px-2 py-1.5 font-medium">{t("trace.colStory")}</th>
-              <th className="px-2 py-1.5 font-medium">{t("trace.colAnchor")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r) => (
-              <tr key={r.caseId} className="border-b border-border/50 align-top">
-                <td className="px-4 py-1.5">{r.title}</td>
-                <td className="px-2 py-1.5">
-                  {r.orphan ? (
-                    <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                      <Unlink className="h-3.5 w-3.5" />
-                      {r.storyId ? t("trace.storyMissing").replace("{id}", r.storyId) : t("trace.noStory")}
-                    </span>
-                  ) : (
-                    <>
-                      <span className="flex items-center gap-1">
-                        <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="font-mono text-[11px]">{r.storyId}</span>
-                        <span className="text-muted-foreground">{r.storyTitle}</span>
+        {side === "cases" ? (
+          <table className="w-full text-[0.8125rem]">
+            <thead className="bg-muted/50 text-left text-[0.6875rem] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-1.5 font-medium">{t("trace.colCase")}</th>
+                <th className="px-2 py-1.5 font-medium">{t("trace.colStory")}</th>
+                <th className="px-2 py-1.5 font-medium">{t("trace.colAnchor")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((r) => (
+                <tr key={r.caseId} className="border-b border-border/50 align-top">
+                  <td className="px-4 py-1.5">{r.title}</td>
+                  <td className="px-2 py-1.5">
+                    {r.orphan ? (
+                      <span className="flex items-center gap-1 text-warn">
+                        <Unlink className="h-3.5 w-3.5" />
+                        {r.storyId ? t("trace.storyMissing").replace("{id}", r.storyId) : t("trace.noStory")}
                       </span>
-                      {r.acceptance.slice(0, 2).map((a, i) => (
-                        <div key={i} className="pl-4 text-[11.5px] text-muted-foreground">
-                          · {a}
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </td>
-                <td className="px-2 py-1.5">
-                  {r.unanchored ? (
-                    <span className="text-muted-foreground">{t("trace.noLiteral")}</span>
-                  ) : (
-                    <span className="flex flex-wrap gap-1">
-                      {r.anchors.map((a) => (
-                        <span
-                          key={a.text}
-                          title={
-                            a.grounded
-                              ? t(a.where === "spec" ? "trace.inSpecOnlyWhy" : "trace.groundedWhy")
-                              : t("trace.ungroundedWhy")
-                          }
-                          className={cn(
-                            "rounded px-1.5 py-0.5 text-[10.5px]",
-                            !a.grounded
-                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                              : a.where === "spec"
-                                ? // 只在整理后的规格里查到：不是编造，但材料里确实没有这句话。
-                                  "bg-sky-500/15 text-sky-700 dark:text-sky-400"
-                                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-                          )}
-                        >
-                          {a.grounded ? (a.where === "spec" ? "△ " : "") : "? "}
-                          {a.text}
+                    ) : (
+                      <>
+                        <span className="flex items-center gap-1">
+                          <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="font-mono text-[0.6875rem]">{r.storyId}</span>
+                          <span className="text-muted-foreground">{r.storyTitle}</span>
                         </span>
-                      ))}
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <table className="w-full text-[12.5px]">
-          <thead className="bg-muted/50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-4 py-1.5 font-medium">{t("trace.colStoryId")}</th>
-              <th className="px-2 py-1.5 font-medium">{t("trace.colStoryTitle")}</th>
-              <th className="px-2 py-1.5 font-medium">{t("trace.colCases")}</th>
-              <th className="px-2 py-1.5 font-medium">{t("trace.colSource")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rep.stories.map((s) => (
-              <tr key={s.storyId} className={cn("border-b border-border/50", s.cases === 0 && "bg-amber-500/5")}>
-                <td className="px-4 py-1.5 font-mono text-[11.5px]">{s.storyId}</td>
-                <td className="px-2 py-1.5">{s.title}</td>
-                <td className="px-2 py-1.5 font-mono tabular-nums">
-                  {s.cases === 0 ? (
-                    <span className="text-amber-600 dark:text-amber-400">0</span>
-                  ) : (
-                    s.cases
-                  )}
-                </td>
-                <td className="px-2 py-1.5 font-mono text-[10.5px] text-muted-foreground">{s.source ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+                        {r.acceptance.slice(0, 2).map((a, i) => (
+                          <div key={i} className="pl-4 text-[0.75rem] text-muted-foreground">
+                            · {a}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    {r.unanchored ? (
+                      <span className="text-muted-foreground">{t("trace.noLiteral")}</span>
+                    ) : (
+                      <span className="flex flex-wrap gap-1">
+                        {r.anchors.map((a) => (
+                          <span
+                            key={a.text}
+                            title={
+                              a.grounded
+                                ? t(a.where === "spec" ? "trace.inSpecOnlyWhy" : "trace.groundedWhy")
+                                : t("trace.ungroundedWhy")
+                            }
+                            className={cn(
+                              "rounded px-1.5 py-0.5 text-[0.6875rem]",
+                              !a.grounded
+                                ? "bg-warn-soft text-warn"
+                                : a.where === "spec"
+                                  ? // 只在整理后的规格里查到：不是编造，但材料里确实没有这句话。
+                                    "bg-primary-soft text-primary"
+                                  : "bg-ok-soft text-ok",
+                            )}
+                          >
+                            {a.grounded ? (a.where === "spec" ? "△ " : "") : "? "}
+                            {a.text}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          /*
+           * **故事树**，不是一张故事平表（US-03.1 AC：「拆解结果以故事树呈现，
+           * 每个故事可展开为测试点」）。
+           *
+           * 三层，而且每一层回答的问题都不一样：
+           *   故事   这条需求有没有被测到（0 条就是没有，整行标黄）
+           *   用例   它是被哪几条测到的
+           *   测试点 那一条具体验的是什么 —— 也就是「测试点」这个词的所指
+           *
+           * 之前它是一张平表，只到第一层：能看出「S-03 有 4 条用例」，
+           * 看不出那 4 条测的是不是同一件事。而复核时真正要判断的恰恰是后者——
+           * 四条用例覆盖同一个测试点，和覆盖四个，在这张表上长得一模一样。
+           */
+          <StoryTree stories={rep.stories} rows={rep.rows} />
+        )}
 
-      <p className="px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">{t("trace.footnote")}</p>
-    </div>
+        <p className="px-4 py-3 text-[0.75rem] leading-relaxed text-muted-foreground">{t("trace.footnote")}</p>
+      </div>
+    </>
   );
 }

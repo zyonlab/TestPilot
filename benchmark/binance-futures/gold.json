@@ -1,0 +1,250 @@
+{
+  "id": "binance-futures-v1",
+  "spec": "exploration of https://demo.binance.com/en/futures/BTCUSDT (2026-09-01); reviewed by AI test engineer 2026-09-03",
+  "reviewed": true,
+  "note": "从 2026-09-01 g0-explore 产物人工复核而来。这个页面是标签切换状态机；每条清单项 = 一个观察到的标签切换行为，match 锚在可见控件标签（Chart/Info/Limit/…）上，不锚转移 id 或泛词 BTCUSDT。去掉了草稿的 G-11(订单簿：无观察到的切换行为)与 G-12(行情统计：纯易变读数)，换成 Funding History 与 Positions 两个真实观察项。覆盖只能证明‘产品变了’不能证明‘产品错了’——材料 derivedFrom exploration。",
+  "outOfScope": [
+    "对价格/倒计时/资金费率/24h 量/持仓量数值本身的断言——两次访问自己会变。",
+    "需要登录才够得着的功能：探索是未登录会话，Login with Binance 之后无观察支撑。",
+    "订单簿深度(Depth)/成交流(Trades)的具体行数或数值——控件存在但无观察到的切换行为。"
+  ],
+  "items": [
+    {
+      "id": "G-01",
+      "story": "S-01",
+      "title": "查看未成交订单（Open Orders 打开下单/订单面板）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "order-mgmt",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Open Orders",
+          "未成交订单"
+        ],
+        "assertAnyOf": [
+          "Cross",
+          "Limit",
+          "Login with Binance",
+          "Info"
+        ]
+      }
+    },
+    {
+      "id": "G-02",
+      "story": "S-02",
+      "title": "查看图表（切到 Chart 视图）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "info-panel",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Chart",
+          "图表"
+        ],
+        "assertAnyOf": [
+          "Chart"
+        ]
+      }
+    },
+    {
+      "id": "G-03",
+      "story": "S-03",
+      "title": "查看订单历史（Order History 标签选中）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "panelGroup": "order-mgmt",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Order History",
+          "订单历史"
+        ],
+        "assertAnyOf": [
+          "Order History"
+        ]
+      }
+    },
+    {
+      "id": "G-04",
+      "story": "S-04",
+      "title": "查看成交历史（Trade History 标签选中）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "order-mgmt",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Trade History",
+          "成交历史",
+          "交易历史"
+        ],
+        "assertAnyOf": [
+          "Trade History"
+        ]
+      }
+    },
+    {
+      "id": "G-05",
+      "story": "S-05",
+      "title": "查看交易参数信息（切到 Info 面板）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "panelGroup": "info-panel",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Info",
+          "交易参数"
+        ],
+        "assertAnyOf": [
+          "Info"
+        ]
+      }
+    },
+    {
+      "id": "G-06",
+      "story": "S-06",
+      "title": "查看交易记录（Transaction History 标签选中）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "panelGroup": "order-mgmt",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Transaction History",
+          "交易记录"
+        ],
+        "assertAnyOf": [
+          "Transaction History"
+        ]
+      }
+    },
+    {
+      "id": "G-07",
+      "story": "S-07",
+      "title": "查看资产（Assets 标签选中）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "order-mgmt",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Assets",
+          "资产"
+        ],
+        "assertAnyOf": [
+          "Assets"
+        ]
+      }
+    },
+    {
+      "id": "G-08",
+      "story": "S-08",
+      "title": "切换到限价单面板（Limit，露出 BBO）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "order-entry",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Limit",
+          "限价"
+        ],
+        "assertAnyOf": [
+          "Limit",
+          "BBO"
+        ]
+      }
+    },
+    {
+      "id": "G-09",
+      "story": "S-09",
+      "title": "切换到市价单面板（Market，收起 BBO）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "panelGroup": "order-entry",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Market",
+          "市价"
+        ],
+        "assertAnyOf": [
+          "Market",
+          "BBO"
+        ]
+      }
+    },
+    {
+      "id": "G-10",
+      "story": "S-10",
+      "title": "切换到条件单面板（Conditional）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "order-entry",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Conditional",
+          "条件单"
+        ],
+        "assertAnyOf": [
+          "Conditional",
+          "Last",
+          "limitPrice"
+        ]
+      }
+    },
+    {
+      "id": "G-11",
+      "story": "S-11",
+      "title": "查看资金费率历史（Funding History 子页）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": false,
+      "panelGroup": "info-subtab",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Funding History",
+          "资金费"
+        ],
+        "assertAnyOf": [
+          "Funding History",
+          "Last"
+        ]
+      }
+    },
+    {
+      "id": "G-12",
+      "story": "S-03",
+      "title": "查看持仓标签（Positions 标签存在/可切换）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "heldOut": true,
+      "panelGroup": "order-mgmt",
+      "reviewed": true,
+      "match": {
+        "anyOf": [
+          "Positions",
+          "持仓"
+        ],
+        "assertAnyOf": [
+          "Positions"
+        ]
+      }
+    }
+  ]
+}

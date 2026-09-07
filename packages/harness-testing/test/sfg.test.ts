@@ -42,6 +42,8 @@ describe("state abstraction", () => {
 describe("the graph handed downstream", () => {
   const g: StateFlowGraph = {
     abstraction: "route+controls",
+    collector: "tags-only/v1",
+    plan: { asked: false, business: "", stories: [] },
     entry: "/",
     stoppedBecause: "连续 3 轮没有发现新界面",
   unvisited: [],
@@ -80,6 +82,8 @@ describe("revisiting a known state vs not moving at all", () => {
   it("两者在图里必须分得开", () => {
     const g: StateFlowGraph = {
       abstraction: "route+controls",
+      collector: "tags-only/v1",
+      plan: { asked: false, business: "", stories: [] },
       entry: "/",
       stoppedBecause: "",
   unvisited: [],
@@ -131,6 +135,8 @@ describe("addresses that are not screens", () => {
 describe("edges we walked vs edges we only saw", () => {
   const g: StateFlowGraph = {
     abstraction: "route+controls",
+    collector: "tags-only/v1",
+    plan: { asked: false, business: "", stories: [] },
     entry: "/",
     stoppedBecause: "",
   unvisited: [],
@@ -168,6 +174,8 @@ describe("edges we walked vs edges we only saw", () => {
 describe("probing a form on purpose", () => {
   const g: StateFlowGraph = {
     abstraction: "route+controls",
+    collector: "tags-only/v1",
+    plan: { asked: false, business: "", stories: [] },
     entry: "/owners/new",
     stoppedBecause: "",
   unvisited: [],
@@ -300,6 +308,8 @@ describe("停止原因要能脱离语言", () => {
   it("图里存得下结构化的停止原因", () => {
     const g = StateFlowGraphSchema.parse({
       abstraction: "route+controls/norm",
+      collector: "tags-only/v1",
+      plan: { asked: false, business: "", stories: [] },
       entry: "/",
       states: [],
       transitions: [],
@@ -312,6 +322,8 @@ describe("停止原因要能脱离语言", () => {
   it("旧图没有这个字段也照样解析——那时只有那句中文", () => {
     const g = StateFlowGraphSchema.parse({
       abstraction: "route+controls",
+      collector: "tags-only/v1",
+      plan: { asked: false, business: "", stories: [] },
       entry: "/",
       states: [],
       transitions: [],

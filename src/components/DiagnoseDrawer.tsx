@@ -78,9 +78,10 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
   };
 
   const subject = scope.node || scope.wfRunId || "";
-  const tips = scope.kind === "node"
-    ? ["wf.tipNode1", "wf.tipNode2", "wf.tipNode3"]
-    : ["wf.tipRun1", "wf.tipRun2", "wf.tipRun3"];
+  const tips =
+    scope.kind === "node"
+      ? ["wf.tipNode1", "wf.tipNode2", "wf.tipNode3"]
+      : ["wf.tipRun1", "wf.tipRun2", "wf.tipRun3"];
 
   return (
     <Drawer
@@ -92,37 +93,37 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
         <span className="flex items-center gap-1.5">
           <Stethoscope className="h-4 w-4 text-primary" />
           {t("wf.diagnose")}
-          <span className="font-mono text-[11.5px] text-muted-foreground">{subject}</span>
+          <span className="font-mono text-[0.75rem] text-muted-foreground">{subject}</span>
         </span>
       }
     >
       {/* 这条规则此前只活在一个 title 属性里，要 hover 才看得到——而它是整个设计里
           最重要的约束：跑什么、什么时候跑，由画布上的按钮决定，不由一句话决定。 */}
-      <p className="border-b border-border px-4 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+      <p className="border-b border-border px-4 py-2 text-[0.75rem] leading-relaxed text-muted-foreground">
         {t("wf.diagnoseRule")}
       </p>
 
       <div className="min-h-0 flex-1 overflow-auto p-3">
         {turns.length === 0 && (
-          <p className="text-[12.5px] leading-relaxed text-muted-foreground">{t("wf.diagnoseHint")}</p>
+          <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">{t("wf.diagnoseHint")}</p>
         )}
         <div className="space-y-2">
           {turns.map((m, i) => (
             <div
               key={i}
               className={cn(
-                "rounded-lg px-2.5 py-1.5 text-[13px] leading-relaxed",
+                "rounded-lg px-2.5 py-1.5 text-[0.8125rem] leading-relaxed",
                 m.role === "you"
                   ? "bg-primary/10"
                   : m.role === "sys"
-                    ? "font-mono text-[11.5px] text-rose-500"
+                    ? "font-mono text-[0.75rem] text-bad"
                     : "bg-muted",
               )}
             >
               {m.text}
             </div>
           ))}
-          {busy && <div className="text-[12px] text-muted-foreground">{t("wf.chatThinking")}</div>}
+          {busy && <div className="text-[0.75rem] text-muted-foreground">{t("wf.chatThinking")}</div>}
           <div ref={end} />
         </div>
       </div>
@@ -135,7 +136,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
               <button
                 key={k}
                 onClick={() => void ask(t(k))}
-                className="cursor-pointer rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="cursor-pointer rounded-full border border-border px-2 py-0.5 text-[0.6875rem] text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 {t(k)}
               </button>
@@ -144,7 +145,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
         )}
         <div className="flex items-end gap-2">
           <textarea
-            className="h-16 min-w-0 flex-1 resize-none rounded-md border border-border bg-background px-2 py-1 text-[13px]"
+            className="h-16 min-w-0 flex-1 resize-none rounded-md border border-border bg-background px-2 py-1 text-[0.8125rem]"
             value={input}
             placeholder={t("wf.diagnosePlaceholder")}
             onChange={(e) => setInput(e.target.value)}

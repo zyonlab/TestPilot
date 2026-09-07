@@ -31,6 +31,9 @@ export function testingPack(opts: {
       {
         id: "g1-g2-full",
         version: 1,
+        title: "读文档 · 一路跑到修复",
+        description:
+          "从挂上的文档出发，一直跑到生成代码、过代码门禁、进有界修复环。最长的一条，也是唯一能回答「这套用例真的跑得起来吗」的一条。",
         nodes: [
           ...g1.nodes,
           { id: "codegen", type: "codegen.case" },
@@ -52,6 +55,9 @@ export function testingPack(opts: {
         // 是因为「读文档」和「看产品」是两次不同的运行、会得出不同的东西，也该分别评测。
         id: "g0-explore",
         version: 1,
+        title: "看产品 · 出文本用例",
+        description:
+          "没有文档时用它：先探索界面，再从看到的东西整理规格。注意它得出的规格永远不可能发现「产品错了」——观察不可能反驳被观察者。",
         nodes: [
           { id: "explore", type: "source.explore", params: { deep: true, lang: "zh" } },
           { id: "spec", type: "spec.compose", params: { lang: "zh" } },
@@ -69,6 +75,9 @@ export function testingPack(opts: {
       {
         id: "g2-code",
         version: 1,
+        title: "从半路起跑 · 只生成代码",
+        description:
+          "拿昨天已经定稿的那批文本用例作种子，直接生成代码并修复，不重新问模型要用例。",
         // Starts halfway down: seeded with a stage-one bundle, which is how "take
         // yesterday's cases and generate code" works without re-asking the model.
         nodes: [

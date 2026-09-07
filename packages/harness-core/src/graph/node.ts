@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { describeParams, type ParamShape } from "./paramShape.js";
 import type { Scope } from "../obs/envelope.js";
+import type { ObservationType } from "../obs/langfuse.js";
 import type { Spend } from "../harness/protocol.js";
 
 /**
@@ -35,6 +36,16 @@ export interface NodeDef<P = unknown, I = unknown, O = unknown> {
   /** null for a source node: it produces without consuming. */
   inKind: string | null;
   outKind: string;
+  /**
+   * 这个节点在追踪上算哪一类观测。默认 `span`。
+   *
+   * 声明在节点这一侧，而不是在运行时按类型名猜：运行时是通用的，它不该知道
+   * 「`source.explore` 是个 agent 而 `gate.textcase` 是道门禁」——那是节点自己才知道的事。
+   *
+   * 这个值不只是标签：Langfuse 的 Agent Graph 是按观测类型画的，把每个节点都报成
+   * `span`，那张图就只是一条直线，看不出哪一段是真的在自主决策。
+   */
+  observationType?: ObservationType;
   // The third type argument is the schema's INPUT type, which differs from its output as
   // soon as a field has a default. Nodes care about the parsed value, so it is left open.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

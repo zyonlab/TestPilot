@@ -4,6 +4,7 @@ import {
   listRunsByProject,
   perfBaselineUpdatedAt,
   type RunRecord,
+  listBaselineVerdicts,
 } from "./db.js";
 
 /**
@@ -81,6 +82,17 @@ export function pendingBaselines(projectId: string): {
   const latest = newest(listRunsByProject(projectId));
   const visual: PendingVisual[] = [];
   const perf: PendingPerf[] = [];
+  /*
+   * 已经裁决过的不再是待办。
+   *
+   * 「接受为新基线」会把基线的时间戳推到这次运行之后，所以它自然就掉出待办了；
+   * 而「判为回归」和「承认是噪声」都**故意不动基线**——它们得靠这份裁决记录
+   * 才划得掉，否则一条已经被判成回归的用例会天天回到待办里，
+   * 而人每天要重新做一次同一个已经做过的判断。
+   */
+  const judged = new Set(
+    listBaselineVerdicts(projectId).map((v) => `${v.kind}:${v.caseId}:${v.runId}:${v.stepIdx ?? ""}`),
+  );
 
   for (const run of latest.values()) {
     const caseTitle = titles.get(run.caseId) ?? run.caseTitle;
@@ -91,6 +103,7 @@ export function pendingBaselines(projectId: string): {
       if (step.status !== "diff") continue;
       const bl = getBaseline(run.caseId, step.stepIdx);
       if (bl && bl.updatedAt > run.startedAt) continue; // approved since this run
+      if (judged.has(`visual:${run.caseId}:${run.id}:${step.stepIdx}`)) continue;
       visual.push({
         kind: "visual",
         caseId: run.caseId,
@@ -109,6 +122,7 @@ export function pendingBaselines(projectId: string): {
     const p = run.perf as PerfShape | undefined;
     if (p?.status === "regression") {
       const at = perfBaselineUpdatedAt(run.caseId);
+      if (judged.has(`perf:${run.caseId}:${run.id}:`)) continue;
       if (!at || at <= run.startedAt) {
         const metrics = p.metrics ?? {};
         const baseline = p.baseline ?? {};

@@ -12,7 +12,8 @@ import { describeOracle, evaluateOracle, type MachineOracle, type PageSnapshot }
 import { classifyFailure, isInfraError, type Failure } from "../failure.js";
 
 export interface RunResult {
-  status: "passed" | "failed";
+  /** `unobservable`：没有一条判据失败，但至少一条没量到——没有判决，不是通过。 */
+  status: "passed" | "failed" | "unobservable";
   durationMs: number;
   startedAt: string;
   logs: string[];
@@ -22,6 +23,8 @@ export interface RunResult {
   perfMetrics: PerfMetrics; // navigation/paint timing of the page under test
   oracle: OracleCheck[]; // functional assertion results (from the case's `expected`)
   failureReason?: string;
+  /** 哪条判据没量到（status 为 unobservable 时）。 */
+  unobservableReason?: string;
   infraError?: boolean; // model/network failure (not a real test failure) — excluded from flake/gate
   /** Structured classification of the failure: code + attribution (docs/spec/06). */
   failure?: Failure;
@@ -76,6 +79,13 @@ export async function executeRun(
     extraHeaders?: Record<string, string>; // fixed request headers (resolved)
     query?: Record<string, string>; // fixed query-string params
     storageState?: StorageState | null; // captured login state to inject
+    /** 持续登录的 SUT profile 目录。给了它就用它启动、不注入 storageState。见 session.ts。 */
+    sutProfileDir?: string;
+    /**
+     * 这个被测对象要多大的视口。跟着环境走，不给就用默认的 1024×720——
+     * 默认是为压小视觉模型的图定的，把它调大会让所有 SUT 一起变贵。见 U-69。
+     */
+    viewport?: { width?: number; height?: number };
     /**
      * A check a program can settle. When present it decides the case and the model is
      * never asked — which is what makes a tier-1 label mean something at execution time.
@@ -123,8 +133,11 @@ export async function executeRun(
     const dataOpts = {
       extraHeaders: opts.extraHeaders,
       query: opts.query,
-      storageState: opts.storageState,
+      // profile 自带登录态时不再注入 storageState——两条路只走一条，避免半套会话打架。
+      storageState: opts.sutProfileDir ? null : opts.storageState,
+      sutProfileDir: opts.sutProfileDir,
       mutation: opts.mutation,
+      ...(opts.viewport ? { viewport: opts.viewport } : {}),
     };
     session = await launchSession(
       url,
@@ -190,6 +203,7 @@ export async function executeRun(
     // Functional oracle: verify the case's expected outcome and record it structurally.
     const oracle: OracleCheck[] = [];
     let assertFailed: string | undefined;
+    let unobservable: string | undefined;
     let infraError = false;
     // A machine-checkable oracle decides on its own and costs no model call. The judge is
     // the fallback, not the default: a case that says a program can settle it should be
@@ -200,14 +214,28 @@ export async function executeRun(
       const snapAfter = await snapshotPage(session.page);
       endedAt = snapAfter.url;
       const verdict = evaluateOracle(opts.oracle, snapAfter, snapBefore);
+      /**
+       * **判据的 detail 也要抹密钥。**
+       *
+       * 判官那一档一直在抹（下面那个分支的 `redact((e as Error).message, secretVals)`），
+       * 机器判据这一档没有——而它恰恰是被鼓励用的那一档（层级要有事实撑着，见门禁的
+       * `tier-unbacked`）。
+       *
+       * 漏的路径很具体：`evaluateOracle` 的 url 分支原样吐出 `地址 ${after.url}`
+       * （`oracle.ts`），而查询串里可能带着令牌。那句话进 `runs.oracleJson`、
+       * 进 `runs.failureReason`、再渲染到界面上——**而同一个字符串的 `rlog` 副本是抹过的**。
+       * 一份抹过、一份没抹，比两份都没抹更难发现。
+       */
+      const detail = redact(verdict.detail, secretVals);
       oracle.push({
         assertion: expected || shown,
         status: verdict.status,
-        detail: verdict.detail,
+        detail,
         decidedBy: "machine",
       });
-      if (verdict.status === "fail") assertFailed = verdict.detail;
-      rlog(`assert ${verdict.status === "pass" ? "✓" : "✗"} — ${verdict.detail}`);
+      if (verdict.status === "fail") assertFailed = detail;
+      else if (verdict.status === "unobservable") unobservable = detail;
+      rlog(`assert ${verdict.status === "pass" ? "✓" : verdict.status === "unobservable" ? "∅" : "✗"} — ${detail}`);
     } else if (expected) {
       rlog(`assert: ${expected}`);
       try {
@@ -265,7 +293,9 @@ export async function executeRun(
     }
     const perfMetrics = await capturePerf(session.page).catch(() => ({}) as PerfMetrics);
     return {
-      status: assertFailed ? "failed" : "passed",
+      // 失败压过一切；没失败但有判据没量到，就是「没有判决」，不是通过。
+      status: assertFailed ? "failed" : unobservable ? "unobservable" : "passed",
+      ...(unobservable && !assertFailed ? { unobservableReason: unobservable } : {}),
       ...(endedAt ? { endedAt } : {}),
       ...(mutationApplied === undefined ? {} : { mutationApplied }),
       failure: assertFailed ? classifyFailure(assertFailed) : undefined,

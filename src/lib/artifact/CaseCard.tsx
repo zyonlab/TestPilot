@@ -14,7 +14,13 @@ import { METHOD_KEY, TIER_KEY, type ArtifactCase } from "./types";
  * 两者不一致的用例最危险——它读起来在验 A，实际在验 B——而不并排放，没人看得出来。
  */
 
-export function CaseMeta({ kase, onFilterMethod }: { kase: ArtifactCase; onFilterMethod?: (m: string) => void }) {
+export function CaseMeta({
+  kase,
+  onFilterMethod,
+}: {
+  kase: ArtifactCase;
+  onFilterMethod?: (m: string) => void;
+}) {
   const t = useT();
   const claimed = kase.tier;
   const delivered = kase.oracle ? tierDelivered(kase.oracle) : 3;
@@ -44,7 +50,9 @@ export function CaseMeta({ kase, onFilterMethod }: { kase: ArtifactCase; onFilte
         {t(TIER_KEY[kase.tier] ?? "artifact.tier3")}
       </Chip>
       {kase.priority ? (
-        <Chip tone={kase.priority === "P0" ? "bad" : kase.priority === "P1" ? "warn" : "plain"}>{kase.priority}</Chip>
+        <Chip tone={kase.priority === "P0" ? "bad" : kase.priority === "P1" ? "warn" : "plain"}>
+          {kase.priority}
+        </Chip>
       ) : (
         // 候选用例没有看板优先级。硬编码一个 P2 是在编造事实——说「还没有」才是真的。
         <Chip title={t("artifact.noPriorityWhy")}>—</Chip>
@@ -111,7 +119,9 @@ export function CaseBody({
           <ol className="space-y-0.5">
             {kase.steps.map((s, i) => (
               <li key={i} className="flex gap-2">
-                <span className="w-4 shrink-0 text-right font-mono text-[11px] text-muted-foreground">{i + 1}</span>
+                <span className="w-4 shrink-0 text-right font-mono text-[0.6875rem] text-muted-foreground">
+                  {i + 1}
+                </span>
                 <span className="min-w-0 flex-1">{s}</span>
               </li>
             ))}
@@ -129,9 +139,7 @@ export function CaseBody({
         tone={kase.oracle ? "normal" : "warn"}
       >
         {kase.oracle && (
-          <span className="font-mono text-[11.5px] text-emerald-700 dark:text-emerald-400">
-            {describeOracle(kase.oracle, t)}
-          </span>
+          <span className="font-mono text-[0.75rem] text-ok">{describeOracle(kase.oracle, t)}</span>
         )}
       </Field>
 
@@ -167,7 +175,9 @@ export function CaseBody({
           <ol className="space-y-0.5">
             {kase.postSteps.map((s, i) => (
               <li key={i} className="flex gap-2">
-                <span className="w-4 shrink-0 text-right font-mono text-[11px] text-muted-foreground">{i + 1}</span>
+                <span className="w-4 shrink-0 text-right font-mono text-[0.6875rem] text-muted-foreground">
+                  {i + 1}
+                </span>
                 <span className="min-w-0 flex-1">{s}</span>
               </li>
             ))}
@@ -177,7 +187,7 @@ export function CaseBody({
 
       {kase.requirementId && (
         <Field label={t("artifact.requirement")}>
-          <span className="font-mono text-[11.5px]">{kase.requirementId}</span>
+          <span className="font-mono text-[0.75rem]">{kase.requirementId}</span>
         </Field>
       )}
     </div>
@@ -189,14 +199,14 @@ export function CaseHeadline({ kase, expanded }: { kase: ArtifactCase; expanded?
   const t = useT();
   return (
     <div className="min-w-0">
-      <span className={cn("font-display text-[13.5px]", expanded ? "text-foreground" : "text-foreground")}>
+      <span className={cn("font-display text-[0.875rem]", expanded ? "text-foreground" : "text-foreground")}>
         {kase.title}
       </span>
       <div className="mt-1">
         <CaseMeta kase={kase} />
       </div>
       {!expanded && (
-        <div className="mt-1 truncate text-[12px] text-muted-foreground">
+        <div className="mt-1 truncate text-[0.75rem] text-muted-foreground">
           {t("artifact.expectedArrow")} {kase.expected}
         </div>
       )}

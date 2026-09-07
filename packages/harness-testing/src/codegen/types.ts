@@ -104,7 +104,7 @@ export type GatedCodeBundle = z.infer<typeof GatedCodeBundleSchema>;
 
 export const ExecOutcomeSchema = z.object({
   caseId: z.string(),
-  status: z.enum(["passed", "failed"]),
+  status: z.enum(["passed", "failed", "unobservable"]),
   /** Which bucket the failure belongs in: infra / locate / assert. */
   failKind: z.enum(["infra", "locate", "assert"]).optional(),
   failCode: z.string().optional(),
@@ -151,6 +151,16 @@ export const RepairRoundSchema = z.object({
   before: ExecOutcomeSchema,
   changes: z.array(RepairChangeSchema),
   note: z.string().default(""),
+  /**
+   * 这一轮改之前和改之后的代码。
+   *
+   * 不存它，人就被要求判断「这次修复诚不诚实」，而证据不在：轮次区只能打一行
+   * `#2 · assertion-semantics`——说了断言被改松，却拿不出改前改后。
+   * 一次修复循环最多几轮、每轮一段用例代码，这个体积换的是**唯一一处**
+   * 能自己看出「它是修好了还是把断言删了」的地方。
+   */
+  codeBefore: z.string().default(""),
+  codeAfter: z.string().default(""),
 });
 export type RepairRound = z.infer<typeof RepairRoundSchema>;
 
@@ -167,6 +177,15 @@ export const RepairReportSchema = z.object({
   strictPassRate: z.number(),
   degraded: z.array(z.string()),
   stoppedBecause: z.record(z.string(), z.string()),
+  /**
+   * 同一件事的机器可读版本：`{ caseId: { reason, n } }`。
+   *
+   * `stoppedBecause` 是一句英文，会原样出现在中文与日文界面上。界面拿这个码去查词条，
+   * 而 `because` 留给日志与 CLI——对着终端看日志的人不需要一串 `no-progress`。
+   */
+  stopReason: z
+    .record(z.string(), z.object({ reason: z.string(), n: z.number().optional() }))
+    .optional(),
 });
 export type RepairReport = z.infer<typeof RepairReportSchema>;
 

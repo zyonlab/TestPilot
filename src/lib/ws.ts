@@ -9,7 +9,6 @@ import { WS_URL } from "./base";
 //   * accept a `resync` when we fell further behind than the server's replay window —
 //     in that case the client refetches state over REST instead of pretending it is caught up.
 
-
 /** Protocol version this build speaks; the gateway refuses anything else (docs/spec/06 §7). */
 const PROTOCOL_VERSION = 1;
 

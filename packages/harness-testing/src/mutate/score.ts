@@ -41,7 +41,7 @@ import type { Mutant } from "./operators.js";
 
 export interface CaseOutcome {
   caseId: string;
-  status: "passed" | "failed";
+  status: "passed" | "failed" | "unobservable";
   failKind?: string;
 }
 

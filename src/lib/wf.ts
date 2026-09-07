@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { tOutsideReact } from "@/lib/prefs";
 import { tOutsideReact as tr } from "./prefs";
 import type { EventEnvelope } from "./types";
 import { connectEvents, type WsState } from "./ws";
@@ -22,6 +23,9 @@ export interface GraphEdgeDef {
 }
 export interface GraphDef {
   id: string;
+  /** 图定义自带的人话标题与一句话说明——见 harness-core 的 GraphDef。 */
+  title?: string;
+  description?: string;
   version: number;
   nodes: GraphNodeDef[];
   edges: GraphEdgeDef[];
@@ -87,6 +91,15 @@ export interface WfRunSummary {
   projectId?: string;
   startedAt: string;
   finishedAt?: string;
+  /** 这次运行改过哪几个节点的参数、关掉过哪些组件——它不是这张图的基线成绩。 */
+  overridden?: string[];
+  ablated?: string[];
+  /** 打的是哪里（`resolveTarget` 那句人话），以及只取环境名的那一半。 */
+  describe?: string;
+  envName?: string;
+  /** 这次运行给的上限与实际花掉的——「21 次调用」是多还是少，取决于上限。 */
+  budget?: { calls?: number; usd?: number; ms?: number };
+  spend?: { calls?: number; tokens?: number; usd?: number; ms?: number };
 }
 
 /**
@@ -124,7 +137,7 @@ export interface TraceRow {
 /**
  * What the harness is doing to this run, as opposed to what the run produced.
  *
- * The prototype calls this the runtime rail, and it is the answer to "where is the harness
+ * The prototype calls this the runtime rail, and it is the answer to"where is the harness
  * layer visible": admission, budget, ablation, prompt fingerprint and who decided each
  * verdict are all properties of the machinery, not of the product under test. They were
  * only ever visible as lines scrolling past in a log, which is the wrong place for state.
@@ -144,6 +157,34 @@ export interface Runtime {
   decided: { machine: number; judge: number };
 }
 
+/**
+ * 「这次它看得到什么」——一次运行的可复现性上下文。
+ *
+ * 这是右栏第三节的内容，也是两个月后回头看这次运行时唯一能回答
+ * 「它当时打的是哪里、读的什么、用哪一版图」的东西。
+ * 每一项在服务端都已经按值记进了运行记录（见 `RunDetail.targetSnapshot` / `materials`），
+ * 前端此前一项都没读——数据在库里躺着，而界面上答不出这些问题。
+ */
+export interface RunContext {
+  /** `项目 / 环境` 那句人话。 */
+  describe: string;
+  /** 起跑那一刻解析出来的地址，**按值记**，事后改环境不影响它。 */
+  baseUrl: string;
+  envName: string;
+  /** 带没带登录态。带了而导出不带走，是交付时最常见的一处静默失败。 */
+  usedSession: boolean;
+  /** 环境是点名要的，还是没人选拿的默认——默认事后被改，旧运行靠这一栏说清它当时拿的是什么。 */
+  envPick: "named" | "default" | "none" | "";
+  /** 地址的出处：一次性 URL / 环境 / 项目 / 环境变量。 */
+  urlFrom: "url" | "env" | "project" | "WF_TARGET_URL" | "";
+  graphId: string;
+  graphVersion: number;
+  /** 这次真的读了哪几份材料。 */
+  materials: string[];
+  /** 因为图上写死了路径而**没吃到**项目材料的节点。 */
+  graphPinned: Array<{ node: string; said: string }>;
+}
+
 export interface GraphVersion {
   version: number;
   savedAt: string;
@@ -158,22 +199,38 @@ interface WfState {
   wfRunId: string;
   runStatus: string;
   /**
-   * 停在了哪个上限上。只有 `runStatus === "budget"` 时才有。
+   * 停在了哪个上限上。只有 `runStatus ==="budget"` 时才有。
    *
-   * 光有一个 "budget" 状态，人还得自己去比数字才知道是调用、金额还是时间到顶了——
+   * 光有一个"budget" 状态，人还得自己去比数字才知道是调用、金额还是时间到顶了——
    * 而那三样对应的下一步完全不同。
    */
   stoppedBy: "calls" | "usd" | "ms" | "";
   nodeRuns: Record<string, NodeRun>;
   outputs: Record<string, unknown>;
   artifacts: Artifact[];
+  /** 这次运行的可复现性上下文。见 `RunContext`。 */
+  runContext: RunContext;
   trace: TraceRow[];
   selectedNode: string;
   nodeDetail: unknown;
-  log: string[];
+  /**
+   * 事件日志，每行记着**是哪一步发出来的**。
+   *
+   * 从前是一个纯字符串数组，于是节点抽屉标题写着 spec、底下滚的却是整次运行的全局流水：
+   * 打开 spec 会看见 design 的行。事件本来就带 `nodeRunId` 这个 scope，
+   * 丢掉它纯粹是没接住。
+   */
+  log: LogLine[];
   ws: WsState;
   error: string;
-  issues: Array<{ at: { node?: string }; message: string }>;
+  /**
+   * 保存被拒时，问题落在哪个元素上。
+   *
+   * `at.edge` 一直都在服务端发出来（`validateGraph` 对每条类型不匹配的边都带着它），
+   * 前端此前只读 `at.node`——于是「这条边接错了」只剩一句话，那条边在画布上
+   * 和别的边长得一模一样。
+   */
+  issues: Array<{ at: { node?: string; edge?: { from: string; to: string } }; message: string }>;
   /**
    * Where the run should stop, and where it did.
    *
@@ -188,6 +245,8 @@ interface WfState {
   load: () => Promise<void>;
   selectGraph: (id: string) => void;
   selectRun: (wfRunId: string) => Promise<void>;
+  /** 放下当前这次运行，回到干净画布。 */
+  selectRunNone: () => void;
   selectNode: (nodeId: string) => Promise<void>;
   hydrateFromLineage: (wfRunId: string) => Promise<void>;
   loadArtifacts: (wfRunId: string) => Promise<void>;
@@ -203,7 +262,14 @@ interface WfState {
   continuations: Array<{ graphId: string; fromNode: string; intoNode: string; ready: boolean }>;
   loadContinuations: () => Promise<void>;
   /** 用这次运行的产物作种子，起一次下一张图的运行。 */
-  continueInto: (graphId: string) => Promise<void>;
+  /**
+   * 接着往下跑一张图，可以顺手改这一次的参数。
+   *
+   * `params` 这个形参服务端一直收着（`continue.ts`），而前端**从来没传过**——
+   * 于是「拿昨天那批用例、把 repair.limit 从 3 改成整套、再跑一遍」这件事做不到，
+   * 除非去改图本身，而那会给图立一个新版本，把一次试跑写成一次定义变更。
+   */
+  continueInto: (graphId: string, params?: Record<string, Record<string, unknown>>) => Promise<void>;
   /**
    * 重新读一次当前运行：状态、逐节点耗费、产物、轨迹。
    *
@@ -220,7 +286,22 @@ interface WfState {
    * 一次都没有就回到「新运行」，画布清空。图不动——图是共享的流水线定义，不属于任何项目。
    */
   syncToProject: (projectId: string) => Promise<void>;
-  start: (opts?: { mode?: "only" | "from"; node?: string; projectId?: string }) => Promise<void>;
+  /**
+   * 起跑。`node` 给了就是部分重跑，其余字段只对整跑有意义。
+   *
+   * 这几个字段服务端一直收着（`startRun`），只是前端从来没发过——见 U-03 那段注释。
+   */
+  start: (opts?: {
+    mode?: "only" | "from";
+    node?: string;
+    projectId?: string;
+    envRef?: string;
+    url?: string;
+    graphVersion?: number;
+    budget?: { calls?: number; usd?: number; ms?: number };
+    params?: Record<string, Record<string, unknown>>;
+    ablate?: string[];
+  }) => Promise<void>;
   toggleBreakpoint: (nodeId: string) => void;
   /** Carry on from the breakpoint the run stopped at. */
   resume: () => Promise<void>;
@@ -234,6 +315,22 @@ interface WfState {
    * save, and save produces a new version like every other edit does.
    */
   draft?: GraphDef;
+  /**
+   * 打开一次旧运行时，画布画的是**它当时那一版图**。
+   *
+   * 从前 canvas 永远取当前版本：一次 v1 的运行被画在 v5 的拓扑上——v1 之后删掉的
+   * 节点不出现，它的产物卡跟着消失；v5 新加的节点画成 idle，看起来像「这次跳过了
+   * 这一步」，而那一步在那次运行时根本还不存在。服务端的续跑判定早就是按运行当时
+   * 的版本做的，理由写在 `graphs.ts` 上：否则改过的图会替它自己的旧运行做决定。
+   */
+  runGraph?: GraphDef;
+  /**
+   * 这次运行还没跑完，接着跑该从哪一步起（服务端算的，判据是产物）。
+   * 空字符串 = 没有可接的东西：一步都没产出的运行「接着跑」等于整跑，
+   * 把两者混成一个按钮，会让人在最该被提醒的时候悄悄重跑二十分钟。
+   */
+  resumeFrom: string;
+  resumeDone: number;
   versions: GraphVersion[];
   diffLines: string[];
   beginEdit: () => void;
@@ -243,11 +340,21 @@ interface WfState {
   loadVersions: (id?: string) => Promise<void>;
   loadDiff: (from: number, to: number) => Promise<void>;
   cancel: () => Promise<void>;
+  /** 正在发取消请求。按钮据此禁用，免得连按三下。 */
+  cancelling: boolean;
+  /** 取消之后要说的那句话——「正在停」和「进程已经不在了」是两句不同的话。 */
+  cancelNote: string;
   connect: () => void;
 }
 
 let close: (() => void) | null = null;
 const LOG_CAP = 200;
+
+/** 一行事件日志，以及它属于哪一步。空的 node 表示这一行属于整次运行。 */
+export interface LogLine {
+  node: string;
+  text: string;
+}
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
@@ -273,7 +380,7 @@ interface RunDetailShape {
   pausedAt?: string;
   spend?: { calls: number; tokens: number; usd: number; ms: number };
   budget?: { calls?: number; usd?: number; ms?: number };
-  /** 停在了哪个上限上。只有 `status === "budget"` 时才有。 */
+  /** 停在了哪个上限上。只有 `status ==="budget"` 时才有。 */
   stoppedBy?: "calls" | "usd" | "ms";
   ablate?: string[];
   prompts?: { combined?: string; entries?: Record<string, string> };
@@ -286,7 +393,10 @@ interface RunDetailShape {
  * yet — it only appears once it finishes — so a plain replacement would blank the very node
  * the person is watching.
  */
-function nodeRunsFrom(detail: RunDetailShape | undefined, current: Record<string, NodeRun>): Record<string, NodeRun> {
+function nodeRunsFrom(
+  detail: RunDetailShape | undefined,
+  current: Record<string, NodeRun>,
+): Record<string, NodeRun> {
   const next: Record<string, NodeRun> = { ...current };
   for (const n of detail?.nodes ?? [])
     next[n.nodeId] = {
@@ -299,6 +409,19 @@ function nodeRunsFrom(detail: RunDetailShape | undefined, current: Record<string
   if (paused) next[paused] = { ...next[paused], state: "paused" };
   return next;
 }
+
+const EMPTY_CONTEXT: RunContext = {
+  describe: "",
+  baseUrl: "",
+  envName: "",
+  usedSession: false,
+  envPick: "",
+  urlFrom: "",
+  graphId: "",
+  graphVersion: 0,
+  materials: [],
+  graphPinned: [],
+};
 
 const EMPTY_RUNTIME: Runtime = {
   gate: { limit: 1, active: 0, waiting: 0 },
@@ -317,10 +440,13 @@ export const useWf = create<WfState>((set, get) => ({
   runs: [],
   wfRunId: "",
   runStatus: "",
+  cancelling: false,
+  cancelNote: "",
   stoppedBy: "",
   nodeRuns: {},
   outputs: {},
   artifacts: [],
+  runContext: EMPTY_CONTEXT,
   trace: [],
   selectedNode: "",
   nodeDetail: undefined,
@@ -333,6 +459,8 @@ export const useWf = create<WfState>((set, get) => ({
   runtime: EMPTY_RUNTIME,
   continuations: [],
   draft: undefined,
+  resumeFrom: "",
+  resumeDone: 0,
   versions: [],
   diffLines: [],
 
@@ -369,6 +497,16 @@ export const useWf = create<WfState>((set, get) => ({
 
   // Switching graphs abandons a draft rather than carrying it across: a draft belongs to
   // the graph it was started from, and silently moving it would be a way to lose work.
+  /**
+   * 切图会把**这次运行**也一起放下。
+   *
+   * 此前只清了 nodeRuns / outputs / breakpoints / draft，却留着 wfRunId、runStatus、
+   * artifacts 和 trace。而事件只按 wfRunId 过滤、按 nodeId 打状态，产物卡只按"这个 node id
+   * 在当前图上有位置"来挂——三张图共用 docs/spec/stories/design/gate 五个节点 id。
+   * 于是从 g1-text-cases 切到 selftest-g1，上一次运行的产物卡原地挂到同名节点下，
+   * 正在跑的那次运行还继续把它们点亮：**一张从没跑过的图看起来正在跑，而且已经产出了
+   * 几十条用例**，而运行下拉此时因为 graphId 不匹配是空的，人更没有线索。
+   */
   selectGraph: (id) =>
     set({
       selectedGraph: id,
@@ -381,8 +519,34 @@ export const useWf = create<WfState>((set, get) => ({
       runtime: EMPTY_RUNTIME,
       continuations: [],
       draft: undefined,
+      runGraph: undefined,
       versions: [],
       diffLines: [],
+      // 这四样才是"这次运行"，它属于原来那张图。
+      wfRunId: "",
+      runStatus: "",
+      artifacts: [],
+      trace: [],
+      log: [],
+      runContext: EMPTY_CONTEXT,
+    }),
+
+  /** 放下当前这次运行，回到一张干净的画布。「新运行」用它，而不是去查一个空 id。 */
+  selectRunNone: () =>
+    set({
+      wfRunId: "",
+      runStatus: "",
+      runGraph: undefined,
+      cancelNote: "",
+      nodeRuns: {},
+      outputs: {},
+      artifacts: [],
+      trace: [],
+      log: [],
+      pausedAt: "",
+      nodeDetail: undefined,
+      runtime: EMPTY_RUNTIME,
+      continuations: [],
     }),
 
   selectRun: async (wfRunId) => {
@@ -390,7 +554,12 @@ export const useWf = create<WfState>((set, get) => ({
       const { run, outputs } = await json<{
         run: WfRunSummary & {
           detail?: {
-            nodes?: Array<{ nodeId: string; status: string; ms: number; spend?: { calls: number; tokens: number } }>;
+            nodes?: Array<{
+              nodeId: string;
+              status: string;
+              ms: number;
+              spend?: { calls: number; tokens: number };
+            }>;
             breakpoints?: string[];
             pausedAt?: string;
             spend?: { calls: number; tokens: number; usd: number; ms: number };
@@ -399,6 +568,19 @@ export const useWf = create<WfState>((set, get) => ({
             ablate?: string[];
             /** `combined` is the fingerprint over every prompt; `entries` says which one moved. */
             prompts?: { combined?: string; entries?: Record<string, string> };
+            /** 见 RunContext：服务端按值记下的可复现性上下文。 */
+            targetSnapshot?: {
+              describe?: string;
+              baseUrl?: string;
+              envName?: string;
+              usedSession?: boolean;
+              envPick?: "named" | "default" | "none";
+              urlFrom?: "url" | "env" | "project" | "WF_TARGET_URL";
+            };
+            materials?: {
+              injected?: Record<string, string[]>;
+              graphPinned?: Array<{ node: string; said: string }>;
+            };
           };
         };
         outputs: Record<string, unknown>;
@@ -411,6 +593,13 @@ export const useWf = create<WfState>((set, get) => ({
           calls: n.spend?.calls,
           tokens: n.spend?.tokens,
         };
+      /*
+       * 被重启打断的运行**不写 nodes 记录**——产物还在 wf_node_outputs 里躺着，
+       * 但界面此前把整张图画成 idle：一次跑了两步的运行看起来像从没跑过。
+       * 有产物就是跑过了，这一条判据服务端的 `completedNodes` 也是这么用的。
+       */
+      for (const id of Object.keys(outputs)) if (!nodeRuns[id]) nodeRuns[id] = { state: "done" };
+
       const pausedAt = run.detail?.pausedAt ?? "";
       // A paused node never finished, so it has no record among `nodes`; without this the
       // canvas shows the run stopped but not where.
@@ -419,7 +608,7 @@ export const useWf = create<WfState>((set, get) => ({
       set({
         wfRunId,
         runStatus: run.status,
-        stoppedBy: run.status === "budget" ? run.detail?.stoppedBy ?? "" : "",
+        stoppedBy: run.status === "budget" ? (run.detail?.stoppedBy ?? "") : "",
         nodeRuns,
         outputs,
         selectedGraph: run.graphId,
@@ -437,7 +626,52 @@ export const useWf = create<WfState>((set, get) => ({
           fails: {},
           decided: { machine: 0, judge: 0 },
         },
+        /**
+         * 「这次它看得到什么」。
+         *
+         * 服务端早就按值记下来了，前端此前一项都没读——于是数据在库里躺着，
+         * 而界面上答不出「这次打的是哪里」「读的是我的 PRD 还是图上写死的那份 mock」。
+         */
+        runContext: {
+          describe: run.detail?.targetSnapshot?.describe ?? "",
+          baseUrl: run.detail?.targetSnapshot?.baseUrl ?? "",
+          envName: run.detail?.targetSnapshot?.envName ?? "",
+          usedSession: !!run.detail?.targetSnapshot?.usedSession,
+          envPick: run.detail?.targetSnapshot?.envPick ?? "",
+          urlFrom: run.detail?.targetSnapshot?.urlFrom ?? "",
+          graphId: run.graphId,
+          graphVersion: Number(run.graphVersion ?? 0),
+          materials: Object.values(run.detail?.materials?.injected ?? {}).flat(),
+          graphPinned: run.detail?.materials?.graphPinned ?? [],
+        },
       });
+      /*
+       * 取这次运行钉住的那一版图。取不到（版本从没被写下来过，比如内置图的第一版）
+       * 就退回当前版本——画错的图也比画不出图强，但**只在真的没有**的时候才退。
+       */
+      const ver = Number(run.graphVersion ?? 0);
+      const current = get().graphs.find((g) => g.id === run.graphId);
+      if (ver > 0 && current && ver !== current.version) {
+        try {
+          const { graph } = await json<{ graph: GraphDef }>(`/api/graphs/${run.graphId}/versions/${ver}`);
+          set({ runGraph: graph });
+        } catch {
+          set({ runGraph: undefined });
+        }
+      } else set({ runGraph: undefined });
+
+      // 没跑完的运行才问「从哪儿接」。跑完的没有下一步，问了只会得到 null。
+      if (["interrupted", "failed", "cancelled", "budget", "paused"].includes(run.status)) {
+        try {
+          const { point } = await json<{ point: { from: string; done: string[] } | null }>(
+            `/api/wf/runs/${wfRunId}/resume-point`,
+          );
+          set({ resumeFrom: point?.from ?? "", resumeDone: point?.done.length ?? 0 });
+        } catch {
+          set({ resumeFrom: "", resumeDone: 0 });
+        }
+      } else set({ resumeFrom: "", resumeDone: 0 });
+
       // A run in progress has no finished-node record yet, so opening the page mid-run
       // would show an empty graph. Lineage has every transition — replay this run's.
       if (run.status === "running") await get().hydrateFromLineage(wfRunId);
@@ -472,13 +706,15 @@ export const useWf = create<WfState>((set, get) => ({
     }
   },
 
-  continueInto: async (graphId) => {
+  continueInto: async (graphId, params) => {
     const id = get().wfRunId;
     if (!id) return;
     try {
       const { wfRunId } = await json<{ wfRunId: string }>(`/api/wf/runs/${id}/continue`, {
         method: "POST",
-        body: JSON.stringify({ graphId }),
+        // 覆盖只作用于这一次运行：服务端把它并进节点参数、记进 paramOverrides，
+        // 图本身一个字都不动，版本号也不动。
+        body: JSON.stringify({ graphId, ...(params ? { params } : {}) }),
       });
       // 跟着跳到新运行上：接着跑的重点就是看后半段，留在已经跑完的那次上没有意义。
       set({ selectedGraph: graphId, error: "" });
@@ -503,7 +739,7 @@ export const useWf = create<WfState>((set, get) => ({
       const nodeRuns = nodeRunsFrom(run.detail, get().nodeRuns);
       set({
         runStatus: run.status,
-        stoppedBy: run.status === "budget" ? run.detail?.stoppedBy ?? "" : "",
+        stoppedBy: run.status === "budget" ? (run.detail?.stoppedBy ?? "") : "",
         nodeRuns,
         outputs,
         pausedAt: run.detail?.pausedAt ?? "",
@@ -549,11 +785,15 @@ export const useWf = create<WfState>((set, get) => ({
 
   hydrateFromLineage: async (wfRunId) => {
     try {
-      const { events } = await json<{ events: EventEnvelope[] }>("/api/events?limit=800");
+      // 按运行取。此前是 `?limit=800` 再在这里筛——而服务端那条路取的是**最旧一万条**，
+      // 于是刷新页面接着看在跑的那次运行，拿到的是一批与它无关的旧事件。
+      const { events } = await json<{ events: EventEnvelope[] }>(
+        `/api/events?wfRunId=${encodeURIComponent(wfRunId)}&limit=2000`,
+      );
       // Replayed, not live: these events already happened, and letting them trigger the
       // same refreshes a live event does turns replay into a loop — the refresh re-replays,
       // which refreshes again. That loop is what made the canvas shake.
-      for (const e of events) if (e.scope.wfRunId === wfRunId) handle(set, get, e, false);
+      for (const e of events) handle(set, get, e, false);
     } catch {
       /* the graph will fill in from live events instead */
     }
@@ -563,7 +803,7 @@ export const useWf = create<WfState>((set, get) => ({
    * Read the products of this run and turn them into cards.
    *
    * Only the nodes that actually ran are asked for, and a node whose output is missing is
-   * simply absent — an empty card claiming "0 cases" would be a statement about the run
+   * simply absent — an empty card claiming"0 cases" would be a statement about the run
    * that the run never made.
    */
   loadArtifacts: async (wfRunId) => {
@@ -602,12 +842,14 @@ export const useWf = create<WfState>((set, get) => ({
       const walked = (g.transitions ?? []).filter((t) => t.walked !== false).length;
       const unseen = (g.unvisited ?? []).length;
       cards.push({
-        id: "a-map", node: "explore", title: tr("art.map"),
+        id: "a-map",
+        node: "explore",
+        title: tr("art.map"),
         value: String((g.states ?? []).length),
         sub: unseen
-          // 「没进去的入口」摆在卡面上，因为它是这张图唯一会让人改主意的数：
-          // 它说的是「这张地图是不全的，而且缺了这么多」。
-          ? tr("art.mapSub", { walked, unseen })
+          ? // 「没进去的入口」摆在卡面上，因为它是这张图唯一会让人改主意的数：
+            // 它说的是「这张地图是不全的，而且缺了这么多」。
+            tr("art.mapSub", { walked, unseen })
           : tr("art.mapSubClean", { walked }),
         tone: unseen ? "warn" : undefined,
         opens: { surface: "map", label: tr("art.mapOpen") },
@@ -617,18 +859,31 @@ export const useWf = create<WfState>((set, get) => ({
     const specNode = has("spec") ? "spec" : has("explore") ? "explore" : "";
     if (specNode && full[specNode]) {
       const origin = String(full[specNode].origin ?? "");
-      const parts = origin.split(",").map((x) => x.trim()).filter(Boolean);
+      const parts = origin
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
       // 规格是**怎么来的**，必须在卡片上说出来。看出来的规格描述的是现状，不是意图——
       // 由它推出的用例只能发现「产品变了」，不可能发现「产品错了」。这句话不摆在人眼前，
       // 一套完全建立在观察之上的绿色套件就会被读成「产品是对的」。
       const from = String(full[specNode].derivedFrom ?? "document");
       cards.push({
-        id: "a-spec", node: specNode,
-        title: from === "exploration" ? tr("art.specFromExplore") : from === "codebase" ? tr("art.specFromCode") : tr("art.spec"),
+        id: "a-spec",
+        node: specNode,
+        title:
+          from === "exploration"
+            ? tr("art.specFromExplore")
+            : from === "codebase"
+              ? tr("art.specFromCode")
+              : tr("art.spec"),
         value: String(parts.length || 1),
-        sub: from === "exploration"
-          ? tr("art.specObservedWarn")
-          : parts.map((x) => x.split("/").pop()).join(" · ").slice(0, 42) || origin,
+        sub:
+          from === "exploration"
+            ? tr("art.specObservedWarn")
+            : parts
+                .map((x) => x.split("/").pop())
+                .join(" · ")
+                .slice(0, 42) || origin,
         tone: from === "exploration" ? "warn" : undefined,
         // Not a surface card: the material belongs to this run, so it opens its own drawer
         // reading what this run actually captured rather than today's file on disk.
@@ -639,7 +894,10 @@ export const useWf = create<WfState>((set, get) => ({
       const st = full.stories.stories as Array<{ id: string; source?: string }>;
       const docs = new Set(st.map((x) => x.source).filter(Boolean));
       cards.push({
-        id: "a-stories", node: "stories", title: tr("art.stories"), value: String(st.length),
+        id: "a-stories",
+        node: "stories",
+        title: tr("art.stories"),
+        value: String(st.length),
         sub: docs.size ? tr("art.storiesFrom", { n: docs.size }) : tr("art.storiesTree"),
         opens: { surface: "stories", label: tr("art.storiesOpen") },
       });
@@ -647,8 +905,12 @@ export const useWf = create<WfState>((set, get) => ({
     if (full.design?.cases) {
       const cs = full.design.cases as Array<{ title: string }>;
       cards.push({
-        id: "a-cases", node: "design", title: tr("art.cases"), value: String(cs.length),
-        sub: tr("art.casesSample", { n: Math.min(3, cs.length) }), samples: cs.slice(0, 3).map((c) => c.title),
+        id: "a-cases",
+        node: "design",
+        title: tr("art.cases"),
+        value: String(cs.length),
+        sub: tr("art.casesSample", { n: Math.min(3, cs.length) }),
+        samples: cs.slice(0, 3).map((c) => c.title),
         // 这次运行的一百条在复核队列里，不在看板上——看板是「已经批准的那些」。
         opens: { surface: "review", label: tr("art.casesOpen") },
       });
@@ -657,9 +919,20 @@ export const useWf = create<WfState>((set, get) => ({
     if (gated?.gate) {
       const g = gated.gate as { score?: number; findings?: unknown[]; stats?: any };
       cards.push({
-        id: "a-gate", node: full.gate ? "gate" : "codegen", title: tr("art.gate1"),
+        id: "a-gate",
+        node: full.gate ? "gate" : "codegen",
+        title: tr("art.gate1"),
         value: `${Math.round((g.score ?? 0) * 100)}%`,
-        sub: tr("art.gate1Sub", { n: g.findings?.length ?? 0, neg: Math.round((g.stats?.negativeRatio ?? 0) * 100) }),
+        /* 比例后面跟阈值与达标判定：一个没有分母的百分比说不出「够不够」。 */
+        sub: tr(
+          g.stats?.minNegativeRatio === undefined ? "art.gate1Sub" : "art.gate1SubThresh",
+          {
+            n: g.findings?.length ?? 0,
+            neg: Math.round((g.stats?.negativeRatio ?? 0) * 100),
+            min: Math.round((g.stats?.minNegativeRatio ?? 0) * 100),
+            ok: (g.stats?.negativeRatio ?? 0) >= (g.stats?.minNegativeRatio ?? 0) ? "✓" : "✗",
+          },
+        ),
         opens: { surface: "review", label: tr("art.gateOpen") },
       });
       // The claim and what can be delivered, side by side: this gap is the number worth
@@ -669,29 +942,52 @@ export const useWf = create<WfState>((set, get) => ({
       const machine = (backed["1"] ?? 0) + (backed["2"] ?? 0);
       if (total)
         cards.push({
-          id: "a-tier", node: full.gate ? "gate" : "codegen", title: tr("art.tierBacked"),
+          id: "a-tier",
+          node: full.gate ? "gate" : "codegen",
+          title: tr("art.tierBacked"),
           value: `${Math.round((machine / total) * 100)}%`,
-          sub: tr("art.tierClaims", { claims: Object.entries((g.stats?.tiers ?? {}) as Record<string, number>).map(([k, v]) => `${v}×t${k}`).join(" ") }),
+          sub: tr("art.tierClaims", {
+            claims: Object.entries((g.stats?.tiers ?? {}) as Record<string, number>)
+              .map(([k, v]) => `${v}×t${k}`)
+              .join(" "),
+          }),
           tone: machine === 0 ? "warn" : undefined,
         });
     }
     const coded = full.repair ?? full.codegate ?? full.codegen;
     if (coded?.code) {
       cards.push({
-        id: "a-code", node: full.repair ? "repair" : full.codegate ? "codegate" : "codegen",
-        title: tr("art.code"), value: String((coded.code as unknown[]).length),
+        id: "a-code",
+        node: full.repair ? "repair" : full.codegate ? "codegate" : "codegen",
+        title: tr("art.code"),
+        value: String((coded.code as unknown[]).length),
         opens: { surface: "code", label: tr("art.codeOpen") },
-        sub: coded.gate?.score !== undefined ? tr("art.codeGate2", { score: Number(coded.gate.score).toFixed(2) }) : tr("art.codeGenerated"),
+        sub:
+          coded.gate?.score !== undefined
+            ? tr("art.codeGate2", { score: Number(coded.gate.score).toFixed(2) })
+            : tr("art.codeGenerated"),
       });
     }
     if (full.repair?.repair) {
-      const r = full.repair.repair as { loosePassRate?: number; strictPassRate?: number; outcomes?: unknown[]; degraded?: unknown[] };
+      const r = full.repair.repair as {
+        loosePassRate?: number;
+        strictPassRate?: number;
+        outcomes?: unknown[];
+        degraded?: unknown[];
+      };
       const n = r.outcomes?.length ?? 0;
       const passed = Math.round((r.loosePassRate ?? 0) * n);
       cards.push({
-        id: "a-runs", node: "repair", title: tr("art.runs"), value: `${passed}/${n}`,
+        id: "a-runs",
+        node: "repair",
+        title: tr("art.runs"),
+        value: `${passed}/${n}`,
         opens: { surface: "runs", label: tr("art.runsOpen") },
-        sub: tr("art.runsSub", { loose: (r.loosePassRate ?? 0).toFixed(2), strict: (r.strictPassRate ?? 0).toFixed(2), degraded: r.degraded?.length ?? 0 }),
+        sub: tr("art.runsSub", {
+          loose: (r.loosePassRate ?? 0).toFixed(2),
+          strict: (r.strictPassRate ?? 0).toFixed(2),
+          degraded: r.degraded?.length ?? 0,
+        }),
         tone: (r.degraded?.length ?? 0) > 0 ? "warn" : undefined,
       });
     }
@@ -701,7 +997,10 @@ export const useWf = create<WfState>((set, get) => ({
     const fails: Record<string, number> = {};
     const decided = { machine: 0, judge: 0 };
     const outcomes = (full.repair?.repair?.outcomes ?? []) as Array<{
-      status?: string; kind?: string; failKind?: string; oracle?: Array<{ decidedBy?: string }>;
+      status?: string;
+      kind?: string;
+      failKind?: string;
+      oracle?: Array<{ decidedBy?: string }>;
     }>;
     for (const o of outcomes) {
       if (o.status && o.status !== "passed") {
@@ -725,33 +1024,21 @@ export const useWf = create<WfState>((set, get) => ({
    */
   loadTrace: async (wfRunId) => {
     try {
-      const { events } = await json<{ events: EventEnvelope[] }>("/api/events?limit=1000");
-      const mine = events.filter((e) => e.scope.wfRunId === wfRunId);
-      const rows: TraceRow[] = [];
-      for (const e of mine) {
-        const p = e.payload as Record<string, any>;
-        const ts = String(e.ts).slice(11, 19);
-        const node = String(p.nodeId ?? e.scope.nodeRunId ?? "—").split(":").pop() ?? "—";
-        if (e.kind === "wf.run.started")
-          rows.push({ ts, kind: "run", node: "—", text: tr("tr.runStart", { graph: String(p.graphId), ver: String(p.graphVersion), n: (p.nodes ?? []).length }) + ((p.ablated ?? []).length ? tr("tr.ablated", { list: (p.ablated as string[]).join(",") }) : ""), right: "" });
-        else if (e.kind === "wf.node.started") rows.push({ ts, kind: "node", node, text: tr("tr.enter", { type: String(p.type) }), right: "" });
-        else if (e.kind === "wf.node.finished")
-          rows.push({
-            ts, kind: p.status === "done" ? "node" : "err", node,
-            text: p.status === "done" ? tr("tr.done") : tr("tr.failed", { msg: String(p.error ?? "").slice(0, 90) }),
-            right: [p.ms ? `${(Number(p.ms) / 1000).toFixed(1)}s` : "", p.spend?.calls ? `${p.spend.calls} calls` : "", p.spend?.tokens ? `${p.spend.tokens} tok` : ""].filter(Boolean).join(" · "),
-          });
-        else if (e.kind === "gate.result")
-          rows.push({ ts, kind: "gate", node, text: tr("tr.gateFindings", { gate: String(p.gate), pct: Math.round(Number(p.score ?? 0) * 100), n: String(p.findings) }), right: "" });
-        else if (e.kind === "wf.node.output" && p.storyId)
-          rows.push({ ts, kind: "model", node, text: tr("tr.produced", { story: String(p.storyId), n: String(p.produced) }), right: "" });
-        else if (e.kind === "run.finished")
-          rows.push({ ts, kind: p.status === "passed" ? "node" : "err", node: String(p.caseId ?? "").slice(0, 18), text: tr("tr.exec", { status: String(p.status) }) + (p.failKind ? ` · ${p.failKind}` : ""), right: "" });
-        else if (e.kind === "repair.round")
-          rows.push({ ts, kind: "model", node: String(p.caseId ?? "").slice(0, 18), text: tr("tr.repairRoundChanges", { n: String(p.round), changes: (p.changes ?? []).join(" · ") }), right: "" });
-        else if (e.kind === "wf.paused")
-          rows.push({ ts, kind: "err", node, text: tr("tr.breakpoint", { reason: String(p.reason) }), right: "" });
-      }
+      // 同上：按运行取，筛选发生在 SQL 里。这条路此前是历史运行轨迹永远为空的直接原因。
+      const { events: mine } = await json<{ events: EventEnvelope[] }>(
+        `/api/events?wfRunId=${encodeURIComponent(wfRunId)}&limit=2000`,
+      );
+      /*
+       * 历史和实时走**同一段代码**。
+       *
+       * 此前是两份：这里一份、`traceRowFor` 一份。两份已经漂开了——
+       * 门禁那一行在历史里写「n 条意见」、在实时里不写；节点完成那一行在历史里带 token 数、
+       * 在实时里不带；「运行开始」那一行实时压根没有。于是同一次运行，
+       * **看的时候和事后看到的是两个样子**，而没有任何地方说得清哪个是对的。
+       *
+       * 一条 stream：先把已经发生的回放完，再无缝接上 live——渲染代码只有一段。
+       */
+      const rows = mine.map(traceRowFor).filter((r): r is TraceRow => !!r);
       set({ trace: rows });
     } catch {
       set({ trace: [] });
@@ -776,6 +1063,14 @@ export const useWf = create<WfState>((set, get) => ({
         opts?.node && wfRunId
           ? `/api/wf/runs/${wfRunId}/nodes/${opts.node}/run?mode=${opts.mode ?? "only"}`
           : "/api/wf/runs";
+      /**
+       * 起跑要把服务端支持的字段都发出去。
+       *
+       * `startRun` 早就收 envRef / url / budget / params / ablate / graphVersion，
+       * 而这里只发 graphId、breakpoints 和 projectId——实测 50 次运行 `detail.target`
+       * 全为 `{}`、`detail.budget` 全为 null。于是 BudgetDrawer、stoppedBy、按版本复现
+       * 全都是死路：不是它们坏了，是**没有人给过它们输入**。
+       */
       const body =
         opts?.node && wfRunId
           ? {}
@@ -786,7 +1081,19 @@ export const useWf = create<WfState>((set, get) => ({
               // from the workspace was unbound, its products could not be approved onto any
               // board without picking a project again at the far end, and the cards on its
               // own artefacts pointed at whatever project happened to be selected.
-              ...(opts?.projectId ? { target: { projectId: opts.projectId } } : {}),
+              ...(opts?.projectId || opts?.envRef || opts?.url
+                ? {
+                    target: {
+                      ...(opts?.projectId ? { projectId: opts.projectId } : {}),
+                      ...(opts?.envRef ? { envRef: opts.envRef } : {}),
+                      ...(opts?.url ? { url: opts.url } : {}),
+                    },
+                  }
+                : {}),
+              ...(opts?.graphVersion !== undefined ? { graphVersion: opts.graphVersion } : {}),
+              ...(opts?.budget ? { budget: opts.budget } : {}),
+              ...(opts?.params ? { params: opts.params } : {}),
+              ...(opts?.ablate?.length ? { ablate: opts.ablate } : {}),
             };
       const res = await json<{ wfRunId: string }>(path, { method: "POST", body: JSON.stringify(body) });
       const whole = !opts?.node;
@@ -802,7 +1109,7 @@ export const useWf = create<WfState>((set, get) => ({
         // (empty) output under the *old* run's numbers, which is worse than showing nothing.
         ...(whole ? { artifacts: [], trace: [], outputs: {} } : {}),
         // The picker is how a run is returned to; a run missing from it looks like it was
-        // never started, and the box falls back to reading "新运行" while one is in flight.
+        // never started, and the box falls back to reading"新运行" while one is in flight.
         runs: get().runs.some((r) => r.id === res.wfRunId)
           ? get().runs
           : [
@@ -813,7 +1120,7 @@ export const useWf = create<WfState>((set, get) => ({
                 status: "running",
                 startedAt: new Date().toISOString(),
                 // Carry the binding on the optimistic row too, or the run reads as
-                // "未绑定项目" until the list is refetched — which is the opposite of true.
+                //"未绑定项目" until the list is refetched — which is the opposite of true.
                 ...(opts?.projectId ? { projectId: opts.projectId } : {}),
               },
               ...get().runs,
@@ -823,7 +1130,7 @@ export const useWf = create<WfState>((set, get) => ({
       // Catch up, because the run can outrun its own HTTP response: a graph that stops at a
       // breakpoint in the first node finishes in milliseconds, and every event it will ever
       // publish is gone before this browser learns the run's id. The live stream only carries
-      // what happens next, so without this the canvas sits at "running" for a run that has
+      // what happens next, so without this the canvas sits at"running" for a run that has
       // already stopped.
       //
       // Three reads rather than one: the first can arrive before the gateway has even
@@ -842,12 +1149,28 @@ export const useWf = create<WfState>((set, get) => ({
     }
   },
 
-  toggleBreakpoint: (nodeId) =>
-    set({
-      breakpoints: get().breakpoints.includes(nodeId)
-        ? get().breakpoints.filter((b) => b !== nodeId)
-        : [...get().breakpoints, nodeId],
-    }),
+  /**
+   * 断点**属于这次运行，不属于浏览器**。
+   *
+   * 此前它只改本地 state，而且只有整跑那一次随请求发出——
+   * 「只跑这一步」「从这里开始」「继续」三条路都不带它，服务端沿用运行里存着的那份。
+   * 于是画布上刚点亮的红点和「这次会不会停」是两回事，
+   * 而顶栏那个「断点 N」数的是本地那一份。
+   *
+   * 选中了一次运行就落盘；没选中（还没起跑）就先留在本地，起跑时随请求带过去。
+   */
+  toggleBreakpoint: (nodeId) => {
+    const next = get().breakpoints.includes(nodeId)
+      ? get().breakpoints.filter((b) => b !== nodeId)
+      : [...get().breakpoints, nodeId];
+    set({ breakpoints: next });
+    const id = get().wfRunId;
+    if (!id) return;
+    void json(`/api/wf/runs/${id}/breakpoints`, {
+      method: "PATCH",
+      body: JSON.stringify({ breakpoints: next }),
+    }).catch((e) => set({ error: (e as Error).message }));
+  },
 
   /**
    * 改这次运行的上限，或者撤掉它（传 `null`）。
@@ -882,11 +1205,30 @@ export const useWf = create<WfState>((set, get) => ({
   },
 
   saveNodeParams: async (nodeId, params) => {
+    /*
+     * 正在编辑拓扑时，参数改到**草稿**上，不发请求。
+     *
+     * 从前这里一律拿「已保存的那张图」当基底，把草稿整个无视掉。于是
+     * 「改一条边 + 改一个参数」这一件事会立两版：参数那一版不含新连线，
+     * 拓扑那一版把参数打回旧值——两版历史，零个真正的改动。
+     * 编辑期间参数属于草稿，跟连线一起在「保存」那一下落地。
+     */
+    if (get().draft) {
+      get().editDraft((dr) => ({
+        ...dr,
+        nodes: dr.nodes.map((n) =>
+          n.id === nodeId ? { ...n, params: params as Record<string, unknown> } : n,
+        ),
+      }));
+      return;
+    }
     const def = get().graphs.find((g) => g.id === get().selectedGraph);
     if (!def) return;
     const next = {
       ...def,
-      nodes: def.nodes.map((n) => (n.id === nodeId ? { ...n, params: params as Record<string, unknown> } : n)),
+      nodes: def.nodes.map((n) =>
+        n.id === nodeId ? { ...n, params: params as Record<string, unknown> } : n,
+      ),
     };
     try {
       // The gateway validates before storing and answers with a NEW version: an edit can
@@ -900,8 +1242,12 @@ export const useWf = create<WfState>((set, get) => ({
         issues: [],
         error: "",
       });
+      // 顶栏已经是 v4、版本抽屉最新还停在 v3，是因为这里从来不重拉。
+      await get().loadVersions(graph.id);
     } catch (e) {
-      const err = e as Error & { issues?: Array<{ at: { node?: string }; message: string }> };
+      const err = e as Error & {
+        issues?: Array<{ at: { node?: string; edge?: { from: string; to: string } }; message: string }>;
+      };
       set({ error: err.message, issues: err.issues ?? [] });
     }
   },
@@ -936,7 +1282,9 @@ export const useWf = create<WfState>((set, get) => ({
     } catch (e) {
       // A rejected topology keeps the draft: the person is mid-edit, and throwing their
       // work away to show them an error message is the wrong trade.
-      const err = e as Error & { issues?: Array<{ at: { node?: string }; message: string }> };
+      const err = e as Error & {
+        issues?: Array<{ at: { node?: string; edge?: { from: string; to: string } }; message: string }>;
+      };
       set({ error: err.message, issues: err.issues ?? [] });
     }
   },
@@ -963,9 +1311,33 @@ export const useWf = create<WfState>((set, get) => ({
     }
   },
 
+  /**
+   * 取消要有回执。
+   *
+   * 此前这里不设任何本地状态、还把错误吞掉（`.catch(() => undefined)`），按下去界面一动不动；
+   * 而取消只在节点边界生效，实测单步耗时 spec 158 秒、codegen 505 秒——**这几分钟里
+   * 人不知道自己按下去有没有用**。服务端现在分三态回答，这里把它们说成三句不同的话。
+   */
   cancel: async () => {
-    if (!get().wfRunId) return;
-    await json(`/api/wf/runs/${get().wfRunId}/cancel`, { method: "POST" }).catch(() => undefined);
+    const id = get().wfRunId;
+    if (!id) return;
+    set({ cancelling: true, error: "" });
+    try {
+      const r = await json<{ result: string; stopsAfter?: string }>(`/api/wf/runs/${id}/cancel`, {
+        method: "POST",
+      });
+      if (r.result === "requested")
+        set({
+          error: "",
+          cancelNote: tOutsideReact("wf.stopping", { step: r.stopsAfter ? `（${r.stopsAfter}）` : "" }),
+        });
+      else if (r.result === "agent-gone")
+        set({ runStatus: "cancelled", cancelNote: tOutsideReact("wf.agentGone") });
+    } catch (e) {
+      set({ error: (e as Error).message });
+    } finally {
+      set({ cancelling: false });
+    }
   },
 
   connect: () => {
@@ -992,9 +1364,17 @@ function handle(set: Set, get: Get, e: EventEnvelope, live: boolean): void {
   const wfRunId = get().wfRunId;
   if (wfRunId && e.scope.wfRunId && e.scope.wfRunId !== wfRunId) return;
   const p = e.payload as Record<string, unknown>;
-  const nodeId = String(p.nodeId ?? "");
+  // `nodeId` is the legacy field name (`wf.node.started`/`wf.node.finished`); the new
+  // `wf.node` kind (契约 §1 `NodeEvent`) calls the same thing `node`. Both are read so
+  // either shape resolves to the same key into `nodeRuns`.
+  const nodeId = String(p.nodeId ?? p.node ?? "");
   const patch = (state: Partial<NodeRun>) =>
-    set({ nodeRuns: { ...get().nodeRuns, [nodeId]: { ...(get().nodeRuns[nodeId] ?? { state: "idle" }), ...state } } });
+    set({
+      nodeRuns: {
+        ...get().nodeRuns,
+        [nodeId]: { ...(get().nodeRuns[nodeId] ?? { state: "idle" }), ...state },
+      },
+    });
 
   switch (e.kind) {
     case "wf.run.started":
@@ -1005,8 +1385,38 @@ function handle(set: Set, get: Get, e: EventEnvelope, live: boolean): void {
       // Reload the run itself and the list: the selector otherwise keeps showing the
       // status the run had when the page opened.
       if (live) void get().refreshRun();
-      void json<{ runs: WfRunSummary[] }>("/api/wf/runs").then(({ runs }) => set({ runs })).catch(() => undefined);
+      void json<{ runs: WfRunSummary[] }>("/api/wf/runs")
+        .then(({ runs }) => set({ runs }))
+        .catch(() => undefined);
       break;
+    /*
+     * `wf.node` — 契约 §1 的 `NodeEvent`，start/end/error 三态，**这是权威来源**。
+     * 服务端目前对同一件事双发（见 `server/src/penguin.ts` `publishNodeEvent` 与
+     * `server/src/penguinRun.ts` `publishBoth` 的注释），所以下面 `wf.node.started` /
+     * `wf.node.finished` 两个旧 case 仍然保留、仍然会收到同一次转变——但只在这里
+     * 触发 `refreshRun()` 和产生轨迹行（`traceRowFor` 对旧 kind 返回 undefined），
+     * 两处不会各自再触发一次，状态本身怎么改由哪个 kind 先到都一样。
+     */
+    case "wf.node": {
+      const phase = String(p.phase ?? "");
+      if (phase === "start") {
+        patch({ state: "running" });
+      } else if (phase === "end" || phase === "error") {
+        patch({
+          state: phase === "end" ? "done" : "failed",
+          ms: Number(p.ms ?? 0),
+          calls: Number(p.calls ?? 0),
+          tokens: Number(p.tokens ?? 0),
+          error: p.error ? String(p.error) : undefined,
+        });
+        // A stage just produced something, so the artefact layer has one more card to show.
+        // It used to appear only when the run was re-selected, which meant watching a run
+        // told you which box was busy and nothing about what came out of it.
+        if (live && phase === "end") void get().refreshRun();
+      }
+      break;
+    }
+    /** 兼容读取：状态补丁仍然应用（幂等，`wf.node` 已经写过同一份），不再重复触发副作用。 */
     case "wf.node.started":
       patch({ state: "running" });
       break;
@@ -1018,20 +1428,39 @@ function handle(set: Set, get: Get, e: EventEnvelope, live: boolean): void {
         tokens: Number((p.spend as { tokens?: number } | undefined)?.tokens ?? 0),
         error: p.error ? String(p.error) : undefined,
       });
-      // A stage just produced something, so the artefact layer has one more card to show.
-      // It used to appear only when the run was re-selected, which meant watching a run
-      // told you which box was busy and nothing about what came out of it.
-      if (live && p.status === "done") void get().refreshRun();
       break;
+    /*
+     * 跑着的时候的花费。节点 finished 才刷新的老做法，让一个六分钟的节点
+     * 在界面上纹丝不动——分不清「在想」和「卡死」。
+     */
+    case "budget.update": {
+      const total = (p.total ?? {}) as { calls?: number; tokens?: number; usd?: number; ms?: number };
+      const node = (p.node ?? {}) as { calls?: number; tokens?: number; ms?: number };
+      const prev = get().runtime;
+      set({
+        runtime: {
+          ...prev,
+          spend: {
+            calls: Number(total.calls ?? prev.spend.calls),
+            tokens: Number(total.tokens ?? prev.spend.tokens),
+            usd: Number(total.usd ?? prev.spend.usd),
+            ms: Number(total.ms ?? prev.spend.ms),
+          },
+        },
+      });
+      if (nodeId)
+        patch({ calls: Number(node.calls ?? 0), tokens: Number(node.tokens ?? 0), ms: Number(node.ms ?? 0) });
+      break;
+    }
     case "gate.result":
       patch({ gate: { score: Number(p.score ?? 0), findings: Number(p.findings ?? 0) } });
       break;
     case "wf.paused":
       set({ runStatus: `paused: ${String(p.reason ?? "")}` });
       // Which node it stopped in front of is the whole point of stopping; a status line
-      // saying "paused" without it leaves you hunting for the node.
+      // saying"paused" without it leaves you hunting for the node.
       // Stopping is when you most want to see what has been produced so far — that is what
-      // a breakpoint is for. Refreshing only on "finished" left the canvas blank at exactly
+      // a breakpoint is for. Refreshing only on"finished" left the canvas blank at exactly
       // the moment it was asked to be useful.
       if (live) void get().refreshRun();
       if (nodeId) {
@@ -1047,14 +1476,14 @@ function handle(set: Set, get: Get, e: EventEnvelope, live: boolean): void {
         e.kind === "log"
           ? String((p as { text?: string }).text ?? "")
           : `${e.kind} ${JSON.stringify(p).slice(0, 160)}`;
-      if (text) set({ log: [...get().log, text].slice(-LOG_CAP) });
+      if (text) set({ log: [...get().log, { node: nodeId, text }].slice(-LOG_CAP) });
       break;
     }
   }
 
   // The trace is rebuilt from lineage whenever the run is refreshed, and a refresh only
   // happens when a node finishes. During a long step — a model call takes minutes — that
-  // left it reading "还没有留下轨迹" while work was visibly happening, which is the one
+  // left it reading"还没有留下轨迹" while work was visibly happening, which is the one
   // moment it exists for. Live events append to it directly.
   if (live) {
     const row = traceRowFor(e);
@@ -1071,29 +1500,105 @@ const TRACE_CAP = 400;
  * the same row after a refresh read identically — a trace whose wording changes underneath
  * you is worse than one that arrives late.
  */
+/**
+ * 一条事件 → 轨迹上的一行。**历史与实时共用它**。
+ *
+ * 这曾经是两份实现：回放一份、live 一份。两份不可能长期一致——实测里它们已经在
+ * 三处漂开了（门禁那行的措辞、节点完成那行带不带 token、「运行开始」那行 live 根本没有），
+ * 于是同一次运行「看着跑」和「事后看」是两个样子。
+ * 一段代码，两条来路：这就是那句「历史与实时是同一条 stream」在代码上的意思。
+ */
 function traceRowFor(e: EventEnvelope): TraceRow | undefined {
   const p = e.payload as Record<string, any>;
   const ts = String(e.ts).slice(11, 19);
-  const node = String(p.nodeId ?? e.scope.nodeRunId ?? "—").split(":").pop() ?? "—";
+  // `node` 是新 kind（`wf.node`）的字段名，`nodeId` 是旧两个 kind 的字段名——都读一遍。
+  const node =
+    String(p.nodeId ?? p.node ?? e.scope.nodeRunId ?? "—")
+      .split(":")
+      .pop() ?? "—";
   switch (e.kind) {
-    case "wf.node.started":
-      return { ts, kind: "node", node, text: tr("tr.enter", { type: String(p.type) }), right: "" };
-    case "wf.node.finished":
+    case "wf.run.started":
       return {
         ts,
-        kind: p.status === "done" ? "node" : "err",
-        node,
-        text: p.status === "done" ? tr("tr.done") : tr("tr.failed", { msg: String(p.error ?? "").slice(0, 90) }),
-        right: [p.ms ? `${(Number(p.ms) / 1000).toFixed(1)}s` : "", p.spend?.calls ? `${p.spend.calls} calls` : ""]
-          .filter(Boolean)
-          .join(" · "),
+        kind: "run",
+        node: "—",
+        text:
+          tr("tr.runStart", {
+            graph: String(p.graphId),
+            ver: String(p.graphVersion),
+            n: (p.nodes ?? []).length,
+          }) +
+          ((p.ablated ?? []).length ? tr("tr.ablated", { list: (p.ablated as string[]).join(",") }) : ""),
+        right: "",
       };
+    /** `wf.node`（契约 §1，phase: start/end/error）——权威来源，见 `handle()` 顶上的注释。 */
+    case "wf.node": {
+      const phase = String(p.phase ?? "");
+      if (phase === "start") return { ts, kind: "node", node, text: tr("tr.enter", { type: node }), right: "" };
+      if (phase === "end")
+        return {
+          ts,
+          kind: "node",
+          node,
+          text: tr("tr.done"),
+          // 耗时、调用数、token 三样一起给：最慢的一步和最贵的一步常常不是同一步。
+          right: [
+            p.ms ? `${(Number(p.ms) / 1000).toFixed(1)}s` : "",
+            p.calls ? `${p.calls} calls` : "",
+            p.tokens ? `${p.tokens} tok` : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        };
+      if (phase === "error")
+        return { ts, kind: "err", node, text: tr("tr.failed", { msg: String(p.error ?? "").slice(0, 90) }), right: "" };
+      return undefined;
+    }
+    /*
+     * 服务端同一件事仍然双发（见 `handle()` 顶上的注释）：`wf.node` 已经为这次转变
+     * 产生了一行，这两个旧 kind 不再重复产生——否则回放历史时每个节点会出现两行
+     * 一模一样的轨迹。case 留着是"读到了、认得、决定不再画"，不是没接住。
+     */
+    case "wf.node.started":
+    case "wf.node.finished":
+      return undefined;
     case "gate.result":
-      return { ts, kind: "gate", node, text: tr("tr.gate", { gate: String(p.gate), pct: Math.round(Number(p.score ?? 0) * 100) }), right: "" };
+      return {
+        ts,
+        kind: "gate",
+        node,
+        // 分数后面跟着「几条意见」：一个光秃秃的百分比说不出该去看什么。
+        text:
+          p.findings === undefined
+            ? tr("tr.gate", { gate: String(p.gate), pct: Math.round(Number(p.score ?? 0) * 100) })
+            : tr("tr.gateFindings", {
+                gate: String(p.gate),
+                pct: Math.round(Number(p.score ?? 0) * 100),
+                n: String(p.findings),
+              }),
+        right: "",
+      };
     case "wf.node.output":
-      return p.storyId ? { ts, kind: "model", node, text: tr("tr.produced", { story: String(p.storyId), n: String(p.produced) }), right: "" } : undefined;
+      return p.storyId
+        ? {
+            ts,
+            kind: "model",
+            node,
+            text: tr("tr.produced", { story: String(p.storyId), n: String(p.produced) }),
+            right: "",
+          }
+        : undefined;
     case "repair.round":
-      return { ts, kind: "model", node: String(p.caseId ?? "").slice(0, 18), text: tr("tr.repairRound", { n: String(p.round) }), right: "" };
+      return {
+        ts,
+        kind: "model",
+        node: String(p.caseId ?? "").slice(0, 18),
+        // 改了什么比「第几轮」有用得多——有就说。
+        text: (p.changes ?? []).length
+          ? tr("tr.repairRoundChanges", { n: String(p.round), changes: (p.changes as string[]).join(" · ") })
+          : tr("tr.repairRound", { n: String(p.round) }),
+        right: "",
+      };
     case "run.finished":
       return {
         ts,

@@ -69,7 +69,7 @@ export function Drawer({
   open,
   onClose,
   title,
-  widthClass = "w-[620px] max-w-[92vw]",
+  widthClass = "w-[38.75rem] max-w-[92vw]",
   resizeKey,
   defaultWidth = 880,
   tabs,
@@ -120,7 +120,10 @@ export function Drawer({
       if (!drag.current) return;
       // Clamped so the drawer can never be dragged past being unusable in either direction:
       // a 40px sliver and a drawer that hides the canvas it came from are both dead ends.
-      const next = Math.max(420, Math.min(window.innerWidth - 80, drag.current.w + (drag.current.x - e.clientX)));
+      const next = Math.max(
+        420,
+        Math.min(window.innerWidth - 80, drag.current.w + (drag.current.x - e.clientX)),
+      );
       setWidth(next);
       widths.set(resizeKey, next);
     };
@@ -154,6 +157,9 @@ export function Drawer({
         tabIndex={-1}
         style={resizeKey ? { width } : undefined}
         className={cn(
+        /* `outline-none` 在这里是对的，别加焦点环：这是抽屉/对话框的**容器**，
+           `tabIndex={-1}` 只为打开时把焦点程序化地放进来，人不会 Tab 到它上面。
+           给容器画一圈环，等于每次开抽屉都闪一下。里面真正的控件各自有环。 */
           "absolute right-0 top-0 flex h-full flex-col border-l border-border bg-card shadow-xl outline-none",
           "motion-safe:translate-x-0 motion-safe:transition-transform motion-safe:duration-300",
           !resizeKey && widthClass,
@@ -172,9 +178,7 @@ export function Drawer({
         )}
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           {title != null && (
-            <h2 className="min-w-0 truncate font-display text-sm font-medium text-foreground">
-              {title}
-            </h2>
+            <h2 className="min-w-0 truncate font-display text-sm font-medium text-foreground">{title}</h2>
           )}
           {tabs && (
             <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
@@ -183,8 +187,10 @@ export function Drawer({
                   key={tb.id}
                   onClick={tb.onSelect}
                   className={cn(
-                    "flex-none cursor-pointer rounded-md px-2.5 py-1 text-[12.5px] transition-colors",
-                    tb.active ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted",
+                    "flex-none cursor-pointer rounded-md px-2.5 py-1 text-[0.8125rem] transition-colors",
+                    tb.active
+                      ? "bg-primary/10 font-medium text-primary"
+                      : "text-muted-foreground hover:bg-muted",
                   )}
                 >
                   {tb.label}
@@ -269,6 +275,9 @@ export function Dialog({
         aria-modal="true"
         tabIndex={-1}
         className={cn(
+        /* `outline-none` 在这里是对的，别加焦点环：这是抽屉/对话框的**容器**，
+           `tabIndex={-1}` 只为打开时把焦点程序化地放进来，人不会 Tab 到它上面。
+           给容器画一圈环，等于每次开抽屉都闪一下。里面真正的控件各自有环。 */
           "relative flex max-h-[90vh] w-full flex-col rounded-xl border border-border bg-card shadow-xl outline-none",
           widthClass,
           "motion-safe:transition-transform motion-safe:duration-200",

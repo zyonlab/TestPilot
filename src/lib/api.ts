@@ -147,8 +147,7 @@ export const api = {
       error?: string;
     }>("/api/dapp/verify", opts, 120000),
   // Load the one-click Uniswap dapp-testing example (project + starter web3 cases).
-  loadUniswapExample: () =>
-    post<{ project: Project; reused: boolean }>("/api/examples/uniswap", {}, 8000),
+  loadUniswapExample: () => post<{ project: Project; reused: boolean }>("/api/examples/uniswap", {}, 8000),
   // MetaMask extension check: launch with the extension, screenshot its UI.
   walletCheck: () =>
     post<{
@@ -172,12 +171,12 @@ export const api = {
       failureReason?: string;
     }>("/api/run", payload),
 
-
   generateCode: (payload: { title: string; steps: string[]; expected: string }) =>
     post<{ code: string }>("/api/generate-code", payload, 30000),
 
   // ---- persistence (backend is the source of truth) ----
-  getProjects: () => get<{ projects: Project[]; overviews?: Record<string, ProjectOverview> }>("/api/projects"),
+  getProjects: () =>
+    get<{ projects: Project[]; overviews?: Record<string, ProjectOverview> }>("/api/projects"),
   createProject: (
     name: string,
     targetUrl: string,
@@ -187,39 +186,27 @@ export const api = {
   updateProject: (
     id: string,
     body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials">>,
-  ) =>
-    patch<{ project: Project }>(`/api/projects/${id}`, body),
+  ) => patch<{ project: Project }>(`/api/projects/${id}`, body),
   deleteProject: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
   getCases: (projectId?: string) =>
     get<{ cases: TestCase[] }>(`/api/cases${projectId ? `?projectId=${projectId}` : ""}`),
   // Runs are project-scoped (like cases/suite/trends). Pass caseId for a single case,
   // or projectId for the whole project.
   getRuns: (opts?: { projectId?: string; caseId?: string }) => {
-    const q = opts?.caseId
-      ? `?caseId=${opts.caseId}`
-      : opts?.projectId
-        ? `?projectId=${opts.projectId}`
-        : "";
+    const q = opts?.caseId ? `?caseId=${opts.caseId}` : opts?.projectId ? `?projectId=${opts.projectId}` : "";
     return get<{ runs: RunRecord[] }>(`/api/runs${q}`);
   },
   getRun: (id: string) => get<{ run: RunRecord }>(`/api/runs/${id}`),
-  patchCase: (id: string, body: Partial<TestCase>) =>
-    patch<{ case: TestCase }>(`/api/cases/${id}`, body),
+  patchCase: (id: string, body: Partial<TestCase>) => patch<{ case: TestCase }>(`/api/cases/${id}`, body),
   // AI refine of steps/oracle — a long model call (up to ~60s), so a generous
   // timeout. Does NOT mutate; caller applies the proposal via patchCase.
-  refineCase: (
-    caseId: string,
-    target: RefineTarget,
-    instruction: string,
-    stepIdx?: number,
-  ) =>
+  refineCase: (caseId: string, target: RefineTarget, instruction: string, stepIdx?: number) =>
     post<RefineResponse>(
       `/api/cases/${caseId}/refine`,
       { target, instruction, stepIdx, lang: uiLang() },
       90000,
     ),
-  genCaseCode: (id: string) =>
-    post<{ case: TestCase }>(`/api/cases/${id}/generate-code`, {}, 60000),
+  genCaseCode: (id: string) => post<{ case: TestCase }>(`/api/cases/${id}/generate-code`, {}, 60000),
   runCaseApi: (
     id: string,
     opts: { url?: string; provider?: string; wallet?: boolean; rpcUrl?: string; chainId?: number } = {},
@@ -240,14 +227,8 @@ export const api = {
       login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null };
       isDefault: boolean;
     },
-  ) =>
-    post<{ environment: Environment }>(
-      `/api/projects/${projectId}/environments`,
-      env,
-      8000,
-    ),
-  deleteEnvironment: (envId: string) =>
-    del<{ ok: true }>(`/api/environments/${envId}`),
+  ) => post<{ environment: Environment }>(`/api/projects/${projectId}/environments`, env, 8000),
+  deleteEnvironment: (envId: string) => del<{ ok: true }>(`/api/environments/${envId}`),
   // Run the env's login flow once and cache the resulting session (storageState).
   captureSession: (envId: string) =>
     post<{
@@ -277,35 +258,25 @@ export const api = {
     }>(`/api/environments/${envId}/api-login`, {}, 30000),
 
   // ---- secrets (per project; values are write-only, never returned) ----
-  getSecrets: (projectId: string) =>
-    get<{ secrets: SecretMeta[] }>(`/api/projects/${projectId}/secrets`),
+  getSecrets: (projectId: string) => get<{ secrets: SecretMeta[] }>(`/api/projects/${projectId}/secrets`),
   setSecret: (projectId: string, key: string, value: string) =>
-    post<{ secret: SecretMeta }>(
-      `/api/projects/${projectId}/secrets`,
-      { key, value },
-      8000,
-    ),
+    post<{ secret: SecretMeta }>(`/api/projects/${projectId}/secrets`, { key, value }, 8000),
   deleteSecret: (projectId: string, key: string) =>
-    del<{ ok: true }>(
-      `/api/projects/${projectId}/secrets/${encodeURIComponent(key)}`,
-    ),
+    del<{ ok: true }>(`/api/projects/${projectId}/secrets/${encodeURIComponent(key)}`),
 
   // ---- suite runs / flake governance / quarantine (scale features) ----
   // The suite run is a genuinely long request (runs the whole suite through a queue).
-  runSuite: (
-    projectId: string,
-    filter: "P0" | "P1" | "P2" | "all",
-    retries?: number,
-  ) =>
+  runSuite: (projectId: string, filter: "P0" | "P1" | "P2" | "all", retries?: number) =>
     post<{ batch: Batch; items: BatchRun[]; gate: "pass" | "fail" }>(
       `/api/projects/${projectId}/suite`,
       { filter, retries },
       600000,
     ),
-  getBatches: (projectId: string) =>
-    get<{ batches: Batch[] }>(`/api/projects/${projectId}/batches`),
-  getBatch: (batchId: string) =>
-    get<{ batch: Batch; items: BatchRun[] }>(`/api/batches/${batchId}`),
+  // 停一个跑着的套件。进行中的那条用例停不了（没有取消点），
+  // 但队列里还没开始的一条都不会再发出去。
+  cancelBatch: (batchId: string) => post<{ ok: boolean; note: string }>(`/api/batches/${batchId}/cancel`, {}),
+  getBatches: (projectId: string) => get<{ batches: Batch[] }>(`/api/projects/${projectId}/batches`),
+  getBatch: (batchId: string) => get<{ batch: Batch; items: BatchRun[] }>(`/api/batches/${batchId}`),
   getQueue: () =>
     get<{
       concurrency: number;
@@ -321,19 +292,12 @@ export const api = {
     patch<{ case: TestCase }>(`/api/cases/${caseId}`, { quarantined }),
 
   // ---- trends dashboard (per project) ----
-  getTrends: (projectId: string) =>
-    get<Trends>(`/api/projects/${projectId}/trends`),
+  getTrends: (projectId: string) => get<Trends>(`/api/projects/${projectId}/trends`),
 
   // ---- app settings: LLM-debug toggle + prompt templates ----
-  getSettings: () =>
-    get<{ settings: AppSettings; defaults: PromptTemplates }>("/api/settings", 4000),
-  saveSettings: (patch: {
-    debugLLM?: boolean;
-    enforceLang?: boolean;
-    prompts?: Partial<PromptTemplates>;
-  }) => post<{ settings: AppSettings }>("/api/settings", patch, 8000),
-  resetPrompts: () =>
-    post<{ settings: AppSettings }>("/api/settings/reset-prompts", {}, 8000),
-  getLlmDebug: () =>
-    get<{ on: boolean; dir?: string; entries: string[] }>("/api/llm-debug", 4000),
+  getSettings: () => get<{ settings: AppSettings; defaults: PromptTemplates }>("/api/settings", 4000),
+  saveSettings: (patch: { debugLLM?: boolean; enforceLang?: boolean; prompts?: Partial<PromptTemplates> }) =>
+    post<{ settings: AppSettings }>("/api/settings", patch, 8000),
+  resetPrompts: () => post<{ settings: AppSettings }>("/api/settings/reset-prompts", {}, 8000),
+  getLlmDebug: () => get<{ on: boolean; dir?: string; entries: string[] }>("/api/llm-debug", 4000),
 };

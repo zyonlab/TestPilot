@@ -17,6 +17,7 @@ import {
   MemoryEventStore,
   MemoryOutputStore,
   RecordedModel,
+  modelFingerprint,
   modelFromEnv,
   runGraph,
   scoreCoverage,
@@ -42,11 +43,31 @@ try {
 } catch {
   /* first run */
 }
+/*
+ * 这一次跑用的模型配置指纹。
+ *
+ * 请求指纹只哈希问出去的那句话——换了模型之后 `--replay` 会照样全部命中，
+ * 然后打印旧模型的成绩。那不是「省时间」，那是静悄悄地报告一个错误的成绩。
+ * 不含密钥：这个指纹会被写进录像文件，而录像文件进版本库。
+ */
+const configFp = modelFingerprint({
+  model: process.env.TP_MODEL_NAME,
+  baseUrl: process.env.TP_MODEL_BASE_URL,
+  noThink: process.env.TP_MODEL_THINK === "0",
+  ...(process.env.TP_MODEL_THINK_BUDGET ? { thinkBudget: Number(process.env.TP_MODEL_THINK_BUDGET) } : {}),
+});
+
+let mismatches = 0;
 const model =
   record || replay
     ? new RecordedModel(recording, {
         mode: record ? "record" : "replay",
         upstream: live,
+        config: configFp,
+        onConfigMismatch: ({ label, recorded, now }) => {
+          mismatches += 1;
+          console.warn(`⚠ ${label ?? "request"}：录像是 ${recorded} 录的，现在是 ${now}`);
+        },
         onRecord: (r) => {
           mkdirSync(`${FIXTURES}recordings`, { recursive: true });
           writeFileSync(RECORDING, JSON.stringify(r, null, 2));
@@ -98,4 +119,17 @@ for (const c of bundle.cases)
 if (bundle.gate.findings.length) {
   console.log(`\n── gate findings ──────────────────────────`);
   for (const f of bundle.gate.findings) console.log(`${f.severity === "warn" ? "!" : "·"} [${f.rule}] ${f.message}`);
+}
+
+/*
+ * 配置不匹配要说在最后一句上。
+ *
+ * 上面那一屏成绩看起来和平时一模一样——这正是问题所在：它是另一套模型配置的成绩。
+ * 警告混在过程日志里会被滚过去，所以它得站在报告的末尾。
+ */
+if (mismatches) {
+  console.warn(
+    `\n⚠ 上面这份成绩里有 ${mismatches} 处是用**另一套模型配置**录下来的（本次配置指纹 ${configFp}）。` +
+      `\n  它不是这套配置的成绩。要拿这套配置的成绩，重录：--record`,
+  );
 }

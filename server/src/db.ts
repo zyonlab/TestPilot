@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS environments (
   headersJson TEXT NOT NULL DEFAULT '{}',   -- fixed request headers (may hold secret refs)
   queryJson TEXT NOT NULL DEFAULT '{}',     -- fixed query-string params appended to navigations
   sessionEnc TEXT NOT NULL DEFAULT '',      -- captured login state (storageState), AES-encrypted
+  viewportJson TEXT NOT NULL DEFAULT '{}',   -- 这个被测对象要多大的视口（见 U-69）
   isDefault INTEGER NOT NULL DEFAULT 0,
   createdAt TEXT NOT NULL,
   UNIQUE(projectId, name)
@@ -146,6 +147,44 @@ CREATE TABLE IF NOT EXISTS flakiness (
   verdict TEXT NOT NULL,                      -- stable | flaky | broken | unknown
   updatedAt TEXT NOT NULL
 );
+
+-- 隔离台账：谁、什么时候、为什么，以及当时门禁是什么判决。
+--
+-- 隔离是**唯一一个会改变门禁结论的人工动作**：一条被隔离的用例照跑，但它的红不再拦门禁。
+-- 没有台账的话，一个绿灯说不清自己是「真的都过了」还是「挂的那几条被人挪出去了」，
+-- 而那正是这套东西最容易被悄悄绕过的地方。所以理由是必填的，记录只增不删。
+CREATE TABLE IF NOT EXISTS quarantine_log (
+  id TEXT PRIMARY KEY,
+  caseId TEXT NOT NULL,
+  projectId TEXT NOT NULL,
+  on_ INTEGER NOT NULL,                       -- 1 = 隔离，0 = 解除
+  reason TEXT NOT NULL,
+  by TEXT NOT NULL,
+  at TEXT NOT NULL,
+  -- 当时最近一次批次的门禁判决。隔离影响的就是它——写下来，事后能对上。
+  gateAtTime TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qlog_project ON quarantine_log(projectId);
+CREATE INDEX IF NOT EXISTS idx_qlog_case ON quarantine_log(caseId);
+
+-- 基线待办的裁决。
+--
+-- 「接受为新基线」此前是**唯一一个出口**——于是一次真回归和一次改版走同一个按钮，
+-- 而按下去之后回归就变成了新的正确答案。三个出口：接受 / 判为回归 / 承认是环境噪声。
+-- 后两个都不动基线：回归要让这条用例继续红，噪声只是把这一条从待办里划掉。
+CREATE TABLE IF NOT EXISTS baseline_verdicts (
+  id TEXT PRIMARY KEY,
+  caseId TEXT NOT NULL,
+  projectId TEXT NOT NULL,
+  kind TEXT NOT NULL,                         -- visual | perf
+  stepIdx INTEGER,
+  runId TEXT NOT NULL,
+  verdict TEXT NOT NULL,                      -- regression | noise
+  note TEXT NOT NULL DEFAULT '',
+  by TEXT NOT NULL DEFAULT 'unknown',
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bverdict_case ON baseline_verdicts(caseId);
 `);
 
 // Migrations: add columns if missing (DB may predate them).
@@ -288,6 +327,31 @@ db.exec(`
   );
 `);
 
+/**
+ * 从一条缺口补出来的用例。
+ *
+ * 缺口分析（`gaps.ts`）能把缺口分成三类、算得出、显示得出——**然后停在那里**：
+ * 没有任何一条代码路径把一条缺口变回一条用例。「这套 harness 会把自己漏掉的东西
+ * 补回来」这句话今天说不出口，缺的就是这张表。
+ *
+ * 为什么不写进那次运行的产出：运行的产出是**证据**，它必须保持原样，
+ * 否则以后每一次对比都在跟一个被后来改过的东西比。补出来的用例是第三样东西——
+ * 一份提案，和复核队列里的编辑一样，等的是同一个决定。
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS gap_cases (
+    id TEXT PRIMARY KEY,
+    wfRunId TEXT NOT NULL,
+    projectId TEXT NOT NULL,
+    gapWhat TEXT NOT NULL,
+    gapKind TEXT NOT NULL,
+    anchorJson TEXT NOT NULL DEFAULT '{}',
+    caseJson TEXT NOT NULL,
+    at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_gapcase_run ON gap_cases(wfRunId);
+`);
+
 const caseCols = new Set(
   (db.prepare("PRAGMA table_info(test_cases)").all() as { name: string }[]).map((r) => r.name),
 );
@@ -325,9 +389,12 @@ if (envCols.size && !envCols.has("queryJson"))
   db.exec("ALTER TABLE environments ADD COLUMN queryJson TEXT NOT NULL DEFAULT '{}'");
 if (envCols.size && !envCols.has("sessionEnc"))
   db.exec("ALTER TABLE environments ADD COLUMN sessionEnc TEXT NOT NULL DEFAULT ''");
+if (envCols.size && !envCols.has("viewportJson"))
+  db.exec("ALTER TABLE environments ADD COLUMN viewportJson TEXT NOT NULL DEFAULT '{}'");
 
 export type Priority = "P0" | "P1" | "P2";
-export type RunStatus = "passed" | "failed" | "notRun" | "running";
+/** `unobservable`：判据没量到——没有判决，不是通过也不是失败（harness-testing/exec/oracle.ts）。 */
+export type RunStatus = "passed" | "failed" | "unobservable" | "notRun" | "running";
 
 export type TargetPlatform = "web" | "ios" | "android";
 export interface Project {
@@ -386,6 +453,52 @@ export interface ReviewEdit {
   /** Who proposed it: a person in the queue, or a regeneration. */
   by?: "human" | "model";
   note?: string;
+}
+
+export interface GapCase {
+  id: string;
+  wfRunId: string;
+  projectId: string;
+  gapWhat: string;
+  gapKind: string;
+  anchor?: unknown;
+  kase: Record<string, unknown>;
+  at: string;
+}
+
+/** 把一条从缺口补出来的用例记下来。它进的是复核队列，不是看板——它还没被人看过。 */
+export function saveGapCase(input: Omit<GapCase, "id" | "at">): GapCase {
+  const row: GapCase = { ...input, id: newId("gapc"), at: new Date().toISOString() };
+  db.prepare(
+    "INSERT INTO gap_cases (id,wfRunId,projectId,gapWhat,gapKind,anchorJson,caseJson,at) VALUES (?,?,?,?,?,?,?,?)",
+  ).run(
+    row.id,
+    row.wfRunId,
+    row.projectId,
+    row.gapWhat,
+    row.gapKind,
+    JSON.stringify(row.anchor ?? {}),
+    JSON.stringify(row.kase),
+    row.at,
+  );
+  return row;
+}
+
+/** 这次运行补出来的那些。它们会和原生的那一批一起进复核队列。 */
+export function listGapCases(wfRunId: string): GapCase[] {
+  const rows = db
+    .prepare("SELECT * FROM gap_cases WHERE wfRunId=? ORDER BY at")
+    .all(wfRunId) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    wfRunId: String(r.wfRunId),
+    projectId: String(r.projectId),
+    gapWhat: String(r.gapWhat),
+    gapKind: String(r.gapKind),
+    anchor: JSON.parse(String(r.anchorJson || "{}")),
+    kase: JSON.parse(String(r.caseJson)) as Record<string, unknown>,
+    at: String(r.at),
+  }));
 }
 
 export function saveReviewEdit(wfRunId: string, caseId: string, edit: ReviewEdit): void {
@@ -490,6 +603,17 @@ export interface Environment {
   vars: Record<string, string | string[]>;
   headers: Record<string, string>; // fixed request headers (may hold ${env}/${secret} refs)
   query: Record<string, string>; // fixed query-string params appended to navigations
+  /**
+   * 这个被测对象要多大的视口。
+   *
+   * 默认 1024×720 是为压小视觉模型的图定的，而它对一部分真实界面撑不开——
+   * Binance 期货在这个宽度下下单面板整块不渲染，探索器只看得到图表和订单簿，
+   * 而它不报错，它只是看不见半个产品。
+   *
+   * 放在环境上而不是做成全局环境变量：把默认调大，所有 SUT 的每一次模型调用
+   * 都跟着变贵，而大多数界面在 1024 下是完整的。不配就沿用默认。
+   */
+  viewport?: { width?: number; height?: number };
   login: LoginFlow;
   isDefault: boolean;
   createdAt: string;
@@ -959,6 +1083,7 @@ type EnvRow = {
   loginJson: string;
   headersJson: string;
   queryJson: string;
+  viewportJson: string;
   sessionEnc: string;
   isDefault: number;
   createdAt: string;
@@ -981,6 +1106,11 @@ const rowToEnv = (r: EnvRow): Environment => {
     vars: JSON.parse(r.varsJson || "{}"),
     headers: JSON.parse(r.headersJson || "{}"),
     query: JSON.parse(r.queryJson || "{}"),
+    ...(() => {
+      const vp = JSON.parse(r.viewportJson || "{}") as { width?: number; height?: number };
+      // 空对象不发：一个 `viewport: {}` 在界面上看起来像"配过了"，而它什么都没说。
+      return vp.width || vp.height ? { viewport: vp } : {};
+    })(),
     login,
     isDefault: !!r.isDefault,
     createdAt: r.createdAt,
@@ -1015,6 +1145,7 @@ export function upsertEnvironment(
     vars: input.vars ?? existing?.vars ?? {},
     headers: input.headers ?? existing?.headers ?? {},
     query: input.query ?? existing?.query ?? {},
+    ...(input.viewport ?? existing?.viewport ? { viewport: input.viewport ?? existing?.viewport } : {}),
     // Preserve the captured session across saves: the UI never round-trips the blob, so
     // only overwrite it when the caller explicitly provides `session` (object or null).
     login: input.login
@@ -1036,9 +1167,9 @@ export function upsertEnvironment(
   if (env.isDefault)
     db.prepare("UPDATE environments SET isDefault=0 WHERE projectId=?").run(env.projectId);
   db.prepare(
-    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,sessionEnc,isDefault,createdAt)
-     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@sessionEnc,@isDefault,@createdAt)
-     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,sessionEnc=@sessionEnc,isDefault=@isDefault`,
+    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,viewportJson,sessionEnc,isDefault,createdAt)
+     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@viewportJson,@sessionEnc,@isDefault,@createdAt)
+     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,viewportJson=@viewportJson,sessionEnc=@sessionEnc,isDefault=@isDefault`,
   ).run({
     id: env.id,
     projectId: env.projectId,
@@ -1048,6 +1179,7 @@ export function upsertEnvironment(
     loginJson: JSON.stringify(loginRest),
     headersJson: JSON.stringify(env.headers),
     queryJson: JSON.stringify(env.query),
+    viewportJson: JSON.stringify(env.viewport ?? {}),
     sessionEnc,
     isDefault: env.isDefault ? 1 : 0,
     createdAt: env.createdAt,
@@ -1133,6 +1265,103 @@ export function computeFlakiness(caseId: string, windowSize = 10): Flakiness {
   ).run(f);
   return f;
 }
+export interface QuarantineEntry {
+  id: string;
+  caseId: string;
+  projectId: string;
+  on: boolean;
+  reason: string;
+  by: string;
+  at: string;
+  gateAtTime?: string;
+}
+
+/**
+ * 记一次隔离或解除。
+ *
+ * 理由是必填的，而且在这一层就拦——不是在界面上提示一句。隔离会让一条红用例
+ * 不再拦门禁，一个没有理由的隔离等于把门禁悄悄调松，而且事后查不出是谁调的。
+ */
+export function logQuarantine(e: Omit<QuarantineEntry, "id" | "at">): QuarantineEntry {
+  const reason = e.reason.trim();
+  if (!reason) throw new Error("隔离要写理由——它会让这条用例的红不再拦门禁");
+  const row: QuarantineEntry = { ...e, reason, id: newId("qlog"), at: new Date().toISOString() };
+  db.prepare(
+    "INSERT INTO quarantine_log (id,caseId,projectId,on_,reason,by,at,gateAtTime) VALUES (?,?,?,?,?,?,?,?)",
+  ).run(row.id, row.caseId, row.projectId, row.on ? 1 : 0, row.reason, row.by, row.at, row.gateAtTime ?? null);
+  return row;
+}
+
+/** 一个项目（或一条用例）的隔离台账，新的在前。 */
+export function listQuarantineLog(projectId: string, caseId?: string): QuarantineEntry[] {
+  const rows = (
+    caseId
+      ? db
+          .prepare("SELECT * FROM quarantine_log WHERE projectId=? AND caseId=? ORDER BY at DESC")
+          .all(projectId, caseId)
+      : db.prepare("SELECT * FROM quarantine_log WHERE projectId=? ORDER BY at DESC LIMIT 200").all(projectId)
+  ) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    caseId: String(r.caseId),
+    projectId: String(r.projectId),
+    on: !!r.on_,
+    reason: String(r.reason),
+    by: String(r.by),
+    at: String(r.at),
+    ...(r.gateAtTime ? { gateAtTime: String(r.gateAtTime) } : {}),
+  }));
+}
+
+export interface BaselineVerdict {
+  id: string;
+  caseId: string;
+  projectId: string;
+  kind: "visual" | "perf";
+  stepIdx?: number;
+  runId: string;
+  verdict: "regression" | "noise";
+  note: string;
+  by: string;
+  at: string;
+}
+
+/**
+ * 记一次「不是新基线」的裁决。
+ *
+ * 两种都**不动基线**：判为回归是说「产品错了，这条用例应该继续红」；
+ * 承认是噪声是说「这次的数字不算数」。把它们混进「接受」那一个按钮里，
+ * 等于让一次回归自己变成新的正确答案——那是这套东西最贵的一种失效。
+ */
+export function recordBaselineVerdict(v: Omit<BaselineVerdict, "id" | "at">): BaselineVerdict {
+  if (v.verdict === "regression" && !v.note.trim())
+    throw new Error("判为回归要写一句为什么——这条用例会一直红着，后面的人得知道在等什么");
+  const row: BaselineVerdict = { ...v, id: newId("bv"), at: new Date().toISOString() };
+  db.prepare(
+    "INSERT INTO baseline_verdicts (id,caseId,projectId,kind,stepIdx,runId,verdict,note,by,at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+  ).run(row.id, row.caseId, row.projectId, row.kind, row.stepIdx ?? null, row.runId, row.verdict, row.note, row.by, row.at);
+  return row;
+}
+
+/** 这条用例上已经裁决过的基线待办——用来把它们从待办里划掉。 */
+export function listBaselineVerdicts(projectId: string): BaselineVerdict[] {
+  const rows = db
+    .prepare("SELECT * FROM baseline_verdicts WHERE projectId=? ORDER BY at DESC LIMIT 500")
+    .all(projectId) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    caseId: String(r.caseId),
+    projectId: String(r.projectId),
+    kind: r.kind as "visual" | "perf",
+    ...(r.stepIdx === null || r.stepIdx === undefined ? {} : { stepIdx: Number(r.stepIdx) }),
+    runId: String(r.runId),
+    verdict: r.verdict as "regression" | "noise",
+    note: String(r.note ?? ""),
+    by: String(r.by ?? "unknown"),
+    at: String(r.at),
+  }));
+}
+
 export const getFlakiness = (caseId: string): Flakiness | undefined =>
   db.prepare("SELECT * FROM flakiness WHERE caseId=?").get(caseId) as Flakiness | undefined;
 export const listFlakiness = (projectId: string): Flakiness[] =>

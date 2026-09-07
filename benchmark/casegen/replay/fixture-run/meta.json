@@ -1,0 +1,13 @@
+{
+  "runId": "replay-fixture-001",
+  "stage": "g1",
+  "skillVersion": "2026-09-03.2",
+  "promptsDigest": { "entries": { "design.cases": "fixture0", "plan.stories": "fixture0", "spec.compose": "fixture0" }, "combined": "fixture0" },
+  "params": { "stage": "g1", "lang": "zh", "minNegativeRatio": 0.3, "maxSteps": 8 },
+  "ablated": [],
+  "model": { "baseUrl": "https://fixture.invalid/v1", "model": "fixture", "thinking": false },
+  "materialsHash": "fixture0000000000",
+  "startedAt": "2026-09-04T00:00:00.000Z",
+  "finishedAt": "2026-09-04T00:00:01.000Z",
+  "spend": { "calls": 0, "tokens": 0, "ms": 1000 }
+}

@@ -1,0 +1,58 @@
+{
+  "origin": "docs/spec/03-UI交互规格.md",
+  "derivedFrom": "document",
+  "stories": [
+    { "id": "US-18", "title": "查看与重启进程", "acceptance": ["Given 进程页 / When 打开 / Then 列出网关、agent、runner"] },
+    { "id": "US-08", "title": "非法输入被拒绝", "acceptance": ["Given 表单 / When 输入非法值 / Then 拒绝并提示"] }
+  ],
+  "flows": [],
+  "cases": [
+    {
+      "id": "US-18-1-processes-listed",
+      "storyId": "US-18",
+      "title": "进程页列出网关、agent、runner 并显示状态",
+      "designMethod": "equivalence",
+      "priority": "P1",
+      "precondition": ["服务已启动"],
+      "steps": ["打开进程页"],
+      "postSteps": [],
+      "expected": "进程列表显示 gateway、agent、runner 三行，状态为运行中",
+      "tier": 1,
+      "oracle": { "kind": "text", "value": "gateway" },
+      "key": "processes|open|three-rows",
+      "covers": [],
+      "sourceRefs": ["docs/spec/03-UI交互规格.md#12"]
+    },
+    {
+      "id": "US-18-2-restart-changes-pid",
+      "storyId": "US-18",
+      "title": "重启一个进程后 PID 变化",
+      "designMethod": "state-transition",
+      "priority": "P1",
+      "precondition": ["进程页有一个运行中的进程"],
+      "steps": ["记下该进程的 PID", "点击 重启"],
+      "postSteps": [],
+      "expected": "该行 PID 与重启前不同，状态回到运行中",
+      "tier": 2,
+      "oracle": { "kind": "delta", "value": "PID", "direction": "increased" },
+      "key": "processes|restart|pid-changes",
+      "covers": [],
+      "sourceRefs": ["docs/spec/03-UI交互规格.md#13"]
+    },
+    {
+      "id": "US-08-1-invalid-rejected",
+      "storyId": "US-08",
+      "title": "非法的参数值被拒绝",
+      "designMethod": "negative",
+      "priority": "P1",
+      "precondition": ["打开参数表单"],
+      "steps": ["输入无效的值", "点击 保存"],
+      "postSteps": [],
+      "expected": "页面显示错误提示，保存被拒绝",
+      "tier": 3,
+      "key": "params|invalid|rejected",
+      "covers": [],
+      "sourceRefs": ["docs/spec/03-UI交互规格.md#40"]
+    }
+  ]
+}

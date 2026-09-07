@@ -36,6 +36,31 @@ const DEFAULTS: Required<GateOptions> = {
 /** Words that promise nothing: an assertion built from them cannot fail honestly. */
 const VAGUE = /正常|合理|符合预期|友好|良好|恰当|适当|没有问题|正确显示|流畅|works? (correctly|fine)|as expected|properly|reasonable/i;
 
+/**
+ * **钉在易变值上的断言。**
+ *
+ * 实测（demo.binance.com 合约页，2026-09-01）：探索只拿到整屏转储，规格于是把
+ * 「Funding 0.01000%」「Countdown 05:40:16」写成了规则，用例跟着产出
+ * 「验证入口页 Funding 数值」「验证入口页 Countdown 数值」——**下一次跑必然失败**，
+ * 而这一批用例在门禁上拿了满分、零条 warn。
+ *
+ * 十八条规则里此前没有一条拦得住它，方向甚至是反的：带数字即通过 `oracle-vague`，
+ * 而 `tier-unbacked` 还在逼每条低层级用例交出字面量判据。
+ *
+ * **判据只认字面量，不认词。** 第一版还匹配了 `funding rate` / `24h high` / `last price`
+ * 这些词，结果在真实运行上产生了 6 条全是误报的告警：
+ * 「页面显示 "Funding (8h) / Countdown" 字段」「页面显示 "24h High" 字段」——
+ * 它们断言的是**字段存在**，那是完全正当的，而且恰恰是提示词约束生效之后模型该写的样子。
+ * 一条会把正确行为判成错的规则，第一次被误伤的人就会把它关掉，
+ * 于是它连原本能抓的那一类也一起失效了。
+ *
+ * 所以只留三种**一望即知是快照**的字面量：时刻（05:40:16）、带三位以上小数的百分比
+ * （0.01000%）、千分位大数（110,510,941,835.01）。
+ * 「余额等于 100」「出现 3 条记录」这类正当断言一个都不碰。
+ */
+const VOLATILE_ORACLE =
+  /\b\d{1,2}:\d{2}(:\d{2})?\b|\d+\.\d{3,}\s*%|\b\d{1,3}(,\d{3}){2,}(\.\d+)?\b/;
+
 /** Traces of an observable phenomenon: quoted text, a number, a state change. */
 const CONCRETE =
   /[「『"'“”].+[」』"'“”]|\d|等于|大于|小于|不再|不显示|出现|消失|跳转|变成|恢复|保持|停留|为空|包含|清空|残留|shown|displayed|visible|disappears?|contains?|equals?|redirect|is empty|are empty|not present|no longer|remains? on|does not contain/i;
@@ -93,6 +118,20 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
         `assertion names no observable phenomenon: "${c.expected.slice(0, 60)}"`,
         c.id,
         "info",
+      );
+    /**
+     * 断言钉在了一个每秒都在变的读数上——**这条用例下一次跑必然失败**。
+     *
+     * 报 warn 而不是 info：它不是"写得不够好"，而是"它一定会红，而红的原因和产品无关"。
+     * 一条必然失败的用例比没有这条用例更糟，因为它会把真实失败淹掉。
+     */
+    if (cfg.gradeOracles && VOLATILE_ORACLE.test(c.expected))
+      add(
+        "oracle-volatile",
+        `assertion is pinned to a value that changes on its own: "${c.expected.slice(0, 60)}"`,
+        c.id,
+        "warn",
+        { args: { expected: c.expected.slice(0, 60) }, field: "expected" },
       );
     if (cfg.gradeOracles && c.tier === 3)
       add("tier", "judged by a model — reserve tier 3 for what nothing else can decide", c.id, "info", {
@@ -349,12 +388,22 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     tiersBacked[real] = (tiersBacked[real] ?? 0) + 1;
   }
 
+  // 把分拖下来的到底是哪几条。分数就是从这个集合算出来的，所以它不是"另算一遍"，
+  // 而是把同一次计算的中间结果留下来——界面因此能从 58% 一步点到那几条上。
+  const flagged = [
+    ...new Set(findings.filter((f) => f.severity === "warn" && f.caseId).map((f) => f.caseId as string)),
+  ];
+  const score = cases.length ? Math.max(0, 1 - flagged.length / cases.length) : 0;
+
   return {
     // The score is a blunt instrument on purpose: a share of cases with no warning against
     // them. It is meant to move between versions, not to be a certificate.
-    score: cases.length
-      ? Math.max(0, 1 - new Set(findings.filter((f) => f.severity === "warn" && f.caseId).map((f) => f.caseId)).size / cases.length)
-      : 0,
+    score,
+    scoreBasis: {
+      cases: cases.length,
+      flagged,
+      formula: `1 − ${flagged.length}/${cases.length}（被警告点到的用例 ÷ 全部用例）`,
+    },
     findings,
     stats: {
       cases: cases.length,
@@ -365,6 +414,15 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       casesCovering: covering,
       methods,
       negativeRatio: Number(negativeRatio.toFixed(3)),
+      /*
+       * **阈值和比例一起给出去。**
+       *
+       * 门禁自己会在低于阈值时出一条 finding（见上面 `negativeRatio < cfg.minNegativeRatio`），
+       * 所以规则一直是执行着的。但界面上只印得出「31% negative」——一个没有分母的数：
+       * 31% 是达标了还是差得远？人得先去翻图定义里的 `minNegativeRatio` 才知道。
+       * AC-05.2 的原话是「不低于阈值」，那么阈值就该和比例印在一起。
+       */
+      minNegativeRatio: cfg.minNegativeRatio,
       orphans,
       duplicates,
     },

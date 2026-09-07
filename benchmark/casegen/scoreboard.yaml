@@ -1,0 +1,7 @@
+# TestPilot 基准记分板：casegen（自举 / selftest-g1）
+#
+# 由 score_run / paired_eval 追加，**不要手写**。
+# 每条 entry 必须带完整 binding（RunMeta），缺 skillVersion / promptsDigest / model /
+# materialsHash 任一项拒收（数据契约 §2）。
+# goldHash 必须是 2405209c3fe70ac7；不同即新谱系，跨谱系不比。
+entries: []

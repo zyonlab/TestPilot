@@ -32,16 +32,9 @@ export function ChainConfigPage() {
   const t = useT();
   return (
     <>
-      <TopBar />
+      <TopBar title={t("chain.title")} hint={t("chain.subtitle")} />
       <div className="flex-1 overflow-auto p-4">
-        <div className="mx-auto max-w-2xl space-y-4">
-          <div>
-            <h1 className="flex items-center gap-2 font-display text-lg font-medium text-foreground">
-              <Blocks className="h-5 w-5 text-violet-500" />
-              {t("chain.title")}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("chain.subtitle")}</p>
-          </div>
+        <div className="max-w-2xl space-y-4">
           <GuideCard />
           <ChainConfigCard />
           <InjectedVerifyCard />
@@ -85,29 +78,29 @@ function GuideCard() {
   ];
 
   return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+    <div className="rounded-xl border border-chat bg-chat-soft p-4">
       <div className="mb-1 flex items-center gap-1.5">
-        <BookOpen className="h-4 w-4 text-violet-500" />
+        <BookOpen className="h-4 w-4 text-chat" />
         <h2 className="font-display text-sm font-medium text-foreground">{t("chain.guideTitle")}</h2>
       </div>
       <p className="mb-2 text-xs leading-snug text-muted-foreground">{t("chain.guideIntro")}</p>
       <ol className="mb-2 space-y-1 pl-1 text-xs leading-snug text-foreground">
         {steps.map((s, i) => (
           <li key={i} className="flex gap-2">
-            <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-violet-500 text-[10px] font-medium text-white">
+            <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-chat text-[0.6875rem] font-medium text-primary-foreground">
               {i + 1}
             </span>
             <span className="text-muted-foreground">{s}</span>
           </li>
         ))}
       </ol>
-      <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+      <p className="mb-3 rounded-md border border-warn bg-warn-soft px-2 py-1.5 text-[0.6875rem] leading-snug text-warn">
         {t("chain.guideNote")}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="primary"
-          className="bg-violet-600 text-xs hover:bg-violet-700"
+          className="bg-chat text-xs hover:bg-chat"
           onClick={loadExample}
           disabled={state === "loading"}
         >
@@ -120,12 +113,7 @@ function GuideCard() {
           <ArrowRight className="h-3.5 w-3.5" />
         </Button>
         {msg && (
-          <span
-            className={cn(
-              "text-[11px]",
-              state === "error" ? "text-red-600 dark:text-red-400" : "text-muted-foreground",
-            )}
-          >
+          <span className={cn("text-[0.6875rem]", state === "error" ? "text-bad" : "text-muted-foreground")}>
             {msg}
           </span>
         )}
@@ -191,7 +179,7 @@ function ChainConfigCard() {
                 setRpcUrl(p.rpcUrl);
                 setChainId(p.chainId);
               }}
-              className="rounded-md border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+              className="rounded-md border border-border bg-background px-2 py-1 text-[0.6875rem] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
             >
               {p.label}
             </button>
@@ -207,7 +195,7 @@ function ChainConfigCard() {
             value={rpcUrl}
             placeholder="http://127.0.0.1:8545"
             onChange={(e) => setRpcUrl(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
+            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
         <div>
@@ -219,7 +207,7 @@ function ChainConfigCard() {
             type="number"
             value={chainId}
             onChange={(e) => setChainId(Number(e.target.value))}
-            className="w-40 rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
+            className="w-40 rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
 
@@ -229,12 +217,12 @@ function ChainConfigCard() {
             {t("model.saveChainConfig")}
           </Button>
           {state === "saved" && (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+            <span className="flex items-center gap-1.5 text-xs text-ok">
               <CheckCircle className="h-4 w-4" /> {t("model.saved")}
             </span>
           )}
           {state === "error" && (
-            <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+            <span className="flex items-center gap-1.5 text-xs text-bad">
               <AlertTriangle className="h-4 w-4" /> {detail}
             </span>
           )}
@@ -243,8 +231,8 @@ function ChainConfigCard() {
         {account && (
           <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5">
             <Wallet className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-            <span className="text-[11px] text-muted-foreground">{t("chain.testWallet")}</span>
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">{account}</span>
+            <span className="text-[0.6875rem] text-muted-foreground">{t("chain.testWallet")}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-[0.6875rem] text-foreground">{account}</span>
             <button
               onClick={() => navigator.clipboard?.writeText(account)}
               className="text-muted-foreground hover:text-foreground"
@@ -287,25 +275,36 @@ function InjectedVerifyCard() {
       <div className="mb-1 flex items-center gap-1.5">
         <Blocks className="h-4 w-4 text-muted-foreground" />
         <h2 className="font-display text-sm font-medium text-foreground">{t("chain.injectedTitle")}</h2>
-        <span className="rounded bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+        <span className="rounded bg-ok-soft px-1.5 text-[0.6875rem] font-medium text-ok">
           {t("chain.default")}
         </span>
       </div>
       <p className="mb-3 text-xs leading-snug text-muted-foreground">{t("chain.injectedHelp")}</p>
 
       <div className="flex items-center gap-3">
-        <Button variant="primary" className="bg-violet-600 hover:bg-violet-700" onClick={run} disabled={state === "running"}>
-          {state === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+        <Button
+          variant="primary"
+          className="bg-chat hover:bg-chat"
+          onClick={run}
+          disabled={state === "running"}
+        >
+          {state === "running" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
           {t("chain.verifyInjected")}
         </Button>
-        {state === "running" && <span className="text-xs text-muted-foreground">{t("chain.verifyRunning")}</span>}
+        {state === "running" && (
+          <span className="text-xs text-muted-foreground">{t("chain.verifyRunning")}</span>
+        )}
         {state === "done" && (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+          <span className="flex items-center gap-1.5 text-xs text-ok">
             <CheckCircle className="h-4 w-4" /> {t("chain.verifyOk")}
           </span>
         )}
         {state === "error" && (
-          <span className="flex items-center gap-1.5 break-all text-xs text-red-600 dark:text-red-400">
+          <span className="flex items-center gap-1.5 break-all text-xs text-bad">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {detail}
           </span>
         )}
@@ -313,11 +312,14 @@ function InjectedVerifyCard() {
 
       {res && (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
-          <dl className="space-y-1 text-[11px]">
+          <dl className="space-y-1 text-[0.6875rem]">
             <Row k={t("chain.account")} v={res.account} mono />
             <Row k={t("chain.connect")} v={res.connect} mono />
             <Row k={t("chain.tx")} v={res.tx} mono />
-            <Row k={t("chain.mined")} v={res.mined ? `✓ block ${res.block ?? "?"} (status ${res.txStatus ?? "?"})` : "✗"} />
+            <Row
+              k={t("chain.mined")}
+              v={res.mined ? `✓ block ${res.block ?? "?"} (status ${res.txStatus ?? "?"})` : "✗"}
+            />
           </dl>
           {res.screenshot && (
             <img
@@ -373,7 +375,7 @@ function MetaMaskCard() {
         <Puzzle className="h-4 w-4 text-muted-foreground" />
         <h2 className="font-display text-sm font-medium text-foreground">{t("chain.metamaskTitle")}</h2>
         {installed === false && (
-          <span className="rounded bg-amber-100 px-1.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+          <span className="rounded bg-warn-soft px-1.5 text-[0.6875rem] font-medium text-warn">
             {t("chain.notInstalled")}
           </span>
         )}
@@ -382,16 +384,21 @@ function MetaMaskCard() {
 
       <div className="flex items-center gap-3">
         <Button onClick={run} disabled={state === "running" || installed === false}>
-          {state === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Puzzle className="h-3.5 w-3.5" />}
+          {state === "running" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Puzzle className="h-3.5 w-3.5" />
+          )}
           {t("chain.checkMetamask")}
         </Button>
         {state === "done" && res && (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-            <CheckCircle className="h-4 w-4" /> {t("chain.loaded")} · onboarded={String(res.onboarded)} · unlocked={String(res.unlocked)}
+          <span className="flex items-center gap-1.5 text-xs text-ok">
+            <CheckCircle className="h-4 w-4" /> {t("chain.loaded")} · onboarded={String(res.onboarded)} ·
+            unlocked={String(res.unlocked)}
           </span>
         )}
         {state === "error" && (
-          <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+          <span className="flex items-center gap-1.5 text-xs text-bad">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" /> {detail}
           </span>
         )}

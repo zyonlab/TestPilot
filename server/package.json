@@ -23,19 +23,20 @@
   },
   "dependencies": {
     "@midscene/web": "^0.30.0",
+    "@testpilot/harness-core": "workspace:*",
+    "@testpilot/harness-testing": "workspace:*",
+    "@testpilot/runner": "workspace:*",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ethers": "^6.17.0",
     "express": "^4.21.1",
+    "p-queue": "^8.0.1",
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",
     "puppeteer": "^23.9.0",
-    "@testpilot/harness-core": "workspace:*",
-    "ws": "^8.18.0",
-    "@testpilot/harness-testing": "workspace:*",
-    "@testpilot/runner": "workspace:*",
-    "p-queue": "^8.0.1"
+    "testpilot-mcp": "workspace:*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

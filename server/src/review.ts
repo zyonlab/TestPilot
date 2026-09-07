@@ -5,6 +5,7 @@ import {
   listReviewEdits,
   recordReviewDecision,
   saveReviewEdit,
+  saveGapCase,
   type CaseType,
   type Priority,
   type ReviewEdit,
@@ -13,8 +14,9 @@ import {
 import { getGraphVersion, nodeOutput, outputStore } from "./graphs.js";
 import { computeGaps, shortTarget, stoppedBecause, type Gap } from "./gaps.js";
 import { readMutationReport } from "./mutation.js";
-import { ABLATABLE, gated, modelFromEnv } from "@testpilot/harness-core";
+import { ABLATABLE, gated, modelFromEnv, traced } from "@testpilot/harness-core";
 import {
+  fillGap,
   reviseCase,
   runGate,
   type Action,
@@ -207,6 +209,11 @@ export interface ReviewBatch {
   wfRunId: string;
   projectId?: string;
   gateScore?: number;
+  /**
+   * 这个分是怎么算出来的：分母、把分拖下来的是哪几条、以及那条算式。
+   * 一个 58% 说不出「差在哪」，人只能自己去 findings 里数——这就是它存在的理由。
+   */
+  gateBasis?: { cases: number; flagged: string[]; formula: string };
   /** Gate ① over the batch as edited. Only present once something has been edited. */
   editedGateScore?: number;
   edited: number;
@@ -257,6 +264,17 @@ export interface ReviewBatch {
     inconclusive: number;
     notApplied: number;
     cases: number;
+    /**
+     * 读懂一个 0 需要的分母。
+     *
+     * 「12 条里 6 条基线就挂、其中 4 条是 infra、真正上场的只有 6 条」——
+     * 没有这几个数，一个 0 分读起来是「这套用例什么都抓不到」，
+     * 而事实可能是「一半的用例集根本没上场」。
+     */
+    baselineFailed?: number;
+    baselineInfra?: number;
+    usableCases?: number;
+    baselineRetried?: number;
   };
 }
 
@@ -297,8 +315,14 @@ interface GatedBundleShape {
     postSteps?: string[];
     /** 这条用例走了哪些转移。重写时要带上，否则它挂在产品模型上的那根线会断。 */
     covers?: string[];
+      sourceRefs?: string[];
   }>;
-  gate?: { score?: number; stats?: Record<string, unknown>; findings?: Array<Finding & { caseId?: string }> };
+  gate?: {
+    score?: number;
+    scoreBasis?: { cases: number; flagged: string[]; formula: string };
+    stats?: Record<string, unknown>;
+    findings?: Array<Finding & { caseId?: string }>;
+  };
 }
 
 interface CodeBundleShape {
@@ -440,6 +464,7 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
     })),
     projectId: target?.projectId,
     gateScore: gated?.gate?.score,
+    ...(gated?.gate?.scoreBasis ? { gateBasis: gated.gate.scoreBasis } : {}),
     editedGateScore: rescored?.score,
     edited: Object.keys(edits).length,
     stats: gated?.gate?.stats,
@@ -463,6 +488,12 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
             inconclusive: mutation.inconclusive ?? 0,
             notApplied: mutation.notApplied,
             cases: mutation.cases,
+            // 老报告没有这几个字段就不发——发一个 0 会被读成「基线一条都没挂」，
+            // 那是在用缺失冒充事实。
+            ...(mutation.baselineFailed !== undefined ? { baselineFailed: mutation.baselineFailed } : {}),
+            ...(mutation.baselineInfra !== undefined ? { baselineInfra: mutation.baselineInfra } : {}),
+            ...(mutation.usableCases !== undefined ? { usableCases: mutation.usableCases } : {}),
+            ...(mutation.baselineRetried !== undefined ? { baselineRetried: mutation.baselineRetried } : {}),
           },
         }
       : {}),
@@ -738,7 +769,7 @@ export async function regenerate(
   const gatedOut = ((await nodeOutput(wfRunId, "gate").catch(() => undefined)) ??
     (await nodeOutput(wfRunId, "codegen").catch(() => undefined))) as GatedBundleShape | undefined;
   const spec = (await nodeOutput(wfRunId, "spec").catch(() => undefined)) as { text?: string } | undefined;
-  const model = gated(modelFromEnv());
+  const model = traced(gated(modelFromEnv()), { name: "review.revise" });
 
   const revised: string[] = [];
   const failed: Array<{ caseId: string; message: string }> = [];
@@ -767,6 +798,8 @@ export async function regenerate(
           covers: product?.covers ?? [],
           // 清理步骤同理：重写不该顺手把「跑完要把产品放回去」这件事丢掉。
           postSteps: product?.postSteps ?? [],
+          // 出处同理：重写不该让一条有出处的用例变成无出处的。
+          sourceRefs: product?.sourceRefs ?? [],
           precondition: item.precondition,
           steps: item.steps,
           expected: item.expected,
@@ -799,6 +832,86 @@ export async function regenerate(
   }
 
   return { revised, failed, batch: await reviewBatch(wfRunId) };
+}
+
+/**
+ * 把一条缺口补成一条用例，过一遍门禁①，放进复核队列。
+ *
+ * 这是「缺口 → 用例」那条闭环里此前完全不存在的一段：`gaps.ts` 能把缺口分成三类、
+ * 算得出、显示得出，然后就停在那里。补出来的东西**进复核队列，不进看板**——
+ * 它和别的候选一样，等的是同一个人的同一个决定。
+ *
+ * 门禁在这里就跑一遍，而不是等它进队列之后：一条判据含糊的补丁用例，
+ * 和一条判据含糊的原生用例一样该被点出来，而且要点在同一套规则上。
+ */
+export async function caseFromGap(
+  wfRunId: string,
+  gap: {
+    kind: string;
+    reach: "missed" | "unseen" | "blind";
+    what: string;
+    detail?: string;
+    anchor?: { kind: "edge"; from: string; to: string } | { kind: "state"; id: string };
+    activity?: string;
+  },
+  opts: { lang?: string } = {},
+): Promise<{ kase: Record<string, unknown>; findings: Finding[]; gapCaseId: string }> {
+  const run = outputStore.getRun(wfRunId);
+  if (!run) throw new Error(`没有这次运行：${wfRunId}`);
+  const projectId = ((run.detail ?? {}) as { target?: { projectId?: string } }).target?.projectId ?? "";
+
+  const gatedOut = (await nodeOutput(wfRunId, "gate").catch(() => undefined)) as
+    | { stories?: Array<{ id: string; activity?: string }> }
+    | undefined;
+  const spec = (await nodeOutput(wfRunId, "spec").catch(() => undefined)) as { text?: string } | undefined;
+  const explore = (await nodeOutput(wfRunId, "explore").catch(() => undefined)) as
+    | { graph?: { states?: Array<{ id: string; route?: string; title?: string; controls?: string[] }> } }
+    | undefined;
+
+  /*
+   * 证据：状态流图上那一处附近的样子。
+   *
+   * 不给证据的话，模型只能凭那句人话编一条用例出来——而编出来的断言会对着一个
+   * 没人见过的字符串。给它路由、标题和看得见的控件，它才写得出**能落地**的一步。
+   */
+  const near = new Set<string>();
+  if (gap.anchor?.kind === "edge") near.add(gap.anchor.from).add(gap.anchor.to);
+  if (gap.anchor?.kind === "state") near.add(gap.anchor.id);
+  const evidence = (explore?.graph?.states ?? [])
+    .filter((s) => near.has(s.id))
+    .map((s) => `- ${s.id}${s.route ? ` (${s.route})` : ""}${s.title ? ` "${s.title}"` : ""}: ${(s.controls ?? []).slice(0, 12).join(" / ")}`);
+
+  const story = gatedOut?.stories?.find((st) => (st as { activity?: string }).activity === gap.activity);
+  const model = traced(gated(modelFromEnv()), { name: "review.fillgap" });
+  const out = await fillGap(model, {
+    gap,
+    ...(story?.id ? { storyId: story.id } : {}),
+    ...(evidence.length ? { evidence } : {}),
+    ...(spec?.text ? { specText: spec.text } : {}),
+    ...(opts.lang ? { lang: opts.lang } : {}),
+  });
+
+  // 门禁①在这里就跑：一条判据含糊的补丁用例，该被同一套规则点出来。
+  const report = runGate({
+    stories: story ? [story as never] : [],
+    cases: [out.kase as never],
+    specText: spec?.text ?? "",
+  } as never);
+
+  const saved = saveGapCase({
+    wfRunId,
+    projectId,
+    gapWhat: gap.what,
+    gapKind: `${gap.reach}:${gap.kind}`,
+    ...(gap.anchor ? { anchor: gap.anchor } : {}),
+    kase: out.kase as unknown as Record<string, unknown>,
+  });
+
+  return {
+    kase: out.kase as unknown as Record<string, unknown>,
+    findings: report.findings as unknown as Finding[],
+    gapCaseId: saved.id,
+  };
 }
 
 /** Runs that still have something waiting for a person. */

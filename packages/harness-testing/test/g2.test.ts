@@ -25,7 +25,7 @@ const textCase = (id: string, title: string, steps: string[], expected: string) 
   steps,
   expected,
   tier: 1 as const,
-  key: `${id}|params|assert`, covers: [], postSteps: [],
+  key: `${id}|params|assert`, covers: [], sourceRefs: [], postSteps: [],
 });
 
 const gatedBundle = (): GatedBundle => ({ origin: "x", flows: [], stories: [{ id: "US-01", title: "登录", acceptance: [] }],
@@ -191,7 +191,7 @@ describe("gate ②", () => {
     steps: ["step"],
     expected: "something concrete is shown",
     tier: 1 as const,
-    key: id, covers: [], postSteps: [],
+    key: id, covers: [], sourceRefs: [], postSteps: [],
   });
 
   it("blocks an invented credential — it fails in a way that blames the product", () => {

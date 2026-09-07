@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Artifact as ArtifactView } from "@/lib/artifact/registry";
+import { StartSheet } from "@/components/StartSheet";
 import {
   Background,
   Controls,
@@ -17,19 +19,62 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Play, Square, RotateCw, StepForward, Save, Pencil, Trash2, X, History, Circle, CircleDot, SkipForward, Settings as SettingsIcon, FlaskConical, Globe, ChevronRight, ServerCog, Hand, SquareDashedMousePointer, Stethoscope, CircleDollarSign } from "lucide-react";
+import {
+  Play,
+  Square,
+  RotateCw,
+  StepForward,
+  Save,
+  Pencil,
+  Trash2,
+  X,
+  History,
+  Circle,
+  CircleDot,
+  SkipForward,
+  Settings as SettingsIcon,
+  FlaskConical,
+  Globe,
+  Plus,
+  ChevronRight,
+  ServerCog,
+  Hand,
+  SquareDashedMousePointer,
+  Stethoscope,
+  CircleDollarSign,
+  SlidersHorizontal,
+} from "lucide-react";
 import { Button } from "@/components/ui";
+import { safeGet, safeSet } from "@/lib/local";
 import { useT, usePrefs } from "@/lib/prefs";
 import { cn } from "@/lib/cn";
 import { API_BASE, IS_OVERRIDDEN, resetApiBase } from "@/lib/base";
-import { runFromHash, useWf, type Artifact, type GraphDef, type NodeRun, type NodeState, type Runtime, type TraceRow } from "@/lib/wf";
-import { SurfacePanel } from "@/components/SurfacePanel";
+import {
+  runFromHash,
+  useWf,
+  type Artifact,
+  type GraphDef,
+  type NodeRun,
+  type NodeState,
+  type Runtime,
+  type TraceRow,
+} from "@/lib/wf";
 import { Drawer } from "@/components/overlay";
+import { RunRail } from "@/components/RunRail";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
+import { NewProjectDialog } from "@/components/NewProjectDialog";
 import { ParamForm } from "@/components/ParamForm";
 import { JsonView } from "@/components/JsonView";
 import { DiagnoseDrawer, type DiagnoseScope } from "@/components/DiagnoseDrawer";
 import { BudgetDrawer } from "@/components/BudgetDrawer";
+
+/**
+ * 项目下拉里「+ 新建项目」那一项的值。
+ *
+ * 用一个不可能与项目 id 相撞的哨兵，而不是空串——空串已经是「未选择项目」了，
+ * 两个不同的意思共用一个值，是这个界面上已经犯过一次的错（运行下拉里的「新运行」
+ * 也是 `value=""`）。
+ */
 import { MaterialPicker } from "@/components/MaterialPicker";
 import { SpecDrawer } from "@/components/SpecDrawer";
 import { StoriesDrawer } from "@/components/StoriesDrawer";
@@ -50,16 +95,28 @@ import { useStore } from "@/lib/store";
 
 const STATE_STYLE: Record<NodeState, string> = {
   idle: "border-border bg-card",
-  running: "border-amber-400 bg-amber-50 dark:bg-amber-950/40",
-  done: "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40",
-  failed: "border-rose-400 bg-rose-50 dark:bg-rose-950/40",
+  running: "border-warn bg-warn-soft",
+  done: "border-ok bg-ok-soft",
+  failed: "border-bad bg-bad-soft",
   skipped: "border-border bg-muted",
-  // Stopped in front of, not run: it reads as "waiting for you", not as a result.
-  paused: "border-sky-400 bg-sky-50 dark:bg-sky-950/40",
+  // Stopped in front of, not run: it reads as"waiting for you", not as a result.
+  paused: "border-primary bg-primary-soft",
+};
+
+/** 状态片的配色。和边框同一套语义色，但它带的是字，不是只有色。 */
+const STATE_CHIP: Record<string, string> = {
+  idle: "bg-muted text-muted-foreground",
+  running: "bg-warn text-primary-foreground",
+  done: "bg-ok-soft text-ok",
+  failed: "bg-bad text-primary-foreground",
+  skipped: "bg-muted text-muted-foreground",
+  paused: "bg-primary text-primary-foreground",
 };
 
 interface CardData extends Record<string, unknown> {
   label: string;
+  /** registry 给的人话标题。没有就退回节点 id——退回，不是省略。 */
+  title?: string;
   type: string;
   run: NodeRun;
   selected: boolean;
@@ -69,13 +126,66 @@ interface CardData extends Record<string, unknown> {
   onDelete?: () => void;
 }
 
+const LEGEND_OPEN = "wf:legend";
+
+/** 画布图例：每一行是「这个颜色 + 这个词 = 你该怎么想」。 */
+function CanvasLegend() {
+  const t = useT();
+  /*
+   * **默认收起。**
+   *
+   * 展开时它盖住右上那几个节点——而这条流水线是从左往右铺的，右上正是终点那几步。
+   * 图例是学一次就不用再看的东西，让它默认挡住要看的东西，代价和收益是反的。
+   * 展开状态记在本地：第一次点开的人下次进来还是展开的。
+   */
+  const [open, setOpen] = useState(() => safeGet(LEGEND_OPEN) === "1");
+  const flip = () => {
+    const v = !open;
+    setOpen(v);
+    safeSet(LEGEND_OPEN, v ? "1" : "0");
+  };
+  const states = ["running", "done", "failed", "paused", "skipped", "idle"] as const;
+  if (!open)
+    return (
+      <button
+        onClick={flip}
+        className="rounded-lg border border-border bg-card px-2 py-1 text-[0.6875rem] text-muted-foreground shadow-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {t("wf.legend")}
+      </button>
+    );
+  return (
+    <div className="max-w-[14rem] rounded-lg border border-border bg-card p-2.5 shadow-sm">
+      <div className="flex items-baseline gap-2">
+        <span className="eyebrow">{t("wf.legend")}</span>
+        <button
+          onClick={flip}
+          className="ml-auto text-[0.6875rem] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("wf.collapse")}
+        </button>
+      </div>
+      <div className="mt-1.5 flex flex-col gap-1">
+        {states.map((k) => (
+          <div key={k} className="flex items-center gap-1.5 text-[0.6875rem]">
+            <span className={cn("h-3 w-3 flex-none rounded-sm border-2", STATE_STYLE[k])} />
+            <span className={cn("flex-none rounded px-1 font-mono", STATE_CHIP[k])}>{t(`wf.state.${k}`)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[0.6875rem] leading-relaxed text-muted-foreground">{t("wf.legendWhy")}</p>
+    </div>
+  );
+}
+
 function NodeCard({ data }: NodeProps) {
+  const t = useT();
   const d = data as CardData;
   const run = d.run;
   return (
     <div
       className={cn(
-        "min-w-[190px] rounded-xl border-2 px-3 py-2 shadow-sm transition-colors",
+        "min-w-[11.875rem] rounded-xl border-2 px-3 py-2 shadow-sm transition-colors",
         STATE_STYLE[run.state],
         d.selected && "ring-2 ring-primary",
       )}
@@ -88,7 +198,7 @@ function NodeCard({ data }: NodeProps) {
         <button
           className={cn(
             "shrink-0 transition-colors",
-            d.breakpoint ? "text-rose-500" : "text-muted-foreground/40 hover:text-rose-400",
+            d.breakpoint ? "text-bad" : "text-muted-foreground/40 hover:text-bad",
           )}
           title="breakpoint"
           onClick={(e) => {
@@ -98,10 +208,12 @@ function NodeCard({ data }: NodeProps) {
         >
           {d.breakpoint ? <CircleDot className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
         </button>
-        <div className="font-display text-[13px] font-medium text-foreground">{d.label}</div>
+        {/* 人话标题在上，节点 id 在下：`gate.textcase` 是给机器读的，
+            而 registry 里那句"Gate: test design" 一直都发过来了，只是没人画。 */}
+        <div className="font-display text-[0.8125rem] font-medium text-foreground">{d.title || d.label}</div>
         {d.editing && (
           <button
-            className="ml-auto text-muted-foreground hover:text-rose-500"
+            className="ml-auto text-muted-foreground hover:text-bad"
             title="remove"
             onClick={(e) => {
               e.stopPropagation();
@@ -112,14 +224,23 @@ function NodeCard({ data }: NodeProps) {
           </button>
         )}
       </div>
-      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{d.type}</div>
-      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-[0.6875rem] text-muted-foreground">
+        <span className="min-w-0 truncate">{d.title ? `${d.label} · ${d.type}` : d.type}</span>
+        {/*
+          **状态要有一个词，不能只有一种颜色。**
+          `03 §9.6` 把这一条写成全局约定，而节点卡此前只染边框和底色：
+          红绿色觉差异的人分不出 done 和 failed，截图变成灰度之后谁都分不出，
+          而这张图最常见的用法恰恰是截下来贴进工单。
+        */}
+        <span className={cn("flex-none rounded px-1", STATE_CHIP[run.state])}>{t(`wf.state.${run.state}`)}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[0.6875rem] text-muted-foreground">
         {run.ms !== undefined && <span>{(run.ms / 1000).toFixed(1)}s</span>}
         {run.calls ? <span>{run.calls} calls</span> : null}
         {run.tokens ? <span>{run.tokens} tok</span> : null}
         {run.gate && <span className="text-foreground">gate {Math.round(run.gate.score * 100)}%</span>}
       </div>
-      {run.error && <div className="mt-1 line-clamp-2 text-[10px] text-rose-600">{run.error}</div>}
+      {run.error && <div className="mt-1 line-clamp-2 text-[0.6875rem] text-bad">{run.error}</div>}
       <Handle type="source" position={Position.Right} className="!h-2 !w-2" />
     </div>
   );
@@ -139,25 +260,28 @@ function ArtifactCard({ data }: NodeProps) {
   return (
     <div
       className={cn(
-        "min-w-[168px] max-w-[190px] rounded-xl border bg-card px-3 py-2 shadow-sm",
-        d.tone === "warn" ? "border-amber-400" : "border-border",
+        "min-w-[10.5rem] max-w-[11.875rem] rounded-xl border bg-card px-3 py-2 shadow-sm",
+        d.tone === "warn" ? "border-warn" : "border-border",
       )}
     >
       <Handle type="target" position={Position.Top} className="!h-1.5 !w-1.5 !opacity-0" />
-      <div className="text-[11.5px] text-muted-foreground">{d.title}</div>
+      <div className="text-[0.75rem] text-muted-foreground">{d.title}</div>
       <div
         className={cn(
-          "font-mono text-[21px] leading-tight tabular-nums",
-          d.tone === "warn" ? "text-amber-600" : "text-primary",
+          "font-mono text-[1.375rem] leading-tight tabular-nums",
+          d.tone === "warn" ? "text-warn" : "text-primary",
         )}
       >
         {d.value}
       </div>
-      <div className="font-mono text-[10.5px] leading-snug text-muted-foreground">{d.sub}</div>
+      <div className="font-mono text-[0.6875rem] leading-snug text-muted-foreground">{d.sub}</div>
       {d.samples && (
         <div className="mt-1 flex flex-col gap-0.5">
           {d.samples.map((x: string, i: number) => (
-            <div key={i} className="truncate rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
+            <div
+              key={i}
+              className="truncate rounded bg-muted px-1.5 py-0.5 text-[0.6875rem] text-muted-foreground"
+            >
               {x}
             </div>
           ))}
@@ -166,7 +290,7 @@ function ArtifactCard({ data }: NodeProps) {
       {d.opens && (
         <button
           onClick={() => d.onOpen?.()}
-          className="mt-1 block cursor-pointer text-[11px] text-primary hover:underline"
+          className="mt-1 block cursor-pointer text-[0.6875rem] text-primary hover:underline"
         >
           {d.opens.label} →
         </button>
@@ -183,6 +307,32 @@ const nodeCards = { card: NodeCard, artifact: ArtifactCard };
  * 年份不写：同一个下拉里几乎不会跨年，而多出来的四个字符会把真正要比的
  * 「几号几点」挤出可视范围。秒也不写——同一分钟内起两次运行的情况不存在。
  */
+/**
+ * 上限用掉了多少，压成一格。
+ *
+ * 只在这次运行真的给了上限时才出现：没有上限的时候写「3/—」是在暗示有个分母。
+ */
+function budgetLabel(r: { budget?: { calls?: number }; spend?: { calls?: number } }): string {
+  const cap = r.budget?.calls;
+  if (!cap) return "";
+  return `${r.spend?.calls ?? 0}/${cap} calls`;
+}
+
+/**
+ * 一份节点产出里认得出来的那些产物。
+ *
+ * 只挑**这一版登记过**的类型，其余照旧交给 JSON 视图。加一种呈现是往登记处加一条，
+ * 不是改这里——这个函数只负责认，不负责画。
+ */
+function artifactsIn(output: unknown): Array<{ kind: string; value: unknown }> {
+  if (!output || typeof output !== "object") return [];
+  const o = output as { gate?: { findings?: unknown[] } };
+  const out: Array<{ kind: string; value: unknown }> = [];
+  if (Array.isArray(o.gate?.findings) && o.gate.findings.length)
+    out.push({ kind: "findings", value: o.gate.findings });
+  return out;
+}
+
 function runStamp(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace("T", " ");
@@ -197,7 +347,7 @@ const Divider = () => <span className="mx-0.5 h-5 w-px flex-none bg-border" />;
  * Which material card is open, held in the URL.
  *
  * Removing the navigation should not remove the ability to send someone a link: `#/?open=cases`
- * still means "look at that batch of cases". It is a query on the one address rather than an
+ * still means"look at that batch of cases". It is a query on the one address rather than an
  * address of its own, because the card is something on top of the workspace, not a place
  * instead of it.
  */
@@ -249,8 +399,7 @@ function useOpenSurface(): [string, string, (id: string) => void] {
 function layout(def: GraphDef): Record<string, { x: number; y: number }> {
   const depth = new Map<string, number>(def.nodes.map((n) => [n.id, 0]));
   for (let pass = 0; pass < def.nodes.length; pass++)
-    for (const e of def.edges)
-      depth.set(e.to, Math.max(depth.get(e.to) ?? 0, (depth.get(e.from) ?? 0) + 1));
+    for (const e of def.edges) depth.set(e.to, Math.max(depth.get(e.to) ?? 0, (depth.get(e.from) ?? 0) + 1));
 
   const perDepth = new Map<number, number>();
   const pos: Record<string, { x: number; y: number }> = {};
@@ -267,24 +416,27 @@ function layout(def: GraphDef): Record<string, { x: number; y: number }> {
 /**
  * Versions, and what changed between two of them.
  *
- * Kept next to the canvas rather than on a page of its own: the question "what did I change
+ * Kept next to the canvas rather than on a page of its own: the question"what did I change
  * since the run that scored 89%" is asked while looking at the graph, not away from it.
  */
 function VersionPanel({
   versions,
   diffLines,
   onDiff,
+  onRunVersion,
 }: {
   versions: Array<{ version: number; savedAt: string; note?: string }>;
   diffLines: string[];
   onDiff: (from: number, to: number) => void;
+  /** 用某一版起一次运行。没有它，「复现半个月前那一版」只能靠 curl。 */
+  onRunVersion?: (version: number) => void;
 }) {
   const t = useT();
   const [from, setFrom] = useState<number | undefined>();
   const [to, setTo] = useState<number | undefined>();
 
   useEffect(() => {
-    // Default to "the newest change": the comparison people want nine times out of ten.
+    // Default to"the newest change": the comparison people want nine times out of ten.
     setTo(versions[0]?.version);
     setFrom(versions[1]?.version ?? versions[0]?.version);
   }, [versions]);
@@ -292,13 +444,14 @@ function VersionPanel({
   if (versions.length === 0) return null;
   const pick = (value: number | undefined, set: (v: number) => void) => (
     <select
-      className="min-w-0 flex-1 rounded border border-border bg-card px-1 py-0.5 font-mono text-[11px]"
+      className="min-w-0 flex-1 rounded border border-border bg-card px-1 py-0.5 font-mono text-[0.6875rem]"
       value={value ?? ""}
       onChange={(e) => set(Number(e.target.value))}
     >
       {versions.map((v) => (
         <option key={v.version} value={v.version}>
           v{v.version}
+          {v.savedAt ? ` · ${new Date(v.savedAt).toLocaleString()}` : ""}
           {v.note ? ` · ${v.note}` : ""}
         </option>
       ))}
@@ -309,11 +462,11 @@ function VersionPanel({
     <div className="border-b border-border p-3">
       <div className="mb-1 flex items-center gap-1.5">
         <History className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-[11px] font-medium text-muted-foreground">{t("wf.versions")}</span>
+        <span className="text-[0.6875rem] font-medium text-muted-foreground">{t("wf.versions")}</span>
       </div>
       <div className="flex items-center gap-1">
         {pick(from, setFrom)}
-        <span className="text-[11px] text-muted-foreground">→</span>
+        <span className="text-[0.6875rem] text-muted-foreground">→</span>
         {pick(to, setTo)}
         <Button
           className="whitespace-nowrap"
@@ -323,8 +476,23 @@ function VersionPanel({
           {t("wf.diff")}
         </Button>
       </div>
+      {/* 用左边那一版再跑一次。
+          服务端的 `startRun` 一直收 `graphVersion`，而界面上没有任何入口——
+          想复现半个月前那一版的结果，唯一的路是 curl。 */}
+      {from !== undefined && onRunVersion && (
+        <div className="mt-1.5">
+          <Button
+            className="whitespace-nowrap"
+            onClick={() => onRunVersion(from)}
+            title={t("wf.runVersionWhy", { ver: String(from) })}
+          >
+            <Play className="h-3.5 w-3.5" />
+            {t("wf.runVersion", { ver: String(from) })}
+          </Button>
+        </div>
+      )}
       {diffLines.length > 0 && (
-        <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2 font-mono text-[10px] leading-relaxed text-foreground">
+        <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2 font-mono text-[0.6875rem] leading-relaxed text-foreground">
           {diffLines.join("\n")}
         </pre>
       )}
@@ -343,56 +511,64 @@ function VersionPanel({
 function TracePanel({ rows, open, onToggle }: { rows: TraceRow[]; open: boolean; onToggle: () => void }) {
   const t = useT();
   const [filter, setFilter] = useState<"all" | "model" | "node" | "gate">("all");
-  const shown = rows.filter((r) => filter === "all" || r.kind === filter || (filter === "node" && r.kind === "run"));
+  const shown = rows.filter(
+    (r) => filter === "all" || r.kind === filter || (filter === "node" && r.kind === "run"),
+  );
   const KIND: Record<TraceRow["kind"], string> = {
-    run: "RUN", node: "NODE", model: "MODEL", gate: "GATE", err: "FLAG",
+    run: "RUN",
+    node: "NODE",
+    model: "MODEL",
+    gate: "GATE",
+    err: "FLAG",
   };
   return (
     <div className={cn("flex flex-col border-t border-border bg-card", open && "h-[220px]")}>
       <div className="flex flex-none items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-[12px] font-semibold">{t("wf.trace")}</span>
+        <span className="text-[0.75rem] font-semibold">{t("wf.trace")}</span>
         {open &&
           (["all", "model", "node", "gate"] as const).map((k) => (
             <button
               key={k}
               onClick={() => setFilter(k)}
               className={cn(
-                "cursor-pointer rounded px-2 py-0.5 text-[11.5px]",
+                "cursor-pointer rounded px-2 py-0.5 text-[0.75rem]",
                 filter === k ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
               )}
             >
               {t(`wf.trace.${k}`)}
             </button>
           ))}
-        <button onClick={onToggle} className="ml-auto cursor-pointer text-[11.5px] text-muted-foreground">
-          {open ? t("wf.collapse") : t("wf.expandTrace")}
+        <button onClick={onToggle} className="ml-auto cursor-pointer text-[0.75rem] text-muted-foreground">
+          {open ? t("wf.collapse") : t("wf.expand")}
         </button>
       </div>
       {open && (
         <div className="min-h-0 flex-1 overflow-auto">
           {shown.length === 0 && (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">{t("wf.traceEmpty")}</div>
+            <div className="px-3 py-2 text-[0.75rem] text-muted-foreground">{t("wf.traceEmpty")}</div>
           )}
           {shown.map((r, i) => (
             <div
               key={i}
-              className="grid grid-cols-[58px_54px_120px_minmax(0,1fr)_auto] items-baseline gap-2.5 border-b border-border/40 px-3 py-1 text-[12px]"
+              className="grid grid-cols-[3.625rem_3.375rem_7.5rem_minmax(0,1fr)_auto] items-baseline gap-2.5 border-b border-border/40 px-3 py-1 text-[0.75rem]"
             >
-              <span className="font-mono text-[10.5px] text-muted-foreground/80">{r.ts}</span>
+              <span className="font-mono text-[0.6875rem] text-muted-foreground/80">{r.ts}</span>
               <span
                 className={cn(
-                  "font-mono text-[10px]",
-                  r.kind === "model" && "text-amber-600",
-                  r.kind === "gate" && "text-emerald-600",
-                  r.kind === "err" && "text-rose-600",
+                  "font-mono text-[0.6875rem]",
+                  r.kind === "model" && "text-warn",
+                  r.kind === "gate" && "text-ok",
+                  r.kind === "err" && "text-bad",
                   r.kind === "node" && "text-primary",
                 )}
               >
                 {KIND[r.kind]}
               </span>
-              <span className="truncate font-mono text-[11px] text-primary">{r.node}</span>
+              <span className="truncate font-mono text-[0.6875rem] text-primary">{r.node}</span>
               <span className="truncate text-muted-foreground">{r.text}</span>
-              <span className="whitespace-nowrap font-mono text-[10.5px] text-muted-foreground/80">{r.right}</span>
+              <span className="whitespace-nowrap font-mono text-[0.6875rem] text-muted-foreground/80">
+                {r.right}
+              </span>
             </div>
           ))}
         </div>
@@ -400,7 +576,6 @@ function TracePanel({ rows, open, onToggle }: { rows: TraceRow[]; open: boolean;
     </div>
   );
 }
-
 
 /**
  * The harness runtime rail.
@@ -413,20 +588,30 @@ function TracePanel({ rows, open, onToggle }: { rows: TraceRow[]; open: boolean;
  *
  * Every gauge here is a real reading. A cap that was never set shows the spend with no
  * denominator rather than inventing one, and a run with no execution node simply has no
- * attribution gauges — a "0 infra · 0 assert" would claim the run checked and found none.
+ * attribution gauges — a"0 infra · 0 assert" would claim the run checked and found none.
  */
 function Gauge({
-  label, value, tone, frac, title,
-}: { label: string; value: string; tone?: "good" | "warn" | "bad"; frac?: number; title?: string }) {
+  label,
+  value,
+  tone,
+  frac,
+  title,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "warn" | "bad";
+  frac?: number;
+  title?: string;
+}) {
   return (
-    <div className="min-w-[104px] flex-none" title={title}>
-      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">{label}</div>
+    <div className="min-w-[6.5rem] flex-none" title={title}>
+      <div className="font-mono text-[0.6875rem] uppercase tracking-wider text-muted-foreground/70">{label}</div>
       <div
         className={cn(
-          "mt-0.5 font-mono text-[12.5px] tabular-nums",
-          tone === "good" && "text-emerald-600 dark:text-emerald-400",
-          tone === "warn" && "text-amber-600 dark:text-amber-400",
-          tone === "bad" && "text-rose-600 dark:text-rose-400",
+          "mt-0.5 font-mono text-[0.8125rem] tabular-nums",
+          tone === "good" && "text-ok",
+          tone === "warn" && "text-warn",
+          tone === "bad" && "text-bad",
           !tone && "text-foreground",
         )}
       >
@@ -435,7 +620,7 @@ function Gauge({
       {frac !== undefined && (
         <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-muted">
           <i
-            className={cn("block h-full rounded-full", frac > 0.85 ? "bg-rose-500" : "bg-primary")}
+            className={cn("block h-full rounded-full", frac > 0.85 ? "bg-bad" : "bg-primary")}
             style={{ width: `${Math.min(100, Math.round(frac * 100))}%` }}
           />
         </div>
@@ -476,9 +661,9 @@ function RuntimeRail({
   return (
     <div className="flex-none border-t border-border bg-card">
       <div className="flex items-center gap-2 px-3 py-1.5">
-        <span className="text-[12px] font-semibold">{t("wf.runtime")}</span>
-        <span className="text-[11px] text-muted-foreground">{t("wf.runtimeWhy")}</span>
-        <button onClick={onToggle} className="ml-auto cursor-pointer text-[11.5px] text-muted-foreground">
+        <span className="text-[0.75rem] font-semibold">{t("wf.runtime")}</span>
+        <span className="text-[0.6875rem] text-muted-foreground">{t("wf.runtimeWhy")}</span>
+        <button onClick={onToggle} className="ml-auto cursor-pointer text-[0.75rem] text-muted-foreground">
           {open ? t("wf.collapse") : t("wf.expand")}
         </button>
       </div>
@@ -499,7 +684,9 @@ function RuntimeRail({
           <Gauge label={t("wf.rtTokens")} value={`${(rt.spend.tokens / 1000).toFixed(1)}k`} />
           <Gauge
             label={t("wf.rtTime")}
-            value={rt.budget.ms ? `${min(rt.spend.ms)} / ${min(rt.budget.ms)} min` : `${min(rt.spend.ms)} min`}
+            value={
+              rt.budget.ms ? `${min(rt.spend.ms)} / ${min(rt.budget.ms)} min` : `${min(rt.spend.ms)} min`
+            }
             frac={rt.budget.ms ? rt.spend.ms / rt.budget.ms : undefined}
           />
           <Gauge
@@ -508,11 +695,7 @@ function RuntimeRail({
             tone={rt.ablate.length ? "warn" : "good"}
             title={t("wf.rtAblateWhy")}
           />
-          <Gauge
-            label={t("wf.rtPrompts")}
-            value={rt.prompts || "—"}
-            title={t("wf.rtPromptsWhy")}
-          />
+          <Gauge label={t("wf.rtPrompts")} value={rt.prompts || "—"} title={t("wf.rtPromptsWhy")} />
           {priciest && (
             <Gauge
               label={t("wf.rtPriciest")}
@@ -549,7 +732,27 @@ function RuntimeRail({
   );
 }
 
-export function WorkspacePage() {
+/**
+ * 画布这一屏——`?open=canvas` 落到搬迁空态，画布本身不再挂载。
+ *
+ * 理由是 `docs/v3/00-架构.md` §1/§2 的那一刀：工作流的编排与运行整个换成
+ * PenguinHarness——session、events、trace 都在 `:7364`，而画布画的正是这些。
+ * §6 也点名了这一条：US-14（画布）是 22 条用户故事里**变差的两条之一**，
+ * 补回的方式是 `run_pipeline` emit 节点事件 + `{stopAfter, from}` 参数，
+ * 而不是在这里再维护一张自己的图。
+ *
+ * 地址保留能打开（`App.tsx` 把没有 `?open=` 但带 `?run=` 的地址也落到这里），
+ * 因为「看这一次运行」这个链接被人存过、发过。
+ *
+ * **v3 Phase 3：这条拦截本身已经搬去 `App.tsx`**（原来这里有一个 `WorkspacePage`，
+ * 函数体只是转发 `<MigratedToPenguin />`——那一层转发没有必要，应用入口直接判断
+ * 「这条地址该看什么」就够了）。下面 `LegacyCanvasPage` 那一千多行**没有删**：
+ * 退役是 Phase 3 剩下那部分的事，这里只是确认了没有任何路径还引用它。
+ * 留着它也留着它的全部注释——那些理由在 Penguin 上重做这一屏时仍然有用。
+ */
+
+/** Phase 3：入口已经断开（曾经的 `WorkspacePage`，现已删除；见上方注释），保留代码与它的理由注释。 */
+export function LegacyCanvasPage() {
   const t = useT();
   /**
    * 诊断打开在哪个对象上。
@@ -575,6 +778,8 @@ export function WorkspacePage() {
     error,
     load,
     selectRun,
+    selectRunNone,
+    cancelNote,
     selectNode,
     start,
     cancel,
@@ -587,11 +792,16 @@ export function WorkspacePage() {
     issues,
     nodeTypes,
     draft: topoDraft,
+    runGraph,
+    resumeFrom,
+    resumeDone,
     artifacts,
     loadArtifacts,
     trace,
     loadTrace,
     runtime,
+    runContext,
+    outputs,
     loadGate,
     syncToProject,
     continuations,
@@ -623,7 +833,9 @@ export function WorkspacePage() {
   const saved = graphs.find((g) => g.id === selectedGraph);
   // While editing, everything on screen reads from the draft: one source of truth beats a
   // canvas that shows the old wiring and a panel that shows the new one.
-  const def = topoDraft ?? saved;
+  // 没在编辑、又打开着一次旧运行时，画的是**那次运行钉住的那一版**（见 wf.ts 的 runGraph）。
+  const def = topoDraft ?? runGraph ?? saved;
+  const pinnedOld = !topoDraft && !!runGraph;
   const editing = !!topoDraft;
 
   useEffect(() => {
@@ -631,6 +843,26 @@ export function WorkspacePage() {
   }, [selectedGraph, loadVersions]);
 
   const node = def?.nodes.find((n) => n.id === selectedNode);
+  /**
+   * 上游还没产出时，这一步重跑不了。
+   *
+   * 服务端已经拦在起跑前（`/rerun` 返回 409），但两个按钮此前在任何节点上都是亮的：
+   * 人得先点一下、吃一个错误，才知道点不得。产物就在 `outputs` 里，判据是同一份，
+   * 那就别等到点下去才说。
+   */
+  /** 第几步 / 共几步、正在跑哪一步、这一步已经跑了多久。 */
+  const progress = (() => {
+    const total = def?.nodes.length ?? 0;
+    const done = Object.values(nodeRuns).filter((r) => r.state === "done").length;
+    const at = def?.nodes.find((n) => nodeRuns[n.id]?.state === "running")?.id ?? "";
+    return { total, done, at, ms: at ? (nodeRuns[at]?.ms ?? 0) : 0 };
+  })();
+
+  const missingUp = (() => {
+    if (!selectedNode || !def || !wfRunId) return "";
+    const ups = def.edges.filter((e) => e.to === selectedNode).map((e) => e.from);
+    return ups.find((u) => outputs[u] === undefined) ?? "";
+  })();
   const [draft, setDraft] = useState("");
   /**
    * 参数草稿里当前选了哪几份材料。
@@ -656,9 +888,18 @@ export function WorkspacePage() {
    * the rest of the time they are two more things on a screen that already had six. They
    * open themselves when a run starts and stay wherever the person last put them.
    */
-  const [openId, openFocus, setOpenId] = useOpenSurface();
+  /**
+   * `spec` 与 `stories` 不在 `SURFACES` 里——它们是画布自己的两个抽屉，
+   * 所以 `surfaceById` 找不到它们，AppShell 会退回渲染画布，抽屉照常打开。
+   * 其余的 `open=` 值现在由左导航接管，见 App.tsx 的 AppShell。
+   */
+  const [openId, , setOpenId] = useOpenSurface();
   const [traceOpen, setTraceOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  /** 保存拓扑时随手写的一句话，落到版本记录上。 */
+  const [saveNote, setSaveNote] = useState("");
+  /** 起跑单开着没有。它只影响这一次运行，不动图。 */
+  const [startSheet, setStartSheet] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   /**
@@ -768,7 +1009,33 @@ export function WorkspacePage() {
 
   const projects = useStore((st) => st.projects);
   const activeProjectId = useStore((st) => st.activeProjectId);
+
+  /**
+   * 项目挂了材料，但图上的 source.spec 自己写死了 paths/text——这次跑的是图上那份。
+   * 服务端的注入规则就是「只在节点自己没说的时候注入」，这里照着同一条规则先算一遍，
+   * 好让人在按下去之前就知道。
+   */
+  const pinnedOverProject = (() => {
+    const proj = projects.find((p) => p.id === activeProjectId);
+    if (!proj?.materials?.length || !def) return "";
+    for (const n of def.nodes) {
+      if (n.type !== "source.spec") continue;
+      const p = (n.params ?? {}) as { paths?: unknown; path?: unknown; text?: unknown };
+      const said =
+        (Array.isArray(p.paths) && p.paths.length ? (p.paths as string[]).join(",") : "") ||
+        (typeof p.path === "string" ? p.path : "") ||
+        (p.text ? t("wf.textOnGraph") : "");
+      if (said) return said;
+    }
+    return "";
+  })();
+
   const selectProject = useStore((st) => st.selectProject);
+  /**
+   * 建项目此前只长在设置抽屉里——也就是说建第一个项目要先想到去翻设置。
+   * 它是这个产品的第一个动作，不该藏在齿轮后面。
+   */
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const loadData = useStore((st) => st.loadData);
   // The workspace is now the only page, so it is what loads the project list. It used to
   // arrive from the layout that wrapped every route.
@@ -800,6 +1067,17 @@ export function WorkspacePage() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, [runs, wfRunId, selectRun]);
+
+  /**
+   * 「新运行」是一个动作，不是一个可选中的运行。
+   *
+   * 在起跑单（U-48）做出来之前，它做的是把画布放回一次干净的状态——不选任何历史运行，
+   * 于是「运行」按钮起的就是一次全新的整跑。**关键是它不再去请求一个不存在的运行**。
+   */
+  const startNewRun = useCallback(() => {
+    selectRunNone();
+    if (window.location.hash.includes("run=")) window.location.hash = "";
+  }, [selectRunNone]);
 
   /**
    * 换运行时把设置抽屉关掉。
@@ -858,7 +1136,10 @@ export function WorkspacePage() {
         id: a.id,
         type: "artifact",
         position: { x: pos[a.node].x, y: pos[a.node].y + 150 + (i % 2 === 1 ? 130 : 0) },
-        data: { ...a, onOpen: () => a.opens && openSurface(a.opens.surface) } as unknown as Record<string, unknown>,
+        data: { ...a, onOpen: () => a.opens && openSurface(a.opens.surface) } as unknown as Record<
+          string,
+          unknown
+        >,
         draggable: false,
         selectable: false,
       }));
@@ -866,31 +1147,55 @@ export function WorkspacePage() {
       .filter((a) => pos[a.node])
       .map<Edge>((a) => ({ id: `art-${a.id}`, source: a.node, target: a.id, style: { opacity: 0.45 } }));
     return {
-      nodes: def.nodes.map<Node>((n) => ({
-        id: n.id,
-        type: "card",
-        position: pos[n.id],
-        data: {
-          label: n.id,
-          type: n.type,
-          run: nodeRuns[n.id] ?? { state: "idle" as NodeState },
-          selected: n.id === selectedNode,
-          editing,
-          breakpoint: breakpoints.includes(n.id),
-          onToggleBreakpoint: () => toggleBreakpoint(n.id),
-          onDelete: () => removeNode(n.id),
-        } satisfies CardData,
-      })).concat(artNodes),
-      edges: def.edges
-        .map<Edge>((e) => ({
-          id: `${e.from}->${e.to}`,
-          source: e.from,
-          target: e.to,
-          animated: nodeRuns[e.to]?.state === "running",
+      nodes: def.nodes
+        .map<Node>((n) => ({
+          id: n.id,
+          type: "card",
+          position: pos[n.id],
+          data: {
+            label: n.id,
+            title: nodeTypes.find((nt) => nt.type === n.type)?.title,
+            type: n.type,
+            run: nodeRuns[n.id] ?? { state: "idle" as NodeState },
+            selected: n.id === selectedNode,
+            editing,
+            breakpoint: breakpoints.includes(n.id),
+            onToggleBreakpoint: () => toggleBreakpoint(n.id),
+            onDelete: () => removeNode(n.id),
+          } satisfies CardData,
         }))
+        .concat(artNodes),
+      edges: def.edges
+        .map<Edge>((e) => {
+          // 被门禁拒下来的那条边，画布上要看得出来。
+          // 一句「gate.textcase 期望 cases，design.cases 给的是 gated-cases」
+          // 配上一张所有边长得一样的图，等于让人自己去数线。
+          const broken = issues.some((i) => i.at.edge?.from === e.from && i.at.edge?.to === e.to);
+          return {
+            id: `${e.from}->${e.to}`,
+            source: e.from,
+            target: e.to,
+            animated: nodeRuns[e.to]?.state === "running",
+            ...(broken
+              ? { style: { stroke: "#e11d48", strokeWidth: 2 }, label: "✕", labelStyle: { fill: "#e11d48" } }
+              : {}),
+          };
+        })
         .concat(artEdges),
     };
-  }, [def, nodeRuns, selectedNode, editing, removeNode, breakpoints, toggleBreakpoint, artifacts, openSurface]);
+  }, [
+    def,
+    nodeRuns,
+    selectedNode,
+    editing,
+    removeNode,
+    breakpoints,
+    toggleBreakpoint,
+    artifacts,
+    openSurface,
+    nodeTypes,
+    issues,
+  ]);
 
   /**
    * React Flow is told about the graph, and tells us back how big each node turned out.
@@ -898,7 +1203,7 @@ export function WorkspacePage() {
    * That second direction is not optional: in controlled mode a fresh node object wipes the
    * measurement React Flow took, and an unmeasured node is hidden, excluded from fitView,
    * and drawn without its edges. Since these objects are rebuilt on every event of a live
-   * run, handing them over raw made the canvas blink and "fit view" do nothing at all.
+   * run, handing them over raw made the canvas blink and"fit view" do nothing at all.
    * Merging over the previous objects keeps the measurements attached.
    */
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -915,7 +1220,7 @@ export function WorkspacePage() {
   const onNodeClick = useCallback(
     (_: unknown, node: Node) => {
       // Artefact cards live on the same canvas but are not graph nodes: selecting one put
-      // "a-gate" in the inspector and asked the gateway for a node that does not exist.
+      //"a-gate" in the inspector and asked the gateway for a node that does not exist.
       // They have their own click target — the link that opens what they hold.
       if (node.type === "artifact") return;
       void selectNode(node.id);
@@ -939,31 +1244,32 @@ export function WorkspacePage() {
       <div className="flex h-screen flex-col">
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
           <Globe className="h-4 w-4 flex-none text-muted-foreground" />
-          <select
-            className="max-w-[170px] rounded-md border border-border bg-card px-2 py-1 text-[13px]"
-            value={activeProjectId}
-            onChange={(e) => void selectProject(e.target.value)}
+          {/*
+            项目在这里是**面包屑的根，不是一个控件**。
+            切换与新建都在左导航底部那一行，它在任何一屏上都常驻——而 `TopBar.tsx`
+            的注释早就写过这条规矩：「同一件事印两遍，人会以为是两件事」。
+            这一屏此前印了三遍：导航底部、这个下拉、右栏的 Project 行。
+          */}
+          <span
+            className="max-w-[10.625rem] flex-none truncate text-[0.8125rem] text-muted-foreground"
             title={t("wf.projectWhy")}
           >
-            <option value="">{t("common.noProjectSelected")}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            {projects.find((p) => p.id === activeProjectId)?.name ?? t("common.noProjectSelected")}
+          </span>
 
           <ChevronRight className="h-3.5 w-3.5 flex-none text-muted-foreground/50" />
 
           <select
-            className="rounded-md border border-border bg-card px-2 py-1 text-[13px]"
+            className="rounded-md border border-border bg-card px-2 py-1 text-[0.8125rem]"
             value={selectedGraph}
             onChange={(e) => selectGraph(e.target.value)}
-            title={t("wf.graphWhy")}
+            title={saved?.description || t("wf.graphWhy")}
           >
+            {/* 说明来自图定义本身（GraphDef.title/description），不是前端硬编码的字符串表：
+                换一个前端，四张图的差别不该跟着消失。 */}
             {graphs.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.id} · v{g.version}
+              <option key={g.id} value={g.id} title={g.description}>
+                {g.title ? `${g.title} · ${g.id} v${g.version}` : `${g.id} · v${g.version}`}
               </option>
             ))}
           </select>
@@ -971,14 +1277,23 @@ export function WorkspacePage() {
           <ChevronRight className="h-3.5 w-3.5 flex-none text-muted-foreground/50" />
 
           <select
-            className="max-w-[210px] rounded-md border border-border bg-card px-2 py-1 text-[13px]"
+            className="max-w-[13.125rem] rounded-md border border-border bg-card px-2 py-1 text-[0.8125rem]"
             value={wfRunId}
-            onChange={(e) => void selectRun(e.target.value)}
+            /*
+              空值不是一个运行 id。此前 onChange 直接 `selectRun("")`，拼出 `/api/wf/runs/`
+              命中的是**列表路由**，返回 `{runs, active}` 而不是一个运行，于是读 `run.detail`
+              抛 TypeError，被 catch 塞进顶栏那条红色错误——「新运行」这一项点下去必然报错。
+              它本来就不是一个可选中的运行，而是一个动作。
+            */
+            onChange={(e) => {
+              if (!e.target.value) return void startNewRun();
+              void selectRun(e.target.value);
+            }}
             title={t("wf.runWhy")}
           >
             <option value="">{t("wf.newRun")}</option>
             {/* 这个项目的运行，加上那些没绑定项目的旧运行——后者明确标出来。把它们藏掉会更
-                "干净"，但今天带着产物的恰恰全是它们：起运行时不绑定项目是后来才修的。 */}
+"干净"，但今天带着产物的恰恰全是它们：起运行时不绑定项目是后来才修的。 */}
             {runs
               .filter((r) => r.graphId === selectedGraph)
               .filter((r) => !r.projectId || r.projectId === activeProjectId)
@@ -990,8 +1305,25 @@ export function WorkspacePage() {
                   连口头告诉别人选哪个都做不到。哈希只有在时间撞了的时候才有用，
                   所以它留在 title 里，让需要的人 hover 得到。
                 */
-                <option key={r.id} value={r.id} title={r.id}>
+                <option
+                  key={r.id}
+                  value={r.id}
+                  title={[
+                    r.id,
+                    r.describe,
+                    budgetLabel(r),
+                    r.overridden?.length ? t("wf.overrode", { what: r.overridden.join(",") }) : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                >
                   {runStamp(r.startedAt)} · {r.status}
+                  {/* 打哪里、上限用掉多少——两个月后能不能读懂这次运行，全靠这两样。 */}
+                  {r.envName ? ` · ${r.envName}` : ""}
+                  {budgetLabel(r) ? ` · ${budgetLabel(r)}` : ""}
+                  {/* 动过参数或关掉过组件的那些，不是这张图的基线成绩——列表上就得说。 */}
+                  {r.overridden?.length ? ` · ${t("wf.runOverridden")}` : ""}
+                  {r.ablated?.length ? ` · ${t("wf.runAblated", { list: r.ablated.join(",") })}` : ""}
                   {!r.projectId ? ` · ${t("wf.runUnbound")}` : ""}
                 </option>
               ))}
@@ -1018,22 +1350,56 @@ export function WorkspacePage() {
               {t("wf.resume")} · {pausedAt}
             </Button>
           ) : (
-            <Button variant="primary" onClick={() => void start({ projectId: activeProjectId })}>
-              <Play className="h-3.5 w-3.5" />
-              {t("wf.run")}
-            </Button>
+            <>
+              <Button
+                variant="primary"
+                onClick={() => void start({ projectId: activeProjectId })}
+                title={
+                  pinnedOverProject ? t("wf.materialsPinnedWhy", { said: pinnedOverProject }) : undefined
+                }
+              >
+                <Play className="h-3.5 w-3.5" />
+                {t("wf.run")}
+              </Button>
+              {/* 起跑单：换环境、给上限、关组件、改这一次的参数。
+                  这六样服务端一直收着，而界面上此前只有一个「运行」按钮——
+                  于是想改任何一样，唯一的路是去改图，而改图会立一个新版本。 */}
+              <Button onClick={() => setStartSheet((v) => !v)} title={t("start.why")}>
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {t("start.open")}
+              </Button>
+            </>
+          )}
+          {/* 项目挂了材料、图上却自己写死了路径——跑的是图上那份。
+              这句话必须在**按下去之前**说：事后才发现，那一次二十分钟的运行
+              读的是一份 mock，产出的规格看起来一切正常。 */}
+          {pinnedOverProject && !running && (
+            <span
+              className="rounded border border-warn bg-warn-soft px-2 py-0.5 text-[0.6875rem] text-warn"
+              title={t("wf.materialsPinnedWhy", { said: pinnedOverProject })}
+            >
+              {t("wf.materialsPinned")}
+            </span>
           )}
 
           {/* 跑完了，而这张图的产物正好是另一张图的输入。阶段一到 gate 就结束——那不是停住，
               是跑完了，阶段二在另一张图里。这道坎在界面上原本看不见：人跑到 gate 只会问
               「然后呢」，然后没有然后。 */}
-          {!running && !editing &&
+          {!running &&
+            !editing &&
             continuations
               .filter((c) => c.ready)
               .map((c) => (
+                /*
+                 * 描边，不是实心。
+                 *
+                 * 它和左边的「运行」此前都是实心主色，一行里两颗同样重的按钮
+                 * 等于没有主按钮——人得读完两行字才知道该点哪个。
+                 * 而这两件事的关系是**先后**不是并列：先跑出文本用例，再续进 g2。
+                 * 描边把这个先后画了出来，同时它一点也没变得更难点。
+                 */
                 <Button
                   key={c.graphId}
-                  variant="primary"
                   onClick={() => void continueInto(c.graphId)}
                   title={t("wf.continueWhy").replace("{from}", c.fromNode).replace("{into}", c.intoNode)}
                 >
@@ -1047,7 +1413,7 @@ export function WorkspacePage() {
           {breakpoints.length > 0 && !editing && (
             <span
               title={breakpoints.join(", ")}
-              className="flex-none rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] text-rose-600 dark:text-rose-400"
+              className="flex-none rounded bg-bad-soft px-1.5 py-0.5 text-[0.6875rem] text-bad"
             >
               {t("wf.breakpoints")} {breakpoints.length}
             </span>
@@ -1069,10 +1435,7 @@ export function WorkspacePage() {
               {/* 问一个关于这次运行的问题。需要同时读规格、故事、用例和 finding 才能
                   回答的那类——其余的应该由界面直接显示，而不是问模型。 */}
               {wfRunId && (
-                <Button
-                  onClick={() => setDiagnosing({ kind: "run", wfRunId })}
-                  title={t("wf.diagnoseWhy")}
-                >
+                <Button onClick={() => setDiagnosing({ kind: "run", wfRunId })} title={t("wf.diagnoseWhy")}>
                   <Stethoscope className="h-3.5 w-3.5" />
                   {t("wf.diagnose")}
                 </Button>
@@ -1081,18 +1444,32 @@ export function WorkspacePage() {
           ) : (
             <>
               <select
-                className="rounded-md border border-border bg-card px-2 py-1 text-[13px]"
+                className="rounded-md border border-border bg-card px-2 py-1 text-[0.8125rem]"
                 value=""
                 onChange={(e) => e.target.value && addNode(e.target.value)}
               >
                 <option value="">+ {t("wf.addNode")}</option>
                 {nodeTypes.map((nt) => (
-                  <option key={nt.type} value={nt.type}>
-                    {nt.type}
+                  <option key={nt.type} value={nt.type} title={nt.description}>
+                    {nt.title ? `${nt.title} · ${nt.type}` : nt.type}
                   </option>
                 ))}
               </select>
-              <Button variant="primary" onClick={() => void saveTopology()}>
+              {/* 一句「为什么改」跟着版本一起存下来。没有它，版本抽屉里
+                  每一项就只是个「v3」，回头没人说得清那次动了什么。 */}
+              <input
+                className="w-44 rounded border border-border bg-card px-2 py-[0.1875rem] text-[0.6875rem]"
+                placeholder={t("wf.notePlaceholder")}
+                value={saveNote}
+                onChange={(e) => setSaveNote(e.target.value)}
+              />
+              <Button
+                variant="primary"
+                onClick={() => {
+                  void saveTopology(saveNote.trim() || undefined);
+                  setSaveNote("");
+                }}
+              >
                 <Save className="h-3.5 w-3.5" />
                 {t("wf.saveTopology")}
               </Button>
@@ -1100,8 +1477,54 @@ export function WorkspacePage() {
                 <X className="h-3.5 w-3.5" />
                 {t("wf.discard")}
               </Button>
-              <span className="text-[11px] text-amber-600">{t("wf.editingHint")}</span>
+              <span className="text-[0.6875rem] text-warn">{t("wf.editingHint")}</span>
             </>
+          )}
+
+          {/* 跑起来之后的一条真进度：第几步 / 共几步、这一步跑了多久、累计花了多少。
+              此前这三样在界面上一处都没有，只能看「哪个方块是黄的」。
+              耗时来自 budget.update，所以一个六分钟的节点内部数字也在动。 */}
+          {running && progress.total > 0 && (
+            <>
+              <Divider />
+              <span className="flex items-center gap-2 text-[0.75rem] text-muted-foreground">
+                <span className="font-mono tabular-nums text-foreground">
+                  {progress.done + 1}/{progress.total}
+                </span>
+                {progress.at && <span className="max-w-[16ch] truncate">{progress.at}</span>}
+                {progress.ms > 0 && (
+                  <span className="font-mono tabular-nums">{(progress.ms / 1000).toFixed(0)}s</span>
+                )}
+                <span className="font-mono tabular-nums">
+                  {runtime.spend.calls} calls · {Math.round(runtime.spend.tokens / 1000)}k tok
+                </span>
+              </span>
+            </>
+          )}
+
+          {/* 没跑完的运行：说清跑到哪儿了，并且给一个能直接按的「接着跑」。
+              此前这里什么都没有，人只能自己猜从哪一步重来。 */}
+          {resumeFrom && !running && (
+            <>
+              <Divider />
+              <span className="text-[0.6875rem] text-muted-foreground">
+                {t("wf.resumeHint", { done: String(resumeDone), from: resumeFrom })}
+              </span>
+              <Button variant="primary" onClick={() => void resume()}>
+                <StepForward className="h-3.5 w-3.5" />
+                {t("wf.resumeFromHere")}
+              </Button>
+            </>
+          )}
+
+          {/* 画的不是今天这张图时，得说出来——否则人会拿旧运行的画面去改今天的图。 */}
+          {pinnedOld && (
+            <span className="rounded border border-warn bg-warn-soft px-2 py-0.5 text-[0.6875rem] text-warn">
+              {t("wf.pinnedOldVersion", {
+                ver: String(runGraph?.version ?? 0),
+                cur: String(saved?.version ?? 0),
+              })}
+            </span>
           )}
 
           {/* 对这一版 harness —— 量的不是产品，所以它不属于上面任何一段。 */}
@@ -1114,21 +1537,27 @@ export function WorkspacePage() {
           {/* 既不属于作用域也不属于动作的两件事：事件流通不通，以及这个标签页在驱动哪个网关。
               后者只在不是默认网关时出现——自举时两个实例同时在跑，「我在看哪一个」会突然
               变得不显然。 */}
-          <span className="ml-auto flex items-center gap-2 text-[12px] text-muted-foreground">
+          <span className="ml-auto flex items-center gap-2 text-[0.75rem] text-muted-foreground">
             {IS_OVERRIDDEN && (
               <button
                 onClick={resetApiBase}
                 title={t("topbar.backToDefault")}
-                className="flex cursor-pointer items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 font-mono text-[11px] text-amber-700 hover:bg-amber-500/25 dark:text-amber-400"
+                className="flex cursor-pointer items-center gap-1 rounded-md bg-warn-soft px-2 py-0.5 font-mono text-[0.6875rem] text-warn hover:bg-warn-soft"
               >
                 <ServerCog className="h-3.5 w-3.5" />
                 {API_BASE.replace(/^https?:\/\//, "")}
               </button>
             )}
-            {error && <span className="text-rose-500">{error}</span>}
+            {error && <span className="text-bad">{error}</span>}
+            {/*
+              取消的回执。「正在停」和「进程已经不在了」是两句不同的话，此前界面对两者
+              都一声不吭——按下停止之后完全没有反馈，而取消只在节点边界生效，
+              实测单步耗时 spec 158 秒、codegen 505 秒。
+            */}
+            {cancelNote && <span className="text-warn">{cancelNote}</span>}
             <span
               title={t(`proc.ws.${ws}`)}
-              className={cn("h-2 w-2 rounded-full", ws === "open" ? "bg-emerald-500" : "bg-amber-500")}
+              className={cn("h-2 w-2 rounded-full", ws === "open" ? "bg-ok" : "bg-warn")}
             />
             <button
               onClick={() => setSettingsOpen(true)}
@@ -1143,66 +1572,111 @@ export function WorkspacePage() {
         <div className="relative flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeCards}
-              onNodeClick={onNodeClick}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onEdgesDelete={onEdgesDelete}
-              onNodeDragStop={onNodeDragStop}
-              onInit={setFlow}
-              fitView
-              nodesDraggable={editing}
-              nodesConnectable={editing}
-              edgesFocusable={editing}
-              deleteKeyCode={editing ? "Delete" : null}
-              proOptions={{ hideAttribution: true }}
-              /* 一个手势只有一种含义：拖动模式下拖的是画布，选择模式下拖出来的是框。 */
-              panOnDrag={tool === "pan"}
-              selectionOnDrag={tool === "select"}
-              selectionMode={SelectionMode.Partial}
-              onSelectionChange={({ nodes: picked }) =>
-                // 产物卡不是图节点：框住它不该被当成"选中了一步"。
-                setPicked(picked.filter((n) => n.type !== "artifact").map((n) => n.id))
-              }
-            >
-              <Background />
-              <Controls showInteractive={false} />
-              {/* 左上角、竖排：手势模式是进画布做的第一个选择，放在视线起点，
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeCards}
+                onNodeClick={onNodeClick}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onEdgesDelete={onEdgesDelete}
+                onNodeDragStop={onNodeDragStop}
+                onInit={setFlow}
+                fitView
+                nodesDraggable={editing}
+                nodesConnectable={editing}
+                edgesFocusable={editing}
+                deleteKeyCode={editing ? "Delete" : null}
+                proOptions={{ hideAttribution: true }}
+                /* 一个手势只有一种含义：拖动模式下拖的是画布，选择模式下拖出来的是框。 */
+                panOnDrag={tool === "pan"}
+                selectionOnDrag={tool === "select"}
+                selectionMode={SelectionMode.Partial}
+                onSelectionChange={({ nodes: picked }) =>
+                  // 产物卡不是图节点：框住它不该被当成"选中了一步"。
+                  setPicked(picked.filter((n) => n.type !== "artifact").map((n) => n.id))
+                }
+              >
+                <Background />
+                <Controls showInteractive={false} />
+                {/* 左上角、竖排：手势模式是进画布做的第一个选择，放在视线起点，
                   也和左下角的缩放控件分开——那是"看得多大"，这是"拖的是什么"。 */}
-              <Panel position="top-left" className="!left-3 !top-3">
-                <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-                  {([
-                    ["pan", Hand, "wf.toolPan"],
-                    ["select", SquareDashedMousePointer, "wf.toolSelect"],
-                  ] as const).map(([id, Icon, key]) => (
-                    <button
-                      key={id}
-                      onClick={() => setTool(id)}
-                      title={t(`${key}Why`)}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-[11.5px] transition-colors",
-                        tool === id ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {t(key)}
-                    </button>
-                  ))}
-                </div>
-              </Panel>
-              {/* A four-node pipeline does not need a second view of itself; shrunk to a
+                <Panel position="top-left" className="!left-3 !top-3">
+                  <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                    {(
+                      [
+                        ["pan", Hand, "wf.toolPan"],
+                        ["select", SquareDashedMousePointer, "wf.toolSelect"],
+                      ] as const
+                    ).map(([id, Icon, key]) => (
+                      <button
+                        key={id}
+                        onClick={() => setTool(id)}
+                        title={t(`${key}Why`)}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-[0.75rem] transition-colors",
+                          tool === id
+                            ? "bg-primary/10 font-medium text-primary"
+                            : "text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {t(key)}
+                      </button>
+                    ))}
+                  </div>
+                </Panel>
+                {/*
+                  图例。**它是这张图的一部分，不是装饰**——上面每一行都对应
+                  一个人看到那个颜色时要做的判断，而 `US-14` 只写了「节点上显示状态」，
+                  没写「人怎么知道那个颜色是什么意思」。
+                  放右上：左上是手势模式，左下是缩放控件，右下是小地图，只剩这一角。
+                  默认收起，展开状态记在本地——它是学一次就不用再看的东西。
+                */}
+                <Panel position="top-right" className="!right-3 !top-3">
+                  <CanvasLegend />
+                </Panel>
+                {/* A four-node pipeline does not need a second view of itself; shrunk to a
                   locator so it stops competing with the artefacts for the corner. */}
-              <MiniMap
-                pannable
-                zoomable
-                className="!bg-muted/70"
-                style={{ width: 108, height: 68 }}
-              />
-            </ReactFlow>
+                <MiniMap pannable zoomable className="!bg-muted/70" style={{ width: 108, height: 68 }} />
+              </ReactFlow>
+              {/*
+              一个项目都没有的时候，画布上是一张空图——而这个人此刻唯一该做的事
+              （建项目）此前只存在于设置抽屉的第二层里。空态不是「这里没东西」，
+              是「这里该发生什么」，所以它带着那个动作本身。
+            */}
+              {/*
+              没有项目时提示建一个，但**不许盖住已经在这儿的东西**。
+
+              此前这张卡是 `absolute inset-0 z-10`，正好压在画布中央的节点上。而挂载时
+              画布会自动落到"这张图最新的一次运行"——实测这台机器上 0 个项目、80 次运行、
+              381 份节点产物、61MB 截图，于是第一屏同时说着「这里什么都没有」和
+              「这是最近一次运行的一百条用例」，两句话都很确定，互相矛盾，
+              而那些产物既读不了也点不到。
+
+              改成一条横幅：它说的是"还缺一个项目"，不是"这里什么都没有"，
+              并且把机器上已经有的东西一起说出来。
+            */}
+              {!projects.length && (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center p-3">
+                  <div className="pointer-events-auto flex max-w-2xl items-center gap-3 rounded-lg border border-border bg-card/95 px-4 py-2.5 text-left shadow-sm backdrop-blur-sm">
+                    <Globe className="h-4 w-4 flex-none text-muted-foreground" />
+                    <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
+                      {t("projects.empty")}
+                      {runs.length > 0 && (
+                        <span className="ml-1 text-foreground">
+                          {t("projects.emptyButRuns", { n: runs.length })}
+                        </span>
+                      )}
+                    </p>
+                    <Button variant="primary" className="flex-none" onClick={() => setNewProjectOpen(true)}>
+                      <Plus className="h-3.5 w-3.5" />
+                      {t("projects.newProject")}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
             <RuntimeRail
               rt={runtime}
@@ -1211,12 +1685,40 @@ export function WorkspacePage() {
               onToggle={() => setRailOpen((v) => !v)}
             />
             <TracePanel rows={trace} open={traceOpen} onToggle={() => setTraceOpen((v) => !v)} />
+            {startSheet && (
+              <StartSheet
+                def={def}
+                nodeTypes={nodeTypes}
+                projectId={activeProjectId ?? ""}
+                title={t("start.title")}
+                onClose={() => setStartSheet(false)}
+                onStart={(opts) => {
+                  setStartSheet(false);
+                  void start({ projectId: activeProjectId, ...opts });
+                }}
+              />
+            )}
           </div>
+
+          {/*
+            右栏三节：**进度 / 产物 / 这次它看得到什么**。
+            常驻而不是抽屉——这三样是读任何一件产物时都要对着看的背景，
+            装进抽屉，人每判断一条就要开关一次，而抽屉一开就盖住了它要解释的那个东西。
+          */}
+          <RunRail
+            runtime={runtime}
+            nodeRuns={nodeRuns}
+            order={(def?.nodes ?? []).map((n) => n.id)}
+            produced={Object.keys(outputs)}
+            artifacts={artifacts}
+            context={runContext}
+            onOpen={openSurface}
+          />
 
           {/* The inspector is about a node, so it is a drawer over the canvas like every other
               overlay: same close, same drag-to-widen, and the pipeline it belongs to stays
               visible behind it. It used to be a permanent 380px column whose contents were
-              "点一个节点看它的产物". */}
+"点一个节点看它的产物". */}
           <Drawer
             open={!!selectedNode}
             onClose={() => void selectNode("")}
@@ -1224,9 +1726,9 @@ export function WorkspacePage() {
             defaultWidth={520}
             title={
               <span className="flex items-baseline gap-2">
-                <span className="font-mono">{selectedNode}</span>
-                <span className="text-[11px] font-normal text-muted-foreground">
-                  {def?.nodes.find((n) => n.id === selectedNode)?.type}
+                <span>{nodeTypes.find((nt) => nt.type === node?.type)?.title || selectedNode}</span>
+                <span className="font-mono text-[0.6875rem] font-normal text-muted-foreground">
+                  {selectedNode} · {node?.type}
                 </span>
               </span>
             }
@@ -1237,23 +1739,29 @@ export function WorkspacePage() {
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
                 <Button
                   onClick={() => void start({ node: selectedNode, mode: "only" })}
-                  disabled={running || !wfRunId}
-                  title={t("wf.runNodeWhy")}
+                  disabled={running || !wfRunId || !!missingUp}
+                  title={missingUp ? t("wf.missingUpstream", { node: missingUp }) : t("wf.runNodeWhy")}
                 >
                   <RotateCw className="h-3.5 w-3.5" />
                   {t("wf.runNode")}
                 </Button>
                 <Button
                   onClick={() => void start({ node: selectedNode, mode: "from" })}
-                  disabled={running || !wfRunId}
-                  title={t("wf.runFromWhy")}
+                  disabled={running || !wfRunId || !!missingUp}
+                  title={missingUp ? t("wf.missingUpstream", { node: missingUp }) : t("wf.runFromWhy")}
                 >
                   <StepForward className="h-3.5 w-3.5" />
                   {t("wf.runFrom")}
                 </Button>
+                {/* 灰掉一个按钮而不说为什么，等于把人挡在门外还不告诉他门在哪。 */}
+                {missingUp && (
+                  <span className="text-[0.6875rem] text-warn">
+                    {t("wf.missingUpstream", { node: missingUp })}
+                  </span>
+                )}
                 <Button onClick={() => toggleBreakpoint(selectedNode)} title={t("wf.breakpointWhy")}>
                   {breakpoints.includes(selectedNode) ? (
-                    <CircleDot className="h-3.5 w-3.5 text-rose-500" />
+                    <CircleDot className="h-3.5 w-3.5 text-bad" />
                   ) : (
                     <Circle className="h-3.5 w-3.5" />
                   )}
@@ -1261,21 +1769,23 @@ export function WorkspacePage() {
                 </Button>
                 {/* 问一个关于这一步的问题，答案就开在这一步旁边。 */}
                 <Button
-                  onClick={() => setDiagnosing({ kind: "node", node: selectedNode, wfRunId: wfRunId || undefined })}
+                  onClick={() =>
+                    setDiagnosing({ kind: "node", node: selectedNode, wfRunId: wfRunId || undefined })
+                  }
                   title={t("wf.diagnoseWhy")}
                 >
                   <Stethoscope className="h-3.5 w-3.5" />
                   {t("wf.diagnose")}
                 </Button>
                 {/* 两个「跑」都要求先有一次运行可以接着改：没有的话说清楚，而不是给一个灰按钮让人猜。 */}
-                {!wfRunId && <span className="text-[11px] text-muted-foreground">{t("wf.needRun")}</span>}
+                {!wfRunId && <span className="text-[0.6875rem] text-muted-foreground">{t("wf.needRun")}</span>}
               </div>
             )}
 
             {node && (
               <div className="border-b border-border p-3">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground">{t("wf.params")}</span>
+                  <span className="text-[0.6875rem] font-medium text-muted-foreground">{t("wf.params")}</span>
                   <Button onClick={() => void save()} disabled={!dirty}>
                     <Save className="h-3.5 w-3.5" />
                     {t("wf.save")}
@@ -1331,7 +1841,7 @@ export function WorkspacePage() {
                   );
                 })()}
                 <textarea
-                  className="h-32 w-full resize-y rounded-md border border-border bg-card p-2 font-mono text-[11px]"
+                  className="h-32 w-full resize-y rounded-md border border-border bg-card p-2 font-mono text-[0.6875rem]"
                   value={draft}
                   spellCheck={false}
                   onChange={(e) => {
@@ -1339,32 +1849,64 @@ export function WorkspacePage() {
                     setDirty(true);
                   }}
                 />
+                {/* 每条问题都可以点：点节点选中它，点边把两端选中并居中。
+                    只列不定位，人还是得自己在图上找——而图上恰恰有二十个节点。 */}
                 {issues.length > 0 && (
-                  <ul className="mt-1 space-y-0.5 text-[11px] text-rose-600">
+                  <ul className="mt-1 space-y-0.5 text-[0.6875rem] text-bad">
                     {issues.map((i, k) => (
                       <li key={k}>
-                        {i.at.node ? `${i.at.node}: ` : ""}
-                        {i.message}
+                        <button
+                          className="cursor-pointer text-left underline decoration-dotted hover:brightness-110"
+                          onClick={() => {
+                            const id = i.at.node ?? i.at.edge?.to ?? "";
+                            if (!id) return;
+                            selectNode(id);
+                            flow?.fitView({ nodes: [{ id }], duration: 300, maxZoom: 1.2 });
+                          }}
+                        >
+                          {i.at.node
+                            ? `${i.at.node}: `
+                            : i.at.edge
+                              ? `${i.at.edge.from} → ${i.at.edge.to}: `
+                              : ""}
+                          {i.message}
+                        </button>
                       </li>
                     ))}
                   </ul>
                 )}
-                <p className="mt-1 text-[10px] text-muted-foreground">{t("wf.saveHint")}</p>
+                <p className="mt-1 text-[0.6875rem] text-muted-foreground">{t("wf.saveHint")}</p>
               </div>
             )}
             <div className="min-h-0 flex-1 overflow-auto p-3">
               {nodeDetail === undefined ? (
-                <div className="text-[12px] text-muted-foreground">{t("wf.noOutput")}</div>
+                <div className="text-[0.75rem] text-muted-foreground">{t("wf.noOutput")}</div>
               ) : (
                 // 可折叠、可搜、不截断。此前这里是 stringify 之后砍到两万字符——
                 // 40 条用例的产物两千多行，想看第 17 条的判据只能滚；
                 // 而被砍掉的部分没有任何提示，读的人以为自己看到了全部。
-                <JsonView value={nodeDetail} />
+                <>
+                  {/* 认得的产物用专用组件画，一张塌了只塌它自己（见 artifact/registry）。
+                      认不出的仍然给 JSON——那是这一版还不认得它，不是它没有值得看的东西。 */}
+                  {artifactsIn(nodeDetail).map((a, i) => (
+                    <div key={i} className="mb-2">
+                      <ArtifactView kind={a.kind} value={a.value} />
+                    </div>
+                  ))}
+                  <JsonView value={nodeDetail} />
+                </>
               )}
             </div>
             <div className="max-h-56 overflow-auto border-t border-border bg-muted p-2">
-              <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-muted-foreground">
-                {log.slice(-40).join("\n") || t("wf.noEvents")}
+              {/* 这个抽屉是**某一步**的，所以日志也只给这一步的。
+                  拿不到归属的行（node 为空的，属于整次运行）一并留下：
+                  它们是「这次运行开始了 / 结束了」这类话，藏掉会让日志看起来断掉。 */}
+              <pre className="whitespace-pre-wrap break-words font-mono text-[0.6875rem] leading-relaxed text-muted-foreground">
+                {log
+                  .filter((l) => !l.node || l.node === selectedNode)
+                  .slice(-40)
+                  .map((l) => l.text)
+                  .join("\n") || t("wf.noEvents")}
               </pre>
             </div>
           </Drawer>
@@ -1386,14 +1928,14 @@ export function WorkspacePage() {
             <div className="p-3">
               <div className="flex flex-wrap gap-1.5">
                 {picked.map((id) => (
-                  <span key={id} className="rounded bg-muted px-2 py-0.5 font-mono text-[11.5px]">
+                  <span key={id} className="rounded bg-muted px-2 py-0.5 font-mono text-[0.75rem]">
                     {id}
                   </span>
                 ))}
               </div>
 
               <div className="mt-3 space-y-2">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70">
+                <div className="text-[0.6875rem] uppercase tracking-wider text-muted-foreground/70">
                   {t("wf.pickedBatch")}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1403,16 +1945,18 @@ export function WorkspacePage() {
                     <CircleDot className="h-3.5 w-3.5" />
                     {t("wf.pickedBreakAll")}
                   </Button>
-                  <Button onClick={() => picked.filter((id) => breakpoints.includes(id)).forEach(toggleBreakpoint)}>
+                  <Button
+                    onClick={() => picked.filter((id) => breakpoints.includes(id)).forEach(toggleBreakpoint)}
+                  >
                     <Circle className="h-3.5 w-3.5" />
                     {t("wf.pickedBreakNone")}
                   </Button>
                 </div>
 
-                <div className="pt-2 text-[11px] uppercase tracking-wider text-muted-foreground/70">
+                <div className="pt-2 text-[0.6875rem] uppercase tracking-wider text-muted-foreground/70">
                   {t("wf.pickedSingleOnly")}
                 </div>
-                <p className="text-[12px] leading-relaxed text-muted-foreground">{t("wf.pickedWhySingle")}</p>
+                <p className="text-[0.75rem] leading-relaxed text-muted-foreground">{t("wf.pickedWhySingle")}</p>
                 <div className="flex flex-wrap gap-2">
                   {picked.map((id) => (
                     <Button key={id} onClick={() => void selectNode(id)} disabled={running}>
@@ -1437,23 +1981,36 @@ export function WorkspacePage() {
               versions={versions}
               diffLines={diffLines}
               onDiff={(a, b) => void loadDiff(a, b)}
+              onRunVersion={(v) => void start({ projectId: activeProjectId, graphVersion: v })}
             />
           </Drawer>
 
-          {/* Material cards and settings float over the canvas rather than replacing it:
-              what you are looking at and where it came from stay in view together. */}
           {/* Run-scoped readers: these artefacts belong to this run, so they are read from
-              it rather than from whichever project happens to be selected. */}
+              it rather than from whichever project happens to be selected.
+              这两个仍然是抽屉——它们不在 `SURFACES` 里，是画布自己的东西。 */}
           {openId === "spec" && wfRunId && <SpecDrawer wfRunId={wfRunId} onClose={() => setOpenId("")} />}
-          {openId === "stories" && wfRunId && <StoriesDrawer wfRunId={wfRunId} onClose={() => setOpenId("")} />}
-          {openId && openId !== "spec" && openId !== "stories" && (
-            <SurfacePanel surfaceId={openId} wfRunId={wfRunId} focus={openFocus} onClose={() => setOpenId("")} onSwitch={setOpenId} />
+          {openId === "stories" && wfRunId && (
+            <StoriesDrawer wfRunId={wfRunId} onClose={() => setOpenId("")} />
           )}
+          {/*
+            产物卡打开的界面**不再盖在画布上**，而是变成左导航里的一屏（见 App.tsx 的 AppShell）。
+            留一句说明而不是删掉整段历史：`openSurface` 仍然在用，它做的事从
+            「打开一张浮层」变成了「换一个落点」——地址机制一个字没改，
+            所以 `#/?open=cases` 这样的旧链接照样能打开。
+
+            为什么不再用浮层：「每类产物一张卡」随类型数线性劣化——13 类就是 13 张卡，
+            人仍然要先在脑子里建一张地图，只是那张地图从菜单换成了画布。
+          */}
           {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
-          {diagnosing && (
-            <DiagnoseDrawer scope={diagnosing} onClose={() => setDiagnosing(undefined)} />
-          )}
+          {diagnosing && <DiagnoseDrawer scope={diagnosing} onClose={() => setDiagnosing(undefined)} />}
           {budgetOpen && <BudgetDrawer onClose={() => setBudgetOpen(false)} />}
+          <NewProjectDialog
+            open={newProjectOpen}
+            onClose={() => setNewProjectOpen(false)}
+            /* createProject 已经把新项目选上了，这里只要把画布带回干净状态：
+               刚建的项目没有任何运行，还停在上一个项目的运行上会读出别人的数。 */
+            onCreated={() => setOpenId("")}
+          />
         </div>
       </div>
     </>

@@ -120,6 +120,19 @@ export const TextCaseSchema = z.object({
    * 说不出任何一条的用例单独计数——它多半没在验证一次变化，而是在描述一屏。
    */
   covers: z.array(z.string()).default([]),
+  /**
+   * 这条用例是对着材料的**哪几段**写出来的：`retrieve_spec` 返回的 chunk id
+   * （`docs/spec.md#7`）或探索观察的段 id。**出处锚点**——六职责盘点里此前空着的那一格。
+   *
+   * 为什么是 id 不是引文：一段引文可以被编出来，一个 id 只能是工具返回过的。
+   * 写盘 hook 与 `design.cases` 节点都用 `checkProvenance` 对着**这次运行真正取到的段**核对，
+   * 对不上的 id 不是「引用错了」，是这条断言查不到出处——survey-02 里 66 条断言只有
+   * 4 条查得到出处，就是因为这个字段以前不存在，出处只活在模型的措辞里。
+   *
+   * 默认空数组而不是必填：A 臂的旧运行没有它，读回来不该炸；**要不要为空由门禁与 hook 决定**，
+   * 形状层只保证它是一组字符串。
+   */
+  sourceRefs: z.array(z.string()).default([]),
 });
 export type TextCase = z.infer<typeof TextCaseSchema>;
 
@@ -342,6 +355,22 @@ export type GateFinding = z.infer<typeof GateFindingSchema>;
 
 export const GateReportSchema = z.object({
   score: z.number().min(0).max(1),
+  /**
+   * 这个分是怎么来的：分母、把分拖下来的是哪几条、以及那条算式本身。
+   *
+   * 门禁的判决是这条流水线上最硬的一个结论，而它此前只给一个百分比——
+   * 一个 58% 说不出「差在哪」，人只能自己去 findings 里数。分数不该是个神谕。
+   */
+  scoreBasis: z
+    .object({
+      /** 分母：参与打分的用例数。 */
+      cases: z.number(),
+      /** 分子那一半：被至少一条 warn 点到的用例 id。它们就是把分拖下来的那几条。 */
+      flagged: z.array(z.string()),
+      /** 算式，写成人能念出来的一句。 */
+      formula: z.string(),
+    })
+    .optional(),
   findings: z.array(GateFindingSchema),
   stats: z.object({
     cases: z.number(),
@@ -350,6 +379,8 @@ export const GateReportSchema = z.object({
     tiersBacked: z.record(z.string(), z.number()).default({}),
     methods: z.record(z.string(), z.number()),
     negativeRatio: z.number(),
+    /** 判它够不够的那条线。和比例一起给，界面才说得出「达标了没有」。 */
+    minNegativeRatio: z.number().optional(),
     /** 这批故事有几条、其中几条挂在流程上——故事地图能不能画的前提。 */
     stories: z.number().optional(),
     storiesAnchored: z.number().optional(),

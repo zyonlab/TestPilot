@@ -9,7 +9,12 @@ import {
   registerPack,
   runGraph,
   setModelLease,
+  forTrace,
+  observe,
+  shutdownTracing,
   startChild,
+  startTracing,
+  traced,
   type GraphDef,
   type GraphRunResult,
   type RunMode,
@@ -40,8 +45,21 @@ interface StartInput {
   spent?: { calls?: number; tokens?: number; usd?: number; ms?: number };
   /** Opaque here: it is handed straight back to the gateway with each execution. */
   target?: unknown;
+  /** 追踪归属：哪些运行算一组、打什么标签。网关决定。 */
+  trace?: { sessionId?: string; tags?: string[] };
   scope?: Record<string, string>;
 }
+
+/**
+ * 追踪要在**建任何模型客户端之前**起来。
+ *
+ * 顺序不是形式：`traced()` 在包的时候会读一次开关，而 OTEL 的 span 处理器要先注册，
+ * 后面创建的 span 才有地方去。这个进程是图运行时的宿主，也就是绝大多数模型调用发生的
+ * 地方——它没起来，trace 上就只剩网关那几次零散调用。
+ *
+ * 环境变量是从网关继承来的（监工 fork 时带 `...process.env`），所以这里不必再读 .env。
+ */
+const tracing = startTracing({ service: "agent" });
 
 const store = new SqliteOutputStore(WF_DB);
 const running = new Map<string, { controller: AbortController; promise: Promise<GraphRunResult> }>();
@@ -75,6 +93,14 @@ const child = startChild({
         spent: input.spent,
         signal: controller.signal,
         scope: input.scope,
+        /**
+         * 谁和谁算一组，由网关说了算——它才知道这次是一条普通运行还是一次配对评测的一臂。
+         * 见 `RunGraphOptions.trace`。
+         */
+        trace: {
+          ...(input.trace?.sessionId ? { sessionId: input.trace.sessionId } : {}),
+          ...(input.trace?.tags?.length ? { tags: input.trace.tags } : {}),
+        },
       }).finally(() => {
         running.delete(wfRunId);
         if (!running.size) child.setTask("idle");
@@ -100,6 +126,11 @@ const child = startChild({
   onShutdown: () => {
     for (const run of running.values()) run.controller.abort();
     child.emit(EventKind.log, { stream: "agent", text: "agent draining" });
+    /**
+     * **冲刷是必须的。** SDK 是异步批处理的，直接退出会丢掉最后一批 span——
+     * 而那一批恰好最有价值，因为进程退出往往是因为出了事。
+     */
+    void shutdownTracing();
   },
 });
 
@@ -128,7 +159,12 @@ setModelLease(async (fn) => {
   }
 });
 
-const model = gated(modelFromEnv());
+/**
+ * `traced(gated(...))`，顺序有意义：span 覆盖**排队等准入槽位的时间**，不只是 HTTP 往返。
+ * 这条流水线上模型并发是 1–3，G1 那十几次串行调用最长的一段恰恰是排队——
+ * 把等待藏起来的延迟数字，会让人去优化模型而不是去优化并发。
+ */
+const model = traced(gated(modelFromEnv()));
 
 /**
  * Executing a case needs the database (environment, secrets) and a browser (the runner),
@@ -139,12 +175,43 @@ function buildRegistry(target: unknown, wfRunId: string): NodeRegistry {
     // `wfRunId` travels with the request so the gateway can file the execution under the
     // run that caused it — otherwise a case exercised only by the repair loop leaves no
     // trace in the project's execution ledger.
+    /**
+     * 执行一条用例，在追踪上是一次 `tool`。
+     *
+     * span 开在**这里**而不是 runner 里，是一个有代价的取舍，要说清楚：真正干活的是
+     * runner 进程（浏览器、Midscene、视觉模型），而它跨了两次进程边界（agent → 网关 →
+     * runner）。把 W3C 上下文一路传过去才能拿到 runner 内部的调用，那是另一件事。
+     *
+     * 在这一侧开 span，能拿到的是：这条用例跑了多久、判决是什么、失败归到哪一档
+     * （infra / locate / assert）——而这三样恰好是读一次运行时最先要看的。拿不到的是
+     * Midscene 每一步的视觉模型调用。**这条边界写在这里，免得以后有人对着一条
+     * 「执行只有一个 span」的 trace 以为是埋点漏了。**
+     */
     run: async (input) =>
-      (await child.parent.execCase({ ...input, target, wfRunId } as never)) as unknown as ReturnType<
-        CaseExecutor["run"]
-      > extends Promise<infer T>
-        ? T
-        : never,
+      observe(
+        "case.execute",
+        {
+          asType: "tool",
+          input: forTrace(input, 4000),
+          metadata: { wfRunId },
+        },
+        async (span) => {
+          const out = (await child.parent.execCase({ ...input, target, wfRunId } as never)) as unknown as Awaited<
+            ReturnType<CaseExecutor["run"]>
+          >;
+          const r = out as unknown as { status?: string; failureReason?: string; failure?: { attribution?: string } };
+          span.update({
+            output: forTrace(out, 6000),
+            metadata: { status: r?.status, attribution: r?.failure?.attribution },
+            // 判决为「挂了」不等于 ERROR：一条用例发现产品有问题，那是它成功了。
+            // 只有基础设施故障才是这次执行自己出了错。
+            ...(r?.failure?.attribution === "infra"
+              ? { level: "WARNING", statusMessage: String(r?.failureReason ?? "").slice(0, 300) }
+              : {}),
+          });
+          return out;
+        },
+      ) as unknown as ReturnType<CaseExecutor["run"]> extends Promise<infer T> ? T : never,
   };
   // 同样的道理：看一眼跑着的产品需要浏览器，这个进程没有。
   const observer: ProductObserver = {
@@ -168,4 +235,10 @@ function buildRegistry(target: unknown, wfRunId: string): NodeRegistry {
 }
 
 child.setTask("idle");
-child.emit(EventKind.log, { stream: "agent", text: `agent ${child.id} up (graph runtime ready)` });
+child.emit(EventKind.log, {
+  stream: "agent",
+  text:
+    `agent ${child.id} up (graph runtime ready)` +
+    // 说出来它是开是关。一个「静默关闭」的可观测性系统，排查起来比没有还慢——人会以为它开着。
+    (tracing.enabled ? "，Langfuse 追踪已开" : `，Langfuse 追踪关闭：${tracing.reason ?? "未配置"}`),
+});

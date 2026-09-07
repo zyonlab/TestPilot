@@ -82,8 +82,28 @@ const child = startChild({
     observe: async (spec: ObserveSpec): Promise<ObserveResult> => {
       child.setTask(`observe ${spec.execId}`);
       try {
-        return await observeSession(spec, (evt) =>
-          child.emit(EventKind.sessionProgress, evt, { runId: spec.execId }),
+        return await observeSession(
+          {
+            ...spec,
+            /**
+             * 「探索之前先问一次业务场景」由这里组装。
+             *
+             * 函数过不了 RPC 边界，所以网关不能把 `ask` 直接塞进 spec——
+             * 第一版就是这么写的，序列化时被丢掉，表现成"计划永远是 null"。
+             * 这个进程里没有 ModelClient（只领模型票），端点也被改写成了 no-think 代理，
+             * 所以真正问模型的是网关，这里只是把请求转过去。
+             */
+            ask: async (req) =>
+              String(
+                await child.parent.askModel({
+                  prompt: req.prompt,
+                  imageDataUrl: req.imageDataUrl,
+                  schema: req.schema,
+                  maxTokens: req.maxTokens,
+                } as never),
+              ),
+          },
+          (evt) => child.emit(EventKind.sessionProgress, evt, { runId: spec.execId }),
         );
       } finally {
         child.setTask("idle");

@@ -1,0 +1,397 @@
+{
+  "id": "binance-futures-v0-DRAFT",
+  "spec": "exploration of https://demo.binance.com/en/futures/BTCUSDT (2026-09-01)",
+  "reviewed": false,
+  "note": "**草稿，未经人复核，不能用来打分。** 由 2026-09-01 那次 g0-explore 的产物机械导出：11 屏 / 13 条转移 / 12 条故事 / 41 条验收标准。anyOf 取自故事标题与验收标准里的「」引文、路由和探索到的控件文案；assertAnyOf 取自验收标准。已经机械地滤掉了长度 <3、纯数字、以及一望即知是快照读数（时刻 / 三位以上小数百分比 / 千分位大数）的锚点——但**机械导出的关键词表仍然必然又宽又漏**：它不知道哪条断言值得测，只知道哪些字出现过。",
+  "humanReviewChecklist": [
+    "删掉不该测的条目：钉在易变读数上的（价格 / 倒计时 / 资金费率 / 成交量），以及纯粹是界面事实、说不出谁想要的。",
+    "把 match 收紧到「测对了才算命中」：现在的 anyOf 宽到一条只提了标题的用例就能命中，那不是覆盖，是提及。",
+    "补上探索没走到的地方（graph.unvisited：/en/trade、/en/futures/ETHUSDT、/en/futures/BNBUSDT、OAuth 登录跳转），或者明确写进 outOfScope。",
+    "挑一半标 heldOut: true——分层之后在每层内部对半分，不是前一半留出后一半调优。",
+    "每条 reviewed 改成 true；顶层 reviewed 改成 true；删掉 draftFrom（那只是导出脚手架）。",
+    "改名成 gold.json，id 去掉 -DRAFT，把 goldHash 记进 README.md。"
+  ],
+  "outOfScope": [
+    "任何对价格、倒计时、资金费率、24h 量、持仓量**数值本身**的断言——它们两次访问之间自己会变。",
+    "需要登录才够得着的功能：这次探索是未登录会话，Login with Binance 之后的一切都没有观察支撑。"
+  ],
+  "items": [
+    {
+      "id": "G-01",
+      "story": "S-01",
+      "title": "查看未成交订单",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-1",
+        "acceptance": 1,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看未成交订单",
+          "Open Orders(0)",
+          "/en/futures/BTCUSDT~1",
+          "BTCUSDT"
+        ],
+        "assertAnyOf": [
+          "Open Orders(0)",
+          "/en/futures/BTCUSDT~1",
+          "BTCUSDT"
+        ]
+      }
+    },
+    {
+      "id": "G-02",
+      "story": "S-02",
+      "title": "查看图表",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-2",
+        "acceptance": 4,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看图表",
+          "Chart",
+          "/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~2",
+          "BTCUSDT",
+          "Last"
+        ],
+        "assertAnyOf": [
+          "Chart",
+          "/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~2",
+          "BTCUSDT",
+          "Last"
+        ]
+      }
+    },
+    {
+      "id": "G-03",
+      "story": "S-03",
+      "title": "查看订单历史",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-3",
+        "acceptance": 1,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看订单历史",
+          "Order History",
+          "/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~3",
+          "BTCUSDT"
+        ],
+        "assertAnyOf": [
+          "Order History",
+          "/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~3",
+          "BTCUSDT"
+        ]
+      }
+    },
+    {
+      "id": "G-04",
+      "story": "S-04",
+      "title": "查看交易历史",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-4",
+        "acceptance": 1,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~3->/en/futures/BTCUSDT~4"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看交易历史",
+          "Trade History",
+          "/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~4",
+          "BTCUSDT"
+        ],
+        "assertAnyOf": [
+          "Trade History",
+          "/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~4",
+          "BTCUSDT"
+        ]
+      }
+    },
+    {
+      "id": "G-05",
+      "story": "S-05",
+      "title": "查看交易参数信息",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-5",
+        "acceptance": 14,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~3->/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~4->/en/futures/BTCUSDT~5"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看交易参数信息",
+          "Info",
+          "/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~5",
+          "BTCUSDT",
+          "Limit"
+        ],
+        "assertAnyOf": [
+          "Info",
+          "/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~5",
+          "BTCUSDT",
+          "Limit",
+          "Market"
+        ]
+      }
+    },
+    {
+      "id": "G-06",
+      "story": "S-06",
+      "title": "查看交易记录",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-6",
+        "acceptance": 1,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~3->/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~4->/en/futures/BTCUSDT~5",
+          "/en/futures/BTCUSDT~5->/en/futures/BTCUSDT~6"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看交易记录",
+          "Transaction History",
+          "/en/futures/BTCUSDT~5",
+          "/en/futures/BTCUSDT~6",
+          "BTCUSDT"
+        ],
+        "assertAnyOf": [
+          "Transaction History",
+          "/en/futures/BTCUSDT~5",
+          "/en/futures/BTCUSDT~6",
+          "BTCUSDT"
+        ]
+      }
+    },
+    {
+      "id": "G-07",
+      "story": "S-07",
+      "title": "查看资产",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-7",
+        "acceptance": 1,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~3->/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~4->/en/futures/BTCUSDT~5",
+          "/en/futures/BTCUSDT~5->/en/futures/BTCUSDT~6",
+          "/en/futures/BTCUSDT~6->/en/futures/BTCUSDT~7"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "查看资产",
+          "Assets",
+          "/en/futures/BTCUSDT~6",
+          "/en/futures/BTCUSDT~7",
+          "BTCUSDT"
+        ],
+        "assertAnyOf": [
+          "Assets",
+          "/en/futures/BTCUSDT~6",
+          "/en/futures/BTCUSDT~7",
+          "BTCUSDT"
+        ]
+      }
+    },
+    {
+      "id": "G-08",
+      "story": "S-08",
+      "title": "切换到限价单面板",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-8",
+        "acceptance": 3,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~3->/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~4->/en/futures/BTCUSDT~5",
+          "/en/futures/BTCUSDT~5->/en/futures/BTCUSDT~6",
+          "/en/futures/BTCUSDT~6->/en/futures/BTCUSDT~7",
+          "/en/futures/BTCUSDT~7->/en/futures/BTCUSDT~8"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "切换到限价单面板",
+          "Limit",
+          "/en/futures/BTCUSDT~7",
+          "/en/futures/BTCUSDT~8",
+          "BTCUSDT",
+          "BBO"
+        ],
+        "assertAnyOf": [
+          "Limit",
+          "/en/futures/BTCUSDT~7",
+          "/en/futures/BTCUSDT~8",
+          "BTCUSDT",
+          "BBO"
+        ]
+      }
+    },
+    {
+      "id": "G-09",
+      "story": "S-09",
+      "title": "切换到条件单面板",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": "F-9",
+        "acceptance": 3,
+        "transitions": [
+          "/en/futures/BTCUSDT->/en/futures/BTCUSDT~1",
+          "/en/futures/BTCUSDT~1->/en/futures/BTCUSDT~2",
+          "/en/futures/BTCUSDT~2->/en/futures/BTCUSDT~3",
+          "/en/futures/BTCUSDT~3->/en/futures/BTCUSDT~4",
+          "/en/futures/BTCUSDT~4->/en/futures/BTCUSDT~5",
+          "/en/futures/BTCUSDT~5->/en/futures/BTCUSDT~6",
+          "/en/futures/BTCUSDT~6->/en/futures/BTCUSDT~7",
+          "/en/futures/BTCUSDT~7->/en/futures/BTCUSDT~9"
+        ]
+      },
+      "match": {
+        "anyOf": [
+          "切换到条件单面板",
+          "Conditional",
+          "/en/futures/BTCUSDT~7",
+          "/en/futures/BTCUSDT~9",
+          "BTCUSDT",
+          "Limit"
+        ],
+        "assertAnyOf": [
+          "Conditional",
+          "/en/futures/BTCUSDT~7",
+          "/en/futures/BTCUSDT~9",
+          "BTCUSDT",
+          "Limit",
+          "Last"
+        ]
+      }
+    },
+    {
+      "id": "G-10",
+      "story": "S-10",
+      "title": "切换到市价单面板",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": null,
+        "acceptance": 3,
+        "transitions": []
+      },
+      "match": {
+        "anyOf": [
+          "切换到市价单面板",
+          "Market",
+          "Limit",
+          "BBO"
+        ],
+        "assertAnyOf": [
+          "Market",
+          "Limit",
+          "BBO"
+        ]
+      }
+    },
+    {
+      "id": "G-11",
+      "story": "S-11",
+      "title": "查看订单簿与成交",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": null,
+        "acceptance": 3,
+        "transitions": []
+      },
+      "match": {
+        "anyOf": [
+          "查看订单簿与成交"
+        ],
+        "assertAnyOf": []
+      }
+    },
+    {
+      "id": "G-12",
+      "story": "S-12",
+      "title": "查看 BTCUSDT 永续合约行情统计",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "flowId": null,
+        "acceptance": 6,
+        "transitions": []
+      },
+      "match": {
+        "anyOf": [
+          "BTCUSDT"
+        ],
+        "assertAnyOf": []
+      }
+    }
+  ]
+}

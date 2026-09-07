@@ -95,13 +95,29 @@ export function shouldContinue(opts: {
   roundsWithoutProgress: number;
   maxWithoutProgress: number;
   lastFailKind?: ExecOutcome["failKind"];
-}): { go: boolean; because: string } {
-  if (opts.round >= opts.maxRounds) return { go: false, because: `hit the ${opts.maxRounds}-round limit` };
+}): { go: boolean; because: string; reason?: RepairStopReason; n?: number } {
+  /*
+   * 两样一起返回：`because` 是给日志和 CLI 读的一句英文，`reason` 是给界面本地化用的码。
+   *
+   * 只给英文句子的后果是它会原样出现在中文和日文界面上——和 readiness 那条
+   * 服务端拼中文的毛病是同一类，只是方向反了。而只给码又会让 CLI 的输出变成
+   * 一串 `no-progress`，那对着终端看日志的人反而更差。所以两样都给。
+   */
+  if (opts.round >= opts.maxRounds)
+    return { go: false, because: `hit the ${opts.maxRounds}-round limit`, reason: "round-limit", n: opts.maxRounds };
   if (opts.roundsWithoutProgress >= opts.maxWithoutProgress)
-    return { go: false, because: `${opts.roundsWithoutProgress} rounds changed nothing` };
+    return {
+      go: false,
+      because: `${opts.roundsWithoutProgress} rounds changed nothing`,
+      reason: "no-progress",
+      n: opts.roundsWithoutProgress,
+    };
   if (opts.lastFailKind === "infra")
     // Retrying a broken environment burns the budget without ever addressing the fault,
     // and it would file an environment outage as a product defect.
-    return { go: false, because: "the failure was environmental, not the test's" };
+    return { go: false, because: "the failure was environmental, not the test's", reason: "infra" };
   return { go: true, because: "" };
 }
+
+/** 为什么停下。`because` 那句英文的机器可读版本，界面拿它去查词条。 */
+export type RepairStopReason = "round-limit" | "no-progress" | "infra";

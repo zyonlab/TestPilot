@@ -26,6 +26,24 @@ export interface OpenAIModelOptions {
   retries?: number;
   /** 退避基数（毫秒），第 n 次等 n×这个数。默认 2000。 */
   retryBackoffMs?: number;
+  /**
+   * 端点方言。**理由绑在出口上，换出口就要重验**（见 `modelFromEnv` 里 noThink 那段）：
+   * Groq 拒绝 `chat_template_kwargs` / `thinking_budget`（400 unsupported），关思考要用
+   * `reasoning_effort: "none"`，开着思考要用 `reasoning_format: "hidden"` 让推理不混进
+   * content（否则 JSON 模式只收到一对空的 <think> 标签而校验失败——2026-09-04 实测）。
+   * 不给就按 baseUrl 的主机名猜：`groq.com` → groq，其余 → openai（vLLM / DashScope 那一族）。
+   */
+  flavor?: "openai" | "groq";
+}
+
+/** 从 baseUrl 猜方言。只认得出 Groq；别的都当 vLLM 一族的 OpenAI 兼容。 */
+export function flavorOf(baseUrl: string, explicit?: "openai" | "groq"): "openai" | "groq" {
+  if (explicit) return explicit;
+  try {
+    return new URL(baseUrl).hostname.endsWith("groq.com") ? "groq" : "openai";
+  } catch {
+    return "openai";
+  }
 }
 
 /**
@@ -39,6 +57,25 @@ export class OpenAIModel implements ModelClient {
 
   constructor(private opts: OpenAIModelOptions) {
     this.guidedSupported = opts.guided ?? true;
+  }
+
+  /**
+   * 就地换一份配置。
+   *
+   * 存在的理由很具体：网关那份客户端是**模块顶层的 const**
+   * （`server/src/graphs.ts` 的 `export const model = traced(gated(modelFromEnv()))`），
+   * 它捕获的是 import 那一刻的值。往 `process.env` 里写新配置对它无效——
+   * 于是「界面上改了端点」在网关自己这条路上要等到重启才生效，而人不会知道。
+   *
+   * 这么做是安全的，因为 `opts` 的每一项都在**调用时**才读（baseUrl / apiKey / model /
+   * noThink / thinkBudget / timeoutMs），所以改完下一次调用就生效，不必重建客户端。
+   *
+   * 代价要说清楚：一次正在跑的运行可能跨两份配置。所以调用方要留一条审计记录，
+   * 而成本报表应该按 `ChatResponse.model`（端点自己回报的那个）算，不是按配置算。
+   */
+  reconfigure(patch: Partial<OpenAIModelOptions>): void {
+    this.opts = { ...this.opts, ...patch };
+    if (patch.guided !== undefined) this.guidedSupported = patch.guided;
   }
 
   /**
@@ -100,12 +137,20 @@ export class OpenAIModel implements ModelClient {
       max_tokens: Math.min(32000, (req.maxTokens ?? 1024) + (this.thinkBudget ?? 0)),
       temperature: 0,
     };
-    if (this.thinkBudget) body.thinking_budget = this.thinkBudget;
-    if (this.opts.noThink !== false) {
-      // Both spellings: servers differ in which one they honour, and sending the wrong one
-      // alone silently leaves thinking on.
-      body.enable_thinking = false;
-      body.chat_template_kwargs = { enable_thinking: false };
+    const flavor = flavorOf(this.opts.baseUrl, this.opts.flavor);
+    if (flavor === "groq") {
+      // Groq：关思考是 reasoning_effort=none；开着思考时把推理藏起来，content 里只剩答案。
+      // 它不认 thinking_budget，预算只能靠 max_tokens 兜。
+      if (this.opts.noThink !== false) body.reasoning_effort = "none";
+      else body.reasoning_format = "hidden";
+    } else {
+      if (this.thinkBudget) body.thinking_budget = this.thinkBudget;
+      if (this.opts.noThink !== false) {
+        // Both spellings: servers differ in which one they honour, and sending the wrong one
+        // alone silently leaves thinking on.
+        body.enable_thinking = false;
+        body.chat_template_kwargs = { enable_thinking: false };
+      }
     }
     if (req.schema && this.guidedSupported)
       body.response_format = { type: "json_schema", json_schema: { name: "output", schema: req.schema } };
@@ -160,13 +205,42 @@ export class OpenAIModel implements ModelClient {
     if (!res.ok) throw new Error(`model HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
 
     const json = (await res.json()) as {
+      model?: string;
       choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
-      usage?: { total_tokens?: number };
+      usage?: {
+        total_tokens?: number;
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        prompt_tokens_details?: { cached_tokens?: number };
+      };
     };
+    const u = json.usage;
+    /**
+     * 分项用量：有就带上，没有就留空。
+     *
+     * **不拿总数去减一个猜的数**——一个凑出来的分项让成本看起来精确，而错在哪没人查得出来。
+     * 缓存命中数走 OpenAI 那个 `prompt_tokens_details.cached_tokens` 的位置；
+     * 这条流水线的速度大半来自前缀缓存，所以它值得单独记一笔。
+     */
+    const usage =
+      u && (u.prompt_tokens !== undefined || u.completion_tokens !== undefined || u.total_tokens !== undefined)
+        ? {
+            ...(u.prompt_tokens !== undefined ? { input: u.prompt_tokens } : {}),
+            ...(u.completion_tokens !== undefined ? { output: u.completion_tokens } : {}),
+            ...(u.total_tokens !== undefined ? { total: u.total_tokens } : {}),
+            ...(u.prompt_tokens_details?.cached_tokens !== undefined
+              ? { cached: u.prompt_tokens_details.cached_tokens }
+              : {}),
+          }
+        : undefined;
     return {
       text: json.choices?.[0]?.message?.content ?? "",
       tokens: json.usage?.total_tokens ?? 0,
       ms: Date.now() - at,
+      ...(usage ? { usage } : {}),
+      // 端点回的那个名字优先：代理有可能把请求路由到别的模型，而我们配置里写的那个
+      // 只是「我们以为的」。两者不一致时，报表该按真的算。
+      model: json.model ?? this.opts.model,
       // A cut-off reply parses as broken JSON, and "the model returned invalid JSON" sends
       // whoever reads it looking for a prompt problem that isn't there. The server knows
       // which it was; carry that answer instead of making it guessable.
@@ -190,6 +264,18 @@ export class OpenAIModel implements ModelClient {
 }
 
 /** Build a client from the environment the gateway already configures. */
+/**
+ * 判官的模型——**必须和生成器不同族**（P2：考官不能是考生）。
+ *
+ * 读 `TP_JUDGE_MODEL`；没设就退回 `MIDSCENE_MODEL_NAME`（此时判官=生成器，是 P2 的弱化，
+ * 调用方应显式设置）。其余（baseUrl / key / thinking / 超时）与 `modelFromEnv` 同一套——
+ * 判官走的是同一个网关的另一个模型，不是另一套凭证。
+ */
+export function judgeModelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel {
+  const judge = env.TP_JUDGE_MODEL && env.TP_JUDGE_MODEL.trim() ? env.TP_JUDGE_MODEL : undefined;
+  return modelFromEnv(judge ? { ...env, MIDSCENE_MODEL_NAME: judge } : env);
+}
+
 export function modelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel {
   return new OpenAIModel({
     baseUrl: env.OPENAI_BASE_URL ?? env.MIDSCENE_MODEL_BASE_URL ?? "http://127.0.0.1:8000/v1",
@@ -221,5 +307,7 @@ export function modelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel 
      */
     noThink: env.TP_MODEL_THINK === "0" ? true : false,
     thinkBudget: env.TP_MODEL_THINK_BUDGET ? Number(env.TP_MODEL_THINK_BUDGET) : undefined,
+    // 显式 `TP_MODEL_FLAVOR=groq|openai` 压过按主机名猜。
+    flavor: env.TP_MODEL_FLAVOR === "groq" || env.TP_MODEL_FLAVOR === "openai" ? env.TP_MODEL_FLAVOR : undefined,
   });
 }

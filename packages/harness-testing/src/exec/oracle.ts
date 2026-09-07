@@ -115,7 +115,16 @@ export function readNumberNear(text: string, label: string): number | undefined 
 }
 
 export interface OracleVerdict {
-  status: "pass" | "fail";
+  /**
+   * `unobservable`：判据没法求值——不是产品错了，是这次没量到。
+   *
+   * 借 commerce-agents 的「None ≠ 0」：取不到的指标是 None 加一句 note，不许拿 0 顶替。
+   * 此前这一档被记成 `fail`，于是「没取到前置快照」「读不到那个数」都算成了产品的错，
+   * 而 M2 三次通过的用例各不相同，有一部分正是这类不可观测被判成了失败。
+   * 它单独成一档，执行结果里单独计数，变异检测把它排除在分母外——和 infra 故障一样，
+   * 「没有判决」不进任何一格。
+   */
+  status: "pass" | "fail" | "unobservable";
   /** Why, in terms of what was actually on the page. */
   detail: string;
 }
@@ -156,12 +165,12 @@ export function evaluateOracle(
       if (!before)
         // A relation needs two observations. Reporting "fail" here would blame the product
         // for something the harness failed to measure.
-        return { status: "fail", detail: `没有取到步骤执行前的快照，${oracle.value} 的变化无法判定` };
+        return { status: "unobservable", detail: `没有取到步骤执行前的快照，${oracle.value} 的变化无法判定` };
       const a = readNumberNear(before.text, oracle.value);
       const b = readNumberNear(after.text, oracle.value);
       if (a === undefined || b === undefined)
         return {
-          status: "fail",
+          status: "unobservable",
           detail: `读不到 ${oracle.value} 旁边的数值（前 ${a ?? "—"} / 后 ${b ?? "—"}）`,
         };
       const diff = b - a;

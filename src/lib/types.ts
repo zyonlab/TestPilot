@@ -1,5 +1,12 @@
 export type Priority = "P0" | "P1" | "P2";
-export type RunStatus = "passed" | "failed" | "notRun" | "running";
+/**
+ * `unknown` = 请求没回来，**不是**这条用例失败了。
+ *
+ * 600 秒超时、网络抖动、网关重启都会走到这里；此前它们一律被写成 `failed`，
+ * 于是界面记下了一个它从没收到过的判决。
+ */
+/** `unobservable`：判据没量到——没有判决，不是通过也不是失败。 */
+export type RunStatus = "passed" | "failed" | "unobservable" | "notRun" | "running" | "unknown";
 export type CaseType = "functional" | "negative" | "boundary" | "e2e";
 
 export interface ApiLoginConfig {
@@ -33,6 +40,12 @@ export interface Environment {
   vars: Record<string, string | string[]>; // value may be an array (data-driven)
   headers: Record<string, string>; // fixed request headers
   query: Record<string, string>; // fixed query-string params
+  /**
+   * 这个被测对象要多大的视口。默认 1024×720 是为压小视觉模型的图定的，
+   * 而它对一部分真实界面撑不开（下单面板整块不渲染，探索器不报错、只是看不见）。
+   * 不配就沿用默认——把默认调大会让所有 SUT 一起变贵。
+   */
+  viewport?: { width?: number; height?: number };
   login: LoginFlow;
   isDefault: boolean;
   createdAt: string;
@@ -45,12 +58,7 @@ export interface SecretMeta {
   key: string;
   updatedAt: string;
 }
-export type ConnectionState =
-  | "idle"
-  | "testing"
-  | "ok"
-  | "fail"
-  | "notMultimodal";
+export type ConnectionState = "idle" | "testing" | "ok" | "fail" | "notMultimodal";
 
 export interface Step {
   order: number;
@@ -91,6 +99,8 @@ export interface ChainAssertion {
 export interface TestCase {
   id: string;
   projectId?: string;
+  /** `runStatus` 是 `unknown` 时，为什么没拿到结果。人据此决定重试还是去看代码。 */
+  runNote?: string;
   title: string;
   priority: Priority;
   priorityReason: string;
@@ -142,6 +152,14 @@ export interface Batch {
   healed: number;
   flaky: number;
   quarantined: number;
+  /**
+   * 没拿到判决的条数（基础设施失败：模型不可达、runner 忙、超时）。
+   *
+   * 服务端一直在统计并入库 `errored`，而这个类型里没有它——于是六格里的「3 失败」
+   * 可能其实是「0 失败 + 3 次模型不可达」。一个把「量不出来」算成「不合格」的统计，
+   * 报出来的不是质量，是运气。
+   */
+  errored?: number;
   gate: "pass" | "fail";
   startedAt: string;
   finishedAt?: string;
@@ -151,7 +169,14 @@ export interface BatchRun {
   caseId: string;
   caseTitle: string;
   runId?: string;
-  status: "passed" | "failed" | "quarantined";
+  /**
+   * `error` = **没有拿到判决**，与 `failed`（真的没通过）是两回事。
+   *
+   * 服务端把 infra 失败记成 `status:"error"`，而这个联合里此前没有它，
+   * StatusPill 的 if/if/else 于是落到最后一支，把它画成了**「已隔离」**——
+   * 一句意思正好相反的话：隔离是人主动做的决定，而这里是机器没能给出答案。
+   */
+  status: "passed" | "failed" | "quarantined" | "error";
   attempts: number;
   healed: boolean;
 }
@@ -271,14 +296,7 @@ export interface ExploreLog {
 
 /* ---- processes (mirrors @testpilot/harness-core's ProcStatus; the UI stays a plain
    web app and does not import the node-side package) ---- */
-export type ProcState =
-  | "idle"
-  | "spawning"
-  | "alive"
-  | "draining"
-  | "exited"
-  | "crashed"
-  | "restarting";
+export type ProcState = "idle" | "spawning" | "alive" | "draining" | "exited" | "crashed" | "restarting";
 
 export interface Spend {
   calls: number;

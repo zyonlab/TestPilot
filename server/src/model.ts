@@ -1,66 +1,52 @@
-import { withModel } from "@testpilot/harness-core";
-import { resolveModelConfig, PROBE_IMAGE, type ModelConfig } from "./config.js";
+import { OpenAIModel, gated, traced, type ModelClient } from "@testpilot/harness-core";
+import { resolveModelRuntime, PROBE_IMAGE, type ModelConfig } from "./config.js";
 import { getSettings, langDirective } from "./settings.js";
 
-interface ChatMessage {
-  role: "system" | "user";
-  content:
-    | string
-    | Array<
-        | { type: "text"; text: string }
-        | { type: "image_url"; image_url: { url: string } }
-      >;
-}
-
-// Every call here waits for the same admission slot a runner's steps wait for — the
-// bottleneck is one endpoint, not one process.
-async function chat(
-  messages: ChatMessage[],
-  cfg: ModelConfig,
-  opts: { timeoutMs?: number; maxTokens?: number } = {},
-): Promise<string> {
-  return withModel(() => chatNow(messages, cfg, opts));
-}
-
-async function chatNow(
-  messages: ChatMessage[],
-  cfg: ModelConfig,
-  opts: { timeoutMs?: number; maxTokens?: number } = {},
-): Promise<string> {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30000);
-  try {
-    const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cfg.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: cfg.modelName,
-        messages,
-        max_tokens: opts.maxTokens ?? 512,
-        temperature: 0,
-        // Qwen3.x runs in "thinking" mode by default: the reply comes back as reasoning
-        // prose and hits the token limit before answering. Measured on this endpoint:
-        // 5.0s / finish_reason "length" with thinking on, 1.0s / "ok" with it off.
-        // Both spellings are sent because servers differ in which one they honour.
-        enable_thinking: false,
-        chat_template_kwargs: { enable_thinking: false },
+/**
+ * 网关这几处模型调用**走的是和运行完全同一条参数装配路径**。
+ *
+ * 此前这里是一条手写的 `fetch`，它和真实运行逐项不同——**八处**：
+ *
+ * | | 手写这条 | 真实运行 |
+ * |---|---|---|
+ * | 超时 | 30s | 900s，可配 |
+ * | 思考 | 无条件关 | 默认**开** |
+ * | thinkBudget | 不送 | 送 |
+ * | max_tokens | 512 | maxTokens + thinkBudget |
+ * | 截断 | 完全不看 | 读 `finish_reason` 并翻倍重发 |
+ * | 重试 | 一次就抛 | 3 次退避 |
+ * | schema | 无 | json_schema guided，失败降级 |
+ * | usage | 只记字符数 | 读 prompt/completion/cached |
+ *
+ * 其中三处直接制造误判：**思考开关**（探活 1 秒过、运行慢 5 倍且吃预算）；
+ * **截断**（这边静默返回半截，`generateCode` 把半截当成代码存进用例）；
+ * **重试**（一次网络抖动就报「端点不可达」，而运行本来扛得过去）。
+ *
+ * 「绿色的连接通过」加「一整场失败的运行」可以同时成立，而人没有任何线索去怀疑
+ * 这两件事测的不是一回事——这正是要合并的理由。
+ *
+ * 探活仍然有它自己的**两个**旋钮：更短的超时、`retries: 1`。
+ * 那是「按一下要一秒内有反应」的产品要求，不是另一套参数装配。
+ */
+function gatewayModel(opts?: { timeoutMs?: number; retries?: number; override?: Partial<ModelConfig> }): ModelClient {
+  // `override` 只有「测试连接」用：人在框里填了一组值，要测的就是那一组，
+  // 不是服务端此刻在跑的那一组。不接它的话，按钮测的永远是后者——
+  // 而那正好让「我改了参数再测一次」这个动作完全失效。
+  const r = resolveModelRuntime(opts?.override);
+  return traced(
+    gated(
+      new OpenAIModel({
+        baseUrl: r.baseUrl,
+        apiKey: r.apiKey,
+        model: r.modelName,
+        noThink: r.noThink,
+        ...(r.thinkBudget !== undefined ? { thinkBudget: r.thinkBudget } : {}),
+        timeoutMs: opts?.timeoutMs ?? r.timeoutMs,
+        ...(opts?.retries !== undefined ? { retries: opts.retries } : {}),
       }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
-    }
-    const json = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    return json.choices?.[0]?.message?.content ?? "";
-  } finally {
-    clearTimeout(t);
-  }
+    ),
+    { name: "gateway.model" },
+  );
 }
 
 export type ProbeResult =
@@ -72,15 +58,29 @@ export type ProbeResult =
 export async function probeModel(
   override?: Partial<ModelConfig>,
 ): Promise<ProbeResult> {
-  const cfg = resolveModelConfig(override);
+  // 探活只调两个旋钮：更短的超时、只试一次。其余全部由 `OpenAIModel` 装配，
+  // 与真实运行逐字相同——这正是这次改动的全部意义。
+  const text = gatewayModel({ timeoutMs: 30_000, retries: 1, override });
+  const vision = gatewayModel({ timeoutMs: 60_000, retries: 1, override });
+  const r = resolveModelRuntime(override);
 
   // Step 1: reachability + basic text completion.
   try {
-    await chat(
-      [{ role: "user", content: "Reply with the single word: ok" }],
-      cfg,
-      { timeoutMs: 30000, maxTokens: 16 },
-    );
+    await text.chat({
+      stable: "Reply with the single word: ok",
+      variable: "",
+      /**
+       * **`maxTokens` 不能按「答案有多长」估。**
+       *
+       * 这个端点关不掉思考（实测：`enable_thinking:false` 与 `chat_template_kwargs`
+       * 都不认，每次多烧 20–60 个推理 token）。此前探活给的是 16，
+       * 于是推理还没写完就撞上限，`content` 回来是空的——
+       * **一个能看图的模型被探针判成了瞎的**。
+       * 走 `OpenAIModel` 之后它会自动加上 thinkBudget，这里只需给答案留够。
+       */
+      maxTokens: 64,
+      label: "model.probe.text",
+    });
   } catch (e) {
     return {
       state: "fail",
@@ -90,22 +90,20 @@ export async function probeModel(
 
   // Step 2: multimodal probe — send an image and see if the model handles it.
   try {
-    const out = await chat(
-      [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "What is in this image? Answer in one word." },
-            { type: "image_url", image_url: { url: PROBE_IMAGE } },
-          ],
-        },
-      ],
-      cfg,
-      { timeoutMs: 60000, maxTokens: 32 },
-    );
+    const out = await vision.chat({
+      stable: "What is in this image? Answer in one word.",
+      variable: "",
+      images: [PROBE_IMAGE],
+      maxTokens: 96,
+      label: "model.probe.vision",
+    });
     return {
       state: "ok",
-      detail: `Reachable and multimodal. Model replied: "${out.trim().slice(0, 60)}"`,
+      // 把**生效的**端点与模型一起报出来：探活最常见的误诊是「测的不是跑的那一个」。
+      detail:
+        `Reachable and multimodal. Model replied: "${out.text.trim().slice(0, 60)}"` +
+        ` · ${out.model ?? r.modelName} @ ${r.baseUrl}` +
+        ` · 思考${r.noThink ? "关" : "开"}（与真实运行相同）`,
     };
   } catch (e) {
     return {
@@ -122,27 +120,34 @@ export async function generateCode(
   expected: string,
   override?: Partial<ModelConfig>,
 ): Promise<string> {
-  const cfg = resolveModelConfig(override);
+  const client = gatewayModel({ override });
   // The instruction preamble is a configurable template; the case-specific data is
   // always appended by code so the placeholders can't be broken by an edit.
   const preamble = getSettings().prompts.generateCode;
-  const prompt = `${preamble}
-
-Test: ${title}
+  /**
+   * 拆成 stable / variable 两半，而不是拼成一个字符串。
+   *
+   * 前缀缓存只在**开头那几个字节逐字相同**时才命中——把每次都变的用例正文
+   * 拼在模板前面或中间，缓存就永远不命中。`ChatRequest` 的形状本来就是
+   * 为了逼调用方说清「哪一半从不变化」。
+   */
+  const caseText = `Test: ${title}
 Steps:
 ${steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 Expected result: ${expected || "the action succeeds"}`;
 
   try {
-    const out = await chat(
-      [
-        { role: "system", content: "You output only code, no prose." },
-        { role: "user", content: prompt },
-      ],
-      cfg,
-      { timeoutMs: 20000, maxTokens: 400 },
-    );
-    const cleaned = out.replace(/```[a-z]*\n?/gi, "").trim();
+    const out = await client.chat({
+      // stable 走前缀缓存：它在这个节点里从不变化。
+      stable: `You output only code, no prose.\n\n${preamble}`,
+      variable: caseText,
+      maxTokens: 800,
+      // label 此前和 refineCase 装反了：这里写的是 "case.refine"，
+      // 而 refineCase 写的是 "case.generate-code"。一条按 label 归因的成本报表，
+      // 会把这两件事的账记到对方头上。
+      label: "case.generate-code",
+    });
+    const cleaned = out.text.replace(/```[a-z]*\n?/gi, "").trim();
     if (cleaned) return cleaned;
   } catch {
     // fall through to template
@@ -186,7 +191,6 @@ export async function refineCase(
   },
   override?: Partial<ModelConfig>,
 ): Promise<RefineResult> {
-  const cfg = resolveModelConfig(override);
   const focus =
     typeof input.stepIdx === "number"
       ? `Focus your change on step ${input.stepIdx + 1}, but you may add/split steps around it if needed.`
@@ -222,15 +226,13 @@ ${focus}
 
 ${shape}${langDirective(input.lang)}`;
 
-  const out = await chat(
-    [
-      { role: "system", content: "You output only strict JSON, no prose." },
-      { role: "user", content: prompt },
-    ],
-    cfg,
-    { timeoutMs: 60000, maxTokens: 600 },
-  );
-  const parsed = extractJson(out);
+  const out = await gatewayModel({ override }).chat({
+    stable: "You output only strict JSON, no prose.",
+    variable: prompt,
+    maxTokens: 900,
+    label: "case.refine",
+  });
+  const parsed = extractJson(out.text);
   const note = typeof parsed.note === "string" ? parsed.note : "AI-proposed change";
   if (input.target === "steps" || input.target === "data") {
     const steps = Array.isArray(parsed.steps)

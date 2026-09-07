@@ -11,6 +11,9 @@ import {
   registerPack,
   type GraphDef,
   type RunMode,
+  traced,
+  topoOrder,
+  upstreamOf,
 } from "@testpilot/harness-core";
 import {
   promptSources,
@@ -27,6 +30,7 @@ import {
   getProject,
   getSecretValues,
   resolveEnvironment,
+  listEnvironments,
   type Environment,
 } from "./db.js";
 import { digestTexts, resolveMap, resolveText, type ResolveContext, type TextDigest } from "@testpilot/harness-core";
@@ -64,12 +68,34 @@ interface ResolvedTarget {
   extraHeaders: Record<string, string>;
   query: Record<string, string>;
   storageState: Environment["login"]["session"] | null;
+  /** 这个被测对象要多大的视口。不配就是 undefined，执行层沿用默认。 */
+  viewport?: { width?: number; height?: number };
   login: string[];
   describe: string;
+  /** 这个环境是**点名要的**，还是没人选、拿了默认的那一个。 */
+  envPick: "named" | "default" | "none";
+  /** 这个地址是哪儿来的。一次性 URL 和保存下来的环境在记录里必须分得开。 */
+  urlFrom: "url" | "env" | "project" | "WF_TARGET_URL";
 }
 
 function resolveTarget(target: RunTarget): ResolvedTarget {
   const projectId = target.projectId ?? "";
+  /*
+   * 点名了一个环境却没有这个环境时，**拦下来**。
+   *
+   * `resolveEnvironment` 在名字对不上时会退回默认环境——于是一次指名打 staging
+   * 的运行会安安静静地打在 prod 上，运行记录里还写着「成功」。名字没对上不是
+   * 「随便给一个」的理由，它是一个错。
+   */
+  if (projectId && target.envRef) {
+    const named = listEnvironments(projectId).find(
+      (e) => e.name === target.envRef || e.id === target.envRef,
+    );
+    if (!named)
+      throw new Error(
+        `这个项目下没有叫「${target.envRef}」的环境——别的环境不能替它跑，先建一个或换一个名字`,
+      );
+  }
   const env = projectId ? resolveEnvironment(projectId, target.envRef) : undefined;
   const ctx: ResolveContext = {
     env: env?.vars ?? {},
@@ -79,6 +105,13 @@ function resolveTarget(target: RunTarget): ResolvedTarget {
   };
   const project = projectId ? getProject(projectId) : undefined;
   const raw = target.url || env?.baseUrl || project?.targetUrl || process.env.WF_TARGET_URL || "";
+  const urlFrom: ResolvedTarget["urlFrom"] = target.url
+    ? "url"
+    : env?.baseUrl
+      ? "env"
+      : project?.targetUrl
+        ? "project"
+        : "WF_TARGET_URL";
   if (!raw)
     throw new Error(
       "a workflow run needs a target: bind a project/environment, pass a url, or set WF_TARGET_URL",
@@ -91,9 +124,12 @@ function resolveTarget(target: RunTarget): ResolvedTarget {
     extraHeaders: { ...resolveMap(env?.headers ?? {}, ctx), ...(useSession ? session?.headers ?? {} : {}) },
     query: resolveMap(env?.query ?? {}, ctx),
     storageState: useSession ? session : null,
+    ...(env?.viewport?.width || env?.viewport?.height ? { viewport: env.viewport } : {}),
     // A captured session replaces the login steps; otherwise the flow runs them.
     login: env?.login?.authRequired && !useSession ? env.login.steps ?? [] : [],
     describe: `${project?.name ?? "no project"} / ${env?.name ?? "no environment"}`,
+    envPick: !env ? "none" : target.envRef ? "named" : "default",
+    urlFrom,
   };
 }
 
@@ -182,6 +218,8 @@ function makeExecutor(
           extraHeaders: t.extraHeaders,
           query: t.query,
           storageState: t.storageState,
+          // 视口跟着被测对象走（U-69）。不配就不传，执行层沿用默认的 1024×720。
+          ...(t.viewport ? { viewport: t.viewport } : {}),
           mutation,
         },
       });
@@ -244,7 +282,26 @@ setAgentExecutor(async (input) => {
   return makeExecutor(target ?? {}, wfRunId).run(rest);
 });
 
-const model = gated(modelFromEnv());
+/**
+ * 网关侧的模型出口。**导出它**，因为探索的「先问业务场景」那一步要用它。
+ *
+ * 为什么不能在 runner 进程里直接问：那个进程没有 `ModelClient`（它只向网关领票），
+ * 而且它的 `OPENAI_BASE_URL` 被改写成了 Midscene 的 no-think 代理。
+ * 网关这一份走的是真端点，而且经过 `traced()`，这次调用会出现在 Langfuse 上——
+ * Midscene 自己的 `ai*` 不在 trace 上，用它问就等于这次改造的成本和效果都量不出来。
+ */
+const rawModel = modelFromEnv();
+export const model = traced(gated(rawModel), { name: "gateway.model" });
+
+/**
+ * 换配置之后让这一份客户端跟上。
+ *
+ * 它是模块顶层的 const，捕获的是 import 那一刻的 env——往 `process.env` 写新值对它无效。
+ * 不做这件事，「界面上改了端点」在网关这条路上要等到重启才生效，而人不会知道。
+ */
+export function reconfigureModel(patch: { baseUrl?: string; apiKey?: string; model?: string; noThink?: boolean; thinkBudget?: number; timeoutMs?: number }): void {
+  (rawModel as unknown as { reconfigure?: (p: unknown) => void }).reconfigure?.(patch);
+}
 
 /**
  * A registry built here serves the palette and graph validation only — runs are executed
@@ -323,10 +380,43 @@ export const graphVersions = (id: string): Array<{ version: number; savedAt: str
   return saved.length || !current ? saved : [{ version: current.version, savedAt: "", note: "built-in" }];
 };
 
+/** 两张图除了节点摆位之外完全一样。 */
+function onlyMoved(a: GraphDef, b: GraphDef): boolean {
+  const strip = (g: GraphDef) => ({
+    ...g,
+    version: 0,
+    // `pos` 是画布加上去的字段，核心的 GraphNode 里没有它——摆位不属于图的含义。
+    nodes: [...g.nodes]
+      .map((n) => {
+        const { pos: _pos, ...rest } = n as GraphDef["nodes"][number] & { pos?: unknown };
+        return rest;
+      })
+      .sort((x, y) => x.id.localeCompare(y.id)),
+    edges: [...g.edges].sort((x, y) => JSON.stringify(x).localeCompare(JSON.stringify(y))),
+  });
+  return JSON.stringify(strip(a)) === JSON.stringify(strip(b));
+}
+
 export function saveGraph(def: GraphDef, note?: string): GraphDef {
   // Every save is a new version: a run pins the version it used, so changing the canvas
   // can never rewrite what an earlier result meant.
   const prev = graphs.get(def.id);
+
+  /*
+   * 把节点拖了个位置就立一版——那一版的 diff 说「无变化」，因为 diff 根本不看摆位。
+   * 版本列表于是被一串什么都没改的版本号填满，真正的改动混在里面找不着。
+   *
+   * 摆位不是含义：一次运行钉住的是节点与连线，不是它们画在哪儿。所以布局改动
+   * **原地写回当前版本**，版本号不动，也不惊动任何钉着这一版的旧运行。
+   */
+  if (prev && onlyMoved(prev, def)) {
+    const same = { ...def, version: prev.version };
+    graphs.set(same.id, same);
+    const keptNote = graphStore.versions(same.id).find((v) => v.version === same.version)?.note;
+    graphStore.save(same, note ?? keptNote);
+    return same;
+  }
+
   const next = { ...def, version: (prev?.version ?? 0) + 1 };
   graphs.set(next.id, next);
   graphStore.save(next, note);
@@ -378,7 +468,59 @@ export function reconcileOrphanedRuns(log: (msg: string) => void): void {
       },
     });
     log(`run ${id} was interrupted by a restart`);
+    // 产物还在（它们落在 wf_node_outputs 里，进程死掉不影响），所以"跑到哪儿了"是查得出来的。
+    // 此前这里只写 status 和 error，界面上于是整张图全是 idle——一次跑了两步的运行
+    // 看起来像从没跑过，唯一的接法是人自己猜从哪一步起。
   }
+}
+
+/**
+ * 这次运行已经产出过哪几个节点。
+ *
+ * 用产物反推，而不是读 `detail.nodes`：被进程重启打断的运行根本没机会写 `detail.nodes`，
+ * 而产物是每跑完一个节点就落盘的。两者不一致时产物为准——它是事实，另一个是汇报。
+ */
+export async function completedNodes(wfRunId: string): Promise<string[]> {
+  return Object.keys(await outputStore.all(wfRunId));
+}
+
+/**
+ * 要重跑这个节点，上游缺的是哪一个（没有缺的返回 `undefined`）。
+ *
+ * 只看直接上游——runtime 也只取直接上游的产物。根节点没有上游，永远返回 `undefined`：
+ * 它要的是种子，那是另一条路上的事（见 `RunDetail.seedFrom`）。
+ */
+export async function missingUpstream(wfRunId: string, nodeId: string): Promise<string | undefined> {
+  const row = outputStore.getRun(wfRunId);
+  if (!row) return undefined;
+  const def = getGraphVersion(String(row.graphId), Number(row.graphVersion ?? 1)) ?? graphs.get(String(row.graphId));
+  if (!def) return undefined;
+  const up = upstreamOf(def, nodeId);
+  if (up === undefined) return undefined;
+  const have = await outputStore.all(wfRunId);
+  return have[up] === undefined ? up : undefined;
+}
+
+/**
+ * 这次运行如果要接着跑，该从哪个节点起。
+ *
+ * `undefined` 表示接不上（图不在了，或者一个节点都没跑成）。
+ */
+export async function resumePoint(wfRunId: string): Promise<{ from: string; done: string[] } | undefined> {
+  const row = outputStore.getRun(wfRunId);
+  if (!row) return undefined;
+  const detail = (row.detail ?? {}) as RunDetail;
+  // 停在断点上的，断点那一步自己就是起点。
+  const done = await completedNodes(wfRunId);
+  if (detail.pausedAt) return { from: detail.pausedAt, done };
+  // 一个节点都没产出 = 没有可"接"的东西。从第一步开始那叫整跑，不叫续跑，
+  // 而把两者混成一个按钮，会让"接着跑"在最该提醒人的时候悄悄重跑二十分钟。
+  if (!done.length) return undefined;
+  const def = getGraphVersion(String(row.graphId), Number(row.graphVersion ?? 1)) ?? graphs.get(String(row.graphId));
+  if (!def) return undefined;
+  const order = topoOrder(def);
+  const next = order.find((id) => !done.includes(id));
+  return next ? { from: next, done } : undefined;
 }
 
 /**
@@ -427,6 +569,8 @@ export async function startRun(input: {
    * 像一次测量。
    */
   spent?: { calls?: number; tokens?: number; usd?: number; ms?: number };
+  /** 种子的出处，续跑时传。见 `RunDetail.seedFrom`。 */
+  seedFrom?: { runId: string; node: string };
   /** Run an older version rather than the current one. Used to compare two versions. */
   graphVersion?: number;
   /**
@@ -440,6 +584,13 @@ export async function startRun(input: {
   params?: Record<string, Record<string, unknown>>;
   /** What this run executes against. Recorded on the run so a re-run uses the same one. */
   target?: RunTarget;
+  /**
+   * 追踪归属。**配对评测的两条臂要传同一个 `sessionId`。**
+   *
+   * 网关是唯一知道「这次运行属于哪个更大的问题」的地方：一次普通运行属于它的项目，
+   * 一次评测的两条臂属于那次评测。不传就按项目归——那也是对的，只是粗一点。
+   */
+  trace?: { sessionId?: string; tags?: string[] };
 }): Promise<{ wfRunId: string; graph: GraphDef; target: RunTarget }> {
   const base =
     input.graphVersion === undefined
@@ -466,22 +617,64 @@ export async function startRun(input: {
     ? (getProject(input.target.projectId)?.materials ?? [])
     : [];
   const injected: Record<string, Record<string, unknown>> = { ...(input.params ?? {}) };
-  if (projectMaterials.length)
-    for (const n of base.nodes) {
-      if (n.type !== "source.spec") continue;
-      const p = (n.params ?? {}) as { paths?: unknown; path?: unknown; text?: unknown };
-      const alreadySaid =
-        (Array.isArray(p.paths) && p.paths.length) || !!p.path || !!p.text || !!injected[n.id];
-      if (!alreadySaid) injected[n.id] = { paths: projectMaterials };
+  /**
+   * 注入了什么、以及**没能注入什么**，两样都要记。
+   *
+   * 只记注入的那一半，就还原不出"项目挂了三份 PRD，可这次跑的是图上写死的那份 mock"
+   * 这个事实——而它正是新建项目第一次跑时最容易踩的坑，界面上还有四处在说反话。
+   */
+  const graphPinned: Array<{ node: string; said: string }> = [];
+  for (const n of base.nodes) {
+    if (n.type !== "source.spec") continue;
+    const p = (n.params ?? {}) as { paths?: unknown; path?: unknown; text?: unknown };
+    const said =
+      (Array.isArray(p.paths) && p.paths.length ? (p.paths as string[]).join(", ") : "") ||
+      (typeof p.path === "string" ? p.path : "") ||
+      (p.text ? "（图上直接写了正文）" : "");
+    const alreadySaid = !!said || !!injected[n.id];
+    if (alreadySaid) {
+      // 被请求参数覆盖的不算"图钉死"——那是这一次运行自己的决定。
+      if (said && !injected[n.id]) graphPinned.push({ node: n.id, said });
+      continue;
     }
+    if (projectMaterials.length) injected[n.id] = { paths: projectMaterials };
+  }
   const params = Object.keys(injected).length ? injected : input.params;
   const def = applyParamOverrides(base, params);
 
-  const wfRunId = input.wfRunId ?? `wf-${Date.now().toString(36)}`;
+  /*
+   * 运行 id 带一个随机尾巴。
+   *
+   * 此前是纯毫秒时间戳——**同一毫秒起的两次运行会拿到同一个 id**，于是它们共用
+   * 同一份产物、同一条步骤史，后起的那次把先起的那次改写掉。从界面上手点碰不到，
+   * 但一次配对评测的两条臂、一个脚本连起的两次运行，正好都是同一毫秒。
+   * 时间戳留着是因为 id 排序即时间序，那个性质别处在用。
+   */
+  const wfRunId = input.wfRunId ?? `wf-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const startedAt = new Date().toISOString();
   // Re-running one node of an existing run must use that run's target, not today's default.
   const previous = (outputStore.getRun(wfRunId)?.detail ?? {}) as RunDetail;
   const target = input.target ?? previous.target ?? {};
+  /**
+   * 按值记下这次打的是哪里。解析失败不拦运行——没绑环境也能跑（`WF_TARGET_URL` 那条路），
+   * 拦下来会把一个记账问题变成一个可用性问题。
+   */
+  let targetSnapshot: RunDetail["targetSnapshot"] = previous.targetSnapshot;
+  try {
+    const r = resolveTarget(target);
+    targetSnapshot = {
+      describe: r.describe,
+      baseUrl: r.url,
+      envName: r.describe.split(" / ")[1],
+      usedSession: !!r.storageState,
+      envPick: r.envPick,
+      urlFrom: r.urlFrom,
+    };
+  } catch (e) {
+    // 点名了一个不存在的环境是个错，不是「没绑环境」——把它原样记下来，
+    // 否则事后看只剩一句「还没有可解析的目标」，人会以为是自己忘了绑。
+    targetSnapshot = { describe: `（目标解析不了：${(e as Error).message}）` };
+  }
   // Breakpoints belong to the run, not to the request that happens to start it: re-running
   // one node of a paused run must not silently clear where the run stops.
   const breakpoints = input.breakpoints ?? previous.breakpoints;
@@ -510,6 +703,25 @@ export async function startRun(input: {
       // the arm differed. Recording the fingerprint is what closes that.
       prompts: runPromptDigest(),
       paramOverrides: params ?? previous.paramOverrides,
+      /**
+       * 这次运行里，**人自己要求**的那些覆盖。
+       *
+       * `paramOverrides` 记的是最终生效的全部参数——里面包含项目材料的自动注入，
+       * 而那是每一次运行都会发生的事。拿它去标「带覆盖」，结果是每一条运行都带着这枚标签，
+       * 于是这枚标签什么都区分不出来了。
+       * 「这次运行不是这张图的基线成绩」说的是**有人动过手**，所以看的是请求里带来的那一份。
+       */
+      requestedOverrides: input.params ?? previous.requestedOverrides,
+      targetSnapshot,
+      materials: {
+        injected: Object.fromEntries(
+          Object.entries(injected)
+            .filter(([, v]) => Array.isArray((v as { paths?: unknown }).paths))
+            .map(([k, v]) => [k, (v as { paths: string[] }).paths]),
+        ),
+        graphPinned,
+      },
+      seedFrom: input.seedFrom ?? previous.seedFrom,
       // It is running again, so where it stopped last time is history, not state.
       pausedAt: undefined,
     },
@@ -527,6 +739,17 @@ export async function startRun(input: {
     spent: input.spent,
     target,
     scope: { projectId: target.projectId ?? "" },
+    trace: {
+      // 没有更具体的归属时按项目归：一个项目的历次运行是一组自然的对照。
+      sessionId: input.trace?.sessionId ?? (target.projectId ? `project:${target.projectId}` : undefined),
+      tags: [
+        ...(input.trace?.tags ?? []),
+        ...(target.envRef ? [`env:${target.envRef}`] : []),
+        // 提示词指纹进标签：两次运行钉了同一个图版本、却由不同的提示词产出，
+        // 在别处是看不出来的（见上面 `prompts` 那段）。
+        ...(runPromptDigest()?.combined ? [`prompts:${runPromptDigest()!.combined.slice(0, 12)}`] : []),
+      ],
+    },
   });
 
   // The run record is completed from the agent's own wf.run.finished event (below).
@@ -550,12 +773,34 @@ function applyParamOverrides(
   const unknownNodes = Object.keys(params).filter((id) => !def.nodes.some((n) => n.id === id));
   if (unknownNodes.length)
     throw new Error(`${def.id} has no node called ${unknownNodes.join(", ")} to override`);
-  return {
+  const next = {
     ...def,
     nodes: def.nodes.map((n) =>
       params[n.id] ? { ...n, params: { ...(n.params ?? {}), ...params[n.id] } } : n,
     ),
   };
+
+  /*
+   * 覆盖参数**当场校验**，而不是等到跑到那一步。
+   *
+   * 校验本来就有——runtime 会在执行每个节点前 `nodeDef.params.safeParse`。可那是
+   * 二十分钟以后的事：一个把 `maxRounds` 写成 `"3"` 的起跑单，会先跑完前四步，
+   * 再在第五步上报一句 zod 错误，前面那些模型调用全部白花。
+   * 同一套 schema，只是提前到按下起跑的那一刻。
+   */
+  for (const n of next.nodes) {
+    if (!params[n.id]) continue;
+    const def0 = registry.get(n.type);
+    if (!def0) continue;
+    const parsed = def0.params.safeParse(n.params ?? {});
+    if (!parsed.success)
+      throw new Error(
+        `${n.id}（${n.type}）的覆盖参数不对：${parsed.error.issues
+          .map((i) => `${i.path.join(".") || "?"} ${i.message}`)
+          .join("；")}`,
+      );
+  }
+  return next;
 }
 
 /**
@@ -578,6 +823,8 @@ export interface RunDetail {
   breakpoints?: string[];
   ablate?: string[];
   paramOverrides?: Record<string, Record<string, unknown>>;
+  /** 上面那份里，**人自己要求**的那一部分。项目材料的自动注入不算。 */
+  requestedOverrides?: Record<string, Record<string, unknown>>;
   /** Fingerprints of the instructions this run was produced by. */
   prompts?: TextDigest;
   /** The caps this run was started with, so spend can be read against them. */
@@ -588,6 +835,40 @@ export interface RunDetail {
   spend?: { calls?: number; tokens?: number; usd?: number; ms?: number };
   /** 停下来是因为撞了哪个上限。`budget` 状态才有。 */
   stoppedBy?: "calls" | "usd" | "ms";
+  /**
+   * 起跑那一刻这次运行打的是哪里，**按值记**。
+   *
+   * `target.envRef` 是一个引用，而环境是可以被改的：以后有人把默认环境的 baseUrl 换掉，
+   * 这次旧运行的含义就跟着变了——"这些用例在 staging 上通过了"会悄悄变成一句关于另一台
+   * 机器的话。所以除了引用，还把当时解析出来的地址与那句人话一起存下来。
+   */
+  targetSnapshot?: {
+    describe: string;
+    baseUrl?: string;
+    envName?: string;
+    usedSession?: boolean;
+    /** 环境是点名的还是拿的默认；默认环境事后被改，旧运行看这一栏才知道它当时拿的是什么。 */
+    envPick?: "named" | "default" | "none";
+    urlFrom?: "url" | "env" | "project" | "WF_TARGET_URL";
+  };
+  /**
+   * 这次运行的 `source.spec` 到底读了什么，以及**哪些节点因为图上写死了路径而没吃到项目材料**。
+   *
+   * 后者是本轮查出来的一处谎言：项目卡亮着"规格来自 N 份文档"，而内置 g1 的 docs 节点出厂
+   * 就写死了 fixtures 里那份 75 行的 mock，于是第一次跑读的根本不是你挂的 PRD。
+   * 记下来，起跑面才有东西可警告。
+   */
+  materials?: { injected?: Record<string, string[]>; graphPinned?: Array<{ node: string; said: string }> };
+  /**
+   * 续跑起来的运行，它的种子是从哪来的。
+   *
+   * 存的是**出处**不是值：种子可以是一整批用例，塞进运行记录会让这张表迅速变胖。
+   * 有了出处，重跑根节点时可以按需把它取回来——此前种子只活在那一次请求里，
+   * 于是续跑起来的运行**第一个节点永远重跑不了**（runtime 拿到 undefined，zod 当场报错）。
+   */
+  seedFrom?: { runId: string; node: string };
+  /** 每一次部分重跑留下一轮记录。整跑不留——它本来就是从头开始。 */
+  rounds?: Array<{ at: string; mode: RunMode; nodes: string[]; spend?: RunDetail["spend"] }>;
   [k: string]: unknown;
 }
 
@@ -613,8 +894,21 @@ export async function resumeRun(wfRunId: string): Promise<{ wfRunId: string; fro
   const row = outputStore.getRun(wfRunId);
   if (!row) throw new Error(`unknown run: ${wfRunId}`);
   const detail = (row.detail ?? {}) as RunDetail;
-  const at = detail.pausedAt;
-  if (!at) throw new Error("this run is not paused at a breakpoint, so there is nothing to resume");
+  /**
+   * 停在断点上的能续，**被重启打断的、被取消的，同样能续**。
+   *
+   * 此前这里只认 `pausedAt`，其余一律抛错。可产物就躺在 `wf_node_outputs` 里：
+   * 一次跑了两步才被打断的运行，界面上整张图是 idle，人只能自己猜从哪一步起——
+   * 而"跑到哪儿了"本来就是查得出来的。
+   */
+  const point = await resumePoint(wfRunId);
+  const at = detail.pausedAt ?? point?.from;
+  if (!at)
+    throw new Error(
+      point === undefined && !outputStore.getRun(wfRunId)
+        ? "unknown run"
+        : "这次运行没有可接上的地方：它要么已经跑完，要么一个节点都没产出。",
+    );
   if (String(row.status) === "budget" && overCap(detail))
     throw new Error(
       `这次运行停在它的${CAP_NAME[overCap(detail)!]}上限上。先改上限或撤掉它（PATCH /api/wf/runs/${wfRunId}/budget），再继续——` +
@@ -627,6 +921,8 @@ export async function resumeRun(wfRunId: string): Promise<{ wfRunId: string; fro
     breakpoints: detail.breakpoints,
     budget: detail.budget,
     spent: detail.spend,
+    seedFrom: detail.seedFrom,
+    seed: detail.seedFrom ? await nodeOutput(detail.seedFrom.runId, detail.seedFrom.node).catch(() => undefined) : undefined,
   });
   return { wfRunId, from: at };
 }
@@ -641,6 +937,32 @@ export function overCap(detail: RunDetail): "calls" | "usd" | "ms" | undefined {
   if (budget.usd !== undefined && budget.usd > 0 && (spend.usd ?? 0) >= budget.usd) return "usd";
   if (budget.ms !== undefined && (spend.ms ?? 0) >= budget.ms) return "ms";
   return undefined;
+}
+
+/**
+ * 改这次运行的断点集。
+ *
+ * 断点**属于这次运行，不属于浏览器**。此前它只活在前端 store 里，
+ * 而且只有整跑那一次随请求发出——「只跑这一步」「从这里开始」「继续」三条路
+ * 都不带它，服务端沿用运行里存着的那份。于是**画布上刚点亮的红点和
+ * 「这次会不会停」是两回事**，而顶栏那个「断点 N」数的是本地那一份。
+ *
+ * 存进运行记录之后，那个计数才第一次说的是真话。
+ */
+export function setRunBreakpoints(wfRunId: string, breakpoints: string[]): RunDetail {
+  const row = outputStore.getRun(wfRunId);
+  if (!row) throw new Error(`unknown run: ${wfRunId}`);
+  const detail: RunDetail = { ...((row.detail ?? {}) as RunDetail), breakpoints };
+  outputStore.saveRun({
+    id: wfRunId,
+    graphId: String(row.graphId),
+    graphVersion: Number(row.graphVersion ?? 1),
+    status: String(row.status),
+    startedAt: String(row.startedAt),
+    finishedAt: row.finishedAt ? String(row.finishedAt) : undefined,
+    detail,
+  });
+  return detail;
 }
 
 /**
@@ -672,6 +994,37 @@ export function setRunBudget(
  * The agent reports the end of a run as an event; the gateway is what stores it, because
  * the run record is database state and the agent holds none.
  */
+/**
+ * 花费**跑着的时候就落盘**，不是只在跑完时写一次。
+ *
+ * 崩溃时这一段的花费此前**全丢**：`spend` 只在 `wf.run.finished` 那个订阅里写一次，
+ * 而一次跑三天的运行崩在第二天，那两天的账就没有了——续跑会从零重新算，
+ * 于是上限在最该起作用的时候悄悄失效。
+ *
+ * 节流到 5 秒一次：`budget.update` 每次模型调用都发，而落盘一次是一次写事务。
+ * 崩溃最坏赔掉的是最后 5 秒的账，而不是两天的。
+ */
+const spendWrittenAt = new Map<string, number>();
+bus.subscribe((e) => {
+  if (e.kind !== "budget.update" || !e.scope.wfRunId) return;
+  const wfRunId = e.scope.wfRunId;
+  const now = Date.now();
+  if (now - (spendWrittenAt.get(wfRunId) ?? 0) < 5000) return;
+  spendWrittenAt.set(wfRunId, now);
+  const row = outputStore.getRun(wfRunId);
+  if (!row || row.status !== "running") return;
+  const total = (e.payload as { total?: RunDetail["spend"] }).total;
+  if (!total) return;
+  outputStore.saveRun({
+    id: wfRunId,
+    graphId: String(row.graphId ?? ""),
+    graphVersion: Number(row.graphVersion ?? 1),
+    status: "running",
+    startedAt: String(row.startedAt ?? new Date().toISOString()),
+    detail: { ...(row.detail as Record<string, unknown>), spend: total },
+  });
+});
+
 bus.subscribe((e) => {
   if (e.kind !== "wf.run.finished" || !e.scope.wfRunId) return;
   const wfRunId = e.scope.wfRunId;
@@ -687,7 +1040,19 @@ bus.subscribe((e) => {
     finishedAt: new Date().toISOString(),
     detail: {
       ...(row?.detail as Record<string, unknown>),
-      nodes: payload.nodes,
+      /**
+       * 部分重跑**累加**步骤史，不覆盖。
+       *
+       * 此前这里直接 `nodes: payload.nodes` 盖上去，而 runtime 只回报这一次跑过的节点。
+       * 实测 wf-mtd7gcdk：整跑是三条节点、41 次调用、719 秒；只重跑了一个 repair 之后，
+       * 这次运行的记录变成一条节点、3 次调用——**一次十二分钟的运行被一次两分钟的重跑
+       * 改写成了它自己的一小段**，而报告看起来完全正常。
+       *
+       * 花费不在这里加：重跑请求会把 `spent` 带上（见 index.ts 的重跑路由），
+       * runtime 是从那个数接着算的，payload.spend 已经是累计值。在这里再加一次会翻倍。
+       */
+      nodes: mergeNodeRuns((row?.detail as RunDetail)?.mode, (row?.detail as RunDetail)?.nodes, payload.nodes),
+      rounds: appendRound(row?.detail as RunDetail, payload),
       spend: payload.spend,
       error: payload.error,
       pausedAt: payload.pausedAt,
@@ -696,11 +1061,88 @@ bus.subscribe((e) => {
     },
   });
   active.delete(wfRunId);
+  spendWrittenAt.delete(wfRunId);
 });
 
-export async function cancelRun(wfRunId: string): Promise<boolean> {
+/**
+ * 还没跑完的那些运行。血缘保留策略拿它来决定哪些事件一行都不能删。
+ *
+ * 用运行记录而不是 `active`：`active` 只有这个进程这次启动之后起的那些，
+ * 而一次跨重启的长运行恰恰不在里面——那正是最需要被保护的那一种。
+ */
+export function unfinishedRunIds(): string[] {
+  return outputStore
+    .listRuns(200)
+    .filter((r) => r.status === "running" || r.status === "paused")
+    .map((r) => String(r.id));
+}
+
+/**
+ * 取消一次运行。
+ *
+ * 返回三种结果，而不是一个布尔——它们在界面上是三句不同的话：
+ * `requested` 信号发出去了，当前这个节点跑完就停（取消只在节点边界生效，而实测单步
+ * 耗时 spec 158 秒、codegen 505 秒，所以这几分钟里必须有话说）；`agent-gone` 进程
+ * 已经不在了，这次运行就地判为已取消；`unknown-run` 没这个运行。
+ *
+ * 此前这里返回 `false` 有两个完全不同的含义，而界面对两者都一声不吭。
+ */
+export async function cancelRun(
+  wfRunId: string,
+): Promise<{ result: "requested" | "agent-gone" | "unknown-run"; stopsAfter?: string }> {
+  const row = outputStore.getRun(wfRunId);
+  if (!row) return { result: "unknown-run" };
   const rpc = await agent().catch(() => undefined);
-  return (await rpc?.cancelRun(wfRunId)) ?? false;
+  const ok = rpc ? await rpc.cancelRun(wfRunId).catch(() => false) : false;
+  if (ok) {
+    const detail = (row.detail ?? {}) as RunDetail;
+    /**
+     * 停在哪一步之后——**不知道就不说**。
+     *
+     * `detail.nodes` 只在运行结束时才写，所以运行中它是空的。第一版在这里退回
+     * `graphId`，而它读起来像一个节点名（"当前这一步（g0-explore）跑完就停"）——
+     * 又一次把"不知道"渲染成了一个具体答案。改成用产物反推：已经落盘的下一个就是
+     * 正在跑的那个。
+     */
+    const def = getGraphVersion(String(row.graphId), Number(row.graphVersion ?? 1)) ?? graphs.get(String(row.graphId));
+    const done = Object.keys(await outputStore.all(wfRunId));
+    const stopsAfter = def ? topoOrder(def).find((id) => !done.includes(id)) : undefined;
+    return { result: "requested", ...(stopsAfter ? { stopsAfter } : {}) };
+  }
+  // agent 拿不到、或者它说没这个运行：进程已经不在了。把记录收干净，
+  // 否则一个永远停在 running 的状态没人再信。
+  if (String(row.status) === "running")
+    outputStore.saveRun({
+      id: wfRunId,
+      graphId: String(row.graphId),
+      graphVersion: Number(row.graphVersion ?? 1),
+      status: "cancelled",
+      startedAt: String(row.startedAt),
+      finishedAt: new Date().toISOString(),
+      detail: { ...((row.detail ?? {}) as RunDetail), error: { message: "agent 进程已经不在了，这次运行就地判为已取消" } },
+    });
+  return { result: "agent-gone" };
+}
+
+/** 部分重跑只回报它跑过的那几个节点；把它们并回整次运行的步骤史。 */
+function mergeNodeRuns(mode: RunMode | undefined, prev: unknown, incoming: unknown): unknown {
+  const partial = mode?.kind === "only" || mode?.kind === "from";
+  if (!partial || !Array.isArray(prev) || !Array.isArray(incoming)) return incoming ?? prev;
+  const ran = new Set(incoming.map((n) => (n as { nodeId?: string }).nodeId));
+  return [...prev.filter((n) => !ran.has((n as { nodeId?: string }).nodeId)), ...incoming];
+}
+
+/** 每一次部分重跑留一轮记录，这样"这个数字是第几次跑出来的"答得上来。 */
+function appendRound(detail: RunDetail | undefined, payload: { nodes?: unknown; spend?: unknown }): RunDetail["rounds"] {
+  const mode = detail?.mode;
+  if (mode?.kind !== "only" && mode?.kind !== "from") return detail?.rounds;
+  const ids = Array.isArray(payload.nodes)
+    ? payload.nodes.map((n) => String((n as { nodeId?: string }).nodeId ?? ""))
+    : [];
+  return [
+    ...(detail?.rounds ?? []),
+    { at: new Date().toISOString(), mode, nodes: ids, spend: payload.spend as RunDetail["spend"] },
+  ];
 }
 
 /** Node outputs live with the runtime, in the agent. */

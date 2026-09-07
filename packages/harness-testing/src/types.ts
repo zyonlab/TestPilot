@@ -23,7 +23,8 @@ export interface StorageState {
 
 export interface OracleCheck {
   assertion: string; // the expected condition that was verified
-  status: "pass" | "fail";
+  /** `unobservable`：这次没量到，不是产品错了（`exec/oracle.ts` 的 OracleVerdict）。 */
+  status: "pass" | "fail" | "unobservable";
   detail?: string;
   /**
    * What settled it. Worth recording on every run: "passed" means two different things

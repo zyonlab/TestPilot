@@ -116,7 +116,7 @@ export async function runMutation(req: MutationRunRequest): Promise<MutationRepo
     const out = await executeCaseDirect(target, c, fragments as never, mutation);
     return {
       caseId: c.caseId,
-      status: out.status === "passed" ? "passed" : "failed",
+      status: out.status === "passed" ? "passed" : out.status === "unobservable" ? "unobservable" : "failed",
       failKind: out.failKind,
       applied: out.mutationApplied,
     };

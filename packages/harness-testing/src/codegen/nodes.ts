@@ -62,6 +62,8 @@ export function codegenNode(opts: CodeGenNodeOptions): NodeDef<
 > {
   return {
     type: "codegen.case",
+    // 用例 → 可运行代码，又一段 chain
+    observationType: "chain" as const,
     title: "Generate code",
     description: "Turn each text case into runnable Midscene code",
     inKind: KIND.gatedCases,
@@ -128,6 +130,8 @@ export function gateCodeNode(): NodeDef<
 > {
   return {
     type: "gate.code",
+    // 阶段二的门禁，而且这一道是有牙齿的：跑不了的代码直接拦下
+    observationType: "guardrail" as const,
     title: "Gate: code quality",
     description: "Check the generated code against the test-development rules",
     inKind: CODE_KIND.code,
@@ -169,6 +173,8 @@ export function repairNode(opts: CodeGenNodeOptions): NodeDef<
 > {
   return {
     type: "repair.loop",
+    // 有界的自主循环：它自己决定改什么、改几轮、什么时候放弃
+    observationType: "agent" as const,
     title: "Execute and repair",
     description: "Run each case and try, within bounds, to fix what fails",
     inKind: CODE_KIND.gatedCode,
@@ -197,6 +203,7 @@ export function repairNode(opts: CodeGenNodeOptions): NodeDef<
       const outcomes: ExecOutcome[] = [];
       const degraded = new Set<string>();
       const stoppedBecause: Record<string, string> = {};
+      const stopReason: Record<string, { reason: string; n?: number }> = {};
       const code = [...bundle.code];
 
       for (const kase of runnable) {
@@ -225,12 +232,16 @@ export function repairNode(opts: CodeGenNodeOptions): NodeDef<
           });
           if (!cont.go) {
             stoppedBecause[current.caseId] = cont.because;
+            // 机器可读的那一份：界面用它查词条，`because` 留给日志与 CLI。
+            if (cont.reason) stopReason[current.caseId] = { reason: cont.reason, n: cont.n };
             break;
           }
           round += 1;
 
           let changes: RepairChange[] = ["none"];
           let note = "";
+          // 这一轮动手之前的样子。`current` 在下面会被换掉，所以先留一份。
+          const codeBefore = current.code;
           try {
             const res = await opts.model.chat({
               stable: REPAIR_STABLE,
@@ -250,8 +261,18 @@ export function repairNode(opts: CodeGenNodeOptions): NodeDef<
               // The model is allowed to refuse: "the product does not do this" is a real
               // answer, and forcing a fix here is exactly how a test gets weakened.
               stoppedBecause[current.caseId] = "reported as a product defect, not a test fault";
+              stopReason[current.caseId] = { reason: "product-defect" };
               note = res.text.slice(0, 200);
-              rounds.push({ caseId: current.caseId, round, before: outcome, changes: ["none"], note });
+              rounds.push({
+                caseId: current.caseId,
+                round,
+                before: outcome,
+                changes: ["none"],
+                note,
+                codeBefore,
+                // 判成产品缺陷就没动过代码——前后一样，这是事实，不是遗漏。
+                codeAfter: codeBefore,
+              });
               break;
             }
 
@@ -285,7 +306,15 @@ export function repairNode(opts: CodeGenNodeOptions): NodeDef<
             note = (e as Error).message;
           }
 
-          rounds.push({ caseId: current.caseId, round, before: outcome, changes, note });
+          rounds.push({
+            caseId: current.caseId,
+            round,
+            before: outcome,
+            changes,
+            note,
+            codeBefore,
+            codeAfter: current.code,
+          });
           ctx.emit("repair.round", { caseId: current.caseId, round, changes, failKind: outcome.failKind });
 
           outcome = await executor.run({
@@ -305,7 +334,7 @@ export function repairNode(opts: CodeGenNodeOptions): NodeDef<
       return {
         ...bundle,
         code,
-        repair: { rounds, outcomes, ...rates, stoppedBecause },
+        repair: { rounds, outcomes, ...rates, stoppedBecause, stopReason },
       };
     },
   };

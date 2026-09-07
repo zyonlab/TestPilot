@@ -14,6 +14,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useT } from "@/lib/prefs";
+import { TopBar } from "@/components/TopBar";
 import { cn } from "@/lib/cn";
 import { API_BASE } from "@/lib/base";
 import { stopReason } from "@/lib/stopReason";
@@ -180,6 +181,34 @@ interface StateData extends Record<string, unknown> {
   dimmed: boolean;
 }
 
+/**
+ * 一条路由，**末尾优先**。
+ *
+ * `truncate` 从右边打点，而这些路由分得开彼此的字恰恰全在末尾：
+ * `/en/futures/BTCUSDT`、`/en/futures/ETHUSDT`、`/en/futures/BTCUSDT~1`
+ * 一律被截成 `/en/futures…`，于是十一个节点长得一模一样，
+ * 唯一还能区分它们的只剩 `31 controls` 与 `34 controls` 这种数字。
+ *
+ * 所以拆成两截：前缀可以被挤掉，最后一段永远完整。
+ */
+function RoutePath({ route, bold }: { route: string; bold?: boolean }) {
+  const i = route.lastIndexOf("/");
+  const head = i > 0 ? route.slice(0, i + 1) : "";
+  const tail = i > 0 ? route.slice(i + 1) : route;
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 items-baseline font-mono text-[0.6875rem]",
+        bold ? "text-[0.75rem] font-medium text-foreground" : "mt-0.5 text-muted-foreground",
+      )}
+      title={route}
+    >
+      {head && <span className="min-w-0 truncate opacity-60">{head}</span>}
+      <span className="flex-none">{tail}</span>
+    </span>
+  );
+}
+
 function StateNode({ data, selected }: NodeProps) {
   const t = useT();
   const d = data as StateData;
@@ -201,33 +230,27 @@ function StateNode({ data, selected }: NodeProps) {
       />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2" />
       <div className="flex items-baseline gap-1.5">
-        <span
-          className={cn(
-            "truncate font-medium text-foreground",
-            d.name ? "text-[12px]" : "font-mono text-[12px]",
-          )}
-          title={d.name ? d.route : undefined}
-        >
-          {d.name ?? d.route}
-        </span>
+        {d.name ? (
+          <span className="truncate text-[0.75rem] font-medium text-foreground" title={d.route}>
+            {d.name}
+          </span>
+        ) : (
+          <RoutePath route={d.route} bold />
+        )}
         {d.variant > 0 && (
           <span
-            className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground"
+            className="shrink-0 rounded bg-muted px-1 font-mono text-[0.6875rem] text-muted-foreground"
             title={t("map.variantWhy")}
           >
             {t("map.variant", { n: d.variant })}
           </span>
         )}
       </div>
-      {d.name && (
-        <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{d.route}</div>
-      )}
-      {d.title && <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{d.title}</div>}
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px]">
+      {d.name && <RoutePath route={d.route} />}
+      {d.title && <div className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">{d.title}</div>}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[0.6875rem]">
         <span className="text-muted-foreground">{t("map.controls", { n: d.controls })}</span>
-        {d.missed > 0 && (
-          <span className="text-amber-600 dark:text-amber-500">{t("map.missedOut", { n: d.missed })}</span>
-        )}
+        {d.missed > 0 && <span className="text-warn">{t("map.missedOut", { n: d.missed })}</span>}
         {d.unseen > 0 && (
           <span className="text-muted-foreground/70">{t("map.unseenHere", { n: d.unseen })}</span>
         )}
@@ -272,17 +295,17 @@ function Legend({ stopped }: { stopped?: string }) {
     return (
       <button
         onClick={toggle}
-        className="rounded-lg border border-border bg-card/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+        className="rounded-lg border border-border bg-card/95 px-2 py-1 text-[0.6875rem] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
       >
         {t("map.legendCollapsed")}
       </button>
     );
 
   return (
-    <div className="max-w-[290px] rounded-lg border border-border bg-card/95 p-2.5 text-[11px] shadow-sm backdrop-blur">
+    <div className="max-w-[18.125rem] rounded-lg border border-border bg-card/95 p-2.5 text-[0.6875rem] shadow-sm backdrop-blur">
       <div className="mb-1.5 flex items-center justify-between gap-3">
         <span className="font-medium text-foreground">{t("map.legendTitle")}</span>
-        <button onClick={toggle} className="text-[10.5px] text-muted-foreground hover:text-foreground">
+        <button onClick={toggle} className="text-[0.6875rem] text-muted-foreground hover:text-foreground">
           {t("map.legendHide")}
         </button>
       </div>
@@ -293,11 +316,12 @@ function Legend({ stopped }: { stopped?: string }) {
           </svg>
           {t("map.legendWalked")}
         </li>
-        <li className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+        <li className="flex items-center gap-2 text-warn">
           <svg width="26" height="6" aria-hidden>
             <line x1="0" y1="3" x2="26" y2="3" stroke="currentColor" strokeWidth="2" />
           </svg>
-          {t("map.legendMissedPre")}<span className="font-medium">{t("map.legendMissed")}</span> {t("map.legendClickable")}
+          {t("map.legendMissedPre")}
+          <span className="font-medium">{t("map.legendMissed")}</span> {t("map.legendClickable")}
         </li>
         <li className="flex items-center gap-2">
           <svg width="26" height="6" aria-hidden>
@@ -316,8 +340,9 @@ function Legend({ stopped }: { stopped?: string }) {
         </li>
       </ul>
       {stopped && (
-        <div className="mt-2 border-t border-border pt-1.5 text-[10.5px] text-muted-foreground">
-          {t("map.stoppedBecause")}<span className="text-foreground">{stopped}</span>
+        <div className="mt-2 border-t border-border pt-1.5 text-[0.6875rem] text-muted-foreground">
+          {t("map.stoppedBecause")}
+          <span className="text-foreground">{stopped}</span>
           <div className="mt-0.5 opacity-80">{t("map.stoppedMeaning")}</div>
         </div>
       )}
@@ -344,12 +369,12 @@ function Detail({
     <div className="flex h-full w-[300px] flex-none flex-col overflow-hidden border-l border-border bg-card">
       <div className="flex items-start gap-2 border-b border-border px-3 py-2">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-mono text-[12px] font-medium text-foreground">{title}</div>
-          {subtitle && <div className="mt-0.5 truncate text-[10.5px] text-muted-foreground">{subtitle}</div>}
+          <div className="truncate font-mono text-[0.75rem] font-medium text-foreground">{title}</div>
+          {subtitle && <div className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">{subtitle}</div>}
         </div>
         <button
           onClick={onClose}
-          className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
+          className="shrink-0 text-[0.6875rem] text-muted-foreground hover:text-foreground"
           aria-label={t("map.close")}
         >
           ✕
@@ -358,7 +383,7 @@ function Detail({
       <div className="min-h-0 flex-1 space-y-3 overflow-auto px-3 py-2.5">
         {gaps.length > 0 && (
           <div>
-            <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="mb-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
               {t("map.detailGaps", { n: gaps.length })}
             </div>
             <ul className="space-y-1.5">
@@ -366,15 +391,13 @@ function Detail({
                 <li
                   key={i}
                   className={cn(
-                    "rounded-md border px-2 py-1.5 text-[11px]",
-                    g.reach === "missed"
-                      ? "border-amber-500/40 bg-amber-500/5"
-                      : "border-border bg-muted/40",
+                    "rounded-md border px-2 py-1.5 text-[0.6875rem]",
+                    g.reach === "missed" ? "border-warn bg-warn-soft" : "border-border bg-muted/40",
                   )}
                 >
                   <div className="text-foreground">{g.what}</div>
                   {g.detail && (
-                    <div className="mt-0.5 break-all font-mono text-[10px] text-muted-foreground">
+                    <div className="mt-0.5 break-all font-mono text-[0.6875rem] text-muted-foreground">
                       {g.detail}
                     </div>
                   )}
@@ -385,10 +408,10 @@ function Detail({
         )}
         {controls && controls.length > 0 && (
           <div>
-            <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="mb-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
               {t("map.detailControls", { n: controls.length })}
             </div>
-            <ul className="space-y-0.5 font-mono text-[10.5px] text-muted-foreground">
+            <ul className="space-y-0.5 font-mono text-[0.6875rem] text-muted-foreground">
               {controls.map((c, i) => (
                 <li key={i} className="truncate" title={c}>
                   {c}
@@ -398,7 +421,7 @@ function Detail({
           </div>
         )}
         {gaps.length === 0 && !controls?.length && (
-          <div className="text-[11px] text-muted-foreground">{t("map.detailNone")}</div>
+          <div className="text-[0.6875rem] text-muted-foreground">{t("map.detailNone")}</div>
         )}
       </div>
     </div>
@@ -414,9 +437,7 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
   const [graph, setGraph] = useState<MapGraph | undefined>();
   const [gaps, setGaps] = useState<MapGap[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sel, setSel] = useState<{ kind: "state"; id: string } | { kind: "edge"; id: string } | null>(
-    null,
-  );
+  const [sel, setSel] = useState<{ kind: "state"; id: string } | { kind: "edge"; id: string } | null>(null);
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   /**
    * 找东西的两个手段：按模块看，和搜。
@@ -678,7 +699,19 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, sel, pos, nodes.length]);
 
-  if (loading) return <div className="p-6 text-[12px] text-muted-foreground">{t("common.loading")}</div>;
+  /**
+   * 加载中与「没有图」这两种状态**也要带着页头**。
+   *
+   * 页头不只是标题，它还挂着同组界面的 tab。守卫分支里把它省掉，等于这一屏在
+   * 空状态下没有出口——人只能回左导航重来一次。而空状态恰恰是最需要出口的时候。
+   */
+  if (loading)
+    return (
+      <>
+        <TopBar title={t("surface.map")} />
+        <div className="p-6 text-[0.75rem] text-muted-foreground">{t("common.loading")}</div>
+      </>
+    );
 
   /**
    * 没有图的时候说清楚**为什么**没有，而不是画一张空画布。
@@ -686,10 +719,13 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
    */
   if (!graph || !graph.states.length)
     return (
-      <div className="space-y-2 p-6 text-[12px] text-muted-foreground">
-        <div className="text-foreground">{t("map.noGraph")}</div>
-        <div>{t("map.noGraphWhy")}</div>
-      </div>
+      <>
+        <TopBar title={t("surface.map")} />
+        <div className="space-y-2 p-6 text-[0.75rem] text-muted-foreground">
+          <div className="text-foreground">{t("map.noGraph")}</div>
+          <div>{t("map.noGraphWhy")}</div>
+        </div>
+      </>
     );
 
   const selState = sel?.kind === "state" ? graph.states.find((s) => s.id === sel.id) : undefined;
@@ -702,98 +738,104 @@ export function ProductMap({ focusRun, focus }: { focusRun?: string; focus?: str
   }
 
   return (
-    <div className="flex h-full min-h-[520px] w-full flex-col">
-      {/*
+    <>
+      <TopBar title={t("surface.map")} />
+      <div className="flex min-h-0 w-full flex-1 flex-col">
+        {/*
         模块条 + 搜索。
         13 屏时靠拖拽还行，几百个 URL 的真实产品不行——而这张图的价值恰恰在产品大的时候。
         模块不是这里发明的：它是规格里按路由聚出来的一等实体，这里只是把同一条规则用在图上，
         并把规格给它起的人话名字取回来（「owners」是代码词，「查找宠物主人」才是人话）。
       */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
-        <input
-          className="w-44 rounded-md border border-border bg-card px-2 py-1 text-[11.5px]"
-          placeholder={t("map.searchPlaceholder")}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {t("map.modules")}
-        </span>
-        {moduleList.map((m) => (
-          <button
-            key={m}
-            onClick={() => setPickedModule(pickedModule === m ? "" : m)}
-            title={moduleNames[m] ? `${moduleNames[m]} · ${m}` : m}
-            className={cn(
-              "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px]",
-              pickedModule === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}
-          >
-            <span
-              aria-hidden
-              className="h-2 w-2 rounded-sm"
-              style={{ background: `hsl(${hueOf(m, moduleList)} 65% 55%)` }}
-            />
-            <span className="max-w-[140px] truncate">{moduleNames[m] ?? m}</span>
-            <span className="font-mono opacity-70">{moduleCount.get(m)}</span>
-          </button>
-        ))}
-        {(pickedModule || q) && (
-          <button
-            className="rounded border border-border px-1.5 py-0.5 text-[10.5px] text-muted-foreground hover:bg-muted"
-            onClick={() => {
-              setPickedModule("");
-              setQ("");
-            }}
-          >
-            {t("cases.filterClear")}
-          </button>
-        )}
-      </div>
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
+          <input
+            className="w-44 rounded-md border border-border bg-card px-2 py-[0.1875rem] text-[0.75rem]"
+            placeholder={t("map.searchPlaceholder")}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <span className="font-mono text-[0.6875rem] uppercase tracking-wider text-muted-foreground">
+            {t("map.modules")}
+          </span>
+          {moduleList.map((m) => (
+            <button
+              key={m}
+              onClick={() => setPickedModule(pickedModule === m ? "" : m)}
+              title={moduleNames[m] ? `${moduleNames[m]} · ${m}` : m}
+              className={cn(
+                "flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6875rem]",
+                pickedModule === m ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+              )}
+            >
+              <span
+                aria-hidden
+                className="h-2 w-2 rounded-sm"
+                style={{ background: `hsl(${hueOf(m, moduleList)} 65% 55%)` }}
+              />
+              <span className="max-w-[8.75rem] truncate">{moduleNames[m] ?? m}</span>
+              <span className="font-mono opacity-70">{moduleCount.get(m)}</span>
+            </button>
+          ))}
+          {(pickedModule || q) && (
+            <button
+              className="rounded border border-border px-1.5 py-0.5 text-[0.6875rem] text-muted-foreground hover:bg-muted"
+              onClick={() => {
+                setPickedModule("");
+                setQ("");
+              }}
+            >
+              {t("cases.filterClear")}
+            </button>
+          )}
+        </div>
 
-    <div className="flex min-h-0 flex-1">
-      <div className="min-w-0 flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onInit={setFlow}
-          onNodeClick={onNodeClick}
-          onEdgeClick={onEdgeClick}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          proOptions={{ hideAttribution: true }}
-          /**
-           * **缩放有下限。**默认的 fitView 会为了把 13 屏全塞进抽屉而一路缩小，
-           * 结果是一张看得见轮廓、读不出字的图——而读不出字的图不解决任何问题。
-           * 宁可让人拖着看：看不全比看不清好，因为看不全的时候人知道自己在拖，
-           * 看不清的时候人以为自己看完了。
-           */
-          minZoom={0.45}
-          fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
-        >
-          <Background />
-          <Controls showInteractive={false} />
-          <Panel position="top-left" className="!left-3 !top-3">
-            <Legend stopped={stopReason(t, graph.stopped, graph.stoppedBecause)} />
-          </Panel>
-          <MiniMap pannable zoomable className="!bg-muted/70" style={{ width: 108, height: 68 }} />
-        </ReactFlow>
+        <div className="flex min-h-0 flex-1">
+          <div className="min-w-0 flex-1">
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onInit={setFlow}
+              onNodeClick={onNodeClick}
+              onEdgeClick={onEdgeClick}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              proOptions={{ hideAttribution: true }}
+              /**
+               * **缩放有下限。**默认的 fitView 会为了把 13 屏全塞进抽屉而一路缩小，
+               * 结果是一张看得见轮廓、读不出字的图——而读不出字的图不解决任何问题。
+               * 宁可让人拖着看：看不全比看不清好，因为看不全的时候人知道自己在拖，
+               * 看不清的时候人以为自己看完了。
+               */
+              minZoom={0.45}
+              fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
+            >
+              <Background />
+              <Controls showInteractive={false} />
+              {/* 左下，不是左上：`layout()` 把入口节点放在最左，而这张图是一条链，
+                  于是左上正好是头两个节点的位置——图例默认展开时把它们盖住了。 */}
+              <Panel position="bottom-left" className="!bottom-3 !left-3">
+                <Legend stopped={stopReason(t, graph.stopped, graph.stoppedBecause)} />
+              </Panel>
+              <MiniMap pannable zoomable className="!bg-muted/70" style={{ width: 108, height: 68 }} />
+            </ReactFlow>
+          </div>
+          {sel && (
+            <Detail
+              title={
+                sel.kind === "state"
+                  ? plainRoute(sel.id) +
+                    (variantOf(sel.id) ? ` · ${t("map.variant", { n: variantOf(sel.id) })}` : "")
+                  : `${plainRoute(sel.id.split("->")[0]!)} → ${plainRoute(sel.id.split("->")[1]!)}`
+              }
+              subtitle={sel.kind === "state" ? selState?.title : t("map.detailWalkedPath")}
+              controls={sel.kind === "state" ? selState?.controls : undefined}
+              gaps={sel.kind === "state" ? (stateGaps.get(sel.id) ?? []) : selEdgeGaps}
+              onClose={() => setSel(null)}
+            />
+          )}
+        </div>
       </div>
-      {sel && (
-        <Detail
-          title={
-            sel.kind === "state"
-              ? plainRoute(sel.id) + (variantOf(sel.id) ? ` · ${t("map.variant", { n: variantOf(sel.id) })}` : "")
-              : `${plainRoute(sel.id.split("->")[0]!)} → ${plainRoute(sel.id.split("->")[1]!)}`
-          }
-          subtitle={sel.kind === "state" ? selState?.title : t("map.detailWalkedPath")}
-          controls={sel.kind === "state" ? selState?.controls : undefined}
-          gaps={sel.kind === "state" ? (stateGaps.get(sel.id) ?? []) : selEdgeGaps}
-          onClose={() => setSel(null)}
-        />
-      )}
-    </div>
-    </div>
+    </>
   );
 }

@@ -32,11 +32,21 @@ interface CodeBundle {
   fragments?: Array<{ id?: string; name?: string }>;
   gate?: { score?: number; findings?: Array<{ caseId?: string; rule: string; severity: string; message: string }> };
   repair?: {
-    rounds?: Array<{ caseId: string; round: number; changes: string[] }>;
+    rounds?: Array<{
+      caseId: string;
+      round: number;
+      changes: string[];
+      note?: string;
+      codeBefore?: string;
+      codeAfter?: string;
+    }>;
     outcomes?: Array<{ caseId: string; status?: string; kind?: string; ms?: number }>;
     degraded?: string[];
     loosePassRate?: number;
     strictPassRate?: number;
+    /** 修复为什么停下来。四种理由里最有价值的是「模型判定这是产品缺陷，拒绝再改」。 */
+    stoppedBecause?: Record<string, string>;
+    stopReason?: Record<string, { reason: string; n?: number }>;
   };
 }
 
@@ -64,8 +74,23 @@ export interface CodeProvenance {
   gate2?: number;
   /** Gate ② findings against this case specifically. */
   findings: Array<{ rule: string; severity: string; message: string }>;
-  /** What the repair loop changed, round by round. */
-  rounds: Array<{ round: number; changes: string[] }>;
+  /** What the repair loop changed, round by round — with that round's code on both sides. */
+  rounds: Array<{
+    round: number;
+    changes: string[];
+    note?: string;
+    codeBefore?: string;
+    codeAfter?: string;
+  }>;
+  /**
+   * 修复为什么不再往下改。
+   *
+   * 四种：撞轮数上限 / 连续 N 轮什么都没改 / 失败是环境的 / **模型判定这是产品缺陷**。
+   * 最后一种是这条流水线上最有价值的一句输出，而它此前在前端一个渲染点都没有。
+   */
+  stoppedBecause?: string;
+  /** 机器可读的停止原因，界面拿它查词条。`stoppedBecause` 那句英文留给日志。 */
+  stopReason?: { reason: string; n?: number };
   /** Whether it only went green after its assertion was weakened. */
   degraded: boolean;
   /** Its last outcome inside the run that produced it. */
@@ -120,7 +145,19 @@ export async function codeProvenance(caseId: string): Promise<CodeProvenance> {
       .map(({ rule, severity, message }) => ({ rule, severity, message })),
     rounds: (bundle.repair?.rounds ?? [])
       .filter((r) => r.caseId === sourceCaseId)
-      .map((r) => ({ round: r.round, changes: r.changes })),
+      .map((r) => ({
+        round: r.round,
+        changes: r.changes,
+        ...(r.note ? { note: r.note } : {}),
+        ...(r.codeBefore ? { codeBefore: r.codeBefore } : {}),
+        ...(r.codeAfter ? { codeAfter: r.codeAfter } : {}),
+      })),
+    ...(bundle.repair?.stopReason?.[sourceCaseId]
+      ? { stopReason: bundle.repair.stopReason[sourceCaseId] }
+      : {}),
+    ...(bundle.repair?.stoppedBecause?.[sourceCaseId]
+      ? { stoppedBecause: bundle.repair.stoppedBecause[sourceCaseId] }
+      : {}),
     degraded: (bundle.repair?.degraded ?? []).includes(sourceCaseId),
     outcome: bundle.repair?.outcomes?.find((o) => o.caseId === sourceCaseId),
     uses: gen?.uses ?? [],
@@ -135,6 +172,10 @@ export interface CodeLineRow {
   degraded: boolean;
   gate2?: number;
   rounds: number;
+  /** 修复为什么停下来。列表上要看得见 product-defect 那一档。 */
+  stoppedBecause?: string;
+  /** 机器可读的停止原因，界面拿它查词条。`stoppedBecause` 那句英文留给日志。 */
+  stopReason?: { reason: string; n?: number };
   sourceRunId?: string;
   outcome?: { status?: string; kind?: string };
   uses: string[];
@@ -168,6 +209,8 @@ export async function codeLine(projectId: string): Promise<{ rows: CodeLineRow[]
       degraded: p?.degraded ?? kase.degraded ?? false,
       gate2: p?.gate2,
       rounds: p?.rounds.length ?? 0,
+      ...(p?.stoppedBecause ? { stoppedBecause: p.stoppedBecause } : {}),
+      ...(p?.stopReason ? { stopReason: p.stopReason } : {}),
       sourceRunId: p?.sourceRunId,
       outcome: p?.outcome,
       uses: p?.uses ?? [],

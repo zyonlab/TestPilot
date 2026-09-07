@@ -15,12 +15,10 @@ type Origin = "all" | "suite" | "case" | "workflow";
 function MetricCard({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="rounded-xl bg-muted p-4">
-      <div className="text-[13px] text-muted-foreground">{label}</div>
-      <div className="font-display text-2xl font-medium text-foreground">
-        {value}
-      </div>
+      <div className="text-[0.8125rem] text-muted-foreground">{label}</div>
+      <div className="font-display text-2xl font-medium text-foreground">{value}</div>
       {/* 分母改了就要说出来：悄悄缩小分母也是一种谎。 */}
-      {note && <div className="mt-0.5 text-[11px] text-muted-foreground">{note}</div>}
+      {note && <div className="mt-0.5 text-[0.6875rem] text-muted-foreground">{note}</div>}
     </div>
   );
 }
@@ -80,15 +78,13 @@ function RowChips({ r, t }: { r: RunRecord; t: (k: string, v?: Record<string, st
     <>
       {/* Who settled it. A pass a program checked and a pass a model judged from a
           screenshot are not the same kind of green, and the list is where that difference
-          has to be visible — opening thirty runs to find out is how "all green" gets believed. */}
+          has to be visible — opening thirty runs to find out is how"all green" gets believed. */}
       {by && (
         <span
           title={t(`runs.decidedByWhy.${by}`)}
           className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-[10.5px]",
-            by === "machine"
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-              : "bg-muted text-muted-foreground",
+            "shrink-0 rounded px-1.5 py-0.5 text-[0.6875rem]",
+            by === "machine" ? "bg-ok-soft text-ok" : "bg-muted text-muted-foreground",
           )}
         >
           {t(`runs.decidedBy.${by}`)}
@@ -101,17 +97,31 @@ function RowChips({ r, t }: { r: RunRecord; t: (k: string, v?: Record<string, st
       {r.failKind === "infra" && (
         <span
           title={`${t("runs.infraWhy")}${r.failCode ? ` · ${r.failCode}` : ""}`}
-          className="shrink-0 rounded bg-slate-500/15 px-1.5 py-0.5 text-[10.5px] text-slate-600 dark:text-slate-300"
+          className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[0.6875rem] text-ink2"
         >
           {t("runs.infra")}
         </span>
+      )}
+      {/* 判决类的失败，行上直接给一个落点。
+          它落到用例的**那一段**上——assert 落在断言，locate 落在步骤措辞——
+          否则人得自己记住 caseId 再去看板里把那一条翻出来。
+          infra 这一档没有这个链接：那一档什么都不该改。 */}
+      {(r.failKind === "assert" || r.failKind === "locate") && r.caseId && (
+        <a
+          href={`#/?open=cases&case=${encodeURIComponent(r.caseId)}&field=${r.failKind === "assert" ? "oracle" : "steps"}`}
+          onClick={(e) => e.stopPropagation()}
+          title={r.failKind === "assert" ? t("runs.nextAssertWhy") : t("runs.nextLocateWhy")}
+          className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[0.6875rem] text-muted-foreground underline decoration-dotted hover:text-foreground"
+        >
+          {r.failKind === "assert" ? t("runs.nextAssert") : t("runs.nextLocate")}
+        </a>
       )}
       {/* A candidate's trial run is not an approved case's run. Saying so on the row is
           what keeps the two from being read as one history. */}
       {(r.origin ?? "case") === "workflow" && (
         <span
           title={`${t("runs.originWhy.workflow")}${r.wfRunId ? ` · ${r.wfRunId}` : ""}`}
-          className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10.5px] text-sky-700 dark:text-sky-400"
+          className="shrink-0 rounded bg-primary-soft px-1.5 py-0.5 text-[0.6875rem] text-primary"
         >
           {t("runs.origin.workflow")}
         </span>
@@ -119,7 +129,7 @@ function RowChips({ r, t }: { r: RunRecord; t: (k: string, v?: Record<string, st
       {r.attempts && r.attempts > 1 && (
         <span
           title={t("runs.retriedWhy")}
-          className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-700 dark:text-amber-400"
+          className="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-[0.6875rem] text-warn"
         >
           ×{r.attempts}
         </span>
@@ -131,7 +141,7 @@ function RowChips({ r, t }: { r: RunRecord; t: (k: string, v?: Record<string, st
 /**
  * 优先级那一格。
  *
- * 工作流来源的执行记录里存的是 `graphs.ts` 写死的 "P2"，而那行代码旁边的注释写得很清楚：
+ * 工作流来源的执行记录里存的是 `graphs.ts` 写死的"P2"，而那行代码旁边的注释写得很清楚：
  * 候选没有看板优先级，声称一个就是在编造事实。代码已经拒绝编造，界面不该替它编——
  * 所以这里显示「—」，并说明为什么。
  */
@@ -153,20 +163,19 @@ export function RunReportPage() {
   const t = useT();
   const runs = useStore((s) => s.runs);
   const runAllP0 = useStore((s) => s.runAllP0);
+  const p0Count = useStore((s) => s.cases.filter((c) => c.priority === "P0").length);
 
   const [filter, setFilter] = useState<Filter>("all");
   /**
    * Which kind of execution to count.
    *
    * The page lists workflow executions too — a case exercised only by the repair loop
-   * used to leave no trace here at all, and an empty page reads as "never ran". But a
+   * used to leave no trace here at all, and an empty page reads as"never ran". But a
    * candidate's trial run and an approved case's run are not the same event, so they are
    * separable rather than merged.
    */
   const [origin, setOrigin] = useState<Origin>("all");
-  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(
-    runs[0]?.id,
-  );
+  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(runs[0]?.id);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [q, setQ] = useState("");
 
@@ -184,7 +193,7 @@ export function RunReportPage() {
   const groups = groupByCase(filtered);
 
   // Computed over what is actually shown, so the number always answers a question the
-  // reader can state: "the pass rate of these rows". Averaged over a mixed set it would
+  // reader can state:"the pass rate of these rows". Averaged over a mixed set it would
   // silently blend approved cases with candidates that were still being repaired.
   const total = filtered.length;
   /**
@@ -201,20 +210,14 @@ export function RunReportPage() {
 
   const p0Runs = judged.filter((r) => r.priority === "P0");
   const p0Passed = p0Runs.filter((r) => r.status === "passed").length;
-  const p0PassRate =
-    p0Runs.length > 0
-      ? `${Math.round((p0Passed / p0Runs.length) * 100)}%`
-      : "—";
+  const p0PassRate = p0Runs.length > 0 ? `${Math.round((p0Passed / p0Runs.length) * 100)}%` : "—";
 
   const avgDuration =
-    total > 0
-      ? fmtDuration(filtered.reduce((sum, r) => sum + r.durationMs, 0) / total)
-      : "—";
+    total > 0 ? fmtDuration(filtered.reduce((sum, r) => sum + r.durationMs, 0) / total) : "—";
 
   const detailOpen = drawerOpen && !!selectedRunId;
   const selected: RunRecord | undefined =
-    filtered.find((r) => r.id === selectedRunId) ??
-    runs.find((r) => r.id === selectedRunId);
+    filtered.find((r) => r.id === selectedRunId) ?? runs.find((r) => r.id === selectedRunId);
 
   const filters: Array<{ key: Filter; label: string }> = [
     { key: "all", label: t("common.all") },
@@ -237,8 +240,13 @@ export function RunReportPage() {
   return (
     <>
       <TopBar
+        title={t("surface.runs")}
+        sub={t("topbar.subExecs", { n: runs.length })}
+        /* P0 一条都没有时不可点。此前它一直亮着，点下去什么都不会跑——
+           而同一条页头上就写着「0 条」。明知会空跑却仍然亮着的按钮，
+           比灰着的更伤人：它让人以为是执行坏了。 */
         actions={
-          <Button variant="success" onClick={runAllP0}>
+          <Button variant="success" disabled={p0Count === 0} onClick={runAllP0}>
             <Play className="h-3.5 w-3.5" /> {t("topbar.runAllP0")}
           </Button>
         }
@@ -246,12 +254,8 @@ export function RunReportPage() {
       <div className="flex-1 overflow-auto p-4">
         {runs.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-8 text-center">
-            <h2 className="font-display text-sm font-medium text-foreground">
-              {t("runs.noRunsYet")}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("runs.noRunsHelp")}
-            </p>
+            <h2 className="font-display text-sm font-medium text-foreground">{t("runs.noRunsYet")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("runs.noRunsHelp")}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -280,7 +284,7 @@ export function RunReportPage() {
               ))}
               <span className="mx-1 h-5 w-px bg-border" />
               <input
-                className="w-56 rounded-md border border-border bg-card px-2 py-1 text-[12px]"
+                className="w-56 rounded-md border border-border bg-card px-2 py-[0.1875rem] text-[0.75rem]"
                 placeholder={t("runs.searchPlaceholder")}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -292,7 +296,7 @@ export function RunReportPage() {
                   onClick={() => setOrigin(o.key)}
                   title={o.key === "all" ? undefined : t(`runs.originWhy.${o.key}`)}
                   className={cn(
-                    "cursor-pointer rounded-full border px-2.5 py-0.5 text-[11.5px]",
+                    "cursor-pointer rounded-full border px-2.5 py-0.5 text-[0.75rem]",
                     origin === o.key
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:bg-muted",
@@ -312,121 +316,129 @@ export function RunReportPage() {
               窄屏没有并排的余地，那时右边顶掉左边，并给一个「返回列表」。
             */}
             <div className="flex gap-3">
-            <div className={cn(
-              "min-w-0 overflow-hidden rounded-xl border border-border bg-card",
-              detailOpen ? "hidden flex-1 lg:block" : "flex-1",
-            )}>
-              {groups.length === 0 ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">
-                  {t("runs.noRunsMatch")}
-                </p>
-              ) : (
-                groups.map((g) => {
-                  const open = expanded.has(g.caseId);
-                  return (
-                    <Fragment key={g.caseId}>
-                      <div
-                        className={cn(
-                          "flex w-full items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0 hover:bg-muted/60",
-                          g.latest.id === selected?.id && drawerOpen && "bg-muted",
-                        )}
-                      >
-                        {/* 一组多轮时才给展开钮：只跑过一次的用例不该长出一个点了没反应的三角。 */}
-                        {g.attempts.length > 1 ? (
-                          <button
-                            onClick={() =>
-                              setExpanded((s) => {
-                                const n = new Set(s);
-                                n.has(g.caseId) ? n.delete(g.caseId) : n.add(g.caseId);
-                                return n;
-                              })
-                            }
-                            title={t("runs.attemptsWhy")}
-                            className="shrink-0 text-muted-foreground hover:text-foreground"
-                          >
-                            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          </button>
-                        ) : (
-                          <span className="w-3.5 shrink-0" />
-                        )}
-                        <button
-                          onClick={() => {
-                            setSelectedRunId(g.latest.id);
-                            setDrawerOpen(true);
-                          }}
-                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
-                        >
-                          <RunStatusPill status={g.latest.status} />
-                          <PriorityBadge run={g.latest} />
-                          <span className="min-w-0 flex-1 truncate font-medium text-foreground">{g.caseTitle}</span>
-                          <RowChips r={g.latest} t={t} />
-                          {g.attempts.length > 1 && (
-                            <span
-                              title={t("runs.attemptsWhy")}
-                              className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-700 dark:text-amber-400"
-                            >
-                              {t("runs.attemptsN", { n: g.attempts.length })}
-                            </span>
+              <div
+                className={cn(
+                  "min-w-0 overflow-hidden rounded-xl border border-border bg-card",
+                  detailOpen ? "hidden flex-1 lg:block" : "flex-1",
+                )}
+              >
+                {groups.length === 0 ? (
+                  <p className="p-6 text-center text-sm text-muted-foreground">{t("runs.noRunsMatch")}</p>
+                ) : (
+                  groups.map((g) => {
+                    const open = expanded.has(g.caseId);
+                    return (
+                      <Fragment key={g.caseId}>
+                        <div
+                          className={cn(
+                            "flex w-full items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0 hover:bg-muted/60",
+                            g.latest.id === selected?.id && drawerOpen && "bg-muted",
                           )}
-                          <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                            {fmtDuration(g.latest.durationMs)}
-                          </span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {new Date(g.latest.startedAt).toLocaleTimeString()}
-                          </span>
-                        </button>
-                      </div>
-                      {open &&
-                        g.attempts.map((r, i) => (
+                        >
+                          {/* 一组多轮时才给展开钮：只跑过一次的用例不该长出一个点了没反应的三角。 */}
+                          {g.attempts.length > 1 ? (
+                            <button
+                              onClick={() =>
+                                setExpanded((s) => {
+                                  const n = new Set(s);
+                                  n.has(g.caseId) ? n.delete(g.caseId) : n.add(g.caseId);
+                                  return n;
+                                })
+                              }
+                              title={t("runs.attemptsWhy")}
+                              className="shrink-0 text-muted-foreground hover:text-foreground"
+                            >
+                              {open ? (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="w-3.5 shrink-0" />
+                          )}
                           <button
-                            key={r.id}
                             onClick={() => {
-                              setSelectedRunId(r.id);
+                              setSelectedRunId(g.latest.id);
                               setDrawerOpen(true);
                             }}
-                            className={cn(
-                              "flex w-full cursor-pointer items-center gap-3 border-b border-border bg-muted/30 py-2 pl-10 pr-3 text-left last:border-b-0 hover:bg-muted/60",
-                              r.id === selected?.id && drawerOpen && "bg-muted",
-                            )}
+                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
                           >
-                            <span className="w-14 shrink-0 font-mono text-[11px] text-muted-foreground">
-                              {t("runs.roundN", { n: g.attempts.length - i })}
+                            <RunStatusPill status={g.latest.status} />
+                            <PriorityBadge run={g.latest} />
+                            <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                              {g.caseTitle}
                             </span>
-                            <RunStatusPill status={r.status} />
-                            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                              {r.failureReason ?? ""}
-                            </span>
-                            <RowChips r={r} t={t} />
+                            <RowChips r={g.latest} t={t} />
+                            {g.attempts.length > 1 && (
+                              <span
+                                title={t("runs.attemptsWhy")}
+                                className="shrink-0 rounded bg-warn-soft px-1.5 py-0.5 text-[0.6875rem] text-warn"
+                              >
+                                {t("runs.attemptsN", { n: g.attempts.length })}
+                              </span>
+                            )}
                             <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                              {fmtDuration(r.durationMs)}
+                              {fmtDuration(g.latest.durationMs)}
                             </span>
                             <span className="shrink-0 text-xs text-muted-foreground">
-                              {new Date(r.startedAt).toLocaleTimeString()}
+                              {new Date(g.latest.startedAt).toLocaleTimeString()}
                             </span>
                           </button>
-                        ))}
-                    </Fragment>
-                  );
-                })
-              )}
-            </div>
-
-            {detailOpen && selected && (
-              <div className="min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-card lg:max-w-[46%]">
-                <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3 py-2">
-                  <button
-                    onClick={() => setDrawerOpen(false)}
-                    className="shrink-0 rounded-md border border-border px-2 py-0.5 text-[11.5px] text-muted-foreground hover:bg-muted"
-                  >
-                    ← {t("runs.backToList")}
-                  </button>
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{selected.caseTitle}</span>
-                </div>
-                <div className="p-3">
-                  <RunDetail run={selected} />
-                </div>
+                        </div>
+                        {open &&
+                          g.attempts.map((r, i) => (
+                            <button
+                              key={r.id}
+                              onClick={() => {
+                                setSelectedRunId(r.id);
+                                setDrawerOpen(true);
+                              }}
+                              className={cn(
+                                "flex w-full cursor-pointer items-center gap-3 border-b border-border bg-muted/30 py-2 pl-10 pr-3 text-left last:border-b-0 hover:bg-muted/60",
+                                r.id === selected?.id && drawerOpen && "bg-muted",
+                              )}
+                            >
+                              <span className="w-14 shrink-0 font-mono text-[0.6875rem] text-muted-foreground">
+                                {t("runs.roundN", { n: g.attempts.length - i })}
+                              </span>
+                              <RunStatusPill status={r.status} />
+                              <span className="min-w-0 flex-1 truncate text-[0.75rem] text-muted-foreground">
+                                {r.failureReason ?? ""}
+                              </span>
+                              <RowChips r={r} t={t} />
+                              <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                                {fmtDuration(r.durationMs)}
+                              </span>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {new Date(r.startedAt).toLocaleTimeString()}
+                              </span>
+                            </button>
+                          ))}
+                      </Fragment>
+                    );
+                  })
+                )}
               </div>
-            )}
+
+              {detailOpen && selected && (
+                <div className="min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-card lg:max-w-[46%]">
+                  <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3 py-2">
+                    <button
+                      onClick={() => setDrawerOpen(false)}
+                      className="shrink-0 rounded-md border border-border px-2 py-0.5 text-[0.75rem] text-muted-foreground hover:bg-muted"
+                    >
+                      ← {t("runs.backToList")}
+                    </button>
+                    <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">
+                      {selected.caseTitle}
+                    </span>
+                  </div>
+                  <div className="p-3">
+                    <RunDetail run={selected} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

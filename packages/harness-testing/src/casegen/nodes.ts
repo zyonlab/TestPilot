@@ -3,6 +3,8 @@ import { z } from "zod";
 import { computeFlows, computeModules, describeFlows } from "../exec/flows.js";
 import { scanSmells } from "./smells.js";
 import { checkStories } from "./storyQuality.js";
+import { buildIndexFromDocs, estimateTokens, retrieve, SPEC_FENCE } from "../retrieve/index.js";
+import { checkProvenance } from "./provenance.js";
 import { ABLATABLE, fitToBudget, type ModelClient, type NodeDef } from "@testpilot/harness-core";
 import {
   CASES_SCHEMA,
@@ -205,6 +207,10 @@ export interface ProductObserver {
     maxScreens?: number;
     dryRounds?: number;
     stateAbstraction?: string;
+    /** 见 source.explore 的同名参数。声明在这里，否则节点转发过来会被类型挡掉。 */
+    scenarioFirst?: boolean;
+    inPageFirst?: "auto" | "on" | "off";
+    groupCap?: number;
   }): Promise<{
     /** 观察到的界面材料：页面文本、可见控件、走过的路径。 */
     notes: string;
@@ -238,6 +244,8 @@ export function sourceSpecNode(
 ): NodeDef<{ path?: string; paths?: string[]; text?: string }, unknown, z.infer<typeof SpecMaterialSchema>> {
   return {
     type: "source.spec",
+    // 读文档，不改变任何状态——这正是 retriever 的定义
+    observationType: "retriever" as const,
     title: "User documents",
     description: "Read the documents the user gave us — material, not yet a specification",
     inKind: null,
@@ -287,6 +295,11 @@ export function sourceExploreNode(
     maxScreens: number;
     dryRounds: number;
     stateAbstraction: string;
+    // 这三个和下面 zod 的 params 必须同时改——类型在两处声明，改一处不报错，
+    // 表现成"参数声明了但传不下去"。
+    scenarioFirst: boolean;
+    inPageFirst: "auto" | "on" | "off";
+    groupCap: number;
     lang?: string;
     maxTokens?: number;
   },
@@ -295,6 +308,8 @@ export function sourceExploreNode(
 > {
   return {
     type: "source.explore",
+    // 整条流水线里唯一一个真的自主循环：它自己决定下一步点哪里、什么时候停
+    observationType: "agent" as const,
     title: "Explore the product",
     description: "Drive the running product and record what it does — material, not yet a specification",
     inKind: null,
@@ -321,6 +336,22 @@ export function sourceExploreNode(
        * 做成参数是为了能消融、能和别人的结果比，而不是写死一把尺子。
        */
       stateAbstraction: z.string().default("route+controls/norm"),
+      /**
+       * 探索之前先问一次「这是什么业务、人在这里可能要完成哪些事」，并用答案决定先点什么。
+       *
+       * 关掉就退回"按控件表和 URL 队列决定"——那正是把一个只有一条 route 的
+       * 合约交易页探索成一份登录流程材料的原因。
+       */
+      scenarioFirst: z.boolean().default(true),
+      /**
+       * 页内控件优先于未去过的路由。
+       *
+       * `auto` 按事实判（这一屏有 ≥2 个控件组）。不能无脑翻转：
+       * "未去过的路由优先"那条规则是从多路由产品的实测里长出来的，翻死了会毁掉那些基准。
+       */
+      inPageFirst: z.enum(["auto", "on", "off"]).default("auto"),
+      /** 一个控件组最多采几项。防一个装着几百个交易对的 listbox 淹掉下单区那三项。 */
+      groupCap: z.number().int().min(1).max(30).default(6),
       lang: z.string().optional(),
       maxTokens: z.number().int().min(400).max(16000).default(2400),
     }),
@@ -335,6 +366,11 @@ export function sourceExploreNode(
         maxScreens: params.maxScreens,
         dryRounds: params.dryRounds,
         stateAbstraction: params.stateAbstraction,
+        // 声明了就要真的转发。这一层已经有现成的反例：`lang` 与 `maxTokens`
+        // 在 params 里躺着，run 里一次都没读——是两个死旋钮。
+        scenarioFirst: params.scenarioFirst,
+        inPageFirst: params.inPageFirst,
+        groupCap: params.groupCap,
       });
       if (!seen.notes.trim()) throw new Error("source.explore saw nothing it could describe");
       // 走到几屏、为什么停，是判断这份材料薄不薄的唯一依据——一屏和六屏产出的规格
@@ -388,6 +424,8 @@ export function composeSpecNode(
 > {
   return {
     type: "spec.compose",
+    // 把材料接到规格上的一段，典型的 chain：上游产物 → 模型 → 下游产物
+    observationType: "chain" as const,
     title: "Compose the specification",
     description: "Organise raw material into the one standard specification shape",
     inKind: KIND.material,
@@ -447,9 +485,41 @@ export function composeSpecNode(
           32000,
           Math.max(6000, params.maxRules * 120 + computed.flows.length * 90 + 2000),
         );
+      /**
+       * 输入也要有预算——这是全流水线最大的一次输入。
+       *
+       * 输出侧早就治好了（上面那段，按图的规模自己算）。输入侧此前一个字都没有：
+       * 探索材料实测最大 128,430 字节，而它唯一的保护是网关那一刀 `slice(0, 240000)`——
+       * **从尾巴切**，正是 `budget.ts` 开宗明义说错的那个算法。同一个节点，
+       * 一半治好了一半没治。
+       *
+       * `fitToBudget` 按份额分配、超了的**掐中间**：开头说明这是什么，
+       * 结尾通常是刚刚追加的那部分，中间才是可以省的。而且它会说出自己省了多少——
+       * 一次被悄悄截断的输入，从产出上看只是「规格短了点」。
+       *
+       * 分配比例：材料 3、算出来的流程 1。流程是**事实**（图算法算的，不是模型推断的），
+       * 短而不可替代；材料长且冗余。
+       */
+      const INPUT_LIMIT = 60_000;
+      const fitted = fitToBudget(
+        [
+          { name: "material", text: material.text, share: 3 },
+          { name: "flows", text: flowText, share: 1 },
+        ],
+        INPUT_LIMIT,
+      );
+      if (fitted.dropped > 0)
+        ctx.emit("log", {
+          stream: "spec.compose",
+          text: `材料超过输入预算，掐掉中间 ${fitted.dropped} token（保留头尾）——规格是照一份不完整的材料写的`,
+        });
+      // 材料是第三方文本：过滤后包进 `<spec_material>` 再进提示词。这是 A 臂离原始材料
+      // 最近的一处，也是此前唯一零过滤的注入面（探索产物就是被测站点的页面文字）。
+      const fittedText = SPEC_FENCE.wrap(fitted.parts.map((p) => p.text).join(""));
+
       const res = await opts.model.chat({
         stable: COMPOSE_STABLE,
-        variable: composeVariable(material.text + flowText, material.origin ?? "inline", material.derivedFrom ?? "document", params.lang),
+        variable: composeVariable(fittedText, material.origin ?? "inline", material.derivedFrom ?? "document", params.lang),
         schema: COMPOSE_SCHEMA,
         maxTokens: budget,
         label: "spec.compose",
@@ -690,6 +760,8 @@ export function planStoriesNode(
 > {
   return {
     type: "plan.stories",
+    // 同上
+    observationType: "chain" as const,
     title: "Stories",
     description: "Split a specification into user stories with their acceptance criteria",
     inKind: KIND.spec,
@@ -905,6 +977,8 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
 > {
   return {
     type: "design.cases",
+    // 同上；它内部每条故事一次模型调用，那些是它下面的 generation
+    observationType: "chain" as const,
     title: "Design cases",
     description: "Expand each story into text cases using the test design methods",
     inKind: KIND.stories,
@@ -951,23 +1025,58 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
           text: "这一批用例是在没有规格的情况下设计的——模型只看得见故事的标题与验收标准",
         });
 
+      /**
+       * 规格切成可检索的段，**一次**，在循环外。
+       *
+       * 索引是纯函数（BM25 + 标题层级切片，见 `../retrieve/`），每条故事重建一遍
+       * 只是把同一份文档重新扫 N 遍。
+       */
+      const specIndex = specText.trim()
+        ? buildIndexFromDocs([{ docId: "spec", text: specText }], "inline")
+        : undefined;
+
       for (const story of bundle.stories) {
         if (ctx.signal.aborted) break;
         try {
-          // The story must survive intact; the specification is the part that gets trimmed,
-          // and how much was trimmed is reported rather than silently swallowed.
-          const budget = fitToBudget(
-            [
-              { name: "story", text: JSON.stringify(story), share: 1, fixed: true },
-              { name: "spec", text: specText, share: 1 },
-            ],
-            params.contextTokens,
-          );
-          const specForCall = budget.parts.find((p) => p.name === "spec")!;
-          if (specForCall.dropped > 0)
+          /**
+           * **按这条故事取规格，不再盲裁。**
+           *
+           * 以前这里是 `fitToBudget`：故事固定不动，规格按份额掐中间。预算是对的，
+           * 掐掉的是**哪一段**却没有人知道——一条讲「退出登录」的故事，很可能拿到的是
+           * 被掐得只剩头尾的登录规格，而产出看起来完全正常，只是少测了几条。
+           *
+           * 现在预算一分不变（还是 `params.contextTokens`），装进去的换成**和这条故事
+           * 最相关的那几段**；没装进去的有名字、有数目、有一句怎么取它们的指导
+           * （`hint`，SWE-agent 的做法：截断变成行为指导，不是一句道歉）。
+           */
+          const storyText = JSON.stringify(story);
+          // 故事不可裁：它是这次调用要回答的问题本身。剩下的才是规格能用的预算。
+          const specBudget = Math.max(200, params.contextTokens - estimateTokens(storyText));
+          const query = [story.title, ...story.acceptance].join(" ");
+          const got = specIndex
+            ? retrieve(specIndex, query, specBudget)
+            : { chunks: [], dropped: 0, hint: "" };
+
+          /**
+           * 每段带 `[id: …]`，模型把它抄进 `sourceRefs`；整份包进 `<spec_material>`。
+           * id 是这次真正取到的段的 id——出处只能是取到过的东西，这一条由下面的
+           * `checkProvenance` 对着 `got.chunks` 核对，对不上的 id 丢掉并记日志。
+           */
+          const specForCall = {
+            text: SPEC_FENCE.wrap(
+              got.chunks
+                .map((c) => `### ${c.heading.length ? c.heading.join(" / ") : "(untitled)"} [id: ${c.id}]\n${c.text}`)
+                .join("\n\n"),
+            ),
+            hint: got.hint,
+          };
+          const retrievedIds = got.chunks.map((c) => c.id);
+          if (specIndex)
             ctx.emit("log", {
               stream: "design.cases",
-              text: `story ${story.id}: trimmed ${specForCall.dropped} tokens of specification to fit the context budget`,
+              text:
+                `story ${story.id}: 载入 ${got.chunks.length} 段规格 / 未载入 ${got.dropped} 段` +
+                `（预算 ${specBudget} token，共 ${specIndex.chunks.length} 段）`,
             });
 
           const res = await opts.model.chat({
@@ -985,7 +1094,13 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
                 return CASES_STABLE;
               })() +
               (params.oracleGuidance === "strict" ? ORACLE_STRICT : ""),
-            variable: casesVariable(specForCall.text, story, params.lang, params.maxCasesPerStory),
+            // `hint` 一起送进去：模型该知道的不是「内容被截断了」，而是「还剩什么、怎么拿」。
+            variable: casesVariable(
+              specForCall.hint ? `${specForCall.text}\n\n[retrieval] ${specForCall.hint}` : specForCall.text,
+              story,
+              params.lang,
+              params.maxCasesPerStory,
+            ),
             schema: CASES_SCHEMA,
             maxTokens: params.perStoryMaxTokens,
             label: `design.cases:${story.id}`,
@@ -996,8 +1111,26 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
             truncated: res.truncated,
             maxTokens: params.perStoryMaxTokens,
           });
-          for (const [i, c] of parsed.cases.slice(0, params.maxCasesPerStory).entries())
-            cases.push({ ...c, id: `${story.id}-${i + 1}-${slug(c.title)}`, storyId: story.id });
+          const produced: TextCase[] = parsed.cases
+            .slice(0, params.maxCasesPerStory)
+            .map((c, i) => ({ ...c, id: `${story.id}-${i + 1}-${slug(c.title)}`, storyId: story.id }));
+          /**
+           * 出处核对（与写盘 hook 同一个 `checkProvenance`）。对不上的 id **丢掉**而不是整条拒掉：
+           * 一条用例的断言仍然可能是对的，只是它指错了段；丢掉之后它成了「无出处」，
+           * 门禁与审计会看见这件事，而不是看见一条看起来有出处的用例。
+           */
+          const known = new Set(retrievedIds);
+          const prov = checkProvenance(produced, known);
+          if (prov.unknown.length || prov.unreferenced.length) {
+            for (const c of produced) c.sourceRefs = c.sourceRefs.filter((r) => known.has(r));
+            ctx.emit("log", {
+              stream: "design.cases",
+              text:
+                `story ${story.id}: ${prov.unknown.length} 条用例引用了本次没取到的段（已丢弃那些 id），` +
+                `${prov.unreferenced.length} 条没有出处`,
+            });
+          }
+          cases.push(...produced);
           ctx.emit("wf.node.output", { nodeId: ctx.nodeId, storyId: story.id, produced: parsed.cases.length });
         } catch (e) {
           // One story's bad reply must not throw away the other stories' work.
@@ -1029,6 +1162,8 @@ export function gateTextCaseNode(): NodeDef<
 > {
   return {
     type: "gate.textcase",
+    // 门禁：拦住不合格的产物往下走。它一次模型都不调，全是事实判断
+    observationType: "guardrail" as const,
     title: "Gate: test design",
     description: "Score the batch against the test-design rules (marks, never blocks)",
     inKind: KIND.cases,

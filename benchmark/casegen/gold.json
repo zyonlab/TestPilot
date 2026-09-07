@@ -1,0 +1,189 @@
+{
+  "id": "testpilot-self-v1",
+  "spec": "docs/spec/02-业务规格与用户故事.md + docs/spec/03-UI交互规格.md",
+  "note": "TestPilot 自举用的黄金清单。逐条**手工**从 docs/spec/03 的「断言点」抽取，没有让模型生成——这个数的全部意义来自它是人写的。抽取人：本次开发会话；**需要你复核后才算数**，尤其是 heldOut 的四条。匹配规则是双语关键词（界面是中文，规格也是中文，但节点类型与 API 是英文）。",
+  "items": [
+    {
+      "id": "S-01",
+      "story": "US-18",
+      "title": "进程页列出网关/agent/runner 并显示状态",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["进程页", "进程列表", "processes", "进程状态"],
+        "assertAnyOf": ["gateway", "agent", "runner", "运行中", "alive"]
+      }
+    },
+    {
+      "id": "S-02",
+      "story": "US-18",
+      "title": "重启一个进程后 PID 变化且状态回到运行中",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["重启", "restart"],
+        "assertAnyOf": ["pid", "PID", "运行中", "alive", "变化"]
+      }
+    },
+    {
+      "id": "S-03",
+      "story": "US-18",
+      "title": "未启动的能力显示为「未启动」而不是「已停止」",
+      "designMethod": "boundary",
+      "expectTier": 1,
+      "heldOut": true,
+      "match": { "assertAnyOf": ["未启动", "not started", "idle"] }
+    },
+    {
+      "id": "S-04",
+      "story": "US-14",
+      "title": "画布渲染工作流的节点与连线",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["画布", "工作流", "canvas", "workflow"],
+        "assertAnyOf": ["节点", "node", "连线", "边"]
+      }
+    },
+    {
+      "id": "S-05",
+      "story": "US-14",
+      "title": "点击节点后右侧显示该节点的产物",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["点击节点", "选中节点", "click a node", "点一个节点"],
+        "assertAnyOf": ["产物", "输出", "output", "JSON"]
+      }
+    },
+    {
+      "id": "S-06",
+      "story": "US-16",
+      "title": "「只跑此节点」不会重算上游",
+      "designMethod": "state-transition",
+      "expectTier": 2,
+      "heldOut": true,
+      "match": {
+        "anyOf": ["只跑此节点", "run this node", "单跑"],
+        "assertAnyOf": ["上游", "不重算", "未重新", "仅"]
+      }
+    },
+    {
+      "id": "S-07",
+      "story": "US-15",
+      "title": "保存节点参数后图版本号递增",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["保存", "参数", "save", "param"],
+        "assertAnyOf": ["版本", "version", "v2", "递增"]
+      }
+    },
+    {
+      "id": "S-08",
+      "story": "US-15",
+      "title": "非法参数被拒绝并指出是哪个节点",
+      "designMethod": "negative",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["非法", "无效", "invalid", "超出范围"],
+        "assertAnyOf": ["拒绝", "错误", "节点", "rejected", "invalid"]
+      }
+    },
+    {
+      "id": "S-09",
+      "story": "US-06",
+      "title": "复核队列展示门禁①的逐条判据结果",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["复核", "队列", "review"],
+        "assertAnyOf": ["门禁", "finding", "判据", "gate"]
+      }
+    },
+    {
+      "id": "S-10",
+      "story": "US-06",
+      "title": "批准后用例出现在看板、并从队列消失",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["批准", "approve"],
+        "assertAnyOf": ["看板", "用例列表", "消失", "board", "不再"]
+      }
+    },
+    {
+      "id": "S-11",
+      "story": "US-06",
+      "title": "未绑定项目的运行不能批准",
+      "designMethod": "negative",
+      "expectTier": 1,
+      "heldOut": true,
+      "match": {
+        "anyOf": ["未绑定", "没有项目", "not bound"],
+        "assertAnyOf": ["拒绝", "不能", "错误", "提示"]
+      }
+    },
+    {
+      "id": "S-12",
+      "story": "US-19",
+      "title": "评测页展示两版的覆盖与显著性判读",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["评测", "配对", "eval"],
+        "assertAnyOf": ["覆盖", "coverage", "p =", "显著"]
+      }
+    },
+    {
+      "id": "S-13",
+      "story": "US-22",
+      "title": "切换语言后界面无中文残留（英文模式）",
+      "designMethod": "state-transition",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["切换语言", "语言", "language", "EN"],
+        "assertAnyOf": ["英文", "English", "残留", "no chinese"]
+      }
+    },
+    {
+      "id": "S-14",
+      "story": "US-01",
+      "title": "创建项目后出现在项目列表",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["新建项目", "创建项目", "create a project"],
+        "assertAnyOf": ["项目列表", "出现", "显示", "列表中"]
+      }
+    },
+    {
+      "id": "S-15",
+      "story": "US-01",
+      "title": "删除项目需要二次确认",
+      "designMethod": "negative",
+      "expectTier": 1,
+      "heldOut": true,
+      "match": {
+        "anyOf": ["删除项目", "delete"],
+        "assertAnyOf": ["确认", "二次", "confirm"]
+      }
+    },
+    {
+      "id": "S-16",
+      "story": "US-13",
+      "title": "趋势页展示通过率与抖动率",
+      "designMethod": "equivalence",
+      "expectTier": 1,
+      "match": {
+        "anyOf": ["趋势", "trends"],
+        "assertAnyOf": ["通过率", "抖动", "pass rate", "flake"]
+      }
+    }
+  ],
+  "outOfScope": [
+    "模型本身的质量（那是模型评测，不是产品测试）",
+    "真实 dapp / 链上资产（自举只跑本机）",
+    "打包发布与安装流程"
+  ]
+}

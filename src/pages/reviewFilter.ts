@@ -18,7 +18,7 @@ export interface ReviewFilters {
   activity: string;
   /** 设计方法的英文枚举值。 */
   method: string;
-  /** 判据强度 "1" | "2" | "3"。 */
+  /** 判据强度"1" |"2" |"3"。 */
   tier: string;
   /** 门禁：block 只看被拦的，warn 看有告警的，none 只看干净的。 */
   finding: "" | "block" | "warn" | "none";
@@ -41,8 +41,7 @@ export const EMPTY_FILTERS: ReviewFilters = {
   decision: "",
 };
 
-export const isFiltering = (f: ReviewFilters): boolean =>
-  Object.values(f).some((v) => v !== "");
+export const isFiltering = (f: ReviewFilters): boolean => Object.values(f).some((v) => v !== "");
 
 /** URL 里用短名字，免得地址栏被撑爆；一个条件为空就不写进去。 */
 const PARAM: Record<keyof ReviewFilters, string> = {
@@ -120,8 +119,7 @@ export function matches(
     ]
       .join(" ")
       .toLowerCase();
-    for (const word of f.q.toLowerCase().split(/\s+/).filter(Boolean))
-      if (!hay.includes(word)) return false;
+    for (const word of f.q.toLowerCase().split(/\s+/).filter(Boolean)) if (!hay.includes(word)) return false;
   }
   return true;
 }

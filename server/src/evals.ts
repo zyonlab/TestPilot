@@ -21,6 +21,7 @@ import {
   type CoverageResult,
   type GoldChecklist,
   type PairedBinary,
+  traced,
 } from "@testpilot/harness-core";
 import { collectEvidence, critique } from "@testpilot/harness-testing";
 import { allOutputs, getGraph, nodeOutput, outputStore, runPromptDigest, startRun, type RunTarget } from "./graphs.js";
@@ -102,6 +103,15 @@ export interface PairedEvalResult {
   b: ArmResult;
   /** Per gold item: covered by A, covered by B. This is the paired unit. */
   mcnemar: ReturnType<typeof mcnemar>;
+  /**
+   * **逐题翻转清单**（US-20 的后半句）。
+   *
+   * McNemar 给的是 `nAB / nBA / p`——三个数说「有多少条翻了、翻得算不算数」，
+   * 但它答不了人接着必然要问的那一句：**是哪几条翻的**。
+   * 一个 p 值说服不了任何人去合并一版改动；「B 把这三条捡了回来、
+   * 却把那一条丢了」可以。两边都不变的那些不列——它们没有信息。
+   */
+  flips: Array<{ id: string; title: string; from: "a" | "b" }>;
   coverageDelta: ReturnType<typeof comparePaired>;
   costDelta: { calls: number; tokens: number; ms: number };
   methodMix: { a: Record<string, { expected: number; covered: number }>; b: Record<string, { expected: number; covered: number }> };
@@ -166,10 +176,28 @@ const save = (row: { id: string; graphId: string; startedAt: string; finishedAt?
     )
     .run({ ...row, finishedAt: row.finishedAt ?? null, json: JSON.stringify(row.detail) });
 
+/**
+ * 最近的评测，**带上那次的预判对没对上**。
+ *
+ * `expect` 是预注册的：它的全部价值在于「我们跑之前的判断准不准」，而那个价值只有在
+ * 能跨多次评测数出来的时候才兑现——一条一条点开去看，等于没有。
+ * 预判躺在 detail 里，所以在这儿顺手取出来，而不是让列表为每一行再发一次详情请求。
+ */
 export const listEvals = (limit = 30): Array<Record<string, unknown>> =>
-  db.prepare("SELECT id, graphId, startedAt, finishedAt, status FROM evals ORDER BY startedAt DESC LIMIT ?").all(limit) as Array<
-    Record<string, unknown>
-  >;
+  (
+    db
+      .prepare("SELECT id, graphId, startedAt, finishedAt, status, json FROM evals ORDER BY startedAt DESC LIMIT ?")
+      .all(limit) as Array<Record<string, unknown> & { json?: string }>
+  ).map(({ json, ...row }) => {
+    try {
+      const detail = JSON.parse(json ?? "{}") as {
+        prediction?: { expected: string; observed: string; significant: boolean; matched?: boolean };
+      };
+      return detail.prediction ? { ...row, prediction: detail.prediction } : row;
+    } catch {
+      return row;
+    }
+  });
 
 export function getEval(id: string): Record<string, unknown> | undefined {
   const row = db.prepare("SELECT * FROM evals WHERE id=?").get(id) as { json: string } | undefined;
@@ -270,7 +298,7 @@ export async function scoreRun(req: {
   // misses says which of them are real gaps — a second number, deliberately not the main
   // one, because a model in the measurement makes runs no longer comparable to each other.
   const semantic = req.semantic
-    ? await adjudicateMisses(gold, cases, coverage, gated(modelFromEnv()))
+    ? await adjudicateMisses(gold, cases, coverage, traced(gated(modelFromEnv()), { name: "eval.adjudicate" }))
     : undefined;
 
   return {
@@ -282,9 +310,35 @@ export async function scoreRun(req: {
     structural,
     heldOut: coverage.heldOut,
     cases: cases.length,
+    /*
+     * **矩阵要的是身份，不只是计数。**
+     *
+     * 这里以前给的是 `hits: string[]`（只有 goldId）与 `extras: number`（只有个数）。
+     * 用它们画不出 `03 §3` 模式①要的那张三色矩阵：命中格里说不出「是哪条用例覆盖了它」，
+     * 多余那一列更是连标题都没有——而「多出来的这 7 条到底是什么」恰恰是
+     * 人看这张矩阵时第二个想问的问题。
+     *
+     * 计数仍然给（`hits`/`extras` 保持旧形状不动，旧的调用方不受影响），
+     * 另外多给三份带标题的清单。
+     */
     hits: coverage.hits.map((h) => h.goldId),
     misses: coverage.misses.map((m) => ({ id: m.id, title: m.title, heldOut: !!m.heldOut })),
     extras: coverage.extras.length,
+    /** 矩阵的行：清单里的每一条，以及它被哪几条用例覆盖了。 */
+    matrix: {
+      gold: gold.items.map((g) => {
+        const hit = coverage.hits.find((h) => h.goldId === g.id);
+        return {
+          id: g.id,
+          title: g.title,
+          heldOut: !!g.heldOut,
+          by: hit ? hit.by : [],
+          reach: hit ? ("hit" as const) : ("miss" as const),
+        };
+      }),
+      /** 生成了、但对不上清单里任何一条的那些。第三种颜色。 */
+      extras: coverage.extras.map((c) => ({ id: c.id ?? "", title: c.title })),
+    },
     semantic,
     methodMix: methodMix(gold, coverage),
   };
@@ -409,6 +463,13 @@ export async function runPairedEval(req: PairedEvalRequest): Promise<PairedEvalR
       a,
       b,
       mcnemar: mcnemar(pairs),
+      flips: pairs
+        .filter((x) => x.a !== x.b)
+        .map((x) => ({
+          id: x.id,
+          title: gold.items.find((g) => g.id === x.id)?.title ?? x.id,
+          from: (x.a ? "a" : "b") as "a" | "b",
+        })),
       coverageDelta: comparePaired([
         { id: "coverage", a: a.coverage, b: b.coverage },
         { id: "heldOut", a: a.heldOutCoverage, b: b.heldOutCoverage },
@@ -530,7 +591,9 @@ export async function runCritique(req: CritiqueRequest): Promise<Record<string, 
     repairRounds,
     spend,
   });
-  const result = await critique(evidence, gated(modelFromEnv()), { ablatable: ALL_ABLATABLE });
+  const result = await critique(evidence, traced(gated(modelFromEnv()), { name: "harness.critic" }), {
+    ablatable: ALL_ABLATABLE,
+  });
 
   const id = `crit-${Date.now().toString(36)}`;
   const detail = { id, runs: ids, ...result, at: new Date().toISOString() };
@@ -565,6 +628,20 @@ export interface DetectionEvalResult {
   /** Cases that failed on the healthy build. Every one of them is a false alarm. */
   falseAlarms: string[];
   falseAlarmRate: number;
+  /**
+   * **这一版滑向哪一边**（US-19 的第三问）。
+   *
+   * `scoreDetection`（`harness-core/src/eval/detect.ts`）用 tp/fp/fn 算这个判定，
+   * 而它要的是「这条用例本该抓到这个缺陷」的 per-case 标注——那种标注只能自己编，
+   * 编出来衡量的是标注质量而不是用例集质量，所以这条路刻意不走（见 `runDetectionEval` 上方的注释）。
+   *
+   * 但手上这两个数扮演的正是同样的角色，而且方向相反：
+   *   **变异分数** 替召回——真有毛病时它注意到了没有
+   *   **虚报率**   替精确——没毛病时它安静得住吗
+   * 一个把所有用例都跑红的用例集，变异分数 100%，虚报率也 100%，一文不值。
+   * 所以用同一条阈值规则（0.5）给出判定，只是把两个输入换成能诚实拿到的那两个。
+   */
+  leaning: "false-alarms" | "silence" | "balanced" | "undetermined";
   /**
    * One row per injected fault: did any case notice?
    *
@@ -696,6 +773,16 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
     })(),
     notApplied: mutants.filter((m) => m.applied === "no").length,
     cases: code.length,
+    leaning: (() => {
+      const graded = mutants.filter((m) => m.applied !== "no");
+      if (!graded.length && !code.length) return "undetermined" as const;
+      const caught = graded.length ? graded.filter((m) => m.killed).length / graded.length : 0;
+      const noisy = falseAlarms.length / (code.length || 1);
+      // 与 detect.ts 同一条阈值，只是输入换成能诚实拿到的那两个。
+      if (noisy >= 0.5) return "false-alarms" as const;
+      if (caught < 0.5) return "silence" as const;
+      return "balanced" as const;
+    })(),
     note:
       "mutation score is a suite-level number: a fault counts as caught if any case notices it. " +
       "Faults that could not be injected are excluded from the denominator, not counted as survivors. " +

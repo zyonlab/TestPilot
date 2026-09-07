@@ -14,6 +14,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@langfuse/otel": "5.11.0",
+    "@langfuse/tracing": "5.11.0",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.221.0",
     "better-sqlite3": "^12.11.1",
     "birpc": "^2.5.0",
     "zod": "^3.24.1"

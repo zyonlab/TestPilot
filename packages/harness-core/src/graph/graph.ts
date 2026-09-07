@@ -18,6 +18,15 @@ export interface GraphEdge {
 export interface GraphDef {
   id: string;
   version: number;
+  /**
+   * 这张图是干什么的，一句话。
+   *
+   * 四张图的真正差别此前**只写在 pack.ts 的注释里**——选择器上只有 `g0-explore · v1`，
+   * 而「看产品」和「读文档」会得出完全不同的东西。说明属于定义，不属于某一个前端的
+   * 硬编码字符串表：换一个前端，差别不该跟着消失。
+   */
+  title?: string;
+  description?: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
 }

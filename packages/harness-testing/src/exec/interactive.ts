@@ -15,6 +15,7 @@ import {
   type SfgState,
   type SfgTransition,
   type StateFlowGraph,
+  abstractionNameOf,
 } from "./sfg.js";
 
 /**
@@ -25,6 +26,275 @@ import {
  * 点击路径上，只有故意填进去才会出现。而两应用各五次的数据显示，**每次都漏的十条
  * 里有六条落在这两块里**。
  */
+/**
+ * 易变值掩码：把每秒都在变的读数归一，**只用于判断"这一行算不算变化"**。
+ *
+ * 掩码绝不作用于写进材料的文字——`spec.compose` 要求规则逐字引用证据，
+ * 删掉数字会让规则失去出处。它只回答一个问题：倒计时从 05:40:16 走到 05:40:15，
+ * 这算页面变了吗？不算。
+ *
+ * 形态要收窄，不能像 `numless` 那样对任意 `\d+` 一刀切——那会把
+ * 「余额 0 → 100」「持仓 0 → 1」这类**真实**的状态变化也吃掉，
+ * 而漏掉一个真实变化比多报一个难发现得多。
+ */
+export function maskVolatile(line: string): string {
+  return line
+    .replace(/\b\d{1,2}:\d{2}(:\d{2})?\b/g, "〈时刻〉")
+    .replace(/\b\d{4}-\d{2}-\d{2}T[\d:.]+Z?\b/g, "〈时刻〉")
+    .replace(/[+-]?\d{1,3}(,\d{3})*(\.\d+)?\s*%/g, "〈百分比〉")
+    .replace(/\b\d{1,3}(,\d{3})+(\.\d+)?\b/g, "〈数值〉")
+    .replace(/\b\d+\.\d{2,}\b/g, "〈数值〉");
+}
+
+/**
+ * 一次动作让页面**哪里变了**。
+ *
+ * 这是探索产物里此前完全缺失的一维。没有它，转移只记着「点了什么」，
+ * 记不下「于是什么变了」，而后者才是一条用户故事的内容。
+ */
+export interface ScreenDiff {
+  controlsAdded: string[];
+  controlsRemoved: string[];
+  /** 同一个控件的状态变了：`Limit: selected=false → selected=true`。 */
+  stateChanged: string[];
+  textAdded: string[];
+  textRemoved: string[];
+  /** 掩码之后仍然有差异吗。没有就说明这次动作什么都没做成。 */
+  changed: boolean;
+}
+
+/** 探索之前问模型拿到的业务判断与候选用户故事。 */
+export interface ScenarioPlan {
+  /** 这是什么产品的什么页面，一句话。 */
+  business: string;
+  stories: Array<{
+    id: string;
+    title: string;
+    actor: string;
+    goal: string;
+    /** 这条故事要用到的控件编号（对应传给模型的那张编号清单）。 */
+    controls: number[];
+    priority: "P0" | "P1" | "P2";
+  }>;
+}
+
+/**
+ * 每个键都写进 `required`。
+ *
+ * 这个仓库实测过三次：**可选的键，这个模型直接不写**——`priority`、`postSteps`
+ * 进了 properties 仍然一条都不产，而报告看起来完全正常。约束解码只是建议，
+ * 唯一有效的强制是 required。
+ */
+const SCENARIO_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["business", "stories"],
+  properties: {
+    business: { type: "string", description: "这是什么产品的什么页面，一句话，不要罗列数字" },
+    stories: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "title", "actor", "goal", "controls", "priority"],
+        properties: {
+          id: { type: "string" },
+          title: { type: "string", description: "一件具体的、能做完的事，动词开头" },
+          actor: { type: "string" },
+          goal: { type: "string", description: "他为什么要做这件事" },
+          controls: { type: "array", items: { type: "integer" }, description: "只能引用清单里出现过的编号" },
+          priority: { type: "string", enum: ["P0", "P1", "P2"] },
+        },
+      },
+    },
+  },
+} as const;
+
+/**
+ * 问一次业务场景，把答案校验成探索计划。
+ *
+ * 给模型的是**编号 + 可见文案 + 所属组**，不给选择器、不给 DOM——
+ * 让它做判断，不让它编事实。回来的编号对不上就整条丢掉，并记一条日志：
+ * 一条引用不到任何真实控件的"用户故事"，下游没法验证，留着只会变成一条假证据。
+ */
+export async function askForScenarios(
+  spec: ObserveSpec,
+  // 结构化写法而不是引用 Control：那个接口声明在 runObserve 内部，
+  // 这里只需要这三个字段。
+  first: { url: string; title: string; elements: Array<{ label: string; group: string; selectedNow: boolean }> },
+  note: (msg: string, level?: "info" | "warn") => void,
+): Promise<ScenarioPlan | undefined> {
+  if (!spec.ask) return undefined;
+  const numbered = first.elements
+    .map((e, i) => ({ i, e }))
+    .filter(({ e }) => e.label.trim())
+    .slice(0, 120);
+  if (!numbered.length) return undefined;
+
+  const groups = new Map<string, string[]>();
+  for (const { i, e } of numbered) {
+    const g = e.group || "（散控件）";
+    groups.set(g, [...(groups.get(g) ?? []), `${i}. ${e.label}${e.selectedNow ? "（当前选中）" : ""}`]);
+  }
+  const inventory = [...groups.entries()]
+    .map(([g, items]) => `【${g}】\n${items.join("\n")}`)
+    .join("\n\n");
+
+  const prompt = [
+    "你在看一个网页应用的一屏。下面是它的地址、标题，以及这一屏上**可交互控件**的编号清单，按控件组分好了。",
+    "",
+    `地址：${first.url}`,
+    `标题：${first.title}`,
+    "",
+    inventory,
+    "",
+    "回答两件事：",
+    "1. business：这是什么产品的什么页面，一句话。**不要罗列屏幕上的数字**——行情、倒计时、余额这些每秒都在变，它们是数据不是功能。",
+    "2. stories：人在这一屏上可能要完成的**具体的事**，每条给出它要用到的控件编号。",
+    "",
+    "写故事的要求：",
+    "- 一条故事是一件**能做完的事**（「用限价单买入」「查看当前持仓」），不是一个静态观察（「页面显示资金费率」）。",
+    "- 只能引用上面出现过的编号。编不出编号的故事不要写。",
+    "- 同一个控件组里的不同选项，往往对应不同的故事——那正是这个产品的业务分支。",
+    "- 优先级按「不做这件事这个产品就没意义」来排。",
+  ].join("\n");
+
+  const raw = await spec.ask({ prompt, schema: SCENARIO_SCHEMA, maxTokens: 2400 });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    note("业务场景：模型没有回出合法 JSON", "warn");
+    return undefined;
+  }
+  const obj = parsed as Partial<ScenarioPlan>;
+  if (!obj || typeof obj.business !== "string" || !Array.isArray(obj.stories)) {
+    note("业务场景：回答少了 business 或 stories", "warn");
+    return undefined;
+  }
+  const valid = new Set(numbered.map(({ i }) => i));
+  const stories: ScenarioPlan["stories"] = [];
+  for (const s of obj.stories) {
+    const ctrls = (s?.controls ?? []).filter((n) => typeof n === "number" && valid.has(n));
+    if (!ctrls.length) {
+      note(`丢掉候选故事「${s?.title ?? "（无题）"}」：它引用的控件编号一个都对不上`, "warn");
+      continue;
+    }
+    stories.push({
+      id: String(s.id ?? `S-${stories.length + 1}`),
+      title: String(s.title ?? ""),
+      actor: String(s.actor ?? ""),
+      goal: String(s.goal ?? ""),
+      controls: ctrls,
+      priority: (["P0", "P1", "P2"] as const).includes(s.priority as "P0") ? (s.priority as "P0") : "P1",
+    });
+  }
+  return stories.length ? { business: obj.business, stories } : undefined;
+}
+
+/**
+ * 把一次页内切换写成材料里的一段话。
+ *
+ * 写差异而不是整屏，是因为整屏里全是行情数字——下游只会又抓一遍 Funding 和 Countdown。
+ * 写成"点了 X，于是 Y 出现了"这种因果形状，规格才可能整理出**行为**，
+ * 而不是又一批"入口页显示 0.01000%"。
+ */
+export function describeEffect(label: string, group: string, d: ScreenDiff): string {
+  const parts: string[] = [`（页内切换：在「${group}」里切到「${label}」）`];
+  if (d.stateChanged.length) parts.push(`选中态变化：\n${d.stateChanged.map((s) => `  - ${s}`).join("\n")}`);
+  if (d.controlsAdded.length) parts.push(`多出的控件：\n${d.controlsAdded.map((s) => `  + ${s}`).join("\n")}`);
+  if (d.controlsRemoved.length) parts.push(`消失的控件：\n${d.controlsRemoved.map((s) => `  - ${s}`).join("\n")}`);
+  if (d.textAdded.length) parts.push(`多出的文字（已滤掉每秒都在跳的读数）：\n${d.textAdded.slice(0, 12).map((s) => `  + ${s}`).join("\n")}`);
+  return parts.join("\n");
+}
+
+export function diffScreens(
+  before: { controls: string[]; states?: string[]; text: string },
+  after: { controls: string[]; states?: string[]; text: string },
+): ScreenDiff {
+  const setOf = (xs: string[]): Set<string> => new Set(xs);
+  const bC = setOf(before.controls);
+  const aC = setOf(after.controls);
+  const controlsAdded = [...aC].filter((x) => !bC.has(x)).slice(0, 40);
+  const controlsRemoved = [...bC].filter((x) => !aC.has(x)).slice(0, 40);
+
+  // 状态变化：按"控件文案"配对，比较它后面的状态串。
+  const stateMap = (xs?: string[]): Map<string, string> =>
+    new Map((xs ?? []).map((s) => { const i = s.indexOf("#"); return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)]; }));
+  const bS = stateMap(before.states);
+  const aS = stateMap(after.states);
+  const stateChanged: string[] = [];
+  for (const [k, v] of aS) {
+    const old = bS.get(k);
+    if (old !== undefined && old !== v) stateChanged.push(`${k}: ${old || "（无）"} → ${v || "（无）"}`);
+  }
+
+  const lines = (t: string): string[] => t.split("\n").map((s) => s.trim()).filter(Boolean);
+  const bT = setOf(lines(before.text).map(maskVolatile));
+  const aT = setOf(lines(after.text).map(maskVolatile));
+  const textAdded = lines(after.text).filter((l) => !bT.has(maskVolatile(l))).slice(0, 30);
+  const textRemoved = lines(before.text).filter((l) => !aT.has(maskVolatile(l))).slice(0, 30);
+
+  return {
+    controlsAdded,
+    controlsRemoved,
+    stateChanged: stateChanged.slice(0, 40),
+    textAdded,
+    textRemoved,
+    changed:
+      controlsAdded.length > 0 || controlsRemoved.length > 0 || stateChanged.length > 0 || textAdded.length > 0,
+  };
+}
+
+/**
+ * 等页面自己安定下来，而不是等一个固定的秒数。
+ *
+ * 固定 1.5 秒对服务端渲染的页面够用，对客户端渲染的应用远远不够。
+ * **实测 2026-09-01**：`demo.binance.com/en/futures/BTCUSDT` 在导航后 1.5 秒时
+ * `innerText` 与可见控件数**都还是 0**；探索器于是把它当成一张空页面，顺着 DOM 里
+ * 已有的链接走去了 `/en/login`，最后交出一份讲登录流程的材料——而项目指的是合约交易。
+ *
+ * 这正是本仓库反复记下的那个形状：**读空了页面的探索器不会报错，
+ * 它会给你一份关于另一个产品的完整材料，而且看起来完全正常。**
+ *
+ * 判据改成「不再长」：连续两次采样，可见控件数与文本长度都不再增加就算安定。
+ * `minMs` 是"至少等多久"，`maxMs` 是上限——等不到就走，
+ * 但要把这件事说出来，而不是假装它安定了。
+ */
+export async function settleOn(
+  page: { evaluate<T>(fn: () => T): Promise<T> },
+  opts: { minMs?: number; maxMs?: number } = {},
+): Promise<{ ms: number; controls: number; textLen: number; settled: boolean }> {
+  const minMs = opts.minMs ?? 600;
+  const maxMs = opts.maxMs ?? 12_000;
+  const probe = async (): Promise<{ n: number; len: number }> =>
+    page
+      .evaluate(() => ({
+        n: [...document.querySelectorAll("button, a, input, select, textarea, [role=button]")].filter(
+          (el) => (el as HTMLElement).offsetParent !== null,
+        ).length,
+        len: (document.body?.innerText ?? "").length,
+      }))
+      .catch(() => ({ n: 0, len: 0 }));
+
+  const began = Date.now();
+  if (minMs) await new Promise((r) => setTimeout(r, minMs));
+  let last = await probe();
+  let steady = 0;
+  while (Date.now() - began < maxMs) {
+    await new Promise((r) => setTimeout(r, 500));
+    const now = await probe();
+    // 只看"有没有长"，不看有没有缩：SPA 切换时会先清空再重画，
+    // 把"缩了"当成变化会让这里每次都等满上限。
+    if (now.n <= last.n && now.len <= last.len) steady += 1;
+    else steady = 0;
+    last = now;
+    if (steady >= 2 && (last.n > 0 || last.len > 0))
+      return { ms: Date.now() - began, controls: last.n, textLen: last.len, settled: true };
+  }
+  return { ms: Date.now() - began, controls: last.n, textLen: last.len, settled: false };
+}
+
 export type ProbeVariant = "empty" | "malformed" | "unmatched";
 
 /** 图里和日志里怎么称呼这三类实验。它会一路走进规格、故事、用例的措辞里。 */
@@ -115,6 +385,8 @@ export interface ExploreSpec {
   deepPrompt?: string;
   /** Dapp explores wait for the app to detect the injected wallet before planning. */
   settleMs?: number;
+  /** 安定等待的上限。到点还没安定就走人，并在轨迹里说出来。见 `settle`。 */
+  maxSettleMs?: number;
   launch: LaunchOpts;
 }
 
@@ -158,9 +430,46 @@ export interface ObserveSpec {
   execId: string;
   url: string;
   artifactDir: string;
+  /**
+   * 一个控件组最多采几项。
+   *
+   * 组是 `role=tablist / radiogroup / menu / listbox` 这样的容器。给它配额是为了
+   * 让一个装着几百个交易对的 listbox 不至于淹掉下单区那三项——而不是像以前那样
+   * 按 DOM 顺序截前 60 个（交易页的下单区正好落在截断线之外）。
+   */
+  groupCap?: number;
+  /**
+   * 页内元素优先于未去过的路由。
+   *
+   * `auto`（默认）按事实判：入口页有 ≥2 个控件组就认为"业务活在页内"。
+   * 这条不能无脑翻转——`nextAction` 里"未去过的路由优先"那条规则是从多路由产品的
+   * 实测里长出来的（30 屏花在一个页内状态上、另一条路由一次没去），翻死了会毁掉那些基准。
+   */
+  inPageFirst?: "auto" | "on" | "off";
+  /**
+   * 问模型一个问题，拿回结构化答案。**由调用方注入**。
+   *
+   * 为什么是注入而不是在这里 new 一个客户端：探索跑在 runner 进程里，
+   * 那个进程根本没有 `ModelClient`（它只向网关领模型票），而且它的 `OPENAI_BASE_URL`
+   * 被网关改写成了 Midscene 的 no-think 代理。网关侧才拿得到真端点，
+   * 也才能把这次调用记进 Langfuse——Midscene 自己的 `ai*` 不在 trace 上。
+   *
+   * 不注入就整步跳过，退回今天的行为。这也正好是消融开关的天然形状。
+   */
+  ask?: (req: { prompt: string; imageDataUrl?: string; schema: unknown; maxTokens?: number }) => Promise<string>;
+  /**
+   * 探索之前先问一次"这是什么业务、可能有哪些用户故事"，并用答案决定先点什么。
+   *
+   * 默认开。关掉就退回"按控件表和 URL 队列决定"——那正是把一个合约交易页
+   * 探索成一份登录流程材料的原因。
+   */
+  scenarioFirst?: boolean;
+
   /** 往前走，而不是只看入口页。关掉就退回单屏采集。 */
   deep?: boolean;
   settleMs?: number;
+  /** 安定等待的上限。到点还没安定就走人，并在轨迹里说出来。见 `settle`。 */
+  maxSettleMs?: number;
   /**
    * 最多采到几屏。
    *
@@ -253,6 +562,35 @@ export async function runObserve(
     href: string;
     external: boolean;
     clickable: boolean;
+    /**
+     * ARIA 角色（`tab` / `checkbox` / `radio` / `switch` / `option` …）。
+     *
+     * 加这一项的理由是实测出来的：`demo.binance.com` 的合约交易页上，
+     * 现有选择器只认出 **7 个控件，而且全是 `<a>` 链接**——
+     * Limit/Market/Conditional、TP/SL、Reduce-Only、Positions/Open Orders
+     * 这些真正的交易控件全是带 `role` 的 `<div>`，**对探索器根本不存在**。
+     * 于是它只能顺着链接爬到别的币对和登录页，交出一份关于登录流程的材料。
+     */
+    role: string;
+    /** 这一项当前是不是被选中的那一个。广度优先时用它认出"基线是哪一项"。 */
+    selectedNow: boolean;
+    /**
+     * 这个控件现在处于什么状态——选中、勾选、按下、展开、禁用，以及下拉当前选的是哪一项。
+     *
+     * **少了它，切换标签页对探索器是隐形的**：Limit 与 Market 的文案、位置、选择器
+     * 全都不变，只有这一位不同。判重看不见它，一次成功的切换就被记成「没有新界面」，
+     * 连续三次之后探索就结束了（dryLimit 默认 3）——这正是"只拿到 4 屏"的机制。
+     *
+     * 空串表示"这个控件没有状态可言"（普通链接、普通按钮）。
+     */
+    state: string;
+    /**
+     * 它属于哪个控件组（`role=tablist` / `radiogroup` / `menu` / `listbox`）。
+     *
+     * 组是广度优先的天然单位：一个 tablist 里的每一项都该被切一遍，
+     * 而不是把整页 224 个"看起来能点"的元素铺开——那里面绝大多数是订单簿的行。
+     */
+    group: string;
     /** 这是个可填的输入框吗——做实验那一步要靠它。 */
     fillable: boolean;
     /**
@@ -277,9 +615,27 @@ export async function runObserve(
   }
 
   /** 一屏的事实：地址、标题、正文、可交互控件的可见文案。 */
+  /** 这一趟探索用的安定等待。见模块顶部的 `settleOn`。 */
+  const settle = async (why: string): Promise<void> => {
+    const r = await settleOn(session!.page as unknown as { evaluate<T>(fn: () => T): Promise<T> }, {
+      minMs: spec.settleMs ?? 600,
+      maxMs: spec.maxSettleMs ?? 12_000,
+    });
+    if (!r.settled && r.controls === 0 && r.textLen === 0)
+      note(`${why}：等了 ${Math.round(r.ms / 1000)} 秒，页面上仍然一个可见控件都没有`, "warn");
+  };
+
   const snapshot = async (
     label: string,
-  ): Promise<{ text: string; url: string; title: string; controls: string[]; elements: Control[] }> => {
+  ): Promise<{
+    text: string;
+    url: string;
+    title: string;
+    controls: string[];
+    /** 与 `controls` 平行的状态串。只有认得它的抽象会读——见 sfg.ts 的 `route+controls+state/norm`。 */
+    states: string[];
+    elements: Control[];
+  }> => {
     const page = session!.page as unknown as {
       url(): string;
       title(): Promise<string>;
@@ -299,7 +655,23 @@ export async function runObserve(
      */
     const elements: Control[] = await page
       .evaluate(() =>
-        [...document.querySelectorAll("button, a, input, select, textarea, [role=button]")]
+        [
+          ...document.querySelectorAll(
+            /**
+             * **按 ARIA 角色收，不按 `cursor: pointer` 收。**
+             *
+             * 实测同一页（demo.binance.com 合约页）：标准标签 19 个，加上 ARIA 角色 38 个，
+             * 而按 `cursor:pointer` 收会得到 **224 个**——多出来的绝大部分是订单簿的价格行，
+             * 它们看起来能点，但不是"这一屏能做什么"。角色是作者自己声明的语义，
+             * 比样式可靠得多。
+             */
+            "button, a, input, select, textarea, [role=button]," +
+              "[role=tab],[role=checkbox],[role=radio],[role=switch]," +
+              "[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio]," +
+              "[role=option],[role=combobox],[role=listbox],[role=slider]," +
+              "[role=spinbutton],[role=searchbox],[role=textbox],[role=link]",
+          ),
+        ]
           /**
            * **只算看得见的。**
            *
@@ -314,7 +686,14 @@ export async function runObserve(
             const r = e.getBoundingClientRect();
             return r.width > 0 && r.height > 0;
           })
-          .slice(0, 60)
+          /*
+           * 不再按 DOM 顺序硬截前 60 个。
+           *
+           * 交易页的 DOM 前 60 个几乎全是顶栏与币种导航，下单区整块落在截断线之外——
+           * 而采不到时代码不报错，表现成"这一屏就这些控件"。改成先全收（上限 400 防病理页面），
+           * 分组配额在下面 map 之后做，因为要先知道每个控件属于哪个组。
+           */
+          .slice(0, 400)
           .map((el) => {
             const e = el as HTMLElement & { placeholder?: string; type?: string; href?: string };
             /**
@@ -421,12 +800,61 @@ export async function runObserve(
               const fid = form.id;
               formSel = fdt ? `[data-test="${fdt}"]` : fid ? `#${CSS.escape(fid)}` : "form";
             }
+            /**
+             * 角色、选中态、所属组——这三样是"页内状态"能被看见的全部依据。
+             *
+             * 组用最近的一个 `tablist / radiogroup / menu / listbox` 祖先来认，
+             * 并用它自己的可读名字（`aria-label` 或第一项的文案）作 id：
+             * 一页上往往有好几个 tablist（下单类型、图表、账户面板各一个），
+             * 不区分开就没法说"把这一组挨个切一遍"。
+             */
+            const roleAttr = (e.getAttribute("role") || "").toLowerCase();
+            /**
+             * 状态串只收**语义明确**的几样，绝不把整串 class 拼进来。
+             *
+             * CSS-in-JS 的哈希类名每次构建都变，混进签名会让同一屏每次刷新都成为新状态——
+             * 那是抽象过紧的另一头，和今天"过松"一样坏。class 只认白名单里的那几个词。
+             */
+            const bits: string[] = [];
+            for (const a of ["aria-selected", "aria-checked", "aria-pressed", "aria-expanded", "aria-current"]) {
+              const v = e.getAttribute(a);
+              if (v !== null) bits.push(`${a.replace("aria-", "")}=${v}`);
+            }
+            if (e.hasAttribute("disabled") || e.getAttribute("aria-disabled") === "true") bits.push("disabled");
+            if (tag === "input" && ["checkbox", "radio"].includes(type))
+              bits.push(`checked=${(e as HTMLInputElement).checked}`);
+            if (tag === "select") {
+              const s = e as unknown as HTMLSelectElement;
+              bits.push(`chosen=${(s.selectedOptions?.[0]?.text ?? "").trim().slice(0, 24)}`, `opts=${s.options?.length ?? 0}`);
+            }
+            const cls = typeof (e as unknown as { className?: unknown }).className === "string" ? (e.className as string) : "";
+            const marked = cls.match(/(^|[-_\s])(active|selected|checked|current|on)([-_\s]|$)/i);
+            if (marked) bits.push(`cls:${marked[2].toLowerCase()}`);
+            const ariaSel = e.getAttribute("aria-selected") ?? e.getAttribute("aria-checked") ?? e.getAttribute("aria-pressed");
+            const groupEl = e.closest("[role=tablist],[role=radiogroup],[role=menu],[role=listbox],[role=group]");
+            let groupId = "";
+            if (groupEl) {
+              const gl = groupEl.getAttribute("aria-label") || "";
+              const first = (groupEl.querySelector("[role=tab],[role=radio],[role=option],[role=menuitem]") as HTMLElement | null)?.innerText ?? "";
+              groupId = `${groupEl.getAttribute("role")}:${(gl || first || "").trim().slice(0, 24)}`;
+            }
             return {
+              /**
+               * `display` 是**界面上看得见的东西**，一个字都不许加内部标记。
+               *
+               * 选中态、角色这些走下面的 `state` / `role` 字段。理由是这个文件 :429-441
+               * 记着的那次事故：`data-test="login-button"` 冒充过文案，一路漏进材料，
+               * 最后产出一条必然失败的断言。签名需要选中态，材料不需要——两者分开走。
+               */
               display: `${tag}${e.type ? `[${e.type}]` : ""}${external ? "[外站]" : ""}: ${shown.slice(0, 60)}${path ? ` -> ${path}` : ""}`,
               label: shown.slice(0, 60),
               selector,
               href: path,
               external,
+              role: roleAttr,
+              state: bits.join(","),
+              selectedNow: ariaSel === "true",
+              group: groupId,
               // 能填的：文本类 input、textarea、select。checkbox/radio 这一版先不管——
               // 它们的「坏值」不是空字符串，需要另一套判断。
               width: Math.round(el.getBoundingClientRect().width),
@@ -478,13 +906,38 @@ export async function runObserve(
         note(`控件采集失败：${String(err).slice(0, 120)}`, "warn");
         return [] as Control[];
       });
-    const controls = elements.map((e) => e.display);
+    /**
+     * 组配额：一个控件组最多留 `groupCap` 项，其余按顺序丢，但**把丢了多少记下来**。
+     *
+     * 一页上可能有一个装着几百个交易对的 listbox；把它整组铺开会淹掉下单区那三项。
+     * 但静默丢弃和当初按 DOM 顺序硬截是同一个错，所以丢了要说得出来。
+     */
+    const cap = Math.max(1, spec.groupCap ?? 6);
+    const perGroup = new Map<string, number>();
+    const dropped = new Map<string, number>();
+    const kept: Control[] = [];
+    for (const e of elements) {
+      if (!e.group) {
+        if (kept.length < 200) kept.push(e);
+        continue;
+      }
+      const n = (perGroup.get(e.group) ?? 0) + 1;
+      perGroup.set(e.group, n);
+      if (n <= cap) kept.push(e);
+      else dropped.set(e.group, (dropped.get(e.group) ?? 0) + 1);
+    }
+    for (const [g, n] of dropped) note(`控件组 ${g} 有 ${n} 项没进这一屏（每组最多 ${cap} 项）`, "warn");
+
+    const controls = kept.map((e) => e.display);
+    /** 与 `controls` 平行的状态串。签名用它，材料不用——见 Control.state。 */
+    const states = kept.map((e) => (e.state ? `${e.display}#${e.state}` : e.display));
 
     return {
       url: page.url(),
       title,
       controls,
-      elements,
+      states,
+      elements: kept,
       text: [
         `===== ${label} =====`,
         `URL: ${page.url()}`,
@@ -509,14 +962,14 @@ export async function runObserve(
    * 所以它是可替换的一族函数，名字随图一起记下来。
    */
   const abstract = abstractionOf(spec.stateAbstraction);
-  const signatureOf = (screen: { url: string; controls: string[]; title?: string }): string =>
+  const signatureOf = (screen: { url: string; controls: string[]; title?: string; states?: string[] }): string =>
     abstract(screen);
 
   try {
     emit({ type: "start", url: spec.url });
     session = await launchSession(spec.url, spec.launch);
     emit({ type: "navigated", shotRef: await shot(session) });
-    if (spec.settleMs) await new Promise((r) => setTimeout(r, spec.settleMs));
+    await settle("入口页");
 
     /**
      * 探索是一个循环，不是「看两眼」。
@@ -574,6 +1027,31 @@ export async function runObserve(
     };
 
     const first = await snapshot("入口页");
+
+    /**
+     * **探索之前先问一次：这是什么业务，人在这里可能要完成哪些事。**
+     *
+     * 为什么要有这一步：此前整条循环里唯一的模型调用是"登录"，去哪、点什么全由
+     * 控件表和 URL 队列决定。对一个只有一条 route、业务全在页内的产品，
+     * 这等于让探索去数链接——实测把一个合约交易页探索成了一份登录流程的材料。
+     *
+     * 模型在这里**只做判断，不做事实**：它拿到的是截图和一张编号控件清单，
+     * 回来的是"哪几个编号合起来是一件事"。编号对不上的整条丢掉——这是这条流水线
+     * 已有的规矩（`spec.compose` 就是这么丢掉模型自己编的 flow 的）。
+     * 具体点哪个、怎么点，仍然由代码按选择器执行。
+     */
+    let plan: ScenarioPlan | undefined;
+    if (spec.ask && spec.scenarioFirst !== false) {
+      plan = await askForScenarios(spec, first, note).catch((e) => {
+        note(`问业务场景失败，退回按控件表探索：${(e as Error).message}`, "warn");
+        return undefined;
+      });
+      if (plan) {
+        note(`业务：${plan.business}`);
+        for (const s of plan.stories) note(`候选故事 ${s.id} · ${s.title}（${s.controls.length} 个控件）`);
+      }
+    }
+
     const screens: string[] = [first.text];
     const seen = new Set([signatureOf(first)]);
     const visited: string[] = [first.url];
@@ -604,7 +1082,7 @@ export async function runObserve(
         id,
         route,
         title: screen.title ?? "",
-        controls: screen.controls.slice(0, 60),
+        controls: screen.controls.slice(0, 200),
       });
       return id;
     };
@@ -661,6 +1139,27 @@ export async function runObserve(
      * 而 404 页、JSON 响应、空壳都没有。
      */
     const deadHref = new Set<string>();
+    /**
+     * 走出被测应用的**路段**，不只是那一个地址。
+     *
+     * 实测（demo.binance.com，2026-09-01）：期货页上挂着几百个 `/en/trade/<PAIR>` 链接，
+     * 每一个点进去都会被弹到 `accounts.binance.com`。只记住"这个地址走出去过"，
+     * 下一轮就去试下一个交易对——探索的 7 轮预算全花在同一件已经知道结果的事上，
+     * 最后交出「2 屏 / 14 个地址看见了但一次都没进去」。
+     *
+     * 人不会这样：撞了两次就知道**整个 /en/trade/ 都是别处**。所以这里按父路径记，
+     * 撞够 `OFFSITE_TOLERANCE` 次就把整段划掉。
+     */
+    const offsiteHits = new Map<string, number>();
+    const OFFSITE_TOLERANCE = 2;
+    /** `/en/trade/BTC_USDT` → `/en/trade`。只吃掉最后一段，别把整站折成 `/`。 */
+    const sectionOf = (href: string): string => {
+      const p = pathOf(href);
+      const cut = p.replace(/\/+$/, "").lastIndexOf("/");
+      return cut > 0 ? p.slice(0, cut) : p;
+    };
+    const offsiteSection = (href: string): boolean =>
+      (offsiteHits.get(sectionOf(href)) ?? 0) >= OFFSITE_TOLERANCE;
     /** 下一轮要先回到哪张表单上接着做实验。见 `nextAction` 开头那段。 */
     let probeReturn: string | undefined;
     /**
@@ -682,6 +1181,20 @@ export async function runObserve(
     const shapeCount = new Map<string, number>();
     /** 去过的地址。同一个地址走第二次对发现新界面没有任何帮助。 */
     const triedGoto = new Set<string>();
+    /**
+     * 页内广度优先已经切过的项：`路由::组::文案`。
+     *
+     * 按路由分键，是因为同一个组在不同页上是不同的东西；按文案而不是选择器，
+     * 是因为交易类界面重渲染之后 `nth-of-type` 路径会变，而文案不变。
+     */
+    const triedInPage = new Set<string>();
+    /**
+     * 切过代表项之后既没换签名、也没产生差异的组——整组标死，不再试它剩下的选项。
+     *
+     * 这是 `shapeDry` 那条自适应规则（一次看不出、三次足以看出、十二次和三次
+     * 答案一样）搬到"组"这个粒度上。
+     */
+    const dryGroups = new Set<string>();
     // 去重和状态 id 必须用**同一把尺子**量地址。此前这里另写了一个丢哈希的
     // `pathOf`，于是在哈希路由的单页应用上，访问过 `/#/search` 之后 `/#/basket`
     // 和 `/#/login` 全被判成「去过了」——探索在第一屏就停了，而图看起来是满的。
@@ -731,7 +1244,15 @@ export async function runObserve(
      */
     type Step =
       | { key: string; kind: "login"; instruction: string }
-      | { key: string; kind: "click"; selector: string; label: string; shape: string }
+      | {
+          key: string;
+          kind: "click";
+          selector: string;
+          label: string;
+          shape: string;
+          /** 页内广度优先时它属于哪个控件组。切完要记"这一组的这一项试过了"。 */
+          group?: string;
+        }
       | { key: string; kind: "goto"; href: string }
       /**
        * **做实验**：故意把表单空着提交，看产品说什么。
@@ -839,6 +1360,78 @@ export async function runObserve(
       }
 
       /**
+       * **页内控件组，广度优先。**
+       *
+       * 这一档是为「业务活在页内」的应用加的。合约交易页只有一条 route，
+       * 整个产品是一组组 `role=tablist`：下单类型（Limit / Market / Conditional）、
+       * 账户面板（Positions / Open Orders / Order History / …）、图表（Chart / Info）。
+       * 实测这一页上有 4 个这样的组、16 个控件带得出选中态。
+       *
+       * 广度优先的三条边界，缺一就会爆炸或空转：
+       * ① **组内挨个切**，切过的不再切（`triedInPage`）；
+       * ② **组间不做笛卡尔积**——只走深度 1，切一组、记差异、再切下一组。
+       *    Limit×全仓×杠杆×买卖是四维积（上百种），而人不会这么试；
+       * ③ 一个组的代表切过之后签名与差异都为空，整组标死（`dryGroups`），不再试它剩下的。
+       *
+       * 还有一条不是效率而是安全：**永远不点提交类控件**。
+       * 这一档只点 tab / switch / radio / checkbox / option / combobox——
+       * 它们改的是"界面处于什么状态"，不是"把一笔订单发出去"。
+       */
+      const IN_PAGE_ROLES = new Set(["tab", "switch", "radio", "checkbox", "option", "menuitemradio", "menuitemcheckbox"]);
+      /**
+       * 场景计划决定**先点哪一组**。
+       *
+       * 计划里的控件编号是入口页那一次采集的下标，重渲染之后下标会漂——
+       * 所以落到**组名 + 文案**上，那两样稳得多。P0 的故事排最前，
+       * 计划里没提到的组排最后（但不排除：模型漏看的东西照样要探）。
+       */
+      const planned = new Map<string, number>();
+      if (plan)
+        for (const s of plan.stories) {
+          const w = s.priority === "P0" ? 0 : s.priority === "P1" ? 1 : 2;
+          for (const n of s.controls) {
+            const e = first.elements[n];
+            if (e) planned.set(`${e.group}::${e.label}`, Math.min(planned.get(`${e.group}::${e.label}`) ?? 9, w));
+          }
+        }
+      const rank = (c: Control): number => planned.get(`${c.group}::${c.label}`) ?? 5;
+      const inPageCandidates = ordered.filter(
+        (c) =>
+          !c.external &&
+          !!c.group &&
+          IN_PAGE_ROLES.has(c.role) &&
+          !c.selectedNow &&
+          !OFF_LIMITS.test(c.display) &&
+          !triedInPage.has(`${here}::${c.group}::${c.label}`) &&
+          !dryGroups.has(`${here}::${c.group}`),
+      );
+      // 计划里的排前面；同一档保持原顺序（稳定排序），这样"没提到的"仍然按 DOM 顺序探。
+      inPageCandidates.sort((a, b) => rank(a) - rank(b));
+      /**
+       * 要不要把这一档排在"未去过的路由"前面。
+       *
+       * `auto` 按事实判，不按猜测：这一屏有 ≥2 个控件组，就认为业务活在页内。
+       * 判据必须是事实，因为下面那条"路由优先"的规则对多路由产品是**对的**——
+       * 它是从「30 屏花在一个页内状态上、另一条路由一次没去」的实测里长出来的，
+       * 翻死了会毁掉 PetClinic / Juice Shop 那两个基准。
+       */
+      const groupCount = new Set(screen.elements.filter((c) => c.group).map((c) => c.group)).size;
+      const mode = spec.inPageFirst ?? "auto";
+      const inPageWins = mode === "on" || (mode === "auto" && groupCount >= 2);
+      if (inPageWins && inPageCandidates[0]) {
+        const c = inPageCandidates[0];
+        return {
+          key: `__inpage__${c.group}::${c.label}`,
+          kind: "click",
+          label: c.label,
+          selector: c.selector,
+          // shape 是"同一形状的控件点过几次"的去重键；页内切换按组去重，所以借用组名。
+          shape: `inpage:${c.group}`,
+          group: c.group,
+        };
+      }
+
+      /**
        * **没去过的路由，优先于同一路由上的新状态。**
        *
        * 探索现在是预算受限的（采满上限而停，不是没东西可点了）。预算怎么花就决定了
@@ -850,11 +1443,19 @@ export async function runObserve(
        * 爬虫先扩边界再深入的道理。
        *
        * 只对 `href` 成立——点击的落点事先不知道，没法这样排序。
+       *
+       * 2026-09-01 加了一个前置条件：上面那一档。理由见那里——单 route 的产品上
+       * 这条规则是反向的，它保证把有限预算优先花在**离开被测页**上。
        */
       const knownRoutes = new Set(sfgStates.map((st) => st.route));
+      // 页内候选还没枯竭时，不要急着跳出这一页。
+      if (inPageWins && inPageCandidates.length) {
+        /* 上面已经 return 了，这里留空是为了让阅读顺序和优先级顺序一致 */
+      }
       for (const c of ordered) {
         if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
         if (!c.href || c.href === here || triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
+        if (offsiteSection(c.href)) continue;
         if (deadHref.has(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
         return { key: c.href, kind: "goto", href: c.href };
@@ -945,6 +1546,7 @@ export async function runObserve(
       for (const href of frontier) {
         frontier.delete(href);
         if (triedGoto.has(href) || NOT_A_SCREEN.test(href) || deadHref.has(href)) continue;
+        if (offsiteSection(href)) continue;
         let route = "";
         try {
           route = pathOf(new URL(href, screen.url).toString());
@@ -969,6 +1571,7 @@ export async function runObserve(
         // 因为那才是这类单页应用打开它的方式。
         if (c.href && c.href !== here && !deadHref.has(c.href)) {
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
+          if (offsiteSection(c.href)) continue;
           return { key: c.href, kind: "goto", href: c.href };
         }
         /**
@@ -1041,7 +1644,7 @@ export async function runObserve(
         try {
           const before = signatureOf(current);
           await page.goBack();
-          await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+          await settle("导航后");
           current = await snapshot(`回退后`);
           /**
            * 退回来落到一个 0 控件的页面上——那是死路（404、JSON、空壳），不是界面。
@@ -1051,7 +1654,7 @@ export async function runObserve(
           if (!current.elements.length) {
             note(`退回来是一张空页面——回入口`, "warn");
             await page.goto(first.url);
-            await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+            await settle("导航后");
             current = await snapshot("回入口");
           }
           /**
@@ -1088,8 +1691,19 @@ export async function runObserve(
           break;
         }
       }
+      /**
+       * 动作之前的样子。**这是整条循环里此前一直缺的东西。**
+       *
+       * 在此之前，代码只问"这个签名见过没有"，从不比较前后——于是下游拿到的是 N 张
+       * 完整屏幕转储，没有任何"点了 X 之后 Y 出现了"的因果标注，只能从整屏文字里抓字面。
+       * 「验证入口页 Funding 数值」「验证入口页 Countdown 数值」就是这么来的。
+       */
+      const before = current;
       if (next.kind === "goto") triedGoto.add(next.href);
       else triedClick.add(next.key);
+      // 页内切换按「路由::组::文案」记，同一项不再切第二次。选择器会随重渲染变，文案不会。
+      if (next.kind === "click" && next.group)
+        triedInPage.add(`${pathOf(current.url)}::${next.group}::${next.label}`);
 
       try {
         const page = session!.page as unknown as {
@@ -1201,7 +1815,7 @@ export async function runObserve(
           const resolved = spec.resolve ? resolveText(next.instruction, spec.resolve) : next.instruction;
           await withModel(() => session!.agent.aiAction(resolved));
         }
-        await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+        await settle("导航后");
         emit({ type: "navigated", shotRef: await shot(session) });
 
         const cameFrom = currentId;
@@ -1220,9 +1834,16 @@ export async function runObserve(
         })();
         if (homeOrigin && nowOrigin !== homeOrigin) {
           // 这一屏不算数：它不属于被测产品。退回入口，接着走产品自己的东西。
+          if (next.kind === "goto") {
+            const sec = sectionOf(next.href);
+            const n = (offsiteHits.get(sec) ?? 0) + 1;
+            offsiteHits.set(sec, n);
+            if (n === OFFSITE_TOLERANCE)
+              note(`${sec}/ 这一段连着 ${n} 次都走出了被测应用——整段跳过，不再一个一个试`, "warn");
+          }
           note(`跟着 ${next.kind === "goto" ? next.href : "一次点击"} 走出了被测应用（到了 ${nowOrigin}）——退回入口`, "warn");
           await page.goto(first.url);
-          await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+          await settle("导航后");
           current = await snapshot("退回入口");
           currentId = idFor(current);
           continue;
@@ -1243,7 +1864,7 @@ export async function runObserve(
           // 用 goBack 而不是 goto 回去：goto 会把死页面留在历史里，
           // 后面探索退不动时 `goBack()` 正好退回它，`idFor` 又给它建一个 0 控件的状态。
           await page.goBack().catch(() => page.goto(current.url));
-          await new Promise((r) => setTimeout(r, spec.settleMs ?? 1500));
+          await settle("导航后");
           current = await snapshot("退回");
           currentId = idFor(current);
           continue;
@@ -1251,9 +1872,26 @@ export async function runObserve(
         const sig = signatureOf(after);
         const wasNew = !seen.has(sig);
         const toId = idFor(after);
+        /**
+         * 这一步**做成了什么**。整条循环里此前没有任何一处比较前后。
+         *
+         * 文本差过掩码：行情每秒都在跳，那不算"做成了什么"。而控件的出现/消失、
+         * 某个控件从未选变成选中，才是。
+         */
+        const effect = diffScreens(before, after);
         sfgEdges.push({
           from: currentId,
           to: toId,
+          ...(effect.changed
+            ? {
+                effect: {
+                  controlsAdded: effect.controlsAdded,
+                  controlsRemoved: effect.controlsRemoved,
+                  stateChanged: effect.stateChanged,
+                  textAdded: effect.textAdded.slice(0, 12),
+                },
+              }
+            : {}),
           action:
             next.kind === "goto"
               ? { kind: "goto", target: next.href, selector: "" }
@@ -1298,9 +1936,29 @@ export async function runObserve(
             screens.push(`（实验：${PROBE_WORDS[next.variant]} ${next.label}）\n${after.text}`);
             note(`实验结果记入材料（状态未变，但页面文字变了）`);
           }
+          /**
+           * 页内切换即使签名没换，只要**确实变了**就记进材料——但记的是**差异**，
+           * 不是又一张整屏转储。
+           *
+           * 这是 probe 那条口子的同一个道理：「这算不算一个新状态」和「这次观察值不值得留」
+           * 是两个问题。而记差异不记整屏，是因为整屏里全是行情数字，
+           * 下游只会又抓一遍 Funding 和 Countdown。
+           */
+          if (next.kind === "click" && next.group && effect.changed) {
+            screens.push(describeEffect(next.label, next.group, effect));
+            note(`页内切换有效果，记入材料（签名未变）`);
+          }
           // 代表没走出去 → 它的结构同类一并跳过。这一条直接把「12 张商品卡片吃掉
           // 11 个干轮」变成 1 个。
           if (next.kind === "click") shapeDry.add(`${cameFrom}::${next.shape}`);
+          /**
+           * 页内组：切了它的一个代表，签名没变、页面文字也没变 → **整组标死**。
+           *
+           * 只在两样都没变时才标死。只看签名不够——有些切换换的是数据不是结构
+           * （切到 Order History 面板，控件一样、内容全变），那不该被当成"这一组没用"。
+           */
+          if (next.kind === "click" && next.group && !effect.changed)
+            dryGroups.add(`${pathOf(current.url)}::${next.group}`);
           // 原地打转也要记一笔：它是「这个产品就这么大」和「探索走不动了」之间的区别。
           dry += 1;
           note(`没有新界面（连续 ${dry}/${dryLimit} 次）`, "warn");
@@ -1416,7 +2074,20 @@ export async function runObserve(
     if (unvisited.length) note(`${unvisited.length} 个地址看见了但一次都没进去`);
 
     const graph: StateFlowGraph = {
-      abstraction: spec.stateAbstraction ?? "route+controls",
+      // 记**实际生效**的那把尺子。此前这里写 "route+controls"，而挑函数时回落到的是
+      // "route+controls/norm"——两个回落值不一致，图从第一天起就在说谎。
+      abstraction: abstractionNameOf(spec.stateAbstraction),
+      /**
+       * 这次探索走的是什么计划。
+       *
+       * 记它的理由和记抽象名字是同一条：一次说不出自己用了哪把尺子、按什么计划走的探索，
+       * 没法和另一次比较。而"问过业务"和"没问过"是本轮改造要证明有效的那个变量。
+       */
+      plan: plan
+        ? { asked: true, business: plan.business, stories: plan.stories.map((s) => ({ id: s.id, title: s.title, priority: s.priority })) }
+        : { asked: false, business: "", stories: [] },
+      // 见 sfg.ts 的 `collector`：采集规则变了，同一个抽象公式算出来的签名也就变了。
+      collector: "aria-roles/v2",
       entry: sfgStates[0]?.id ?? "",
       states: sfgStates,
       transitions: sfgEdges,
@@ -1482,7 +2153,12 @@ export async function runExplore(
     emit({ type: "start", url: spec.url });
     session = await launchSession(spec.url, spec.launch);
     emit({ type: "navigated", shotRef: await shot(session) });
-    if (spec.settleMs) await new Promise((r) => setTimeout(r, spec.settleMs));
+    // 同样等页面安定，不是等一个固定的秒数——这条路上读空了页面，
+    // 下游看到的是一份"这个产品什么都没有"的材料。
+    await settleOn(session.page as unknown as { evaluate<T>(fn: () => T): Promise<T> }, {
+      minMs: spec.settleMs ?? 600,
+      maxMs: spec.maxSettleMs ?? 12_000,
+    });
 
     startBeat();
     const flows = asArray(await withModel(() => session!.agent.aiQuery(spec.prompt)));

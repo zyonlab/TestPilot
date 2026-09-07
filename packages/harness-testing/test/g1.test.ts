@@ -55,7 +55,7 @@ function fakeModel() {
               steps: ["输入 ${env.USERNAME}", "输入 ${secret.PASSWORD}", "点击 Sign in"],
               expected: "页面显示 Welcome, ${env.USERNAME} 与 Your dashboard is ready.",
               tier: 1,
-              key: "login|valid|dashboard-shown", covers: [], postSteps: [],
+              key: "login|valid|dashboard-shown", covers: [], sourceRefs: [], postSteps: [],
             },
           ],
         }),
@@ -71,7 +71,7 @@ function fakeModel() {
             steps: ["输入 ${env.USERNAME}", "输入错误密码 wrong-pass", "点击 Sign in"],
             expected: "显示 Invalid username or password，停留在登录页",
             tier: 1,
-            key: "login|wrong-password|error-shown", covers: [], postSteps: [],
+            key: "login|wrong-password|error-shown", covers: [], sourceRefs: [], postSteps: [],
           },
           {
             title: "空用户名登录被拒绝",
@@ -80,7 +80,7 @@ function fakeModel() {
             steps: ["用户名留空", "输入 ${secret.PASSWORD}", "点击 Sign in"],
             expected: "显示 Invalid username or password",
             tier: 1,
-            key: "login|empty-username|error-shown", covers: [], postSteps: [],
+            key: "login|empty-username|error-shown", covers: [], sourceRefs: [], postSteps: [],
           },
         ],
       });
@@ -144,7 +144,7 @@ describe("G1: specification → text cases", () => {
             steps: ["点击 Sign in"],
             expected: "显示 Your dashboard is ready.",
             tier: 1,
-            key: "login|valid|dashboard", covers: [], postSteps: [],
+            key: "login|valid|dashboard", covers: [], sourceRefs: [], postSteps: [],
           },
         ],
       });
@@ -213,7 +213,7 @@ describe("gate ①", () => {
     // says so, which is the whole point of the rule.
     oracle: { kind: "text" as const, value: "Your dashboard is ready." },
     tier: 1 as const,
-    key: "login|valid|dashboard", covers: [], postSteps: [],
+    key: "login|valid|dashboard", covers: [], sourceRefs: [], postSteps: [],
   };
 
   it("marks an assertion that promises nothing checkable", () => {
@@ -480,7 +480,7 @@ describe("gate ① on the stories themselves", () => {
     expected: "页面显示 Checkout: Your Information",
     tier: 1 as const,
     oracle: { kind: "text" as const, value: "Checkout: Your Information" },
-    key: "checkout|cart|step-one", covers: [], postSteps: [],
+    key: "checkout|cart|step-one", covers: [], sourceRefs: [], postSteps: [],
   };
   const withStories = (stories: unknown[]) =>
     runGate({ origin: "x", flows: [], stories: stories as never, cases: [kase] as never });
@@ -533,6 +533,7 @@ describe("gate ① on what a case exercises", () => {
     oracle: { kind: "text" as const, value: "X" },
     key: "a|b|c",
     covers: [],
+    sourceRefs: [],
     postSteps: [],
     ...over,
   });

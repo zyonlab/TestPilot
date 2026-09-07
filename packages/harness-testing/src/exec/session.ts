@@ -13,7 +13,7 @@ import {
 } from "./wallet.js";
 import { resolveChainConfig, resolveViewport } from "../env.js";
 import { setupInjectedWallet } from "./injectedWallet.js";
-import type { StorageState } from "../types.js";
+import type { StorageState, Viewport } from "../types.js";
 
 // Apply the fixed query params to EVERY navigation (not just the entry URL) via request
 // interception: each document/navigation request's URL is rewritten to carry the params, so
@@ -172,12 +172,27 @@ export interface LaunchOpts {
   query?: Record<string, string>; // fixed query-string params appended to navigations
   storageState?: StorageState | null; // captured login state → cookies + localStorage injected
   /**
+   * 一个**持续登录**的 profile 目录。给了它就用它启动，且**不再注入 `storageState`**——
+   * profile 自己带着登录态。这是给那些「光 replay cookie 过不去」的站点用的
+   * （Binance 的私有接口要它自家 JS 生成的头、会话绑浏览器指纹；见 `testpilot-binance-sut`）：
+   * 在这个 profile 里手动登录一次，之后每次执行都复用它，指纹和头都还在。
+   * 与 `wallet`/`injected` 互斥（那两条各有自己的 profile 规矩）。
+   */
+  sutProfileDir?: string;
+  /**
    * 变异体：往这一个浏览器会话里注入一个人造缺陷，看用例会不会叫。
    *
    * **被测应用一个字节都不改**——变的只是这个会话看到的那份 DOM。这一点是黑盒变异测试
    * 成立的关键：两次运行之间被测对象仍然是同一个东西。见 `mutate/inject.ts`。
    */
   mutation?: { id: string; script: string };
+  /**
+   * 这个被测对象要多大的视口。
+   *
+   * 环境上的一个字段，不是全局环境变量：把默认调大会让所有 SUT 的每一次
+   * 模型调用都跟着变贵，而大多数界面在 1024 下是完整的。不给就用默认。
+   */
+  viewport?: Partial<Viewport>;
 }
 
 // Launch Chrome for Testing (Puppeteer's default build) and wrap the page in a Midscene agent.
@@ -196,7 +211,7 @@ export async function launchSession(
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     const page = await browser.newPage();
-    await page.setViewport(resolveViewport());
+    await page.setViewport(resolveViewport(opts.viewport));
     await installQueryInterception(page, opts.query);
     await page.setUserAgent(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -238,17 +253,37 @@ export async function launchSession(
   const headless =
     opts.headless ??
     (wantsWallet ? process.env.HEADLESS === "1" : true);
+  // A persistent, already-logged-in profile for the SUT (non-wallet runs only). When set we
+  // launch on it and skip storageState injection — the profile carries the session. This is
+  // the path for sites whose auth cannot be reproduced by replaying cookies into a blank
+  // context. Automation flags are stripped so the window is an ordinary Chrome (some sites
+  // gate login behind an is-automated check).
+  const sutProfile = !wantsWallet && !opts.injected ? opts.sutProfileDir : undefined;
+  // 持续 profile 必须用**登录它的那个 app**来驱动:macOS 的 cookie 密钥挂在 Keychain 的
+  // "Chrome Safe Storage",按 app 身份取。用 Chrome for Testing 打开一个由正式版 Chrome 登录的
+  // profile,解不开加密 cookie,登录态就丢了。所以 sutProfile 在场时默认指向正式版 Chrome。
+  const REAL_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  const executablePath = sutProfile
+    ? process.env.PUPPETEER_EXECUTABLE_PATH || REAL_CHROME
+    : process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
   const browser = await puppeteer.launch({
     headless, // wallet → headed; otherwise new headless
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    executablePath,
     args,
-    userDataDir: onboarded
-      ? PROFILE_DIR
-      : wantsWallet
-        ? mkdtempSync(join(tmpdir(), "testpilot-profile-"))
+    userDataDir: sutProfile
+      ? sutProfile
+      : onboarded
+        ? PROFILE_DIR
+        : wantsWallet
+          ? mkdtempSync(join(tmpdir(), "testpilot-profile-"))
+          : undefined,
+    // Puppeteer disables extensions by default; allow them. Strip the automation banner for
+    // a persistent SUT profile so the page sees a normal browser.
+    ignoreDefaultArgs: wantsWallet
+      ? ["--disable-extensions"]
+      : sutProfile
+        ? ["--enable-automation"]
         : undefined,
-    // Puppeteer disables extensions by default; allow them.
-    ignoreDefaultArgs: wantsWallet ? ["--disable-extensions"] : undefined,
   });
 
   let walletId: string | undefined;
@@ -272,7 +307,7 @@ export async function launchSession(
   const page = await browser.newPage();
   // Downsampled viewport (see resolveViewport): keeps the vision-model prompt small enough
   // for memory-constrained self-hosted models (MLX prefill guard). Same as the injected path.
-  await page.setViewport(resolveViewport());
+  await page.setViewport(resolveViewport(opts.viewport));
   await installQueryInterception(page, opts.query);
   // **两条启动路径都要装。**第一版只写在注入钱包那条分支里，而正常执行走的是这一条
     // ——于是变异体一次都没装上，计数恒为 0，我先后怀疑了时机和 API，都不是。

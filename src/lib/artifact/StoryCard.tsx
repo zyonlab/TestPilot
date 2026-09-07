@@ -19,13 +19,13 @@ export function StoryTitle({ story, compact }: { story: ArtifactStory; compact?:
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-mono text-[11px] text-primary">{story.id}</span>
-        <span className={cn("font-medium text-foreground", compact ? "text-[12.5px]" : "text-[13.5px]")}>
+        <span className="font-mono text-[0.6875rem] text-primary">{story.id}</span>
+        <span className={cn("font-medium text-foreground", compact ? "text-[0.8125rem]" : "text-[0.875rem]")}>
           {story.title}
         </span>
       </div>
       {story.role || story.benefit ? (
-        <div className="mt-0.5 text-[11.5px] leading-[1.6] text-muted-foreground">
+        <div className="mt-0.5 text-[0.75rem] leading-[1.6] text-muted-foreground">
           {t("artifact.asRoleIWant", {
             role: story.role ?? t("artifact.roleUnknown"),
             what: story.title,
@@ -34,12 +34,10 @@ export function StoryTitle({ story, compact }: { story: ArtifactStory; compact?:
         </div>
       ) : (
         // 两个都没有 = 这不是一条用户故事。说出来。
-        <div className="mt-0.5 text-[11.5px] text-amber-600 dark:text-amber-400">
-          {t("artifact.notAStory")}
-        </div>
+        <div className="mt-0.5 text-[0.75rem] text-warn">{t("artifact.notAStory")}</div>
       )}
       {incomplete && (story.role || story.benefit) && (
-        <div className="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+        <div className="mt-0.5 text-[0.6875rem] text-warn">
           {!story.role ? t("artifact.missingRole") : t("artifact.missingBenefit")}
         </div>
       )}
@@ -63,14 +61,22 @@ export function StoryCard({
       <div className="flex items-start gap-3">
         <StoryTitle story={story} />
         <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1">
-          {story.activity && <Chip tone="accent" title={t("artifact.activityWhy")}>{story.activity}</Chip>}
+          {story.activity && (
+            <Chip tone="accent" title={t("artifact.activityWhy")}>
+              {story.activity}
+            </Chip>
+          )}
           {story.flowId && <Chip title={t("artifact.flowWhy")}>{story.flowId}</Chip>}
           {story.requirementId && <Chip title={t("artifact.reqWhy")}>{story.requirementId}</Chip>}
           {caseCount !== undefined &&
             (caseCount > 0 ? (
-              <Chip tone="plain" onClick={onOpenCases}>{t("artifact.nCases", { n: caseCount })}</Chip>
+              <Chip tone="plain" onClick={onOpenCases}>
+                {t("artifact.nCases", { n: caseCount })}
+              </Chip>
             ) : (
-              <Chip tone="warn" title={t("artifact.noCasesWhy")}>{t("artifact.noCases")}</Chip>
+              <Chip tone="warn" title={t("artifact.noCasesWhy")}>
+                {t("artifact.noCases")}
+              </Chip>
             ))}
         </div>
       </div>
@@ -90,10 +96,7 @@ export function StoryCard({
       <Field label={t("artifact.source")} empty={t("artifact.noSource")} tone="muted">
         {story.source && (
           <span
-            className={cn(
-              "font-mono text-[11.5px]",
-              story.sourceBy === "located" ? "" : "text-amber-600 dark:text-amber-400",
-            )}
+            className={cn("font-mono text-[0.75rem]", story.sourceBy === "located" ? "" : "text-warn")}
             title={t(`stories.sourceBy.${story.sourceBy ?? "claimed"}`)}
           >
             {story.sourceBy === "located" ? "" : "? "}

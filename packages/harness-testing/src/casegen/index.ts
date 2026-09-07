@@ -2,6 +2,8 @@ export * from "./types.js";
 export * from "./attribute.js";
 export * from "./prompts.js";
 export * from "./gate.js";
+export * from "./provenance.js";
 export * from "./nodes.js";
 export * from "./graph.js";
 export * from "./revise.js";
+export * from "./fillgap.js";

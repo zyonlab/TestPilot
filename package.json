@@ -7,13 +7,18 @@
     "dev": "rsbuild dev",
     "build": "rsbuild build",
     "preview": "rsbuild preview",
-    "typecheck": "tsc --noEmit && node scripts/check-i18n.mjs",
-    "test": "pnpm -r --filter './packages/**' --filter './apps/**' test",
-    "typecheck:ws": "pnpm -r --filter './packages/**' --filter './apps/**' typecheck",
+    "typecheck": "pnpm typecheck:app && pnpm typecheck:ws",
+    "typecheck:app": "tsc --noEmit && node scripts/check-i18n.mjs",
+    "typecheck:ws": "pnpm -r --filter './packages/**' --filter './apps/**' --filter './server' typecheck",
+    "test": "pnpm -r --filter './packages/**' --filter './apps/**' --filter './server' test",
     "server:dev": "pnpm --filter testpilot-server dev",
-    "check:i18n": "node scripts/check-i18n.mjs"
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "test:hooks": "node --test \"plugins/testpilot/hooks/test/*.test.mjs\"",
+    "check:drift": "node scripts/check-drift.mjs"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
     "@xyflow/react": "^12.11.3",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",

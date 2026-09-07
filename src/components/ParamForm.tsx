@@ -56,20 +56,21 @@ export function ParamForm({
     onChange(next);
   };
 
-  const input = "w-full rounded-md border border-border bg-card px-2 py-1 text-[11.5px]";
+  const input = "w-full rounded-md border border-border bg-card px-2 py-1 text-[0.75rem]";
   return (
     <div className="mb-2 space-y-1.5">
       {editable.map((f) => {
         const v = value[f.name];
-        const ph = f.defaultValue !== undefined ? String(f.defaultValue) : f.optional ? t("wf.paramOptional") : "";
+        const ph =
+          f.defaultValue !== undefined ? String(f.defaultValue) : f.optional ? t("wf.paramOptional") : "";
         return (
           <label key={f.name} className="flex items-start gap-2">
             <span
-              className="w-24 shrink-0 pt-1 text-right font-mono text-[10.5px] leading-[1.5] text-muted-foreground"
+              className="w-24 shrink-0 pt-1 text-right font-mono text-[0.6875rem] leading-[1.5] text-muted-foreground"
               title={f.description}
             >
               {f.name}
-              {!f.optional && <span className="text-rose-500"> *</span>}
+              {!f.optional && <span className="text-bad"> *</span>}
             </span>
             <span className="min-w-0 flex-1">
               {f.kind === "boolean" ? (
@@ -101,7 +102,10 @@ export function ParamForm({
                   value={Array.isArray(v) ? (v as string[]).join(", ") : ""}
                   placeholder={t("wf.paramListHint")}
                   onChange={(e) => {
-                    const items = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+                    const items = e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
                     set(f.name, items.length ? items : undefined);
                   }}
                 />
@@ -122,7 +126,7 @@ export function ParamForm({
                 />
               )}
               {(f.description || f.min !== undefined || f.max !== undefined) && (
-                <span className="mt-0.5 block text-[10px] leading-[1.5] text-muted-foreground">
+                <span className="mt-0.5 block text-[0.6875rem] leading-[1.5] text-muted-foreground">
                   {f.description}
                   {f.min !== undefined && f.max !== undefined && ` ${f.min}–${f.max}`}
                 </span>
@@ -133,7 +137,7 @@ export function ParamForm({
       })}
       {shape.fields.length > editable.length && (
         // 说出来：有几个键这个表单看不懂，它们只能在下面的 JSON 里改。
-        <p className="pl-[104px] text-[10px] text-muted-foreground">
+        <p className="pl-[6.5rem] text-[0.6875rem] text-muted-foreground">
           {t("wf.paramOnlyJson", { n: shape.fields.length - editable.length })}
         </p>
       )}

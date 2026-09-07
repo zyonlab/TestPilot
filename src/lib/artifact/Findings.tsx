@@ -8,7 +8,7 @@ import type { ArtifactFinding, CaseField } from "./types";
 /**
  * 门禁的 finding，画成人话。
  *
- * 此前界面直接显示 `[oracle-vague] assertion names no observable phenomenon: "到达 /owners/find 页面"`
+ * 此前界面直接显示 `[oracle-vague] assertion names no observable phenomenon:"到达 /owners/find 页面"`
  * ——一个中文界面里的英文 lint 码，没有解释、没有改法、点不动。根因不在前端：
  * 那句话在 `casegen/gate.ts` 里就被拼死了，过河即成常量，没有 key 也就没法译。
  *
@@ -70,19 +70,15 @@ function FindingRow({
   const text = translated ? t(msgKey, f.args ?? {}) : (f.message ?? t(msgKey));
   const explainable = hasKey(whyKey) || hasKey(fixKey);
   const tone =
-    f.severity === "block"
-      ? "text-rose-600 dark:text-rose-400"
-      : f.severity === "warn"
-        ? "text-amber-600 dark:text-amber-400"
-        : "text-muted-foreground";
+    f.severity === "block" ? "text-bad" : f.severity === "warn" ? "text-warn" : "text-muted-foreground";
 
   return (
-    <li className="text-[11.5px] leading-[1.6]">
+    <li className="text-[0.75rem] leading-[1.6]">
       <div className="flex items-start gap-1.5">
         <span
           className={cn(
-            "mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full",
-            f.severity === "block" ? "bg-rose-500" : f.severity === "warn" ? "bg-amber-500" : "bg-muted-foreground/50",
+            "mt-[0.1875rem] h-1.5 w-1.5 shrink-0 rounded-full",
+            f.severity === "block" ? "bg-bad" : f.severity === "warn" ? "bg-warn" : "bg-muted-foreground/50",
           )}
           aria-hidden
         />
@@ -93,7 +89,7 @@ function FindingRow({
         >
           {prefix ? `${prefix} ` : ""}
           {text}
-          {!translated && <span className="ml-1 font-mono text-[10px] opacity-60">[{f.rule}]</span>}
+          {!translated && <span className="ml-1 font-mono text-[0.6875rem] opacity-60">[{f.rule}]</span>}
           {explainable &&
             (open ? (
               <ChevronDown className="ml-1 inline h-3 w-3 align-[-1px]" />
@@ -104,7 +100,7 @@ function FindingRow({
         {f.field && onFocusField && (
           <button
             type="button"
-            className="shrink-0 font-mono text-[10.5px] text-primary hover:underline"
+            className="shrink-0 font-mono text-[0.6875rem] text-primary hover:underline"
             onClick={() => onFocusField(f.field!)}
           >
             {t("gate.goFix")}
@@ -112,7 +108,7 @@ function FindingRow({
         )}
       </div>
       {open && (
-        <div className="ml-3 mt-1 space-y-0.5 border-l border-border pl-2.5 text-[11px] text-muted-foreground">
+        <div className="ml-3 mt-1 space-y-0.5 border-l border-border pl-2.5 text-[0.6875rem] text-muted-foreground">
           {hasKey(whyKey) && <div>{t(whyKey)}</div>}
           {hasKey(fixKey) && (
             <div className="text-foreground">

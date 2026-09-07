@@ -56,6 +56,25 @@ export interface HarnessConfig {
     usd: number;
     ms: number;
   };
+  /**
+   * **性能预算**：一次页面加载的绝对上限，毫秒。
+   *
+   * 它和上面那个 `budget` 是两件事，而界面上一直只有一个「预算」，
+   * 于是 US-11 的「与基线**和预算**比对」看起来像是没做——
+   * 其实 `comparePerf` 一直支持 budgets，只是调用处传的是 `{}`，没人配得到它。
+   *
+   *   `budget`      一次运行花多少（调用数 / 美元 / 时长）——花完就停
+   *   `perfBudget`  被测页面慢到什么程度算回归——超了就标红，不停跑
+   *
+   * 只跟基线比会漏掉一种情况：基线本身就慢。基线保的是「别变得更慢」，
+   * 预算保的是「本来就不该这么慢」，两条线缺一不可。
+   */
+  perfBudget: {
+    ttfbMs: number;
+    fcpMs: number;
+    domContentLoadedMs: number;
+    loadMs: number;
+  };
   /** Components switched off for an ablation run. Reported alongside every result. */
   ablate: string[];
   guard: {

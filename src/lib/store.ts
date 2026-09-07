@@ -12,9 +12,6 @@ import type {
 } from "./types";
 import { api } from "./api";
 
-
-
-
 interface StoreState {
   cases: TestCase[];
   selectedId: string;
@@ -36,20 +33,24 @@ interface StoreState {
   setQuarantine: (id: string, quarantined: boolean) => Promise<void>;
   selectProject: (id: string) => Promise<void>;
   exitProject: () => void;
+  /** 建成了就把它交出来；后端不通时返回 `undefined`——调用方得能分辨这两种情况。 */
   createProject: (
     name: string,
     targetUrl: string,
     targetPlatform?: TargetPlatform,
     materials?: string[],
-  ) => Promise<void>;
+  ) => Promise<Project | undefined>;
   /** Rename / re-point / switch ends. */
-  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>) => Promise<void>;
+  updateProject: (
+    id: string,
+    patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>,
+  ) => Promise<void>;
   select: (id: string) => void;
   patchCase: (id: string, patch: Partial<TestCase>) => Promise<void>;
   setPriority: (id: string, p: Priority) => Promise<void>;
   generateCode: (id: string) => Promise<void>;
   runCase: (id: string) => Promise<void>;
-  runAllP0: () => void;
+  runAllP0: () => Promise<void>;
   setModel: (patch: Partial<ModelConfig>) => void;
   testConnection: () => Promise<void>;
 }
@@ -85,7 +86,7 @@ export const useStore = create<StoreState>((set, get) => ({
       if (!projects.length) {
         // Backend is up but has no projects → a genuinely empty state. Clear the
         // built-in mock data (which is only a fallback for when the backend is OFFLINE),
-        // otherwise the UI shows a phantom "shop.acme.com" project + mock cases.
+        // otherwise the UI shows a phantom"shop.acme.com" project + mock cases.
         set({
           backendUp: true,
           projects: [],
@@ -130,9 +131,7 @@ export const useStore = create<StoreState>((set, get) => ({
     } catch {
       // revert on failure
       set((s) => ({
-        cases: s.cases.map((c) =>
-          c.id === id ? { ...c, quarantined: !quarantined } : c,
-        ),
+        cases: s.cases.map((c) => (c.id === id ? { ...c, quarantined: !quarantined } : c)),
       }));
     }
   },
@@ -142,10 +141,7 @@ export const useStore = create<StoreState>((set, get) => ({
     const proj = get().projects.find((p) => p.id === id);
     if (!proj) return;
     try {
-      const [{ cases }, { runs }] = await Promise.all([
-        api.getCases(id),
-        api.getRuns({ projectId: id }),
-      ]);
+      const [{ cases }, { runs }] = await Promise.all([api.getCases(id), api.getRuns({ projectId: id })]);
       set({
         activeProjectId: id,
         cases,
@@ -173,8 +169,11 @@ export const useStore = create<StoreState>((set, get) => ({
       const { project } = await api.createProject(name, targetUrl, targetPlatform, materials);
       set((s) => ({ projects: [...s.projects, project] }));
       await get().selectProject(project.id);
+      return project;
     } catch {
-      /* backend offline */
+      // 后端不通。此前这里静默返回，于是「建好了」和「一个字都没写进去」在界面上
+      // 长得一模一样——表单关掉、列表照旧，人只会以为自己点漏了。
+      return undefined;
     }
   },
 
@@ -235,16 +234,48 @@ export const useStore = create<StoreState>((set, get) => ({
       // Single-case runs do NOT enter s.runs — the Runs page is the suite ledger.
       // The case detail shows this run inline (fetched by caseId).
       set((s) => ({ cases: s.cases.map((c) => (c.id === id ? updated : c)) }));
-    } catch {
-      set((s) => ({ cases: s.cases.map((c) => (c.id === id ? { ...c, runStatus: "failed" } : c)) }));
+    } catch (e) {
+      /**
+       * 请求没回来 ≠ 这条用例失败了。
+       *
+       * 此前这里一律写 `runStatus:"failed"`——**界面记下了一个它从没收到过的判决**。
+       * 600 秒超时、网络抖动、网关重启，全都会变成一条红色的用例，而它可能跑得好好的。
+       * 「没拿到结果」是它自己的状态，理由要留着，人才知道该重试还是该去看代码。
+       */
+      set((s) => ({
+        cases: s.cases.map((c) =>
+          c.id === id ? { ...c, runStatus: "unknown", runNote: (e as Error).message } : c,
+        ),
+      }));
     }
   },
 
-  runAllP0: () => {
+  /**
+   * 跑一批 P0。
+   *
+   * 走**队列**，不再每 300ms 直接发一个 POST：那条路不进队列，而 runnerCount 默认是 1，
+   * `pickRunner` 找不到空闲的就把活交给正忙的那个，runner 抛"runner busy"，
+   * 路由 catch 里把用例标成 failed——**把根本没跑成的用例直接标红，而且不留任何记录**。
+   */
+  runAllP0: async () => {
     const p0 = get().cases.filter((c) => c.priority === "P0");
-    p0.forEach((c, i) => window.setTimeout(() => void get().runCase(c.id), i * 300));
+    if (!p0.length || !get().backendUp) return;
+    set((s) => ({
+      cases: s.cases.map((c) => (c.priority === "P0" ? { ...c, runStatus: "running" } : c)),
+    }));
+    try {
+      const pid = get().activeProjectId;
+      if (!pid) return;
+      await api.runSuite(pid, "P0");
+      await get().loadData();
+    } catch (e) {
+      set((s) => ({
+        cases: s.cases.map((c) =>
+          c.priority === "P0" ? { ...c, runStatus: "unknown", runNote: (e as Error).message } : c,
+        ),
+      }));
+    }
   },
-
 
   /*
    * 「探索直接产用例」已经下掉（2026-08-21）：观察现在是**材料**，和用户文档一样先经

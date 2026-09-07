@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ALL_ABLATABLE } from "@testpilot/harness-core";
@@ -165,4 +165,100 @@ export function listEvalSpecs(): { specs: LoadedSpec[]; problems: SpecProblem[] 
 
 export function getEvalSpec(id: string): LoadedSpec | undefined {
   return listEvalSpecs().specs.find((s) => s.id === id);
+}
+
+/**
+ * 从一条 critic 建议造一份**可以直接跑**的评测定义。
+ *
+ * critic 提得出改进建议，但产物是**给人读的文字**——而 `evals/*.json` 今天全部手写。
+ * 于是两头都在：一边是「这里可能有问题」，一边是「这个 harness 拿什么考自己」，
+ * 中间没有路。这个函数就是那条路。
+ *
+ * 三条纪律：
+ * ① 只有**说得出怎么证伪**的建议才生成得出来（`test.kind` 是 ablation 或 param）。
+ *    一条 manual 的建议造不出两条臂——硬造出来的那两条臂量的是别的东西。
+ * ② `why` 必填而且不能是复述标题：一份说不出自己在问什么的评测，
+ *    最后会变成一个大家都看、但谁也不会据此改任何东西的仪表盘。
+ * ③ `expect` 是**预注册**的，不是断言。它记下我们跑之前的判断，跑完之后对账——
+ *    一个会红的评测会被人调到绿为止，而那正是评测本该防住的事。
+ *
+ * 走 `validate()` 落盘，所以一份造出来的定义和一份手写的受同一套检查：
+ * 未知的开关、两条一样的臂、label 撞名，全都当场拒。
+ */
+export function specFromSuggestion(input: {
+  suggestion: {
+    title: string;
+    change: string;
+    evidence: string;
+    expectedEffect?: string;
+    test: { kind: "ablation" | "param" | "manual"; handle?: string };
+    inadmissible?: string;
+  };
+  graphId: string;
+  /** 预判：跑之前写下来的那一句。不给就记成 `unknown`——诚实，不是偷懒。 */
+  expect?: { direction: "a-better" | "b-better" | "no-difference" | "unknown"; note: string };
+  goldPath?: string;
+}): LoadedSpec {
+  const s = input.suggestion;
+  if (s.inadmissible)
+    throw new Error(`这条建议被判为不可采纳（${s.inadmissible}）——不该被造成一份评测`);
+  if (s.test.kind === "manual" || !s.test.handle)
+    throw new Error(
+      `这条建议说不出怎么证伪（test.kind=${s.test.kind}）。一份配对评测需要两条**只差一处**的臂，` +
+        `而硬造出来的那两条臂量的是别的东西。`,
+    );
+
+  const id = `critic-${slug(s.title)}`;
+  /*
+   * 两条臂**只差一处**：基线，和改了那一处之后。
+   *
+   * 这是配对评测唯一能成立的形状——差两处的两条臂，量出来的差异归不到任何一处上。
+   */
+  const arms =
+    s.test.kind === "ablation"
+      ? {
+          a: { label: "baseline", ablate: [] as string[] },
+          b: { label: `without ${s.test.handle}`, ablate: [s.test.handle] },
+        }
+      : (() => {
+          // "node.param=value"
+          const m = /^([\w.-]+)\.([\w-]+)=(.*)$/.exec(s.test.handle ?? "");
+          if (!m) throw new Error(`参数写法要是 "节点.参数=值"，收到的是 "${s.test.handle}"`);
+          const [, node, param, raw] = m;
+          const value: unknown = raw === "true" ? true : raw === "false" ? false : Number.isNaN(Number(raw)) ? raw : Number(raw);
+          return {
+            a: { label: "baseline", ablate: [] as string[] },
+            b: { label: `${node}.${param}=${raw}`, ablate: [] as string[], params: { [node]: { [param]: value } } },
+          };
+        })();
+
+  const spec = {
+    id,
+    title: s.title,
+    // 证据就是这份评测存在的理由——把 critic 手里那份原样带过来，别让它在路上蒸发。
+    why: `${s.change}\n\n证据：${s.evidence}`,
+    graphId: input.graphId,
+    ...(input.goldPath ? { goldPath: input.goldPath } : {}),
+    ...arms,
+    expect: input.expect ?? {
+      direction: "unknown" as const,
+      note: s.expectedEffect || "critic 没有说出它预期哪一边更好——unknown 是诚实的答案",
+    },
+  };
+
+  const rel = `evals/${id}.json`;
+  const checked = validate(spec, rel);
+  mkdirSync(EVAL_DIR, { recursive: true });
+  writeFileSync(resolve(EVAL_DIR, `${id}.json`), JSON.stringify(spec, null, 2) + "\n");
+  return checked;
+}
+
+/** 标题变成一个能当文件名的 id。 */
+function slug(title: string): string {
+  const s = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return s || "untitled";
 }

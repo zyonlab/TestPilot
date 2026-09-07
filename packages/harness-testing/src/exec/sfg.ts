@@ -57,6 +57,24 @@ export const SfgTransitionSchema = z.object({
    * 两者混作一谈，图就在声称一些没验证过的事。
    */
   walked: z.boolean().default(true),
+  /**
+   * 这一步**做成了什么**——哪些控件出现/消失、哪个控件的状态变了、多了哪几行字。
+   *
+   * 挂在转移上而不是动作上：同一个点击在不同状态下效果不同。
+   * 这一维此前完全没有，于是下游只能拿整屏转储去抓字面——
+   * 「显示 0.01000%」这类"规则"就是这么进规格的。有了它，一条转移才说得出
+   * 「切到条件单之后多出了触发价这个字段」，那才是一条用户故事的内容。
+   *
+   * 文本差已经过易变值掩码（见 `maskVolatile`）：行情每秒都在跳，那不是"做成了什么"。
+   */
+  effect: z
+    .object({
+      controlsAdded: z.array(z.string()).default([]),
+      controlsRemoved: z.array(z.string()).default([]),
+      stateChanged: z.array(z.string()).default([]),
+      textAdded: z.array(z.string()).default([]),
+    })
+    .optional(),
 });
 export type SfgTransition = z.infer<typeof SfgTransitionSchema>;
 
@@ -80,6 +98,19 @@ export const StateFlowGraphSchema = z.object({
    * 一次探索的结果如果说不出自己用的哪把尺子，它就没法和另一次比较。
    */
   abstraction: z.string().default("route+controls"),
+  /**
+   * 采集控件用的是哪一版规则。
+   *
+   * 抽象的**公式**由 `abstraction` 记着，但公式吃的是控件列表——采集规则一变，
+   * 同一个公式算出来的签名也跟着变。2026-09-01 把选择器从
+   * `button,a,input,select,textarea,[role=button]` 扩到包含 ARIA 交互角色
+   * （实测 demo.binance.com 合约页：7 → 38 个控件），并在控件文案里带上
+   * `{tab*}` 这样的角色与选中态标记。
+   *
+   * 不记这一项的话，一张两个月前的图和今天的图会声称用了同一把尺子——
+   * 而它们量出来的东西不是一回事。
+   */
+  collector: z.string().default("tags-only/v1"),
   entry: z.string().default(""),
   states: z.array(SfgStateSchema).default([]),
   transitions: z.array(SfgTransitionSchema).default([]),
@@ -101,6 +132,22 @@ export const StateFlowGraphSchema = z.object({
    * 它不该变成一条边（那会让图说谎），但它必须活下来。所以单独存一份地址清单。
    */
   unvisited: z.array(z.string()).default([]),
+  /**
+   * 这次探索走的是什么计划——问没问过业务、问出了哪些候选故事。
+   *
+   * 和 `abstraction`、`collector` 一个道理：一次说不出自己按什么走的探索，
+   * 没法和另一次比较。而"先问业务场景"正是要被证明有效的那个变量，
+   * 图上分辨不出来，消融就只能靠人记得当时开没开。
+   */
+  plan: z
+    .object({
+      asked: z.boolean().default(false),
+      business: z.string().default(""),
+      stories: z
+        .array(z.object({ id: z.string(), title: z.string(), priority: z.string() }))
+        .default([]),
+    })
+    .default({ asked: false, business: "", stories: [] }),
 });
 export type StateFlowGraph = z.infer<typeof StateFlowGraphSchema>;
 
@@ -111,7 +158,18 @@ export type StateFlowGraph = z.infer<typeof StateFlowGraphSchema>;
  * 而且不同探索策略适配不同的抽象——严格细粒度的利于 model-based（我们这一类），
  * 紧凑的利于 RL-based。写死了就没法参与消融，也没法和别人的结果比。
  */
-export type Abstraction = (screen: { url: string; controls: string[]; title?: string }) => string;
+export type Abstraction = (screen: {
+  url: string;
+  controls: string[];
+  title?: string;
+  /**
+   * 与 `controls` 平行的**状态串**：`控件文案#selected=true,disabled` 这种形状。
+   *
+   * 只有认得它的抽象才读；旧的五把尺子一个字都不动，所以它们量出来的东西和以前一样。
+   * 没有这一项的调用方（老测试、老入口）传 undefined，新尺子会退回只看 controls。
+   */
+  states?: string[];
+}) => string;
 
 /**
  * 路由。**包含 `#/` 开头的哈希。**
@@ -171,10 +229,38 @@ export const ABSTRACTIONS: Record<string, Abstraction> = {
    */
   "route+controls/norm": (s) =>
     `${pathOf(s.url)}|${[...s.controls].map(numless).sort().join("|")}`,
+  /**
+   * 路由 + 控件 + **控件的状态**。给"业务活在页内"的应用用。
+   *
+   * 为什么必须新开一把尺子而不是改上面那把：合约交易页只有一条 route，
+   * Limit→Market、Cross→Isolated、TP/SL 开关这些切换在 DOM 上**只改选中态**，
+   * 控件文案集合一个字不变。上面五把尺子对它们一律判同 → 每次成功的切换都被记成
+   * 「没有新界面」→ 连续三次就结束探索。实测（demo.binance.com，2026-09-01）：
+   * 整个合约页只采到 7 个控件、全是链接，图上这条 route 只有 1 个状态。
+   *
+   * 数字照样归一（`numless`），否则订单簿的价格每秒都在造新状态——
+   * 那是抽象过紧的那一头，和过松一样坏。
+   */
+  "route+controls+state/norm": (s) =>
+    `${pathOf(s.url)}|${[...(s.states ?? s.controls)].map(numless).sort().join("|")}`,
 };
 
+/** 不传名字时用哪一把。写成常量是因为它在两个地方被读，而它们此前给的是不同的答案。 */
+export const DEFAULT_ABSTRACTION = "route+controls/norm";
+
 export const abstractionOf = (name?: string): Abstraction =>
-  ABSTRACTIONS[name ?? ""] ?? ABSTRACTIONS["route+controls/norm"];
+  ABSTRACTIONS[name ?? ""] ?? ABSTRACTIONS[DEFAULT_ABSTRACTION];
+
+/**
+ * 实际生效的抽象叫什么名字。
+ *
+ * 存在的理由是一个正在发生的谎：`interactive.ts` 里挑函数走 `abstractionOf(...)`
+ * （回落到 `route+controls/norm`），写进图的却是 `spec.stateAbstraction ?? "route+controls"`
+ * ——两个回落值不一样，于是一张用 `/norm` 量出来的图，声称自己用的是另一把尺子。
+ * 一次说不出自己用哪把尺子的探索，没法和另一次比较，而这正是上面那段注释的全部要点。
+ */
+export const abstractionNameOf = (name?: string): string =>
+  name && ABSTRACTIONS[name] ? name : DEFAULT_ABSTRACTION;
 
 export { routeOf, pathOf };
 

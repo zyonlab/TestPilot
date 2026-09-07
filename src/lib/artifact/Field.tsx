@@ -25,16 +25,16 @@ export function Field({
   const has = children !== undefined && children !== null && children !== false;
   return (
     <div className="flex gap-2.5" id={id}>
-      <span className="w-14 shrink-0 pt-px text-right font-mono text-[10.5px] leading-[1.7] text-muted-foreground">
+      <span className="w-14 shrink-0 pt-px text-right font-mono text-[0.6875rem] leading-[1.7] text-muted-foreground">
         {label}
       </span>
       <div
         className={cn(
-          "min-w-0 flex-1 text-[12.5px] leading-[1.7]",
+          "min-w-0 flex-1 text-[0.8125rem] leading-[1.7]",
           !has || tone === "muted"
             ? "text-muted-foreground"
             : tone === "warn"
-              ? "text-amber-600 dark:text-amber-400"
+              ? "text-warn"
               : "text-foreground",
         )}
       >
@@ -58,11 +58,11 @@ export function Chip({
 }) {
   const cls =
     tone === "good"
-      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+      ? "bg-ok-soft text-ok"
       : tone === "warn"
-        ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+        ? "bg-warn-soft text-warn"
         : tone === "bad"
-          ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+          ? "bg-bad-soft text-bad"
           : tone === "accent"
             ? "bg-primary/10 text-primary"
             : "bg-muted text-muted-foreground";
@@ -72,7 +72,7 @@ export function Chip({
       title={title}
       onClick={onClick}
       className={cn(
-        "rounded px-1.5 py-px font-mono text-[10.5px] leading-[1.6]",
+        "rounded px-1.5 py-px font-mono text-[0.6875rem] leading-[1.6]",
         cls,
         onClick && "hover:brightness-95",
       )}

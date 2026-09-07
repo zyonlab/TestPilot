@@ -51,7 +51,9 @@ vi.mock("../src/db.js", () => ({
   resolveEnvironment: () => undefined,
 }));
 
-const { startRun, resumeRun, runDetail, outputStore, listGraphs } = await import("../src/graphs.js");
+const { startRun, resumeRun, runDetail, outputStore, listGraphs, getGraph, resumePoint, setRunBreakpoints } =
+  await import("../src/graphs.js");
+const { topoOrder } = await import("@testpilot/harness-core");
 
 const GRAPH = listGraphs()[0]!.id;
 
@@ -167,9 +169,60 @@ describe("breakpoints on a run", () => {
     expect(runDetail(wfRunId).pausedAt).toBeUndefined();
   });
 
-  it("refuses to resume a run that is not paused", async () => {
+  /**
+   * 2026-09-01 改了这条的判据。
+   *
+   * 原来只认 `pausedAt`，其余一律拒绝——包括被网关重启打断的运行，而它的产物就躺在
+   * `wf_node_outputs` 里。实测 wf-mtfmsfq8：status=interrupted、detail 里没有 nodes 也没有
+   * pausedAt，可 outputs 里有 docs 的产物；界面上整张图全是 idle，人只能自己猜从哪一步起。
+   *
+   * 所以现在的判据是「有没有可接上的地方」，而不是「有没有停在断点上」。
+   * 一个节点都没产出的运行仍然拒绝——那才是真的没有可接的东西。
+   */
+  it("拒绝续跑一次什么都没产出的运行，但不再要求它必须停在断点上", async () => {
     const { wfRunId } = await startRun({ graphId: GRAPH, target: { url: "http://127.0.0.1:5301" } });
-    await expect(resumeRun(wfRunId)).rejects.toThrow(/not paused/);
+    await expect(resumeRun(wfRunId)).rejects.toThrow(/没有可接上的地方|一个节点都没产出/);
     await expect(resumeRun("wf-never-existed")).rejects.toThrow(/unknown run/);
+  });
+
+  it("被打断的运行按产物反推续跑点", async () => {
+    const { wfRunId } = await startRun({ graphId: GRAPH, target: { url: "http://127.0.0.1:5301" } });
+    const def = getGraph(GRAPH)!;
+    const first = topoOrder(def)[0]!;
+    // 模拟"跑完第一步就被打断"：产物落盘，运行记录停在 interrupted 且没有 pausedAt。
+    await outputStore.set(wfRunId, first, { ok: true });
+    const point = await resumePoint(wfRunId);
+    expect(point?.done).toContain(first);
+    expect(point?.from).toBe(topoOrder(def)[1]);
+  });
+});
+
+/**
+ * 断点属于这次运行，不属于浏览器。
+ *
+ * 此前它只活在前端 store 里，而且只有整跑那一次随请求发出——「只跑这一步」
+ * 「从这里开始」「继续」三条路都不带它。于是画布上刚点亮的红点和「这次会不会停」
+ * 是两回事，顶栏那个「断点 N」数的是本地那一份。
+ */
+describe("断点存进运行记录", () => {
+  it("改过之后，部分重跑与续跑都用新的那一组", async () => {
+    const { wfRunId } = await startRun({
+      graphId: GRAPH,
+      target: { url: "http://127.0.0.1:5301" },
+      breakpoints: ["a"],
+    });
+    expect(runDetail(wfRunId).breakpoints).toEqual(["a"]);
+
+    setRunBreakpoints(wfRunId, ["b", "c"]);
+    expect(runDetail(wfRunId).breakpoints).toEqual(["b", "c"]);
+
+    // 不带 breakpoints 的起跑（部分重跑走的就是这条）必须沿用运行里那一份
+    started.length = 0;
+    await startRun({ graphId: GRAPH, wfRunId, mode: { kind: "only", node: "docs" } });
+    expect((started[0] as { breakpoints?: string[] }).breakpoints).toEqual(["b", "c"]);
+  });
+
+  it("没有这个运行时如实报错，不静默吞掉", () => {
+    expect(() => setRunBreakpoints("wf-never-existed", ["x"])).toThrow(/unknown run/);
   });
 });

@@ -107,6 +107,14 @@ export async function continueRun(
 
   const seed = await nodeOutput(runId, pick.fromNode);
   const previous = (outputStore.getRun(runId)?.detail ?? {}) as { target?: { projectId?: string; url?: string } };
-  const started = await startRun({ graphId, seed, target: previous.target, ...(params ? { params } : {}) });
+  // 种子的出处跟着运行走：只传值的话，这次运行的根节点以后永远重跑不了——
+  // 值只活在这一次请求里，重跑时 runtime 拿到 undefined，zod 当场报 input 不匹配。
+  const started = await startRun({
+    graphId,
+    seed,
+    seedFrom: { runId, node: pick.fromNode },
+    target: previous.target,
+    ...(params ? { params } : {}),
+  });
   return { wfRunId: started.wfRunId };
 }

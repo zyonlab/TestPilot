@@ -24,7 +24,7 @@ export function JsonView({ value, defaultOpen = 1 }: { value: unknown; defaultOp
       <label className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1">
         <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
         <input
-          className="min-w-0 flex-1 bg-transparent text-[11.5px] outline-none"
+          className="min-w-0 flex-1 rounded-sm bg-transparent text-[0.75rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           placeholder={t("wf.outputSearch")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -35,8 +35,7 @@ export function JsonView({ value, defaultOpen = 1 }: { value: unknown; defaultOp
   );
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** 一行摘要：不展开时也要说出「里面是什么」，而不是只说「是个对象」。 */
 function summarise(v: unknown): string {
@@ -84,9 +83,11 @@ function Node({
 
   if (!branch)
     return (
-      <div className="flex gap-1.5 font-mono text-[11px] leading-[1.6]" style={{ paddingLeft: depth * 12 }}>
+      <div className="flex gap-1.5 font-mono text-[0.6875rem] leading-[1.6]" style={{ paddingLeft: depth * 12 }}>
         {name && <span className="shrink-0 text-primary">{name}:</span>}
-        <span className={cn("min-w-0 break-all", typeof value === "string" ? "text-foreground" : "text-amber-700 dark:text-amber-400")}>
+        <span
+          className={cn("min-w-0 break-all", typeof value === "string" ? "text-foreground" : "text-warn")}
+        >
           {summarise(value)}
         </span>
       </div>
@@ -100,7 +101,7 @@ function Node({
     <div style={{ paddingLeft: depth * 12 }}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1 text-left font-mono text-[11px] leading-[1.6] hover:bg-muted/60"
+        className="flex w-full items-center gap-1 text-left font-mono text-[0.6875rem] leading-[1.6] hover:bg-muted/60"
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />

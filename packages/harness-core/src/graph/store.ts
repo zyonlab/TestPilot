@@ -93,13 +93,42 @@ export class SqliteOutputStore implements OutputStore {
       .prepare("SELECT id, graphId, graphVersion, status, startedAt, finishedAt, json FROM wf_runs ORDER BY startedAt DESC LIMIT ?")
       .all(limit) as Array<Record<string, unknown> & { json?: string }>;
     return rows.map(({ json, ...row }) => {
-      let projectId: string | undefined;
+      /*
+       * 列表要的三样：**为哪个项目跑的、打的是哪里、上限用掉多少**。
+       *
+       * 三样都在 detail 里，而 detail 就是这一行的 json 列——在这儿顺手取出来，
+       * 是因为调用方否则要为每一行再发一次详情请求，去拿一个列表本来就要按它排序的事实。
+       */
+      let extra: Record<string, unknown> = {};
       try {
-        projectId = (JSON.parse(json ?? "{}") as { target?: { projectId?: string } }).target?.projectId;
+        const detail = JSON.parse(json ?? "{}") as {
+          target?: { projectId?: string };
+          targetSnapshot?: { describe?: string; envName?: string };
+          budget?: Record<string, number>;
+          spend?: Record<string, number>;
+          requestedOverrides?: Record<string, unknown>;
+          ablate?: string[];
+        };
+        extra = {
+          ...(detail.target?.projectId ? { projectId: detail.target.projectId } : {}),
+          ...(detail.targetSnapshot?.describe ? { describe: detail.targetSnapshot.describe } : {}),
+          ...(detail.targetSnapshot?.envName ? { envName: detail.targetSnapshot.envName } : {}),
+          ...(detail.budget && Object.keys(detail.budget).length ? { budget: detail.budget } : {}),
+          ...(detail.spend ? { spend: detail.spend } : {}),
+          /*
+           * 这次运行动过参数或关掉过组件——**它不是这张图的基线成绩**。
+           * 不标出来，一次「把 repair.limit 调到 3」的试跑会和正经运行并排躺在列表里，
+           * 而两个月后没人分得出哪个是哪个。
+           */
+          ...(detail.requestedOverrides && Object.keys(detail.requestedOverrides).length
+            ? { overridden: Object.keys(detail.requestedOverrides) }
+            : {}),
+          ...(detail.ablate?.length ? { ablated: detail.ablate } : {}),
+        };
       } catch {
         /* a run whose detail cannot be parsed is still a run; it just has no project */
       }
-      return projectId ? { ...row, projectId } : row;
+      return { ...row, ...extra };
     });
   }
 

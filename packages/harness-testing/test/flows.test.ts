@@ -21,6 +21,8 @@ const edge = (from: string, to: string | undefined, target: string, ok = true) =
 /** 一张缩小版的 SauceDemo：登录 → 列表 →（详情｜购物车 → 结账）。 */
 const shop: StateFlowGraph = {
   abstraction: "route+controls",
+  collector: "tags-only/v1",
+  plan: { asked: false, business: "", stories: [] },
   entry: "/",
   stoppedBecause: "",
   unvisited: [],

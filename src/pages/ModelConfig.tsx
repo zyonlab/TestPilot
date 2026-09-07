@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Cpu,
   CheckCircle,
   AlertTriangle,
   Loader2,
-  Copy,
   Server,
   Boxes,
   KeyRound,
@@ -18,7 +16,7 @@ import {
   Languages,
   ClipboardPaste,
 } from "lucide-react";
-import { TopBar } from "@/components/TopBar";
+import { NeedProject } from "@/components/NeedProject";
 import { Button } from "@/components/ui";
 import { useT, usePrefs } from "@/lib/prefs";
 import { useStore } from "@/lib/store";
@@ -27,248 +25,12 @@ import { cn } from "@/lib/cn";
 import type { AppSettings, PromptTemplates } from "@/lib/api";
 import type { Environment, LoginFlow, SecretMeta } from "@/lib/types";
 
-export function ModelConfigPage() {
-  const t = useT();
-  const model = useStore((s) => s.model);
-  const setModel = useStore((s) => s.setModel);
-  const connection = useStore((s) => s.connection);
-  const connectionDetail = useStore((s) => s.connectionDetail);
-  const testConnection = useStore((s) => s.testConnection);
-
-  const isVL = /vl/i.test(model.modelFamily);
-  const maskedKey = model.apiKey ? "****" : "";
-  const envLines = [
-    `MIDSCENE_MODEL_BASE_URL=${model.baseUrl}`,
-    `MIDSCENE_MODEL_API_KEY=${maskedKey}`,
-    `MIDSCENE_MODEL_NAME=${model.modelName}`,
-  ];
-  if (isVL) envLines.push("MIDSCENE_USE_QWEN3_VL=1");
-  const envText = envLines.join("\n");
-
-  const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text);
-  };
-
-  return (
-    <>
-      <TopBar />
-      <div className="flex-1 overflow-auto p-4">
-        <div className="mx-auto max-w-2xl space-y-4">
-          <div>
-            <h1 className="font-display text-lg font-medium text-foreground">
-              {t("model.title")}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("model.subtitle")}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <div>
-              <label
-                htmlFor="baseUrl"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
-                {t("model.baseUrl")}
-              </label>
-              <input
-                id="baseUrl"
-                type="text"
-                value={model.baseUrl}
-                onChange={(e) => setModel({ baseUrl: e.target.value })}
-                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="apiKey"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
-                {t("model.apiKey")}
-              </label>
-              <input
-                id="apiKey"
-                type="password"
-                value={model.apiKey}
-                onChange={(e) => setModel({ apiKey: e.target.value })}
-                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="modelName"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
-                {t("model.modelName")}
-              </label>
-              <input
-                id="modelName"
-                type="text"
-                value={model.modelName}
-                onChange={(e) => setModel({ modelName: e.target.value })}
-                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="modelFamily"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
-                {t("model.modelFamily")}
-              </label>
-              <input
-                id="modelFamily"
-                type="text"
-                value={model.modelFamily}
-                onChange={(e) => setModel({ modelFamily: e.target.value })}
-                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("model.modelFamilyHelp")}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-1">
-              <Button
-                variant="primary"
-                onClick={() => testConnection()}
-                disabled={connection === "testing"}
-              >
-                {connection === "testing" && (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                )}
-                {t("model.testConnection")}
-              </Button>
-              <Cpu className="h-4 w-4 text-muted-foreground" />
-            </div>
-
-            <div>
-              {connection === "ok" && (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950">
-                  <p className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle className="h-4 w-4" />
-                    {t("model.okTitle")}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("model.okHelp")}
-                  </p>
-                </div>
-              )}
-
-              {connection === "notMultimodal" && (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
-                  <p className="flex items-center gap-1.5 text-sm font-medium text-red-600 dark:text-red-400">
-                    <AlertTriangle className="h-4 w-4" />
-                    {t("model.notMultimodalTitle")}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("model.notMultimodalHelp")}
-                  </p>
-                </div>
-              )}
-
-              {connection === "fail" && (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
-                  <p className="flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400">
-                    <AlertTriangle className="h-4 w-4" />
-                    {t("model.failTitle")}
-                  </p>
-                </div>
-              )}
-
-              {connection === "idle" && (
-                <p className="text-xs text-muted-foreground">{t("model.notTested")}</p>
-              )}
-
-              {connection === "testing" && (
-                <p className="text-xs text-muted-foreground">
-                  {t("model.probing")}
-                </p>
-              )}
-
-              {connectionDetail &&
-                connection !== "idle" &&
-                connection !== "testing" && (
-                  <p className="mt-2 break-words font-mono text-[11px] text-muted-foreground">
-                    {connectionDetail}
-                  </p>
-                )}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-display text-sm font-medium text-foreground">
-                {t("model.endpointPreview")}
-              </h2>
-              <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                HOST localhost
-              </span>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="w-24 shrink-0 text-xs text-muted-foreground">
-                  {t("model.openaiApi")}
-                </span>
-                <code className="flex-1 truncate font-mono text-xs text-foreground">
-                  {model.baseUrl}
-                </code>
-                <button
-                  onClick={() => copy(model.baseUrl)}
-                  className="cursor-pointer text-muted-foreground hover:text-foreground"
-                  aria-label="Copy base URL"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-24 shrink-0 text-xs text-muted-foreground">
-                  {t("model.visionModel")}
-                </span>
-                <code className="flex-1 truncate font-mono text-xs text-foreground">
-                  {model.modelName}
-                </code>
-                <button
-                  onClick={() => copy(model.modelName)}
-                  className="cursor-pointer text-muted-foreground hover:text-foreground"
-                  aria-label="Copy vision model"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-display text-sm font-medium text-foreground">
-                {t("model.envVars")}
-              </h2>
-              <Button onClick={() => copy(envText)}>
-                <Copy className="h-3.5 w-3.5" />
-                {t("common.copy")}
-              </Button>
-            </div>
-            <pre
-              className={cn(
-                "overflow-auto rounded-md bg-background p-3 font-mono text-[11px] text-foreground",
-              )}
-            >
-              {envText}
-            </pre>
-          </div>
-
-          {/* 环境、密钥、提示词模板与偏好过去都长在这一页里。它们和模型端点没有关系——
-              环境属于项目，提示词属于 harness，语言属于这个人——所以现在各自是「设置」下
-              的一节，由 Settings.tsx 组合。这一页只剩下它名字所说的那件事。 */}
-        </div>
-      </div>
-    </>
-  );
-}
+/*
+ * `ModelConfigPage`（模型端点这一整屏）已在 v3 Phase 3 退役——见 `docs/v3/00-架构.md` §1/§2 与
+ * `components/SettingsDrawer.tsx` 的文件注释：模型端点归 PenguinHarness 的 session，不再是
+ * 这台机器的设置。这个文件现在只剩它名字所说的另一半：环境、密钥、提示词模板与偏好，
+ * 这三张卡被 `pages/SettingsSections.tsx` re-export 复用，是活代码。
+ */
 
 // Global LLM-debug toggle + prompt-template editors. Both read/write the backend's
 // app settings (/api/settings); the debug card also lists the most recent capture
@@ -319,8 +81,8 @@ export function DebugPromptsCards({ show = "all" }: { show?: "all" | "prompts" |
     );
   }
 
-  // Which of these cards is on screen is the caller's decision: "语言与调试" is a personal
-  // preference and "提示词模板" changes what every future run is told — filed together only
+  // Which of these cards is on screen is the caller's decision:"语言与调试" is a personal
+  // preference and"提示词模板" changes what every future run is told — filed together only
   // because they happened to share one fetch. The fetch is still shared; the page is not.
   const prefs = show === "all" || show === "prefs";
   const tpl = show === "all" || show === "prompts";
@@ -372,9 +134,7 @@ function LanguageCard({
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-1 flex items-center gap-1.5">
         <Languages className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-display text-sm font-medium text-foreground">
-          {t("model.langCard")}
-        </h2>
+        <h2 className="font-display text-sm font-medium text-foreground">{t("model.langCard")}</h2>
       </div>
 
       <label className="mt-2 flex cursor-pointer items-center gap-2.5">
@@ -390,7 +150,7 @@ function LanguageCard({
         >
           <span
             className={cn(
-              "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+              "inline-block h-4 w-4 transform rounded-full bg-card shadow transition-transform",
               settings.enforceLang ? "translate-x-4" : "translate-x-0.5",
             )}
           />
@@ -459,9 +219,7 @@ function DebugCard({
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-1 flex items-center gap-1.5">
         <Bug className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-display text-sm font-medium text-foreground">
-          {t("model.debugCard")}
-        </h2>
+        <h2 className="font-display text-sm font-medium text-foreground">{t("model.debugCard")}</h2>
       </div>
 
       <label className="mt-2 flex cursor-pointer items-center gap-2.5">
@@ -477,7 +235,7 @@ function DebugCard({
         >
           <span
             className={cn(
-              "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+              "inline-block h-4 w-4 transform rounded-full bg-card shadow transition-transform",
               settings.debugLLM ? "translate-x-4" : "translate-x-0.5",
             )}
           />
@@ -491,40 +249,30 @@ function DebugCard({
         <div className="mt-3 border-t border-border pt-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium text-foreground">
-              {captures ? captures.entries.length : 0}{" "}
-              {t("model.debugCapturesCount")}
+              {captures ? captures.entries.length : 0} {t("model.debugCapturesCount")}
             </span>
             <button
               onClick={refreshCaptures}
               disabled={loadingCaptures}
               className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
             >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5", loadingCaptures && "animate-spin")}
-              />
+              <RefreshCw className={cn("h-3.5 w-3.5", loadingCaptures && "animate-spin")} />
               {t("model.refresh")}
             </button>
           </div>
           {captures?.dir && (
-            <p className="mb-2 break-all font-mono text-[11px] text-muted-foreground">
-              {captures.dir}
-            </p>
+            <p className="mb-2 break-all font-mono text-[0.6875rem] text-muted-foreground">{captures.dir}</p>
           )}
           {captures && captures.entries.length > 0 ? (
             <div className="max-h-40 overflow-auto rounded-md bg-background p-2">
               {captures.entries.slice(0, 10).map((name) => (
-                <p
-                  key={name}
-                  className="truncate font-mono text-[11px] text-muted-foreground"
-                >
+                <p key={name} className="truncate font-mono text-[0.6875rem] text-muted-foreground">
                   {name}
                 </p>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              {t("model.debugNoCaptures")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("model.debugNoCaptures")}</p>
           )}
         </div>
       )}
@@ -573,9 +321,7 @@ function PromptsCard({
   onReset: (settings: AppSettings) => void;
 }) {
   const t = useT();
-  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [detail, setDetail] = useState("");
 
   // Reset-to-default is available whenever the editors differ from defaults.
@@ -618,13 +364,9 @@ function PromptsCard({
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-1 flex items-center gap-1.5">
         <FileText className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-display text-sm font-medium text-foreground">
-          {t("model.promptsCard")}
-        </h2>
+        <h2 className="font-display text-sm font-medium text-foreground">{t("model.promptsCard")}</h2>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
-        {t("model.promptsHelp")}
-      </p>
+      <p className="mb-3 text-xs text-muted-foreground">{t("model.promptsHelp")}</p>
 
       <div className="space-y-4">
         {PROMPT_KEYS.map(({ key, label, desc, hint }) => {
@@ -632,44 +374,31 @@ function PromptsCard({
           return (
             <div key={key}>
               <div className="mb-1 flex items-center gap-2">
-                <label
-                  htmlFor={`prompt-${key}`}
-                  className="text-xs font-medium text-foreground"
-                >
+                <label htmlFor={`prompt-${key}`} className="text-xs font-medium text-foreground">
                   {t(label)}
                 </label>
                 {modified && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[0.6875rem] font-medium text-warn">
                     {t("model.modified")}
                   </span>
                 )}
               </div>
-              <p className="mb-1 text-[11px] text-muted-foreground">{t(desc)}</p>
+              <p className="mb-1 text-[0.6875rem] text-muted-foreground">{t(desc)}</p>
               <textarea
                 id={`prompt-${key}`}
                 rows={key === "exploreDeepPrefix" ? 5 : 8}
                 value={prompts[key]}
-                onChange={(e) =>
-                  setPrompts({ ...prompts, [key]: e.target.value })
-                }
-                className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"
+                onChange={(e) => setPrompts({ ...prompts, [key]: e.target.value })}
+                className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
-              {hint && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {t(hint)}
-                </p>
-              )}
+              {hint && <p className="mt-1 text-[0.6875rem] text-muted-foreground">{t(hint)}</p>}
             </div>
           );
         })}
       </div>
 
       <div className="mt-4 flex items-center gap-3 border-t border-border pt-3">
-        <Button
-          variant="primary"
-          onClick={save}
-          disabled={state === "saving" || !editorsDirty}
-        >
+        <Button variant="primary" onClick={save} disabled={state === "saving" || !editorsDirty}>
           {state === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {t("common.save")}
         </Button>
@@ -678,17 +407,15 @@ function PromptsCard({
           {t("model.resetPrompts")}
         </Button>
         {state === "saved" && (
-          <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+          <span className="flex items-center gap-1.5 text-xs text-ok">
             <CheckCircle className="h-4 w-4" /> {t("model.saved")}
           </span>
         )}
         {editorsDirty && state !== "saved" && (
-          <span className="text-xs text-amber-600 dark:text-amber-400">
-            {t("model.modified")}
-          </span>
+          <span className="text-xs text-warn">{t("model.modified")}</span>
         )}
         {state === "error" && (
-          <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+          <span className="flex items-center gap-1.5 text-xs text-bad">
             <AlertTriangle className="h-4 w-4" /> {detail}
           </span>
         )}
@@ -739,8 +466,7 @@ function parseBatch(text: string): Record<string, string> | null {
     const o = JSON.parse(t);
     if (o && typeof o === "object" && !Array.isArray(o)) {
       const out: Record<string, string> = {};
-      for (const [k, v] of Object.entries(o))
-        out[k] = Array.isArray(v) ? JSON.stringify(v) : String(v);
+      for (const [k, v] of Object.entries(o)) out[k] = Array.isArray(v) ? JSON.stringify(v) : String(v);
       return out;
     }
   } catch {
@@ -778,19 +504,19 @@ function KvEditor({
             value={v.key}
             placeholder={keyPh}
             onChange={(e) => set(i, { key: e.target.value })}
-            className="w-1/3 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+            className="w-1/3 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <input
             type="text"
             value={v.value}
             placeholder={valPh}
             onChange={(e) => set(i, { value: e.target.value })}
-            className="flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <button
             onClick={() => setRows(rows.filter((_, idx) => idx !== i))}
             aria-label="Remove"
-            className="cursor-pointer text-muted-foreground hover:text-red-500"
+            className="cursor-pointer text-muted-foreground hover:text-bad"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -866,9 +592,7 @@ export function EnvironmentsCard() {
   const [envs, setEnvs] = useState<Environment[]>([]);
   const [selected, setSelected] = useState<string>(NEW_ENV);
   const [form, setForm] = useState(blankEnvForm());
-  const [state, setState] = useState<"loading" | "idle" | "saving" | "error">(
-    "loading",
-  );
+  const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [detail, setDetail] = useState("");
 
   const load = useCallback(async () => {
@@ -1087,32 +811,25 @@ export function EnvironmentsCard() {
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-1 flex items-center gap-1.5">
         <Boxes className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-display text-sm font-medium text-foreground">
-          {t("model.environments")}
-        </h2>
+        <h2 className="font-display text-sm font-medium text-foreground">{t("model.environments")}</h2>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
-        {t("model.environmentsHelp")}
-      </p>
+      <p className="mb-3 text-xs text-muted-foreground">{t("model.environmentsHelp")}</p>
 
       {!projectId ? (
         <p className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-          {t("model.selectProjectFirst")}
+          <NeedProject />
         </p>
       ) : (
         <div className="space-y-3">
           <div>
-            <label
-              htmlFor="envPick"
-              className="mb-1 block text-xs text-muted-foreground"
-            >
+            <label htmlFor="envPick" className="mb-1 block text-xs text-muted-foreground">
               {t("model.environment")}
             </label>
             <select
               id="envPick"
               value={selected}
               onChange={(e) => pick(e.target.value)}
-              className="w-full cursor-pointer rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full cursor-pointer rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value={NEW_ENV}>{t("model.newEnvironment")}</option>
               {envs.map((env) => (
@@ -1125,10 +842,7 @@ export function EnvironmentsCard() {
           </div>
 
           <div>
-            <label
-              htmlFor="envName"
-              className="mb-1 block text-xs text-muted-foreground"
-            >
+            <label htmlFor="envName" className="mb-1 block text-xs text-muted-foreground">
               {t("model.name")}
             </label>
             <input
@@ -1137,15 +851,12 @@ export function EnvironmentsCard() {
               value={form.name}
               placeholder="staging"
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="envBaseUrl"
-              className="mb-1 block text-xs text-muted-foreground"
-            >
+            <label htmlFor="envBaseUrl" className="mb-1 block text-xs text-muted-foreground">
               {t("model.baseUrl")}
             </label>
             <input
@@ -1153,10 +864,8 @@ export function EnvironmentsCard() {
               type="text"
               value={form.baseUrl}
               placeholder="https://staging.acme.com"
-              onChange={(e) =>
-                setForm((f) => ({ ...f, baseUrl: e.target.value }))
-              }
-              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
+              onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
 
@@ -1177,18 +886,29 @@ export function EnvironmentsCard() {
                   rows={4}
                   value={batchText}
                   onChange={(e) => setBatchText(e.target.value)}
-                  placeholder={'{ "USER": "alice", "terms": ["a", "b", "c"] }\n— or —\nUSER=alice\nterms=["a","b","c"]'}
-                  className="w-full rounded border border-border bg-card px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                  placeholder={
+                    '{"USER":"alice","terms": ["a","b","c"] }\n— or —\nUSER=alice\nterms=["a","b","c"]'
+                  }
+                  className="w-full rounded border border-border bg-card px-2 py-1 font-mono text-[0.6875rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <div className="mt-1.5 flex items-center gap-2">
-                  <Button variant="primary" className="text-xs" onClick={importBatch} disabled={!batchText.trim()}>
+                  <Button
+                    variant="primary"
+                    className="text-xs"
+                    onClick={importBatch}
+                    disabled={!batchText.trim()}
+                  >
                     {t("model.import")}
                   </Button>
-                  <span className="text-[11px] text-muted-foreground">{t("model.batchImportHelp")}</span>
+                  <span className="text-[0.6875rem] text-muted-foreground">{t("model.batchImportHelp")}</span>
                 </div>
               </div>
             )}
-            <KvEditor rows={form.vars} setRows={(vars) => setForm((f) => ({ ...f, vars }))} valPh='value or ["a","b"]' />
+            <KvEditor
+              rows={form.vars}
+              setRows={(vars) => setForm((f) => ({ ...f, vars }))}
+              valPh='value or ["a","b"]'
+            />
           </div>
 
           {/* Fixed request headers — pass the site's own checks (auth, feature flags, bot bypass) */}
@@ -1200,7 +920,7 @@ export function EnvironmentsCard() {
               keyPh="X-Automation-Test"
               valPh="true  ·  Bearer ${secret.TOKEN}"
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">{t("model.headersHelp")}</p>
+            <p className="mt-1 text-[0.6875rem] text-muted-foreground">{t("model.headersHelp")}</p>
           </div>
 
           {/* Fixed query-string params appended to every navigation */}
@@ -1212,16 +932,14 @@ export function EnvironmentsCard() {
               keyPh="e2e"
               valPh="1"
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">{t("model.queryHelp")}</p>
+            <p className="mt-1 text-[0.6875rem] text-muted-foreground">{t("model.queryHelp")}</p>
           </div>
 
           <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
             <input
               type="checkbox"
               checked={form.authRequired}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, authRequired: e.target.checked }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, authRequired: e.target.checked }))}
               className="h-3.5 w-3.5 cursor-pointer"
             />
             {t("model.requiresLogin")}
@@ -1229,10 +947,7 @@ export function EnvironmentsCard() {
 
           {form.authRequired && (
             <div>
-              <label
-                htmlFor="envSteps"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
+              <label htmlFor="envSteps" className="mb-1 block text-xs text-muted-foreground">
                 {t("model.loginFlow")}
               </label>
               <textarea
@@ -1242,15 +957,12 @@ export function EnvironmentsCard() {
                 placeholder={
                   "Open ${env.BASE_URL}/login\nType ${env.USER} into the email field\nType ${secret.PASSWORD} into the password field\nClick Sign in"
                 }
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, steps: e.target.value }))
-                }
-                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                onChange={(e) => setForm((f) => ({ ...f, steps: e.target.value }))}
+                className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {t("model.placeholderReferences")}{" "}
-                <code className="font-mono">{"${env.KEY}"}</code> {t("model.andPlaceholders")}{" "}
-                <code className="font-mono">{"${secret.KEY}"}</code>{" "}
+              <p className="mt-1 text-[0.6875rem] text-muted-foreground">
+                {t("model.placeholderReferences")} <code className="font-mono">{"${env.KEY}"}</code>{" "}
+                {t("model.andPlaceholders")} <code className="font-mono">{"${secret.KEY}"}</code>{" "}
                 {t("model.placeholders")}
               </p>
 
@@ -1259,12 +971,12 @@ export function EnvironmentsCard() {
                 <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                   <KeyRound className="h-3.5 w-3.5 text-muted-foreground" /> {t("model.session")}
                 </div>
-                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                <p className="mt-1 text-[0.6875rem] leading-snug text-muted-foreground">
                   {t("model.sessionHelp")}
                 </p>
                 {form.session?.hasSession ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    <span className="rounded bg-ok-soft px-1.5 py-0.5 text-ok">
                       {t("model.sessionCaptured")} · {form.session.cookies} cookies
                     </span>
                     {form.session.capturedAt && (
@@ -1274,12 +986,12 @@ export function EnvironmentsCard() {
                     )}
                   </div>
                 ) : (
-                  <p className="mt-2 text-[11px] text-muted-foreground">{t("model.noSession")}</p>
+                  <p className="mt-2 text-[0.6875rem] text-muted-foreground">{t("model.noSession")}</p>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Button
                     variant="primary"
-                    className="bg-violet-600 text-xs hover:bg-violet-700"
+                    className="bg-chat text-xs hover:bg-chat"
                     onClick={capture}
                     disabled={!form.id || sessionState === "capturing"}
                     title={!form.id ? t("model.captureNeedsSave") : undefined}
@@ -1296,18 +1008,12 @@ export function EnvironmentsCard() {
                       <Trash2 className="h-3.5 w-3.5" /> {t("model.clearSession")}
                     </Button>
                   )}
-                  {!form.id && (
-                    <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                      {t("model.captureNeedsSave")}
-                    </span>
-                  )}
+                  {!form.id && <span className="text-[0.6875rem] text-warn">{t("model.captureNeedsSave")}</span>}
                   {sessionMsg && (
                     <span
                       className={cn(
-                        "text-[11px]",
-                        sessionState === "error"
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-muted-foreground",
+                        "text-[0.6875rem]",
+                        sessionState === "error" ? "text-bad" : "text-muted-foreground",
                       )}
                     >
                       {sessionMsg}
@@ -1319,7 +1025,7 @@ export function EnvironmentsCard() {
                 <div className="mt-2 border-t border-border pt-2">
                   <button
                     onClick={() => setPasteOpen((o) => !o)}
-                    className="flex cursor-pointer items-center gap-1 text-[11px] text-primary hover:underline"
+                    className="flex cursor-pointer items-center gap-1 text-[0.6875rem] text-primary hover:underline"
                   >
                     <ClipboardPaste className="h-3 w-3" /> {t("model.pasteSession")}
                   </button>
@@ -1330,7 +1036,7 @@ export function EnvironmentsCard() {
                         value={pasteText}
                         onChange={(e) => setPasteText(e.target.value)}
                         placeholder={t("model.pasteSessionPlaceholder")}
-                        className="w-full rounded border border-border bg-card px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full rounded border border-border bg-card px-2 py-1 font-mono text-[0.6875rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       />
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <Button
@@ -1341,7 +1047,7 @@ export function EnvironmentsCard() {
                         >
                           {t("model.applySession")}
                         </Button>
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-[0.6875rem] text-muted-foreground">
                           {t("model.pasteSessionHelp")}
                         </span>
                       </div>
@@ -1363,7 +1069,7 @@ export function EnvironmentsCard() {
                   />
                   <Server className="h-3.5 w-3.5 text-muted-foreground" /> {t("model.apiLogin")}
                 </label>
-                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                <p className="mt-1 text-[0.6875rem] leading-snug text-muted-foreground">
                   {t("model.apiLoginHelp")}
                 </p>
                 {form.apiLogin.enabled && (
@@ -1374,7 +1080,7 @@ export function EnvironmentsCard() {
                         onChange={(e) =>
                           setForm((f) => ({ ...f, apiLogin: { ...f.apiLogin, method: e.target.value } }))
                         }
-                        className="w-20 rounded border border-border bg-card px-1.5 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
+                        className="w-20 rounded border border-border bg-card px-1.5 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <option>POST</option>
                         <option>GET</option>
@@ -1386,7 +1092,7 @@ export function EnvironmentsCard() {
                           setForm((f) => ({ ...f, apiLogin: { ...f.apiLogin, url: e.target.value } }))
                         }
                         placeholder="https://api.site.com/login"
-                        className="flex-1 rounded border border-border bg-card px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                        className="flex-1 rounded border border-border bg-card px-2 py-1 font-mono text-[0.6875rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       />
                     </div>
                     <textarea
@@ -1396,7 +1102,7 @@ export function EnvironmentsCard() {
                         setForm((f) => ({ ...f, apiLogin: { ...f.apiLogin, body: e.target.value } }))
                       }
                       placeholder={'{"username":"${env.USER}","password":"${secret.PASSWORD}"}'}
-                      className="w-full rounded border border-border bg-card px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                      className="w-full rounded border border-border bg-card px-2 py-1 font-mono text-[0.6875rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                     <div className="flex gap-1.5">
                       <input
@@ -1405,7 +1111,7 @@ export function EnvironmentsCard() {
                           setForm((f) => ({ ...f, apiLogin: { ...f.apiLogin, tokenPath: e.target.value } }))
                         }
                         placeholder={t("model.apiTokenPath")}
-                        className="flex-1 rounded border border-border bg-card px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                        className="flex-1 rounded border border-border bg-card px-2 py-1 font-mono text-[0.6875rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       />
                       <input
                         value={form.apiLogin.tokenHeader}
@@ -1413,13 +1119,13 @@ export function EnvironmentsCard() {
                           setForm((f) => ({ ...f, apiLogin: { ...f.apiLogin, tokenHeader: e.target.value } }))
                         }
                         placeholder="Authorization"
-                        className="w-32 rounded border border-border bg-card px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                        className="w-32 rounded border border-border bg-card px-2 py-1 font-mono text-[0.6875rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant="primary"
-                        className="bg-violet-600 text-xs hover:bg-violet-700"
+                        className="bg-chat text-xs hover:bg-chat"
                         onClick={runApiLogin}
                         disabled={!form.apiLogin.url.trim() || apiState === "running"}
                       >
@@ -1433,10 +1139,8 @@ export function EnvironmentsCard() {
                       {apiMsg && (
                         <span
                           className={cn(
-                            "text-[11px]",
-                            apiState === "error"
-                              ? "text-red-600 dark:text-red-400"
-                              : "text-muted-foreground",
+                            "text-[0.6875rem]",
+                            apiState === "error" ? "text-bad" : "text-muted-foreground",
                           )}
                         >
                           {apiMsg}
@@ -1453,9 +1157,7 @@ export function EnvironmentsCard() {
             <input
               type="checkbox"
               checked={form.isDefault}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, isDefault: e.target.checked }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, isDefault: e.target.checked }))}
               className="h-3.5 w-3.5 cursor-pointer"
             />
             {t("model.defaultEnvironment")}
@@ -1465,15 +1167,9 @@ export function EnvironmentsCard() {
             <Button
               variant="primary"
               onClick={save}
-              disabled={
-                state === "saving" ||
-                state === "loading" ||
-                !form.name.trim()
-              }
+              disabled={state === "saving" || state === "loading" || !form.name.trim()}
             >
-              {state === "saving" && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
+              {state === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {t("model.saveEnvironment")}
             </Button>
             {form.id && (
@@ -1483,7 +1179,7 @@ export function EnvironmentsCard() {
               </Button>
             )}
             {state === "error" && (
-              <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+              <span className="flex items-center gap-1.5 text-xs text-bad">
                 <AlertTriangle className="h-4 w-4" /> {detail}
               </span>
             )}
@@ -1502,9 +1198,7 @@ export function SecretsCard() {
   const [secrets, setSecrets] = useState<SecretMeta[]>([]);
   const [key, setKey] = useState("");
   const [value, setValue] = useState("");
-  const [state, setState] = useState<"loading" | "idle" | "saving" | "error">(
-    "loading",
-  );
+  const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [detail, setDetail] = useState("");
 
   const load = useCallback(async () => {
@@ -1562,19 +1256,16 @@ export function SecretsCard() {
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-1 flex items-center gap-1.5">
         <KeyRound className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-display text-sm font-medium text-foreground">
-          {t("model.secrets")}
-        </h2>
+        <h2 className="font-display text-sm font-medium text-foreground">{t("model.secrets")}</h2>
       </div>
       <p className="mb-3 flex items-start gap-1.5 text-xs text-muted-foreground">
         <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-        {t("model.secretsHelp")}{" "}
-        <code className="font-mono">{"${secret.KEY}"}</code>.
+        {t("model.secretsHelp")} <code className="font-mono">{"${secret.KEY}"}</code>.
       </p>
 
       {!projectId ? (
         <p className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-          {t("model.selectProjectFirst")}
+          <NeedProject />
         </p>
       ) : (
         <div className="space-y-3">
@@ -1592,19 +1283,15 @@ export function SecretsCard() {
                   className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5"
                 >
                   <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-                  <code className="flex-1 truncate font-mono text-xs text-foreground">
-                    {s.key}
-                  </code>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    ••••••
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
+                  <code className="flex-1 truncate font-mono text-xs text-foreground">{s.key}</code>
+                  <span className="font-mono text-[0.6875rem] text-muted-foreground">••••••</span>
+                  <span className="text-[0.6875rem] text-muted-foreground">
                     {new Date(s.updatedAt).toLocaleDateString()}
                   </span>
                   <button
                     onClick={() => remove(s.key)}
                     aria-label={`Delete secret ${s.key}`}
-                    className="cursor-pointer text-muted-foreground hover:text-red-500"
+                    className="cursor-pointer text-muted-foreground hover:text-bad"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -1615,10 +1302,7 @@ export function SecretsCard() {
 
           <div className="flex items-end gap-1.5 border-t border-border pt-3">
             <div className="w-1/3">
-              <label
-                htmlFor="secretKey"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
+              <label htmlFor="secretKey" className="mb-1 block text-xs text-muted-foreground">
                 {t("model.key")}
               </label>
               <input
@@ -1627,14 +1311,11 @@ export function SecretsCard() {
                 value={key}
                 placeholder="PASSWORD"
                 onChange={(e) => setKey(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-2 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
             <div className="flex-1">
-              <label
-                htmlFor="secretValue"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
+              <label htmlFor="secretValue" className="mb-1 block text-xs text-muted-foreground">
                 {t("model.valueWriteOnly")}
               </label>
               <input
@@ -1644,23 +1325,17 @@ export function SecretsCard() {
                 placeholder="••••••••"
                 autoComplete="new-password"
                 onChange={(e) => setValue(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-2 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
-            <Button
-              variant="primary"
-              onClick={save}
-              disabled={state === "saving" || !key.trim() || !value}
-            >
-              {state === "saving" && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
+            <Button variant="primary" onClick={save} disabled={state === "saving" || !key.trim() || !value}>
+              {state === "saving" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {t("common.save")}
             </Button>
           </div>
 
           {state === "error" && (
-            <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+            <span className="flex items-center gap-1.5 text-xs text-bad">
               <AlertTriangle className="h-4 w-4" /> {detail}
             </span>
           )}
