@@ -52,10 +52,14 @@
   },
   "risk": { "impact": "funds-and-exposure", "reason": "数量取整错误会改变实际敞口", "ruleRefs": ["R-SIZE-PRECISION"] },
   "testData": { "fixtureRef": "perp-deterministic-v1", "values": [{ "name": "size", "value": "0.001", "unit": "BTC", "source": "R-SIZE-PRECISION" }] },
-  "assertions": [{ "id": "A-SIZE", "statement": "接口里的持仓数量等于 0.001 BTC", "ruleRefs": ["R-SIZE-PRECISION"], "oracle": { "kind": "api", "url": "${env.HL_INFO}", "method": "POST", "body": "…", "path": "…szi", "op": "eq", "value": "0.001" } }],
+  "assertions": [{ "id": "A-SIZE", "statement": "仓位表里 BTC 那一行的数量列显示 0.001", "ruleRefs": ["R-SIZE-PRECISION"], "oracle": { "kind": "text", "value": "0.001" } }],
   "readiness": { "design": "candidate", "execution": "requires-fixture", "reason": "缺可控持仓 fixture" }
 }
 ```
+
+> `assertions[].oracle` 和顶层 `oracle` 是同一套判据，**同样只能从屏幕读**（CLAUDE.md 红线；
+> 门禁规则 `oracle-offsite` 两边都查）。2026-09-13 之前这里的示例写的是 `kind: "api"`——
+> 红线定了之后它没跟上，实测有用例照着它写出了断言被测站接口的判据，复核时被驳回。
 
 | 字段 | 给了就会被核对的事 |
 |---|---|

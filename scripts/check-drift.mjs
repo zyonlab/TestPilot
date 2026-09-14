@@ -36,7 +36,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -179,7 +179,27 @@ async function main() {
   if (WRITE) {
     writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + "\n");
     console.log("drift baseline written: 认领块与 skillDigests 已更新");
-    return 0;
+  }
+
+  /**
+   * **宿主 plugin 的副本也归这里查。**
+   *
+   * 2026-09-14 实测：`plugins/testpilot-claude` 与 `-codex` 是构建产物（真源只有
+   * `plugins/testpilot/`），而它们停在 09-12，落后四个文件——其中就有当天刚改过的
+   * `testpilot-stories/SKILL.md`。也就是说「长故事覆盖短故事」那条新规则，
+   * 宿主 agent 从来没收到过。
+   *
+   * 检查本来是有的（`build-*-plugin.mjs --check`），只是挂在 `pnpm check:drift` 这个
+   * 三步串里，而 CLAUDE.md 的红线写的是 `node scripts/check-drift.mjs`——只有第一步。
+   * 照红线跑，它一直是绿的。**一个有两种跑法、而其中一种会漏的检查，等于没有这个检查。**
+   *
+   * 所以把三步收进这一个入口：两种拼法从此等价，漏不掉。
+   */
+  for (const script of ["build-claude-plugin.mjs", "build-codex-plugin.mjs"]) {
+    const full = path.join(path.dirname(fileURLToPath(import.meta.url)), script);
+    const r = spawnSync(process.execPath, WRITE ? [full] : [full, "--check"], { encoding: "utf8" });
+    if (r.status !== 0) problems.push(`${script}：${(r.stderr || r.stdout || "").trim().split("\n").slice(0, 6).join("\n    ")}`);
+    else if (WRITE) console.log((r.stdout || "").trim());
   }
 
   if (problems.length) {
@@ -187,7 +207,7 @@ async function main() {
     for (const p of problems) console.error("  - " + p + "\n");
     return 1;
   }
-  console.log(`check-drift: ${PAIRS.length} 对提示词的规则全部认领，${Object.keys(plugin.skillVersions).length} 个 skill 摘要一致`);
+  console.log(`check-drift: ${PAIRS.length} 对提示词的规则全部认领，${Object.keys(plugin.skillVersions).length} 个 skill 摘要一致，两个宿主 plugin 与真源一致`);
   return 0;
 }
 

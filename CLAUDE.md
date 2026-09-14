@@ -40,7 +40,8 @@
 - 本会话用户已授权本地真实模型/浏览器联调，不需要再次索要 `.env` 或确认这类验收。新会话按其授权范围执行；不得把旧默认限制当成本会话的额外审批。`git commit` / `git push` / 对外发布仍未授权。
 - 不改 `benchmark/*/gold.json`、`human-labels.json`、`held-out/`、`rubric/`；不把它们放进任何提示词。
 - 不让自愈改 `oracle`。
-- 动 `packages/harness-testing/src/casegen/prompts.ts` 或 `plugins/testpilot/skills/**` 时：`node scripts/check-drift.mjs` 必须绿，`plugins/testpilot/plugin.json` 的 `skillVersions` 跳版本。
+- 动 `packages/harness-testing/src/casegen/prompts.ts` 或 `plugins/testpilot/skills/**` 时：`pnpm check:drift`（等价于 `node scripts/check-drift.mjs`）必须绿，`plugins/testpilot/plugin.json` 的 `skillVersions` 跳版本。
+  改完 skill 记得 `node scripts/build-claude-plugin.mjs` 与 `build-codex-plugin.mjs` 重新生成宿主副本——检查会拦，但拦住之前先想着它：2026-09-14 那次，改过的 skill 有四个文件整整两天没到宿主 agent 手里。
 
 ## 验收命令
 ```bash
