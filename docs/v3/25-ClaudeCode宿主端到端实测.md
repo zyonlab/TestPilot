@@ -82,13 +82,49 @@ S-01/AC-1 要求用户动手（When the visitor clicks the visible Inc），却�
 （见 24 §38），当时是对着中文语料调的。这次在纯英文规格上跑，`When` 子句解析与
 英文动作动词（`clicks`）都命中了。最终两轮门禁都 `score: 1`。
 
+## 第二轮：真实站点，走到执行
+
+2026-09-14 同日。上面那轮用的是脚本自带的本地 counter 规格，这一轮换成真东西：
+新建项目、目标 `https://app.hyperliquid-testnet.xyz/trade`，并且走完复核 → g2 → 执行。
+驱动脚本 `server/scripts/drive-claude-host.ts`。
+
+**分工是被迫的，也是对的。** MCP 里没有探索工具（`register_run` 收的是材料文本），
+而且探索要浏览器、宿主 agent 没有。所以：
+
+```
+服务端探索（modules 前设断点停住）→ Claude Code 宿主规划 → 人复核 → g2 → execution
+```
+
+| 阶段 | 结果 |
+| --- | --- |
+| 项目 | `prj-mu18xegk-1002` |
+| 探索 | 6 屏、32,656 字材料、产品模型 21 功能 / 10 模块，2 分钟 |
+| 宿主规划 | 9 模块 / 4 故事 / 11 用例，门禁 `score 1`；冻结由 `CLAUDE_HOST_E2E_OPERATOR` 显式按下 |
+| 人工复核 | 10 批准 / 1 驳回 |
+| g2 | `ready_to_execute`，代码门禁 `score 1`（3 条 info：措辞漂移、重复步骤序列） |
+
+用例质量与上一批（24 §38 之前那 81 条）完全不同：11 条全是 `tier1 + 机器判据 + ready`，
+`acRefs` 全部按编号引用，步骤是真实动作，大多带回退。没有一条是「打开页面 + 看一眼」。
+
+### 驳回的那条，缺陷不在用例
+
+C-12 的判据是 `Account value must be <$2500万 to use portfolio margin in beta mode.`
+——一个英文 dapp 不会渲染「万」。查探索材料，**原文就是这句**：用例逐字抄的，没编。
+缺陷在上游：材料里这句的数字被本地化了（`$25M` → `$2500万`），而同一份材料里
+`No open positions yet`、`Trailing Stop`、`The maximum leverage is 10x.` 都是逐字英文。
+拿它当 `text` 判据必然永远不匹配。**`outputLanguage: 'zh'` 的运行都可能中招。**
+
+### 两条批了但要标出来的弱判据
+
+C-01「输入数量后可用余额仍为 0.00 USDC」、C-11「切到 Sell / Short 后仓位仍是 0.00 HYPE」
+——判据在**动作之前就已经成立**。作为不变性检查勉强成立，但它分不清「没变」和「本来就是」。
+执行结果里的 `heldBefore` 会把这种绿标出来。
+
 ## 还没验到的
 
-- **hook 有没有真的被宿主执行**。这次的判据只到「MCP 阶段工具被调用、产物落盘」，
+- **hook 有没有真的被宿主执行**。判据只到「MCP 阶段工具被调用、产物落盘」，
   `PreToolUse` / `Stop` 走没走 `hooks/adapters/claude-code.mjs`，trace 里没有直接证据。
-- **执行节点**。这次停在 `finalize` / `waiting_review`，没有走复核 → g2 → execution。
-  Codex 那次（19）走完了，且第二段用的是另一个原生会话。
-- **真实被测对象**。用的是脚本自带的本地 counter 规格，不是 Hyperliquid 那样的重前端页面。
+- **宿主自己发起探索**。MCP 没有这个工具，目前也不打算有——探索要浏览器。
 
 ## 前提
 
