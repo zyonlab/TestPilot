@@ -8,6 +8,24 @@ description: Runs TestPilot generation with this host as planner, immutable proj
 宿主模型负责理解、故事拆解和用例设计。Midscene 的执行模型另由项目配置提供。
 服务端保存阶段事实与门禁凭证，Web 展示同一批产物并交给用户复核。
 
+## 你在这里能做的不止是跑一遍流水线
+
+除了下面这串阶段工具，还有一组按域分的工具（`tp_project` / `tp_run` / `tp_stage` /
+`tp_unit` / `tp_artifact` / `tp_review` / `tp_execution` / `tp_case` / `tp_report` /
+`tp_export` / `tp_settings` / `tp_eval` / `tp_queue` / `tp_graph` / `tp_wf` /
+`tp_audit` / `tp_system`）——**Web 界面上能做的操作，这里基本都能做**：建项目、挂规则包、
+读进度与中间产物、看执行报告与基线、导出能自己跑的测试工程、读记分板。
+每个工具的 `action` 枚举里写着它能干什么。
+
+三件事要记住：
+
+- **不知道 runId 就先找。** 它只在服务器上，你上一次会话结束就忘了。
+  `tp_run.list({projectId})` 把这个项目跑过的都列出来，`tp_run.checkpoint` 说它停在哪。
+- **参数不全不要猜。** 建项目缺 `targetUrl`、跑执行缺 `codeRevision`——问人，
+  人答完再调一次。编一个地址比报错更糟。
+- **人的决定要人来做。** 冻结模块树、批准用例、立基线——把内容摆给人看，
+  人点头了你再调那个工具。这条和界面上是同一条：agent 是那只手，不是那个拍板的人。
+
 ## 顺序
 
 1. 没有 runId 时，调用 `register_run`：传项目 ID、宿主运行时、稳定的 externalId/idempotencyKey，以及材料原文数组 `{name,text}`。重试保留完全相同的参数。宿主模型身份只有确定时才报告；未知留空。已由 Web 或运行适配器注册时，直接使用提供的 runId。

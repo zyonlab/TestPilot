@@ -68,6 +68,14 @@ const project: DomainSpec = {
     add_environment: { summary: "给项目加一个环境", method: "POST", path: "/api/projects/:id/environments", params: ["id"], mutates: true, body: json },
     secrets: { summary: "列出密钥的**名字**（值永远不返回，也不该问）", method: "GET", path: "/api/projects/:id/secrets", params: ["id"] },
     datasets: { summary: "列出项目的测试数据集", method: "GET", path: "/api/projects/:id/datasets", params: ["id"] },
+    add_dataset: { summary: "给项目加一个数据集（一行一个 test，数据随导出的工程走）", method: "POST", path: "/api/projects/:id/datasets", params: ["id"], mutates: true, body: json },
+    remove_dataset: { summary: "删一个数据集", method: "DELETE", path: "/api/datasets/:id", params: ["id"], mutates: true },
+    preview_dataset: { summary: "落库前先预览：列名解析错了，症状是二十分钟后一批断言失败", method: "POST", path: "/api/datasets/preview", mutates: true, body: json },
+    set_secret: {
+      summary: "写一个密钥。**值不要经过模型**——让人在界面上填，或由脚本直接写",
+      method: "POST", path: "/api/projects/:id/secrets", params: ["id"], mutates: true, body: json,
+    },
+    remove_secret: { summary: "删一个密钥", method: "DELETE", path: "/api/projects/:id/secrets/:key", params: ["id", "key"], mutates: true },
   },
 };
 
@@ -200,6 +208,8 @@ const kase: DomainSpec = {
     code: { summary: "读一条用例编译出来的代码", method: "GET", path: "/api/cases/:id/code", params: ["id"] },
     set_code: { summary: "改一条用例的代码", method: "PATCH", path: "/api/cases/:id/code", params: ["id"], mutates: true, body: json },
     generate_code: { summary: "为一条用例生成代码", method: "POST", path: "/api/cases/:id/generate-code", params: ["id"], mutates: true, body: json },
+    generate_batch: { summary: "批量生成代码", method: "POST", path: "/api/generate-code", mutates: true, body: json },
+    run_adhoc: { summary: "临时跑一段步骤（不建用例，用来试探产品）", method: "POST", path: "/api/run", mutates: true, body: json },
     run: { summary: "跑一条用例（服务端开浏览器；执行层带缓存，同一条重跑省 token）", method: "POST", path: "/api/cases/:id/run", params: ["id"], mutates: true, body: json },
     debug: { summary: "读一条用例的调试信息：每一步看到了什么、判据怎么判的", method: "GET", path: "/api/cases/:id/debug", params: ["id"] },
     refine: { summary: "让模型改写一条用例（自愈不许动 oracle）", method: "POST", path: "/api/cases/:id/refine", params: ["id"], mutates: true, body: json },
@@ -292,10 +302,116 @@ const evaluation: DomainSpec = {
     score: { summary: "给一次运行打分", method: "POST", path: "/api/evals/score", mutates: true, body: json },
     paired: { summary: "跑一次配对评测（两臂只差一件事）", method: "POST", path: "/api/evals/paired", mutates: true, body: json },
     detection: { summary: "跑变异检测：人造缺陷，看用例叫不叫", method: "POST", path: "/api/evals/detection", mutates: true, body: json },
+    specs: { summary: "列出评测规格", method: "GET", path: "/api/evals/specs" },
+    run_spec: { summary: "跑一个评测规格", method: "POST", path: "/api/evals/specs/:id/run", params: ["id"], mutates: true, body: json },
+    spec_from_critique: { summary: "从一份评审意见生成评测规格", method: "POST", path: "/api/evals/specs/from-critique", mutates: true, body: json },
+    subject: { summary: "读某张图当被测对象时的评测视图", method: "GET", path: "/api/evals/subject/:graphId", params: ["graphId"] },
   },
 };
 
-export const DOMAINS: readonly DomainSpec[] = [project, run, stage, unit, artifact, review, execution, kase, report, exportProject, settings, evaluation];
+
+/** 复核队列：看板那一侧的复核（和工作流运行的复核是两条路）。 */
+const queue: DomainSpec = {
+  tool: "tp_queue",
+  title: "复核队列",
+  description:
+    "看板的复核队列：批、驳、批量处理、补一条缺口用例、让模型重写。" +
+    "**批准与驳回是人的决定**——摆给人看，人说了才调。",
+  actions: {
+    list: { summary: "列出待复核的运行", method: "GET", path: "/api/review" },
+    get: { summary: "读一次运行待复核的内容", method: "GET", path: "/api/review/:wfRunId", params: ["wfRunId"] },
+    approve: { summary: "批准。**这是人的决定**", method: "POST", path: "/api/review/:wfRunId/approve", params: ["wfRunId"], mutates: true, body: json },
+    reject: { summary: "驳回这批用例，并写清楚为什么。**这是人的决定**", method: "POST", path: "/api/review/:wfRunId/reject", params: ["wfRunId"], mutates: true, body: json },
+    batch: { summary: "批量处理一批复核。**这是人的决定**", method: "POST", path: "/api/review/:wfRunId/batch", params: ["wfRunId"], mutates: true, body: json },
+    amend_case: { summary: "复核时改一条用例", method: "PATCH", path: "/api/review/:wfRunId/cases/:caseId", params: ["wfRunId", "caseId"], mutates: true, body: json },
+    gap_case: { summary: "补一条缺口用例：复核时发现漏测的地方", method: "POST", path: "/api/review/:wfRunId/gap-case", params: ["wfRunId"], mutates: true, body: json },
+    regenerate: { summary: "让模型重写这批用例", method: "POST", path: "/api/review/:wfRunId/regenerate", params: ["wfRunId"], mutates: true, body: json },
+  },
+};
+
+/** 图与节点类型：工作流本身的定义。 */
+const graph: DomainSpec = {
+  tool: "tp_graph",
+  title: "工作流图",
+  description: "工作流图的定义、版本与差异，以及可用的节点类型。改图会影响后续每一次运行。",
+  actions: {
+    list: { summary: "列出全部工作流图", method: "GET", path: "/api/graphs" },
+    get: { summary: "读一张图的定义：节点、连线、当前版本", method: "GET", path: "/api/graphs/:id", params: ["id"] },
+    versions: { summary: "列出一张图的版本", method: "GET", path: "/api/graphs/:id/versions", params: ["id"] },
+    version: { summary: "读某一版图的完整定义", method: "GET", path: "/api/graphs/:id/versions/:version", params: ["id", "version"] },
+    diff: { summary: "比两版图差在哪：哪些节点变了", method: "GET", path: "/api/graphs/:id/diff", params: ["id"] },
+    create: { summary: "建一张图。会影响后续每一次运行，动手前跟人确认", method: "POST", path: "/api/graphs", mutates: true, body: json },
+    node_types: { summary: "列出可用的节点类型", method: "GET", path: "/api/node-types" },
+    ablatable: { summary: "列出可消融的部件（两臂对照用）", method: "GET", path: "/api/ablatable" },
+  },
+};
+
+/** 工作流运行（看板视角）：和 tp_run 是同一批运行的另一组视图与控制。 */
+const wf: DomainSpec = {
+  tool: "tp_wf",
+  title: "工作流运行控制",
+  description:
+    "看板视角的运行列表与控制：起跑、断点、续跑、取消、可续点。" +
+    "和 `tp_run` 指的是同一批运行，这里是图执行那一侧的视图。",
+  actions: {
+    list: { summary: "列出全部工作流运行（跨项目）", method: "GET", path: "/api/wf/runs" },
+    get: { summary: "读一次运行的节点产物", method: "GET", path: "/api/wf/runs/:id", params: ["id"] },
+    start: { summary: "起一次图执行", method: "POST", path: "/api/wf/runs", mutates: true, body: json },
+    cancel: { summary: "取消这次图执行", method: "POST", path: "/api/wf/runs/:id/cancel", params: ["id"], mutates: true, body: json },
+    resume: { summary: "从可续点接着跑", method: "POST", path: "/api/wf/runs/:id/resume", params: ["id"], mutates: true, body: json },
+    continuations: { summary: "读可以接着干的岔路", method: "GET", path: "/api/wf/runs/:id/continuations", params: ["id"] },
+    continue_from: { summary: "从某个岔路接着跑", method: "POST", path: "/api/wf/runs/:id/continue", params: ["id"], mutates: true, body: json },
+    controls: { summary: "读一次运行的断点与控制", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/controls", params: ["projectId", "runId"] },
+    set_controls: { summary: "设断点：让运行在某个节点前停下等人", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/controls", params: ["projectId", "runId"], mutates: true, body: json },
+  },
+};
+
+/** 审计与变异：这批用例到底有没有发现问题的能力。 */
+const audit: DomainSpec = {
+  tool: "tp_audit",
+  title: "审计与变异检测",
+  description:
+    "审计一次运行：扫描、差异、人工标注、判官校准；以及变异检测——往 DOM 里注一个人造缺陷，" +
+    "看这批用例叫不叫。**人工标注与 gold 是冻结的，不要拿它们去训练或塞进提示词。**",
+  actions: {
+    scan: { summary: "扫描一次运行，找可疑的地方", method: "GET", path: "/api/audit/:runId/scan", params: ["runId"] },
+    diff: { summary: "和上次比差在哪", method: "GET", path: "/api/audit/:runId/diff", params: ["runId"] },
+    holds: { summary: "读被 hook 拦下的那些", method: "GET", path: "/api/audit/:runId/holds", params: ["runId"] },
+    calibration: { summary: "读判官校准结果：模型判的和人判的差多少", method: "GET", path: "/api/audit/:runId/calibration", params: ["runId"] },
+    label: { summary: "写人工标注。**这是人的判断**，不要替人写", method: "POST", path: "/api/audit/:runId/labels", params: ["runId"], mutates: true, body: json },
+    mutations: { summary: "读一次运行的变异检测结果", method: "GET", path: "/api/mutation/:wfRunId", params: ["wfRunId"] },
+    mutate: { summary: "跑一轮变异检测：人造缺陷，看用例抓不抓得住", method: "POST", path: "/api/mutation/:wfRunId", params: ["wfRunId"], mutates: true, body: json },
+    critic: { summary: "读评审意见", method: "GET", path: "/api/critic" },
+    run_critic: { summary: "跑一次评审", method: "POST", path: "/api/critic", mutates: true, body: json },
+    apply_graph: { summary: "把一次对话里议定的图改动应用上去", method: "POST", path: "/api/chat/apply-graph", mutates: true, body: json },
+    apply_prompt: { summary: "把一次对话里议定的提示词改动应用上去", method: "POST", path: "/api/chat/apply-prompt", mutates: true, body: json },
+  },
+};
+
+/** 系统：进程、能力、配置、健康。 */
+const system: DomainSpec = {
+  tool: "tp_system",
+  title: "系统与进程",
+  description: "外部能力进程（本地链、基准站点）的起停、系统配置与健康检查。",
+  actions: {
+    health: { summary: "服务端活着吗：连不上时先用它分清是服务没起还是别的问题", method: "GET", path: "/api/health" },
+    config: { summary: "读系统配置", method: "GET", path: "/api/config" },
+    set_config: { summary: "改系统配置", method: "POST", path: "/api/config", mutates: true, body: json },
+    processes: { summary: "列出受管的外部进程与它们的状态（本地链、基准站点）", method: "GET", path: "/api/processes" },
+    process_action: { summary: "对一个进程做操作（start/stop/restart）", method: "POST", path: "/api/processes/:id/:action", params: ["id", "action"], mutates: true, body: json },
+    cancel_work: { summary: "取消一个进程正在做的活", method: "POST", path: "/api/processes/:id/cancel-work", params: ["id"], mutates: true, body: json },
+    start_capability: { summary: "起一个外部能力", method: "POST", path: "/api/capabilities", mutates: true, body: json },
+    set_capability_cwd: { summary: "设一个能力的工作目录", method: "PATCH", path: "/api/capabilities/:id/cwd", params: ["id"], mutates: true, body: json },
+    llm_debug: { summary: "读模型调用的调试记录", method: "GET", path: "/api/llm-debug" },
+    load_example: { summary: "装载 uniswap 示例项目（上手用）", method: "POST", path: "/api/examples/uniswap", mutates: true, body: json },
+    check_wallet: { summary: "检查本机钱包配置", method: "POST", path: "/api/wallet/check", mutates: true, body: json },
+    dapp_test: { summary: "验一次 dapp 连接", method: "POST", path: "/api/wallet/dapp-test", mutates: true, body: json },
+    verify_dapp: { summary: "验证 dapp 的链上断言", method: "POST", path: "/api/dapp/verify", mutates: true, body: json },
+  },
+};
+
+export const DOMAINS: readonly DomainSpec[] = [project, run, stage, unit, artifact, review, execution,
+  kase, report, exportProject, settings, evaluation, queue, graph, wf, audit, system];
 
 /** `<domain>.<action>` → 规格。`check-host-parity` 与工具注册都从这里取。 */
 export function actionIndex(): Map<string, { domain: DomainSpec; action: string; spec: ActionSpec }> {

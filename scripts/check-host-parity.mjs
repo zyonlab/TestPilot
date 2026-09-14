@@ -92,8 +92,16 @@ function main() {
   const rate = reachable ? covered / reachable : 1;
   const baseline = manifest.baseline ?? { covered: 0, reachable, rate: 0 };
 
-  if (!WRITE && rate + 1e-9 < baseline.rate)
-    problems.push(`覆盖率从 ${(baseline.rate * 100).toFixed(1)}% 掉到 ${(rate * 100).toFixed(1)}%。` +
+  /**
+   * 比的是**覆盖条数**，不是比率。
+   *
+   * 第一版比 `rate`，而基线里存的是 `toFixed(4)` 的四舍五入值：新加一条路由、
+   * 同时把它覆盖了，真实比率会比存下来的四舍五入值低一丁点，于是报
+   * 「从 91.3% 掉到 91.3%」——一句自相矛盾的话。条数是整数，没有这个问题：
+   * 它要表达的本来就是「宿主能做的事只能变多」。
+   */
+  if (!WRITE && covered < (baseline.covered ?? 0))
+    problems.push(`宿主覆盖从 ${baseline.covered} 条掉到 ${covered} 条（${(baseline.rate * 100).toFixed(1)}% → ${(rate * 100).toFixed(1)}%）。` +
       `宿主入口只能越来越全——要么补上，要么说清楚为什么这条退回 todo。`);
 
   if (WRITE) {

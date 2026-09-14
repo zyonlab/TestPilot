@@ -5,37 +5,37 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/ablatable",
-   "status": "todo"
+   "host": "tp_graph.ablatable"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/audit/:runId/calibration",
-   "status": "todo"
+   "host": "tp_audit.calibration"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/audit/:runId/diff",
-   "status": "todo"
+   "host": "tp_audit.diff"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/audit/:runId/holds",
-   "status": "todo"
+   "host": "tp_audit.holds"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/audit/:runId/labels",
-   "status": "todo"
+   "host": "tp_audit.label"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/audit/:runId/scan",
-   "status": "todo"
+   "host": "tp_audit.scan"
   },
   {
    "source": "index.ts",
@@ -53,7 +53,7 @@
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/capabilities/:id/cwd",
-   "status": "todo"
+   "host": "tp_system.set_capability_cwd"
   },
   {
    "source": "index.ts",
@@ -65,7 +65,7 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/capabilities",
-   "status": "todo"
+   "host": "tp_system.start_capability"
   },
   {
    "source": "index.ts",
@@ -167,61 +167,61 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/chat/apply-graph",
-   "status": "todo"
+   "host": "tp_audit.apply_graph"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/chat/apply-prompt",
-   "status": "todo"
+   "host": "tp_audit.apply_prompt"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/chat",
-   "status": "todo"
+   "uiOnly": "Web UI 自己的对话框——它做的事（跟人商量、再调工具）正是宿主本身在做的。把它暴露给宿主等于让 agent 去驱动另一个 agent，多一层没有意义。议定之后的落地走 tp_audit.apply_graph / apply_prompt。"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/config",
-   "status": "todo"
+   "host": "tp_system.config"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/config",
-   "status": "todo"
+   "host": "tp_system.set_config"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/critic",
-   "status": "todo"
+   "host": "tp_audit.critic"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/critic",
-   "status": "todo"
+   "host": "tp_audit.run_critic"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/dapp/verify",
-   "status": "todo"
+   "host": "tp_system.verify_dapp"
   },
   {
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/datasets/:id",
-   "status": "todo"
+   "host": "tp_project.remove_dataset"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/datasets/preview",
-   "status": "todo"
+   "host": "tp_project.preview_dataset"
   },
   {
    "source": "index.ts",
@@ -287,25 +287,25 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/evals/specs/:id/run",
-   "status": "todo"
+   "host": "tp_eval.run_spec"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/evals/specs/from-critique",
-   "status": "todo"
+   "host": "tp_eval.spec_from_critique"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/evals/specs",
-   "status": "todo"
+   "host": "tp_eval.specs"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/evals/subject/:graphId",
-   "status": "todo"
+   "host": "tp_eval.subject"
   },
   {
    "source": "index.ts",
@@ -317,19 +317,19 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/events",
-   "status": "todo"
+   "uiOnly": "服务端推事件流（SSE）。宿主是请求-响应的，订阅不了一条长连接；进度改用 tp_run.checkpoint / tp_unit.status 轮询，拿到的是同一份状态。"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/examples/uniswap",
-   "status": "todo"
+   "host": "tp_system.load_example"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/generate-code",
-   "status": "todo"
+   "host": "tp_case.generate_batch"
   },
   {
    "source": "index.ts",
@@ -347,49 +347,49 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/graphs/:id/diff",
-   "status": "todo"
+   "host": "tp_graph.diff"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/graphs/:id/versions/:version",
-   "status": "todo"
+   "host": "tp_graph.version"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/graphs/:id/versions",
-   "status": "todo"
+   "host": "tp_graph.versions"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/graphs/:id",
-   "status": "todo"
+   "host": "tp_graph.get"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/graphs",
-   "status": "todo"
+   "host": "tp_graph.list"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/graphs",
-   "status": "todo"
+   "host": "tp_graph.create"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/health",
-   "status": "todo"
+   "host": "tp_system.health"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/llm-debug",
-   "status": "todo"
+   "host": "tp_system.llm_debug"
   },
   {
    "source": "index.ts",
@@ -419,37 +419,37 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/mutation/:wfRunId",
-   "status": "todo"
+   "host": "tp_audit.mutations"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/mutation/:wfRunId",
-   "status": "todo"
+   "host": "tp_audit.mutate"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/node-types",
-   "status": "todo"
+   "host": "tp_graph.node_types"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/processes/:id/:action",
-   "status": "todo"
+   "host": "tp_system.process_action"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/processes/:id/cancel-work",
-   "status": "todo"
+   "host": "tp_system.cancel_work"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/processes",
-   "status": "todo"
+   "host": "tp_system.processes"
   },
   {
    "source": "index.ts",
@@ -485,7 +485,7 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/projects/:id/datasets",
-   "status": "todo"
+   "host": "tp_project.add_dataset"
   },
   {
    "source": "index.ts",
@@ -563,7 +563,7 @@
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/projects/:id/secrets/:key",
-   "status": "todo"
+   "host": "tp_project.remove_secret"
   },
   {
    "source": "index.ts",
@@ -575,7 +575,7 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/projects/:id/secrets",
-   "status": "todo"
+   "host": "tp_project.set_secret"
   },
   {
    "source": "index.ts",
@@ -677,13 +677,13 @@
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/controls",
-   "status": "todo"
+   "host": "tp_wf.controls"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/controls",
-   "status": "todo"
+   "host": "tp_wf.set_controls"
   },
   {
    "source": "runRoutes.ts",
@@ -911,55 +911,55 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/review/:wfRunId/approve",
-   "status": "todo"
+   "host": "tp_queue.approve"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/review/:wfRunId/batch",
-   "status": "todo"
+   "host": "tp_queue.batch"
   },
   {
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/review/:wfRunId/cases/:caseId",
-   "status": "todo"
+   "host": "tp_queue.amend_case"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/review/:wfRunId/gap-case",
-   "status": "todo"
+   "host": "tp_queue.gap_case"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/review/:wfRunId/regenerate",
-   "status": "todo"
+   "host": "tp_queue.regenerate"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/review/:wfRunId/reject",
-   "status": "todo"
+   "host": "tp_queue.reject"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/review/:wfRunId",
-   "status": "todo"
+   "host": "tp_queue.get"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/review",
-   "status": "todo"
+   "host": "tp_queue.list"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/run",
-   "status": "todo"
+   "host": "tp_case.run_adhoc"
   },
   {
    "source": "index.ts",
@@ -1013,13 +1013,13 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wallet/check",
-   "status": "todo"
+   "host": "tp_system.check_wallet"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wallet/dapp-test",
-   "status": "todo"
+   "host": "tp_system.dapp_test"
   },
   {
    "source": "index.ts",
@@ -1037,19 +1037,19 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wf/runs/:id/cancel",
-   "status": "todo"
+   "host": "tp_wf.cancel"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/wf/runs/:id/continuations",
-   "status": "todo"
+   "host": "tp_wf.continuations"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wf/runs/:id/continue",
-   "status": "todo"
+   "host": "tp_wf.continue_from"
   },
   {
    "source": "index.ts",
@@ -1073,7 +1073,7 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wf/runs/:id/resume",
-   "status": "todo"
+   "host": "tp_wf.resume"
   },
   {
    "source": "index.ts",
@@ -1085,24 +1085,24 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/wf/runs/:id",
-   "status": "todo"
+   "host": "tp_wf.get"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/wf/runs",
-   "status": "todo"
+   "host": "tp_wf.list"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wf/runs",
-   "status": "todo"
+   "host": "tp_wf.start"
   }
  ],
  "baseline": {
-  "covered": 121,
-  "reachable": 183,
-  "rate": 0.6612
+  "covered": 181,
+  "reachable": 181,
+  "rate": 1
  }
 }
