@@ -13,6 +13,9 @@
  * workspace，那里没有这个包的 node_modules。
  */
 import { register } from "tsx/esm/api";
+import { loadModelEnv } from "./model-env.mjs";
+
+if (process.env.TP_MODEL_ENV_FILE) loadModelEnv(process.env.TP_MODEL_ENV_FILE);
 
 register();
 await import(new URL("../src/server.ts", import.meta.url).href);

@@ -1,34 +1,16 @@
-import { OpenAIModel, gated, traced, type ModelClient } from "@testpilot/harness-core";
+import { OpenAIModel, gated, traced, plannerModel, plannerConnectionFromEnv, type ModelClient } from "@testpilot/harness-core";
+import { projectModelConnection } from "./modelProfiles.js";
 import { resolveModelRuntime, PROBE_IMAGE, type ModelConfig } from "./config.js";
 import { getSettings, langDirective } from "./settings.js";
 
 /**
- * 网关这几处模型调用**走的是和运行完全同一条参数装配路径**。
- *
- * 此前这里是一条手写的 `fetch`，它和真实运行逐项不同——**八处**：
- *
- * | | 手写这条 | 真实运行 |
- * |---|---|---|
- * | 超时 | 30s | 900s，可配 |
- * | 思考 | 无条件关 | 默认**开** |
- * | thinkBudget | 不送 | 送 |
- * | max_tokens | 512 | maxTokens + thinkBudget |
- * | 截断 | 完全不看 | 读 `finish_reason` 并翻倍重发 |
- * | 重试 | 一次就抛 | 3 次退避 |
- * | schema | 无 | json_schema guided，失败降级 |
- * | usage | 只记字符数 | 读 prompt/completion/cached |
- *
- * 其中三处直接制造误判：**思考开关**（探活 1 秒过、运行慢 5 倍且吃预算）；
- * **截断**（这边静默返回半截，`generateCode` 把半截当成代码存进用例）；
- * **重试**（一次网络抖动就报「端点不可达」，而运行本来扛得过去）。
- *
- * 「绿色的连接通过」加「一整场失败的运行」可以同时成立，而人没有任何线索去怀疑
- * 这两件事测的不是一回事——这正是要合并的理由。
- *
- * 探活仍然有它自己的**两个**旋钮：更短的超时、`retries: 1`。
- * 那是「按一下要一秒内有反应」的产品要求，不是另一套参数装配。
+ * Domain generation uses the project planner, or explicit TP_PLANNER_* defaults.
+ * The retired global model probe keeps its own override path for compatibility;
+ * project role probes live in modelProfilesRoutes.ts.
  */
-function gatewayModel(opts?: { timeoutMs?: number; retries?: number; override?: Partial<ModelConfig> }): ModelClient {
+function gatewayModel(opts?: { timeoutMs?: number; retries?: number; override?: Partial<ModelConfig>; executorProbe?: boolean; projectId?: string }): ModelClient {
+  if (!opts?.executorProbe) return traced(gated(plannerModel(opts?.projectId
+    ? projectModelConnection(opts.projectId, "planner") : plannerConnectionFromEnv())), { name: "gateway.planner" });
   // `override` 只有「测试连接」用：人在框里填了一组值，要测的就是那一组，
   // 不是服务端此刻在跑的那一组。不接它的话，按钮测的永远是后者——
   // 而那正好让「我改了参数再测一次」这个动作完全失效。
@@ -60,8 +42,8 @@ export async function probeModel(
 ): Promise<ProbeResult> {
   // 探活只调两个旋钮：更短的超时、只试一次。其余全部由 `OpenAIModel` 装配，
   // 与真实运行逐字相同——这正是这次改动的全部意义。
-  const text = gatewayModel({ timeoutMs: 30_000, retries: 1, override });
-  const vision = gatewayModel({ timeoutMs: 60_000, retries: 1, override });
+  const text = gatewayModel({ timeoutMs: 30_000, retries: 1, override, executorProbe: true });
+  const vision = gatewayModel({ timeoutMs: 60_000, retries: 1, override, executorProbe: true });
   const r = resolveModelRuntime(override);
 
   // Step 1: reachability + basic text completion.
@@ -118,9 +100,9 @@ export async function generateCode(
   title: string,
   steps: string[],
   expected: string,
-  override?: Partial<ModelConfig>,
+  projectId?: string,
 ): Promise<string> {
-  const client = gatewayModel({ override });
+  const client = gatewayModel({ projectId });
   // The instruction preamble is a configurable template; the case-specific data is
   // always appended by code so the placeholders can't be broken by an edit.
   const preamble = getSettings().prompts.generateCode;
@@ -189,7 +171,7 @@ export async function refineCase(
     stepIdx?: number; // optional: focus the edit on one step
     lang?: string; // optional: UI language to force the output into (when enforced)
   },
-  override?: Partial<ModelConfig>,
+  projectId?: string,
 ): Promise<RefineResult> {
   const focus =
     typeof input.stepIdx === "number"
@@ -226,7 +208,7 @@ ${focus}
 
 ${shape}${langDirective(input.lang)}`;
 
-  const out = await gatewayModel({ override }).chat({
+  const out = await gatewayModel({ projectId }).chat({
     stable: "You output only strict JSON, no prose.",
     variable: prompt,
     maxTokens: 900,

@@ -15,7 +15,39 @@ import { loadGold } from "../src/score.js";
  * `loadGold` 找不到就抛、不兜底（`score.ts`）是这份契约在代码里的另一半。
  */
 const ROOT = join(__dirname, "..", "..", "..");
-const caps = readdirSync(join(ROOT, "benchmark")).filter((d) => statSync(join(ROOT, "benchmark", d)).isDirectory());
+const allCaps = readdirSync(join(ROOT, "benchmark")).filter((d) => statSync(join(ROOT, "benchmark", d)).isDirectory());
+/**
+ * 两种基准目录。有 `statement/` 或 `gold.json` 的是**可打分的**，走下面的全套契约；
+ * 只有 `materials/` + README 的是**材料层**（07 T-11 的 `hyperliquid-testnet` 先是这样）——它不产生分数，
+ * 契约只要求它把这一点写在脸上：README 说明 gold.json 还不存在、fail-closed。
+ */
+const isPendingDraft = (cap:string) => {
+ const dir=join(ROOT,'benchmark',cap),path=join(dir,'lifecycle.json');
+ return !existsSync(join(dir,'gold.json')) && existsSync(path) && JSON.parse(readFileSync(path,'utf8')).mode==='awaiting-human-review';
+};
+const isScoreable = (cap: string) => existsSync(join(ROOT, "benchmark", cap, "statement")) || existsSync(join(ROOT, "benchmark", cap, "gold.json"));
+const caps = allCaps.filter(c=>isScoreable(c)&&!isPendingDraft(c));
+const materialOnly = allCaps.filter((c) => !isScoreable(c)&&!isPendingDraft(c));
+
+describe.each(allCaps.filter(isPendingDraft))('benchmark/%s (awaiting human review)',cap=>{
+ it('has an explicit draft lifecycle and cannot be scored as frozen gold',()=>{
+ const dir=join(ROOT,'benchmark',cap);const lifecycle=JSON.parse(readFileSync(join(dir,'lifecycle.json'),'utf8'));
+ expect(lifecycle.humanReviewRequired).toBe(true);expect(lifecycle.formalScoringAllowed).toBe(false);
+ expect(existsSync(join(dir,'gold.draft.json'))).toBe(true);expect(existsSync(join(dir,'statement'))).toBe(true);
+ expect(()=>loadGold(join(dir,'gold.json'))).toThrow('gold checklist not found');
+ });
+});
+
+describe.each(materialOnly)("benchmark/%s（材料层，不打分）", (cap) => {
+  const dir = join(ROOT, "benchmark", cap);
+  it("有 materials/ 与 README，README 明说 gold.json 还不存在（fail-closed）", () => {
+    expect(existsSync(join(dir, "materials"))).toBe(true);
+    const readme = readFileSync(join(dir, "README.md"), "utf8");
+    expect(readme).toMatch(/gold\.json/);
+    expect(readme).toMatch(/还不存在|不存在/);
+    expect(existsSync(join(dir, "scoreboard.yaml"))).toBe(false);
+  });
+});
 
 describe.each(caps)("benchmark/%s", (cap) => {
   const dir = join(ROOT, "benchmark", cap);

@@ -3,7 +3,7 @@
   "description_zh": "把 TestPilot 的用例生成做成**可进化的 Agent State**：生成器提示词进 skill，schema 校验与设计门禁进 hook，打分留在 MCP 工具里——模型不写分。",
   "short_description": "Generate, gate and audit reviewable test cases.",
   "short_description_zh": "生成、门禁与审计可复核的测试用例。",
-  "version": "2026-09-04.1",
+  "version": "2026-09-10.1",
   "category": "software-development",
   "preinstall": false,
   "hooks": {
@@ -38,28 +38,28 @@
     "user_prompt": []
   },
   "skillVersions": {
-    "testpilot-generate": "2026-09-02.1",
+    "testpilot-generate": "2026-09-10.1",
     "testpilot-explore": "2026-09-03.1",
-    "testpilot-stories": "2026-09-03.2",
-    "testpilot-design": "2026-09-03.2",
-    "testpilot-run-c": "2026-09-03.2",
+    "testpilot-stories": "2026-09-14.1",
+    "testpilot-design": "2026-09-13.1",
+    "testpilot-run-c": "2026-09-12.3",
     "testpilot-evaluation": "2026-09-03.1",
     "testpilot-benchmark-design": "2026-09-04.1",
     "testpilot-scanner": "2026-09-03.1",
-    "testpilot-memory": "2026-09-04.1",
+    "testpilot-memory": "2026-09-09.3",
     "testpilot-onboard-sut": "2026-09-04.1"
   },
   "_note": "`skillVersions` 不是 PenguinHarness 的字段——官方 loader 用 plugin.json 的 version 给每个 skill 盖同一个版本号。这里逐个给，是因为 `RunMeta.skillVersion` 要指认「这次运行用的是哪一版生成器」：testpilot-generate 是 A 臂、没变过，它跟着 C 臂一起跳版本会让两臂的印记同时改变，而 P1 要求两臂只差一件事。官方 loader 读到未知字段会忽略它，所以这个字段不会让这个 plugin 变得不可安装。",
   "skillDigests": {
-    "testpilot-generate": "23d0affda4d450b4",
+    "testpilot-generate": "12ee15239b74568a",
     "testpilot-explore": "49cd2ccdaf361117",
-    "testpilot-stories": "2d2abb7a3d45b95b",
-    "testpilot-design": "432aed136da83307",
-    "testpilot-run-c": "6924f02fafcb8558",
+    "testpilot-stories": "0e71db20690374b0",
+    "testpilot-design": "17734a1342ef759e",
+    "testpilot-run-c": "dc8f6953b1b9efd9",
     "testpilot-evaluation": "3d1bc1c2aaeae65e",
     "testpilot-benchmark-design": "e864d158ad34baf6",
     "testpilot-scanner": "10e35f7f7a7ada73",
-    "testpilot-memory": "0ffb8eadaf34a9f7",
+    "testpilot-memory": "41b7b032023da7a8",
     "testpilot-onboard-sut": "cd302c44eb146513"
   }
 }

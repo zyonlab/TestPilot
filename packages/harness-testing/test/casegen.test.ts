@@ -6,6 +6,8 @@ import {
   STORIES_SCHEMA,
 } from "../src/casegen/prompts.js";
 import { SpecDocSchema, StorySchema, TextCaseSchema } from "../src/casegen/types.js";
+import { checkDesignEvidence } from "../src/casegen/designEvidence.js";
+import { validateCases } from "../src/casegen/validate.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { FakeModel } from "@testpilot/harness-core";
@@ -225,9 +227,12 @@ describe("the specification reaching the node that writes the cases", () => {
 
   it("still lets a non-empty parameter override what came down the graph", async () => {
     const model = new FakeModel(() => reply);
+    // 规格现在是**按故事检索**进提示词的（BM25，`../src/retrieve`），不再整段照抄。
+    // 所以覆盖用的那份规格得跟故事共享几个词，否则它零命中、根本进不了请求——
+    // 那测的就成了检索而不是覆盖。这里让它带上故事标题与验收编号。
     await designCasesNode({ model }).run(
       bundle as never,
-      { specText: "另一份规格", contextTokens: 8000, perStoryMaxTokens: 6000, maxCasesPerStory: 8, oracleGuidance: "default" } as never,
+      { specText: "另一份规格：US-02 凭证错误时被拒绝 — AC-02.1 显示「Oops」", contextTokens: 8000, perStoryMaxTokens: 6000, maxCasesPerStory: 8, oracleGuidance: "default" } as never,
       ctx as never,
     );
     expect(model.calls[0].variable).toContain("另一份规格");
@@ -719,6 +724,36 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
   const filledByHarness: Record<string, string> = {
     id: "由 harness 从标题生成，模型给的 id 不稳定也不唯一",
     storyId: "这次调用只处理一条故事，id 在调用方手上，问模型等于让它抄一遍",
+    /**
+     * 这两个是**另一条生成路径**的字段（2026-09-11 单元循环，docs/v3/22）。
+     * 它们引用产品模型的 featureId 和规则包的 ruleId——A 臂旧 pipeline 从规格出发，
+     * 根本没有产品模型，问它等于让它编 ID。单元循环那条路上由服务端按单元范围校验。
+     */
+    featureRefs: "只在单元循环路径上有值：A 臂没有产品模型，编不出真实 featureId",
+    ruleRefs: "同上：规则 ID 来自规则包，A 臂没有绑定规则包",
+    /**
+     * v2 设计证据的八个字段（2026-09-11，docs/v3/21 §2 与 §5）。
+     *
+     * 它们不在 A 臂的约束解码 schema 里，有两条理由，都不是"以后再说"：
+     * ① 这些字段引用的是**产品模型与规则包里的 id**（acRefs / conditionRefs / risk.ruleRefs /
+     *    design.ruleId / design.stateModelRef）。A 臂从规格出发，手上没有产品模型，
+     *    把它们设成 required 等于逼模型编 id——而本仓库已经有过一次教训：
+     *    编出来的 `covers` 让结构覆盖率虚高，谁也走不到。
+     * ② 这个 schema 里的键必须全部 required（可选键这个模型直接不写，见本文件上面那段）。
+     *    八个嵌套结构一律必填，等于要求每条用例都拿得出边界步长、判定行赋值、状态边 id，
+     *    而多数用例本来就用不到其中大半——结果只会是形状正确、内容编造。
+     *
+     * 它们由单元循环那条路径产出：那里规划器拿得到本单元的功能、规则原文与观察，
+     * 服务端按单元范围逐字段核对（`designEvidence.ts`）。
+     */
+    acRefs: "引用故事的验收点 id；A 臂的故事没有稳定验收点 id",
+    conditionRefs: "引用测试条件 id；A 臂没有「先条件、后用例」这一层",
+    scenarioType: "与 designMethod 的迁移期并存字段，由 v2 路径写；A 臂仍用 designMethod=negative",
+    design: "设计证据引用规则包与状态图的 id，A 臂两者都没有，设成必填只会得到编造的证据",
+    risk: "risk.ruleRefs 指向规则包；A 臂没有绑定规则包",
+    testData: "结构化数据的 source 要能追到规则或标的元数据，A 臂拿不到",
+    assertions: "拆开的断言各自带判据；A 臂的返回格式是单个 expected + 单个 oracle",
+    readiness: "执行就绪状态取决于 fixture 与账户条件，A 臂不知道这些",
   };
 
   it("TextCase 的每个字段，要么在 schema 里，要么在豁免名单里", () => {
@@ -765,6 +800,9 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
     ).properties.stories.items.properties;
     const filledByHarness: Record<string, string> = {
       sourceBy: "出处是定位出来的还是模型自称的，由 harness 拿验收标准回材料里查出来的，不能问模型",
+      // 见上面 TextCase 那份名单里的同名两条：产品模型只在单元循环路径上存在。
+      featureRefs: "只在单元循环路径上有值：A 臂没有产品模型，编不出真实 featureId",
+      ruleRefs: "同上：规则 ID 来自规则包，A 臂没有绑定规则包",
     };
     const missing = Object.keys(StorySchema.shape).filter(
       (k) => !(k in produced) && !(k in filledByHarness),
@@ -792,5 +830,78 @@ describe("给模型的 schema 与给我们的校验必须对齐", () => {
       (k) => !(k in produced) && !(k in assembled),
     );
     expect(missing, `这些字段 zod 认、compose schema 不认：${missing.join(", ")}`).toEqual([]);
+  });
+});
+
+/**
+ * v2 设计证据（docs/v3/21 §2 与 §5）。八个字段全是可选的，所以这些检查只在字段出现时触发——
+ * 旧归档一条都不会被点到，而这正是要钉住的：「没给证据」与「给了坏证据」是两件事。
+ */
+describe("设计证据的确定性校验", () => {
+  const base = {
+    id: "c1", storyId: "s1", title: "t", designMethod: "boundary" as const, tier: 1 as const,
+    key: "k", steps: ["做一件事"], expected: "页面显示「X」", precondition: [], postSteps: [],
+    sourceRefs: ["docs/x.md#1"], covers: [] as string[],
+  };
+  const parse = (over: Record<string, unknown>) => TextCaseSchema.parse({ ...base, ...over });
+
+  it("旧用例（一个 v2 字段都没有）照样通过，一条错都不报", () => {
+    expect(checkDesignEvidence([parse({})])).toEqual([]);
+  });
+
+  it("方法标签和设计证据说的不是同一种方法 → 报出来", () => {
+    const c = parse({ design: { technique: "equivalence", inputDimension: "数量", partitionId: "p1", predicate: "> 0", validity: "valid", representative: "0.001" } });
+    expect(checkDesignEvidence([c]).map((e) => e.code)).toContain("design_technique_mismatch");
+  });
+
+  it("边界取了两侧却没取边界本身 → 报出来（边界值分析的核心就是那一点）", () => {
+    const c = parse({ design: { technique: "boundary", ruleId: "R-SIZE", dimension: "数量", unit: "BTC", bound: "0.001", inclusivity: "inclusive",
+      points: [{ at: "below", value: "0.0009" }, { at: "above", value: "0.0011" }] } });
+    expect(checkDesignEvidence([c]).map((e) => e.code)).toContain("boundary_without_the_bound");
+    const ok = parse({ design: { technique: "boundary", ruleId: "R-SIZE", dimension: "数量", unit: "BTC", bound: "0.001", inclusivity: "inclusive",
+      points: [{ at: "at", value: "0.001" }] } });
+    expect(checkDesignEvidence([ok])).toEqual([]);
+  });
+
+  it("判定表：赋值落在自己没列出的条件上，或漏了某个条件 → 都报", () => {
+    const c = parse({ designMethod: "decision-table", design: { technique: "decision-table", tableId: "T1",
+      conditionIds: ["c-a", "c-b"], rowId: "r1", assignment: { "c-a": "true", "c-x": "false" }, expectedOutcomeRefs: ["AC-1"] } });
+    const codes = checkDesignEvidence([c]).map((e) => e.code);
+    expect(codes).toContain("decision_row_unknown_condition");
+    expect(codes).toContain("decision_row_missing_condition");
+  });
+
+  it("状态迁移：设计证据说走了某条边，covers 里却没有 → 报出来", () => {
+    const c = parse({ designMethod: "state-transition", covers: ["/a->/b"],
+      design: { technique: "state-transition", stateModelRef: "SM1", from: "/a", event: "点 X", to: "/c", transitionIds: ["/a->/c"] } });
+    expect(checkDesignEvidence([c]).map((e) => e.code)).toContain("transition_not_in_covers");
+  });
+
+  it("断言 id 重复、tier 1/2 却没有任何判据 → 都报", () => {
+    const c = parse({ tier: 2, assertions: [{ id: "a1", statement: "x", ruleRefs: [] }, { id: "a1", statement: "y", ruleRefs: [] }] });
+    const codes = checkDesignEvidence([c]).map((e) => e.code);
+    expect(codes).toContain("duplicate_assertion_id");
+    expect(codes).toContain("assertion_without_oracle");
+  });
+
+  it("执行不就绪却不说缺什么 → 报出来；说了就放行", () => {
+    expect(checkDesignEvidence([parse({ readiness: { design: "candidate", execution: "requires-fixture" } })]).map((e) => e.code))
+      .toContain("readiness_without_reason");
+    expect(checkDesignEvidence([parse({ readiness: { design: "candidate", execution: "requires-fixture", reason: "缺可控持仓" } })])).toEqual([]);
+  });
+
+  it("给了风险理由却没有优先级 → 理由在解释一个不存在的判断", () => {
+    expect(checkDesignEvidence([parse({ risk: { impact: "funds-and-exposure", reason: "减仓方向错会扩大敞口", ruleRefs: ["R-1"] } })]).map((e) => e.code))
+      .toContain("risk_without_priority");
+  });
+
+  it("validateCases 在证据自相矛盾时拒绝写入，并指出是哪一条", () => {
+    const bundle = { origin: "t", stories: [{ id: "s1", title: "t", acceptance: [] }], flows: [],
+      cases: [{ ...base, design: { technique: "equivalence", inputDimension: "d", partitionId: "p", predicate: "x", validity: "valid", representative: "1" } }] };
+    const v = validateCases(bundle);
+    expect(v.ok).toBe(false);
+    if (v.ok) return;
+    expect(v.gate).toBe("schema");
+    expect(v.reason).toContain("design_technique_mismatch");
   });
 });

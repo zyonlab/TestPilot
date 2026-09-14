@@ -44,7 +44,7 @@ export interface Err {
   detail?: unknown;
 }
 
-// Event kinds (docs/spec/06). Kept as a const map so producers can't typo a kind
+// Event kinds (docs/archive/spec/06). Kept as a const map so producers can't typo a kind
 // into existence — an unknown kind on the bus is a bug, not a new feature.
 export const EventKind = {
   wfRunStarted: "wf.run.started",

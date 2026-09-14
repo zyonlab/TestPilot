@@ -30,12 +30,18 @@ import {
   newRunId,
   publishNodeEvent,
   readRun,
-  startRun as penguinStartRun,
   stopWatching,
   watchRun,
   type NodeEvent,
   type RunProducts,
 } from "./penguin.js";
+import { getRuntime, defaultRuntimeName, type RuntimeName } from "./runtimes.js";
+import { captureWebModels } from "./modelSnapshots.js";
+import { cancelManagedRun } from "./runtime/managed-penguin.js";
+import { unitGenerationMessage } from "./runtime/skill-launch.js";
+import { unitRunBudget } from "./runBudget.js";
+import { registerWebRun, freezeRunMaterials, runLedger } from "./runService.js";
+import { registeredStageProducts } from "./runStages.js";
 
 /** 这条路的「图 id」。它不是一张图——但运行记录那一列不能空，列表按它分组。 */
 export const PENGUIN_GRAPH_ID = "penguin:testpilot-generate";
@@ -50,6 +56,8 @@ export interface PenguinRunTarget {
 }
 
 export interface PenguinStartInput {
+  generationMode?: "skill" | "pipeline";
+  resumeStage?: string;
   /** 兼容字段：图 id 在这条路上没有意义，收下只是为了请求体一模一样。 */
   graphId?: string;
   target?: PenguinRunTarget;
@@ -63,6 +71,8 @@ export interface PenguinStartInput {
   workspace?: string;
   /** 自己指定运行 id（配对评测要两条臂对得上号时用）。 */
   wfRunId?: string;
+  /** 哪个运行时跑（07 P2）：penguin / claude-code。不给用 `TP_AGENT_RUNTIME`，再不给就是 penguin。 */
+  runtime?: RuntimeName;
   trace?: { sessionId?: string; tags?: string[] };
 }
 
@@ -216,12 +226,61 @@ export async function prepareMaterials(projectId: string, workspace: string): Pr
  * `wfRunId`，但两条路的返回不一样的话，`TP_RUNTIME` 这个开关就不是一个开关，
  * 而是两套接口。
  */
+/** 主模块数 + 1 个旅程单元 + 每个功能一条故事的用例单元；只用于给预算定一个下界。 */
+/** 导出只为可测：这是一条**口径**（用例单元是一条故事一个），不是实现细节。 */
+export function estimateUnitCount(runId: string, projectId: string): number {
+  try {
+    /**
+     * **已经拆出来的就别估了，数真的。**
+     *
+     * 续跑时单元表就在那儿；估出来的那个数只在第一次起跑时有意义。
+     * 2026-09-12 实测：故事扇出调对之后用例单元从 4 个变成 56 个，而预算还是按
+     * 老估计（主模块数 + 1 + 功能数 = 27）给的 324 次调用——规划器写到一半被自己的
+     * 预算掐断，整次运行 failed，56 条故事白写。预算在起跑那一刻就交给 worker 开代理了，
+     * 事后改运行记录对这一次没用，所以只能在这里把数算对。
+     */
+    const planned = countPlannedUnits(runId);
+    if (planned) return planned;
+    const ledger = runLedger();
+    const row = ledger.listRevisions(projectId, runId).find(r => r.name === "product/model-candidate");
+    if (!row) return 0;
+    const model = ledger.readRevision(row.id, projectId).content as {
+      modules?: Array<{ id: string; parentId: string | null }>; features?: Array<{ moduleId?: string }>;
+    };
+    const modules = model.modules ?? [], features = model.features ?? [];
+    const roots = modules.filter(m => !m.parentId).length;
+    const leaves = modules.filter(m => !modules.some(x => x.parentId === m.id));
+    /**
+     * 用例单元是**一条故事一个**，而故事的下限是「每个叶子至少两条、一个功能至少一条」
+     * ——那正是单元契约交给规划器的那个数（workUnits.ts::unitContract）。
+     * 老口径按功能数算，等于假设一个功能一条故事，实测差一倍。
+     */
+    const stories = leaves.reduce((n, l) => n + Math.max(2, features.filter(f => f.moduleId === l.id).length), 0);
+    return roots + 1 + Math.max(stories, features.length);
+  } catch { return 0; }
+}
+
+/** 这次运行已经拆出来的单元总数（故事 + 用例）。拆过就用真数，别再估。 */
+function countPlannedUnits(runId: string): number {
+  try {
+    const l = runLedger();
+    const row = l.db.prepare("SELECT COUNT(*) AS n FROM run_work_units WHERE runId=?").get(runId) as { n?: number } | undefined;
+    return Number(row?.n ?? 0);
+  } catch { return 0; }
+}
+
 export async function startRun(
   input: PenguinStartInput = {},
 ): Promise<{ wfRunId: string; graph: { id: string; version: number; title?: string; nodes: never[]; edges: never[] }; target: PenguinRunTarget }> {
   const target = input.target ?? {};
   const scopeProjectId = target.projectId;
   const runId = input.wfRunId ?? newRunId();
+  const rt = getRuntime(input.runtime ?? defaultRuntimeName());
+  if (rt.name !== "penguin") throw new Error(`managed_planner_unsupported (${rt.name})：Web 项目模型目前使用 Penguin 托管运行；宿主插件接入另走宿主入口`);
+  const prior = outputStore.getRun(runId);
+  if (prior && !(prior.detail as { modelRoles?: unknown } | undefined)?.modelRoles)
+    throw new Error("legacy_run_model_snapshot_missing：旧运行未记录模型快照，请发起新运行");
+  const models = captureWebModels(runId, scopeProjectId, "penguin", input.generationMode ?? "skill");
   /**
    * 一个项目一个工作区。
    *
@@ -241,16 +300,56 @@ export async function startRun(
 
   // 挂了项目就用探索产物当材料（Binance 那条路：没有 PRD，只有观察）。
   // 显式指了 materialsDir 的不动——那是调用方自己的决定。
-  const materialsDir =
+  let materialsDir =
     input.materialsDir ?? (scopeProjectId ? await prepareMaterials(scopeProjectId, workspace) : undefined);
 
+  if (scopeProjectId) {
+    registerWebRun(runId, scopeProjectId, models.binding, { ...input.params, ...(limit ? { limit } : {}) });
+    if (materialsDir) materialsDir = freezeRunMaterials(runId, scopeProjectId, materialsDir);
+  }
+
   const startedAt = new Date().toISOString();
-  const started = await penguinStartRun({
+  // 单元循环的 run 换一套任务话术：整份写入会被服务端拒绝，规划器必须逐个领单元。
+  const workUnits = (input.params as { workUnits?: number } | undefined)?.workUnits === 1;
+  /**
+   * 预算也跟着换：拆得越细，调用越多、墙钟越长。单元数在这一刻还没拆出来（拆分需要产品模型
+   * 和故事），所以按产品模型的主模块数与功能数估一个下界：故事单元 ≈ 主模块数 + 1，
+   * 用例单元 ≈ 功能数（一功能至少一条故事）。估少了仍会被掐，但不会像默认值那样差一个数量级。
+   */
+  const unitEstimate = workUnits && scopeProjectId ? estimateUnitCount(runId, scopeProjectId) : 0;
+  const started = await rt.startRun({
+    ...(!input.resumeStage && workUnits && materialsDir ? { message: unitGenerationMessage({ materialsDir, outDir: join(workspace, "runs", runId), ...(limit !== undefined ? { limit } : {}) }) } : {}),
+    /**
+     * **续跑的话术必须和首跑说同一件事。**
+     *
+     * 这一段原来只有一套：「complete only missing stages with write_stories/write_cases…」——
+     * 而单元模式下那两个工具是**会被拒的**（`stage_requires_units`），首跑的话术里写得清清楚楚
+     * 「Do not call write_stories or write_cases」。于是每次「继续运行」，规划器都被指使去
+     * 调两个必然失败的工具，单元循环那套说明整段丢失。2026-09-12 一天里撞了好几次，
+     * 表现成「节点调整之后运行就失败」。
+     *
+     * 所以：开了单元的运行，续跑时把单元循环的话术接在前面，再说「从哪一步接上」。
+     */
+    ...(input.resumeStage ? { message: [
+      ...(workUnits && materialsDir ? [unitGenerationMessage({ materialsDir, outDir: join(workspace, "runs", runId), ...(limit !== undefined ? { limit } : {}) })] : []),
+      `Continue registered TestPilot run ${runId} from ${input.resumeStage}. Before planning each missing stage call begin_stage; stop immediately if paused/cancelled/failed. Call get_project_run for project ${scopeProjectId}, and read_run_artifact for required upstream revisions (validated/stories or validated/cases). Preserve those upstream contents exactly. Read load_run_instructions, retrieve_spec as needed.`,
+      workUnits
+        ? "Stages already done stay done: do not rewrite them. For each missing stage use the unit loop above (claim_unit → write_unit); write_stories and write_cases are refused in this mode. Then gate_run and finalize_run. Finish at waiting_review. The host remains the planner."
+        : "Complete only missing stages with write_stories/write_cases/gate_run/finalize_run. Finish at waiting_review. The host remains the planner.",
+    ].join("\n") } : {}),
+    generationMode: input.generationMode ?? "skill",
+    ...(models ? { models } : {}),
     workspace,
     ...(materialsDir ? { materialsDir } : {}),
     ...(limit !== undefined ? { limit } : {}),
+    // 消融开关要真的交到运行时手上（写进 MCP env）；此前只记进了运行记录，工具那头从没收到过。
+    ...(input.ablate?.length ? { ablate: input.ablate } : {}),
     ...(scopeProjectId ? { scopeProjectId } : {}),
     ...(target.envRef ? { envRef: target.envRef } : {}),
+    // 预算要真的交到运行时手上：managed worker 收不到就退回 configuredRunBudget()，
+    // 而那一份是给「一次写整份」定的 10 分钟。2026-09-11 第一次跑就是这么被掐断的。
+    // 注意这里的 RunBudget 与 `input.budget`（记进运行详情的 calls/usd/ms）不是同一个形状。
+    ...(unitEstimate ? { budget: unitRunBudget(unitEstimate) } : {}),
     runId,
   });
 
@@ -261,7 +360,10 @@ export async function startRun(
     status: "running",
     startedAt,
     detail: {
-      runtime: "penguin",
+      runtime: rt.name,
+      parameters: { ...input.params, ...(limit ? { limit } : {}) },
+      ...(scopeProjectId ? { binding: runLedger().registration(runId, scopeProjectId)?.binding } : {}),
+      ...(models ? { modelRoles: models.binding } : {}),
       target,
       // 「看 trace →」的深链就靠这两个。缺了它们，审计台上那一列是死的。
       penguin: {
@@ -270,13 +372,14 @@ export async function startRun(
         outDir: started.outDir,
         agentId: AGENT_ID,
         projectId: PROJECT_ID,
-        url: `http://127.0.0.1:7364/sessions/${started.sessionId}`,
+        // Penguin 的深链指它的 server；Claude Code 的「trace」是落在产物目录里的 stream-json。
+        url: rt.name === "penguin" ? `http://127.0.0.1:7364/sessions/${started.sessionId}` : join(started.outDir, "claude-stream.jsonl"),
       },
-      ...(input.budget ? { budget: input.budget } : {}),
+      ...(input.budget ? { budget: input.budget } : unitEstimate ? { budget: unitRunBudget(unitEstimate), budgetBasis: { workUnits: true, estimatedUnits: unitEstimate } } : {}),
       ...(input.ablate?.length ? { ablate: input.ablate } : {}),
       ...(input.params ? { requestedOverrides: input.params, paramOverrides: input.params } : {}),
       targetSnapshot: {
-        describe: `Penguin · ${AGENT_ID} · ${started.workspace}`,
+        describe: `${rt.name === "penguin" ? `Penguin · ${AGENT_ID}` : "Claude Code"} · ${started.workspace}`,
       },
     },
   });
@@ -294,7 +397,7 @@ export async function startRun(
     { wfRunId: runId, ...(scopeProjectId ? { projectId: scopeProjectId } : {}) },
   );
 
-  watchRun({
+  rt.watchRun({
     runId,
     sessionId: started.sessionId,
     workspace: started.workspace,
@@ -306,7 +409,7 @@ export async function startRun(
 
   return {
     wfRunId: runId,
-    graph: { id: PENGUIN_GRAPH_ID, version: 1, title: "TestPilot · generate（Penguin）", nodes: [], edges: [] },
+    graph: { id: PENGUIN_GRAPH_ID, version: 1, title: `TestPilot · generate（${rt.name === "penguin" ? "Penguin" : "Claude Code"}）`, nodes: [], edges: [] },
     target,
   };
 }
@@ -326,12 +429,33 @@ async function finish(
 ): Promise<void> {
   const finishedAt = new Date().toISOString();
   const prev = (outputStore.getRun(wfRunId)?.detail ?? {}) as Record<string, unknown>;
-  const products = r.products;
+  const registered = registeredStageProducts(wfRunId);
+  const products = registered.protected ? registered.finalized ? registered.products : undefined : r.products;
+  const stoppedStatus = String(outputStore.getRun(wfRunId)?.status);
+  /**
+   * **「没跑完」不等于「失败」。**
+   *
+   * 这里原来是：注册过的运行只要没 finalize 就一律记 `failed`。于是两种完全正常的停法
+   * 都被记成失败（2026-09-12 实测，一天里 4 次）：
+   *   - 停在 `modules/waiting_review`——那是**我们自己让它停的**，等人冻结模块树；
+   *   - 规划器这一轮干完了活（故事已经写完并入库）但还没走到 finalize。
+   * 人在界面上看到的是一排「失败」，而产物好端端地在账本里，「继续运行」也点得动——
+   * 状态在说谎，于是没人再信它。
+   *
+   * 现在分三种：有节点在等人 → `waiting_review`；规划器自己报错或进程挂了 → `failed`；
+   * 干净地停在半路 → `paused`（界面上就是「可以继续」）。
+   */
+  const waiting = runLedger().nodeStates(wfRunId).some((n) => n.phase === "waiting_review");
+  const status = ["paused", "cancelled"].includes(stoppedStatus) ? stoppedStatus
+    : registered.protected
+      ? registered.finalized ? "waiting_review" : waiting ? "waiting_review" : r.status === "failed" ? "failed" : "paused"
+      : r.status;
 
   if (products) {
     // `reviewBatch` 读的就是这个 id。stories 也一并放进去——`GatedBundle` 本来就含它。
     await outputStore.set(wfRunId, "gate", {
-      origin: "penguin",
+      // 来源写真实的运行时：审计台按它分组，Claude Code 跑出来的不该顶着 Penguin 的名字。
+      origin: typeof prev.runtime === "string" ? prev.runtime : "penguin",
       stories: products.bundle.stories,
       cases: products.bundle.cases,
       gate: products.bundle.gate,
@@ -342,14 +466,14 @@ async function finish(
     id: wfRunId,
     graphId: PENGUIN_GRAPH_ID,
     graphVersion: 1,
-    status: r.status,
+    status,
     startedAt,
     finishedAt,
     detail: {
       ...prev,
       target,
-      ...(products?.meta ? { meta: products.meta, prompts: products.meta.promptsDigest } : {}),
-      ...(products?.spend ? { spend: products.spend } : {}),
+      ...(!registered.protected && r.products?.meta ? { meta: r.products.meta, prompts: r.products.meta.promptsDigest } : {}),
+      ...(!registered.protected && r.products?.spend ? { spend: r.products.spend } : {}),
       ...(r.error ? { error: r.error } : {}),
     },
   });
@@ -357,8 +481,8 @@ async function finish(
   bus.publish(
     "wf.run.finished",
     {
-      status: r.status,
-      ...(products?.spend ? { spend: products.spend } : {}),
+      status,
+      ...(!registered.protected && r.products?.spend ? { spend: r.products.spend } : {}),
       ...(r.error ? { error: r.error } : {}),
       nodes: PENGUIN_NODES,
       cases: products?.bundle.cases.length ?? 0,
@@ -372,6 +496,7 @@ export function cancelRun(wfRunId: string): { result: string } {
   const row = outputStore.getRun(wfRunId);
   if (!row) return { result: "unknown-run" };
   stopWatching(wfRunId);
+  cancelManagedRun(wfRunId);
   outputStore.saveRun({
     id: wfRunId,
     graphId: String(row.graphId ?? PENGUIN_GRAPH_ID),

@@ -371,3 +371,29 @@ export interface ProjectOverview {
     latestAt?: string;
   };
 }
+
+
+/* ---- 07 P5：成本 / 记分板 / gold ---- */
+export interface CostCaseRow {
+  caseId: string; title: string; priority: string; n: number; passRate: number; infra: number;
+  failures: { infra: number; locate: number; assert: number; unknown: number }; unobservable: number;
+  wallMedian?: number; wallSpread: string; modelCallsMedian?: number; modelMsMedian?: number; tokensMedian?: number;
+  cacheHitRate?: number; stale: number; oracleMachineShare?: number; usdMedian?: number;
+  healedRuns: number; degraded: { total: number; blocked: number }; phasedRuns: number; phaseMedian: Record<string, number | undefined>;
+  attribution: { runner: number; window: number };
+}
+export interface CostReport {
+  project: string; last: number; cases: CostCaseRow[];
+  totals: { runs: number; tokens: number; modelCalls: number; modelMs: number; wallMs: number; hits: number; misses: number; stale: number; machine: number; judge: number; passed: number;
+    failures: { infra: number; locate: number; assert: number; unknown: number }; unobservable: number; healedRuns: number; degraded: { total: number; blocked: number };
+    phases: Record<string, number>; phasedRuns: number; attribution: { runner: number; window: number } };
+}
+/** 记分板一行：binding 的字段摊平在顶层（`score_run` 写的形状），外加 capability。 */
+export interface ScoreboardRow {
+  capability: string; runId?: string; goldHash?: string; coverage?: number; heldOut?: number | { coverage?: number }; gate?: number | { score?: number };
+  tokens?: number; n?: number; binding?: Record<string, unknown>; skillVersion?: string; promptsDigest?: { combined?: string }; model?: { model?: string }; runtime?: string; materialsHash?: string;
+  [k: string]: unknown;
+}
+export interface GoldItem { sourceRefs?: string[]; expected?: string; ruleFamily?: string; split?: "train" | "dev" | "heldout"; reviewReceipt?: { reviewer: string; at: string; contentHash: string }; id: string; title: string; story?: string; designMethod?: string; expectTier?: number; heldOut?: boolean; match: Record<string, unknown>; anchors?: string[]; stale?: boolean }
+export interface GoldFile { reviewPolicy?: "individual-v1"; id: string; items: GoldItem[]; outOfScope?: string[] }
+export interface GoldState { capability: string; dir: string; draft: GoldFile | null; gold: GoldFile | null; frozenHash: string | null; currentHash: string | null; checklist: string[] }

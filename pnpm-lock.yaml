@@ -260,6 +260,9 @@ importers:
       ws:
         specifier: ^8.18.0
         version: 8.21.3
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13
@@ -4947,7 +4950,7 @@ snapshots:
       https-proxy-agent: 7.0.2
       js-yaml: 4.1.0
       jsonrepair: 3.12.0
-      langsmith: 0.3.7(openai@4.81.0(zod@3.24.3))
+      langsmith: 0.3.7(openai@4.81.0(ws@8.21.3)(zod@3.25.76))
       openai: 4.81.0(ws@8.21.3)(zod@3.24.3)
       semver: 7.5.2
       socks-proxy-agent: 8.0.4
@@ -6988,7 +6991,7 @@ snapshots:
       jwa: 2.0.1
       safe-buffer: 5.2.1
 
-  langsmith@0.3.7(openai@4.81.0(zod@3.24.3)):
+  langsmith@0.3.7(openai@4.81.0(ws@8.21.3)(zod@3.25.76)):
     dependencies:
       '@types/uuid': 10.0.0
       chalk: 4.1.2
@@ -6998,7 +7001,7 @@ snapshots:
       semver: 7.8.5
       uuid: 10.0.0
     optionalDependencies:
-      openai: 4.81.0(ws@8.21.3)(zod@3.24.3)
+      openai: 4.81.0(ws@8.21.3)(zod@3.25.76)
 
   lilconfig@3.1.3: {}
 
@@ -7181,6 +7184,22 @@ snapshots:
       zod: 3.24.3
     transitivePeerDependencies:
       - encoding
+
+  openai@4.81.0(ws@8.21.3)(zod@3.25.76):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.13
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0
+    optionalDependencies:
+      ws: 8.21.3
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - encoding
+    optional: true
 
   opener@1.5.2: {}
 

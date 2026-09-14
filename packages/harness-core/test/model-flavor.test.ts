@@ -46,11 +46,15 @@ describe("端点方言", () => {
     expect(b.reasoning_effort).toBeUndefined();
   });
 
-  it("openai 一族照旧：关思考发两种拼法的 enable_thinking，开思考带 thinking_budget", async () => {
+  it("openai 一族关思考：两种拼法的 enable_thinking 之外还要发标准的 reasoning_effort", async () => {
     const off = await capture({ baseUrl: "https://api.runinfra.ai/v1", apiKey: "k", model: "m", noThink: true });
     expect(off.enable_thinking).toBe(false);
     expect((off.chat_template_kwargs as { enable_thinking: boolean }).enable_thinking).toBe(false);
-    expect(off.reasoning_effort).toBeUndefined();
+    /**
+     * 2026-09-11 实测：这个端点两个厂商扩展都不认，只有 `reasoning_effort: "none"` 管用。
+     * 不发它，推理会把 max_tokens 吃光，content 为空串，下游报「模型返回空内容」。
+     */
+    expect(off.reasoning_effort).toBe("none");
     const on = await capture({ baseUrl: "https://api.runinfra.ai/v1", apiKey: "k", model: "m", noThink: false, thinkBudget: 500 });
     expect(on.thinking_budget).toBe(500);
     expect(on.enable_thinking).toBeUndefined();

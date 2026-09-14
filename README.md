@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>AI 驱动的端到端测试平台 —— 面向 Web 应用与 Web3 dapp。</b><br>
-  给一个网址，AI 探索出用例、驱动真实 UI 跑测、并给出确定性判定。
+  给一个网址，AI 探索出用例、驱动真实 UI 跑测、并返回可复核的结果与判据证据。
 </p>
 
 <p align="center">
@@ -21,6 +21,53 @@
   <img alt="engine" src="https://img.shields.io/badge/引擎-Midscene_+_Puppeteer-8B5CF6">
   <img alt="model" src="https://img.shields.io/badge/模型-Qwen--VL_自托管-FF6A00">
 </p>
+
+---
+
+## 当前交付 · 2026-09-09
+
+TestPilot 把专业领域规则、用例设计、机器判据与人类 review 组合成可被 Web 和宿主 agent 共用的测试能力。Web 管理项目、workflow、模型、物料及审核；Claude Code / Codex / PenguinHarness 继承宿主规划模型，另用低成本 Midscene 模型执行。Web 初期两角色使用相同模型，`TP_PLANNER_*` 可独立调整。
+
+从 [最新 HTML 报告](docs/reports/testpilot-delivery-2026-09-09.html)、[安装说明](docs/v3/10-安装与诊断.md) 或 [Claude 接手指南](docs/v3/09-执行目标与接手指南.md) 开始。领域资产版本 `2026-09-09.3`。三宿主真实闭环、Web→Codex 应用修复、角色成本、缓存/导出与独立判据已验证；Penguin 评估扩展已完成一次真实拒绝候选实验。
+
+人工金标/正式领域评估、真实晋级、其余四晚稳定性以及远端发布仍有条件待满足。记忆和领域参考的实验尚未证明稳定收益。详细分母、失败、录屏和原始结果都在报告中，不把工程机制通过当成模型效果提升。
+
+## v3 · 第四档（2026-09-07 的数字，不是架构图）
+
+> 以下为 2026-09-07 历史快照，产品职责以本页“当前交付”为准。当时的核心资产包括：skills（生成器提示词）、hooks（门禁）、MCP 工具（打分 / 执行 / 检索）、基准（gold）。下面每个数都带来源；路线与逐条验收在 [`docs/v3/07`](docs/v3/07-第四档路线-任务与进度.md)，四篇 build log 在 [`docs/build-log/`](docs/build-log/)。
+
+**执行层的账**（`app.hyperliquid-testnet.xyz`，7 条 P0，全部接口判据，`Qwen3.8-27B-FP8`@inferx，Midscene 0.30.10；来源 `docs/v3/06 §6`）：
+
+| | 清缓存首跑 | 二跑（缓存回放） | 三跑 |
+|---|---|---|---|
+| 7 条总墙钟 | 583s | 591s | **310s（首跑的 53%）** |
+| 模型调用 / tokens | 50 / 177k | 22 / 77k | **5 / 15k** |
+| 缓存 命中 / 未命中 / 失效 | 0 / 64 / 0 | 39 / 26 / 1 | **56 / 4 / 0（93%）** |
+| 判决由机器判据下 | 100% | 100% | 100% |
+
+首跑时机器判据抓到一次真失败：「市价开多 0.001」成交了 0.17365 BTC，屏幕上看不出来，`szi eq 0.001` 一眼。「二跑 ≤ 首跑 1/3」没到（53%）：剩下的地板是 Midscene 回放每个动作截图 + 抓 DOM 的成本，不在模型上。
+
+**三个运行时，同一份资产**（来源 `docs/v3/07` T-05～T-09、`docs/build-log/03`）：
+
+| 运行时 | hook 执行 | 一次 g1 | 状态 |
+|---|---|---|---|
+| PenguinHarness 0.2.9 | 否（发布包里 `pre_tool_use` / `stop` 为 0） | 2 故事 / 12 用例，trace 里 hook 事件 0 条 | 门禁只剩 SKILL.md 的一句话 |
+| Claude Code | 是（PreToolUse 拦下缺出处的 Write，记 `holds.jsonl`） | 2 故事 / 16 用例，1 分 48 秒 | 可用 |
+
+2026-09-08 同一份 skill + gold（casegen，16 条）+ MCP + 材料 + 模型（`qwen3.8-flash`），两个运行时各 n=3（`evals/runtime-compare.json`）：
+
+| 运行时 | gate（3 次） | coverage（3 次） | tokens（MCP 内） | 墙钟 | paired vs 另一臂 |
+|---|---|---|---|---|---|
+| Penguin 0.2.9 | 1.00 / 0.94 / 0.86 | 0 / 0.17 / 0 | 44–48k | 161s / 456s / **927s** | 三对 McNemar p = 1.0 |
+| Claude Code | 1.00 / 1.00 / 0.94 | 0.08 / 0.17 / 0 | 39–53k | 162s / 207s / 207s | 翻转 1 / 5 / 1 条，是抖动 |
+| Codex | — | — | — | — | 未跑 |
+
+换运行时量不出差别；Penguin 那一臂「无 hook」的差异没机会出现——g1 走 `run_pipeline` 一步写盘，hook 在这条路上不触发。慢的是 Penguin 自己的 agent 回合，不是模型。
+| Codex | 无 hook，门禁挪进 `write_stories` / `write_cases` 工具 | 未跑 | 这台机器的账号无可用模型 |
+
+**接进研发循环**：`fixtures/tier4-demo/` 是一个被 coding agent 修改的合约下单面板，Stop hook 在它想结束回合时跑 P0。2026-09-08 的一次真实会话（`docs/v3/evidence/t15-stop-hook-session.jsonl`）：agent 只改了一个 placeholder，Stop 被挡（`position.szi = 0.002（要求 eq 0.001）`），agent 读 `holds.jsonl` 去修 `normalizeSize`，四条 P0 回放 0 次模型调用后放行。
+
+**还没做到的**（写在这里免得第一屏只剩好看的）：装 / 卸领域 REFERENCE 的配对评测没跑（要一份人复核并冻结的 gold）；三运行时对比表缺 Codex 一列；配对评测的 n=3 太小，只能说「量不出差别」。
 
 ---
 
@@ -49,7 +96,7 @@ TestPilot 把「一个部门的自动化测试工作」交给 AI 来做：
 3. **判定** —— 每次运行走「**功能断言（视觉）+ 链上/性能/视觉基线断言（确定性）**」双重 oracle，给出可信结论。
 4. **治理** —— 套件运行、CI 门禁、自愈重试、抖动（flaky）统计、趋势看板、可运行代码导出。
 
-与传统「录制脚本 / 手写选择器」相比，用例用自然语言表达，**页面小改动不再批量失效**；判定尽量落在确定性信号（链上回执、像素基线、性能预算）上，把脆弱的视觉判断和可靠的结果判断解耦。
+与传统「录制脚本 / 手写选择器」相比，用例用自然语言表达，可降低部分页面变动带来的维护成本，但仍须实际回归验证；判定尽量落在确定性信号（链上回执、像素基线、性能预算）上，把脆弱的视觉判断和可靠的结果判断解耦。
 
 > **特别聚焦 Web3 dapp E2E**：用户和 dapp 的 UI 交互，最终真值是「钱包里多了一条成功交易」。TestPilot 用注入式虚拟钱包自动确认钱包弹窗，并把这条 tx 回执做成一等断言 —— 全程不绕过 UI。
 

@@ -1,7 +1,7 @@
 # TestPilot v3 差距报告（对照 2026 harness 工程调研）
 
 > 对象：`/Users/admin/Midscene/testpilot`，分支 `v3`（本地，未推送；远端只有 main / v2）。
-> 读了什么：目录树、193 条提交记录、`docs/v3/00-架构.md` 全文、`docs/v3/04`、`docs/v3/05`、`docs/spec/01`、`benchmark/binance-futures/README.md` 与 scoreboard、`evals/README.md`、`plugins/testpilot/plugin.json` 与 10 个 skill、hooks、`harness-core` / `harness-testing` / `testpilot-mcp` 源码目录、变异算子、CI 配置。约 8 万行，94 个测试文件。
+> 读了什么：目录树、193 条提交记录、`docs/v3/00-架构.md` 全文、`docs/v3/04`、`docs/v3/05`、`docs/archive/spec/01`、`benchmark/binance-futures/README.md` 与 scoreboard、`evals/README.md`、`plugins/testpilot/plugin.json` 与 10 个 skill、hooks、`harness-core` / `harness-testing` / `testpilot-mcp` 源码目录、变异算子、CI 配置。约 8 万行，94 个测试文件。
 > 对照基准：上一轮调研里 Anthropic（best practices / effective harnesses / harness design）、OpenAI harness engineering、Stripe minions、Cognition、OKX 2026-07 JD、以及 PenguinHarness 本身（Prism-Shadow/penguin-harness，开源 RSI harness）。
 
 ---
@@ -43,7 +43,7 @@ v3 已经做到的、在调研里被列为 2026 年 harness 工程核心的东�
 
 1. **Formal Baseline**：binance-futures gold（goldHash `9adf397fde985380`）上 A 臂 n=3 的覆盖率中位数与散布、gate 分、每次运行的模型成本与墙钟。
 2. **一次配对评测**：不要等 C 臂 hook。你自己在 `00-架构.md §12` 已列出选项三「A 臂内部配对（消融、n≥3）」——现在就做，比如 `REFERENCE-oracle.md` 装上 vs 卸掉（这正是它被设计成可选文件的原因），报 McNemar。
-3. **变异杀掉率 + 活下来的清单**：四个算子（text/hide/relink/dropOne）对 gold 用例集的杀掉率，并按你自己的规矩同时报活下来的。`docs/spec/14` 里已有一个 0.600（12 条子集、零模型调用）——把它做成正式条目。
+3. **变异杀掉率 + 活下来的清单**：四个算子（text/hide/relink/dropOne）对 gold 用例集的杀掉率，并按你自己的规矩同时报活下来的。`docs/archive/spec/14` 里已有一个 0.600（12 条子集、零模型调用）——把它做成正式条目。
 
 这三组数任何一组出来，TestPilot 就从「平台」变成「结果」。
 
@@ -90,7 +90,7 @@ v3 已经做到的、在调研里被列为 2026 年 harness 工程核心的东�
 
 **3 分钟版**加三组数字（差距一）和一个故事（`evals/README.md` 的三次白跑：报告全绿、产物为空，根因是约束解码里可选键被模型跳过——这就是 2026 面试题「AI 哪里错了、你怎么发现的」的标准答案）。
 
-**对 OKX JD 逐句对应**：「agent harnesses」→ A/C 双臂；「reusable skills」→ plugin 10 个 skill + 版本与 digest；「E2E automation」→ Midscene + 注入钱包；「evaluation pipelines」→ evals/ + paired_eval + κ；「teaching AI agents to maintain tests」→ 自愈双口径 + 有界修复 + `docs/spec/01` 里「自愈收敛率宽口径 70% / 严口径 50%」的引用与你自己的度量。
+**对 OKX JD 逐句对应**：「agent harnesses」→ A/C 双臂；「reusable skills」→ plugin 10 个 skill + 版本与 digest；「E2E automation」→ Midscene + 注入钱包；「evaluation pipelines」→ evals/ + paired_eval + κ；「teaching AI agents to maintain tests」→ 自愈双口径 + 有界修复 + `docs/archive/spec/01` 里「自愈收敛率宽口径 70% / 严口径 50%」的引用与你自己的度量。
 
 ---
 

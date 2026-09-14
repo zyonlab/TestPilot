@@ -32,8 +32,28 @@ export const StorySchema = z.object({
    * 值取自规格的流程（`flowId` 指向的那条），或流程终点所在的模块。
    */
   activity: z.string().optional(),
+  moduleIds: z.array(z.string().min(1)).optional(),
   /** 这条故事兑现的是哪条流程。没有对应流程的故事——比如「页脚显示社交链接」——留空。 */
   flowId: z.string().optional(),
+  /**
+   * **走完这条故事，就顺带走完了这几条更短的故事。**
+   *
+   * 2026-09-14 用户看完重跑结果提的：「一般长的用户故事会覆盖短的用户故事。
+   * 这样步数会增加，同时不重要的用户故事可以减少。」
+   *
+   * 实测的毛病正是这个：38 条故事里一大半是展示型的短故事（「看到标记价与预言机价」
+   * 「看到 24h 涨跌」），每条各自长出一个用例单元，于是 170 条用例里 22 条
+   * 除了导航什么都不做——它们的判据在初始页面上就成立，通过时什么都没证明。
+   *
+   * 声明覆盖之后有两个后果，都是想要的：
+   * - 被覆盖的故事**不再单独出用例单元**（`planUnits`），短用例随之消失；
+   * - 覆盖方的用例契约会拿到被覆盖故事的验收准则编号，`acRefs` 可以引它们，
+   *   于是那些展示型检查变成一条长用例路上的断言，而不是一条两步用例。
+   *
+   * 只允许一层：被覆盖的故事自己不能再覆盖别人（否则「哪条故事该出单元」要做传递闭包，
+   * 而人在界面上也看不懂）。
+   */
+  subsumes: z.array(z.string().min(1)).optional(),
   /** 谁在用。「作为 X」——没有角色的条目不是用户故事，是界面事实。 */
   role: z.string().optional(),
   /** 为了什么。「以便 Z」——它是判断这条故事值不值得测的唯一依据。 */
@@ -46,6 +66,33 @@ export const StorySchema = z.object({
    * 显示成同一个文件名就等于宣称它们一样。
    */
   sourceBy: z.enum(["located", "claimed"]).optional(),
+  /**
+   * 产品模型里的功能 / 规则引用（2026-09-11，单元循环）。
+   *
+   * 有产品模型的 run 上，服务端按单元范围核对它们：引用不在本单元范围内的功能就拒绝。
+   *
+   * 和 `priority` 同一条规矩：**不给默认值**。旧 run 和没有产品模型的 run 里它们是
+   * `undefined`——「没说」和「说了是空」不是一回事，补一个 `[]` 会让归档看起来像
+   * 「明确声明了不关联任何功能」。
+   */
+  featureRefs: z.array(z.string().min(1)).optional(),
+  ruleRefs: z.array(z.string().min(1)).optional(),
+  /**
+   * 这条故事压在生命周期的哪一段（规则包 `lifecycle` 里的阶段 id）。
+   *
+   * 优先级要有据可依，先得有「据」：一条故事在不在主链上是可以查的事实，
+   * 不是读完标题的感觉。不在任何一段上就留空——那本身也是一句话：它是支线。
+   */
+  lifecycleId: z.string().min(1).optional(),
+  /**
+   * P0 / P1 / P2。**不给默认值**：和 `featureRefs` 同一条规矩，
+   * 「没说」和「说了是 P2」不是一回事。
+   *
+   * 2026-09-12 之前故事上根本没有这个字段（只有用例上有），于是「从模块和生命周期
+   * 拆出 P0/P1」这件事在故事这一层无处落脚。判据写在 workflowControls 的故事契约里：
+   * 主链断了就是 P0，主链走得通但结果可能错是 P1，其余 P2。
+   */
+  priority: z.enum(["P0", "P1", "P2"]).optional(),
 });
 export type Story = z.infer<typeof StorySchema>;
 
@@ -55,6 +102,15 @@ export const DesignMethod = z.enum([
   "state-transition",
   "decision-table",
   "negative",
+  /**
+   * 证据是一次探索，不是一张表。
+   *
+   * `DesignTechnique` 一开始就有 `exploratory`，而这个枚举没有——于是一条以探索章程
+   * 为证据的用例填不出一致的方法标签：填 `exploratory` 被 `design_technique_mismatch`
+   * 拒掉，填别的就是撒谎。2026-09-11 第二轮实测撞上一次，只能把 `design` 整个删掉，
+   * 一条本来有出处的证据反而变成了「没给证据」。
+   */
+  "exploratory",
 ]);
 export type DesignMethod = z.infer<typeof DesignMethod>;
 
@@ -67,6 +123,142 @@ export type DesignMethod = z.infer<typeof DesignMethod>;
  */
 export const OracleTier = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 export type OracleTier = z.infer<typeof OracleTier>;
+
+/**
+ * 一条用例是在**什么场景**下跑的。和设计方法分开（21 §5）。
+ *
+ * 旧契约把 `negative` 混进了 `designMethod`——它不是一种设计方法，是一类场景：
+ * 一条负例同样可以用边界或判定表设计出来。两者挤在一个字段里，结果是
+ * 「负例占比」和「用了哪些方法」这两个数永远算不准，因为它们共用一个分母。
+ * 迁移期两者并存：旧产物只有 `designMethod`，新产物应两个都给。
+ */
+export const ScenarioType = z.enum(["positive", "negative", "recovery", "concurrency"]);
+export type ScenarioType = z.infer<typeof ScenarioType>;
+
+/** 设计方法本身（不含 `negative`——那是场景，见 `ScenarioType`）。 */
+export const DesignTechnique = z.enum(["equivalence", "boundary", "decision-table", "state-transition", "exploratory"]);
+export type DesignTechnique = z.infer<typeof DesignTechnique>;
+
+/**
+ * **设计证据**：这条用例凭什么说自己用了那种方法（21 §5）。
+ *
+ * 为什么是判别联合而不是一团自由 JSON：方法标签是免费的，证据不是。
+ * 2026-09-11 实测一批 135 条用例，方法标签 100% 都有，而 36 条 `state-transition`
+ * 里 36 条说不出自己走的是哪条边——标签看起来很专业，背后什么都没有。
+ * 每一支的字段都要能被确定性核对：边界点能算、判定行能对上条件、状态边能在图里找到。
+ */
+export const DesignEvidenceSchema = z.discriminatedUnion("technique", [
+  z.object({
+    technique: z.literal("equivalence"),
+    /** 被划分的输入维度，如「数量」「价格」。 */
+    inputDimension: z.string().min(1),
+    partitionId: z.string().min(1),
+    /** 这一类的判定条件，人能读、也能回头核对。 */
+    predicate: z.string().min(1),
+    validity: z.enum(["valid", "invalid"]),
+    /** 这一类挑出来的代表值。 */
+    representative: z.string().min(1),
+  }).strict(),
+  z.object({
+    technique: z.literal("boundary"),
+    /** 边界来自哪条规则——**不能自己编一个上限**。 */
+    ruleId: z.string().min(1),
+    dimension: z.string().min(1),
+    /** 单位。数量的步长和价格的精度混用过一次，就再也说不清哪个数是什么。 */
+    unit: z.string().min(1),
+    bound: z.string().min(1),
+    inclusivity: z.enum(["inclusive", "exclusive"]),
+    /** 相邻可表示值的间隔（步长 / tick），以及它的依据。 */
+    step: z.string().optional(),
+    /** 实际取到的边界点，至少一个。 */
+    points: z.array(z.object({ at: z.enum(["below", "at", "above"]), value: z.string().min(1) }).strict()).min(1),
+  }).strict(),
+  z.object({
+    technique: z.literal("decision-table"),
+    tableId: z.string().min(1),
+    conditionIds: z.array(z.string().min(1)).min(2),
+    rowId: z.string().min(1),
+    /** 这一行每个条件的取值。键必须是 `conditionIds` 里的。 */
+    assignment: z.record(z.string()),
+    expectedOutcomeRefs: z.array(z.string().min(1)).min(1),
+  }).strict(),
+  z.object({
+    technique: z.literal("state-transition"),
+    stateModelRef: z.string().min(1),
+    from: z.string().min(1),
+    event: z.string().min(1),
+    guard: z.string().optional(),
+    to: z.string().min(1),
+    /** 走过的转移 id，和 `covers` 说的必须是同一批。 */
+    transitionIds: z.array(z.string().min(1)).min(1),
+  }).strict(),
+  z.object({
+    technique: z.literal("exploratory"),
+    charterRef: z.string().min(1),
+    observedResultRefs: z.array(z.string().min(1)).default([]),
+  }).strict(),
+]);
+export type DesignEvidence = z.infer<typeof DesignEvidenceSchema>;
+
+/**
+ * 风险**理由**。优先级本身仍是顶层的 `priority`，这里不重复。
+ *
+ * 和 21 §2 的 `risk` 略有出入：那份草案把 `priority` 也放进 risk。本仓库的
+ * `priority` 已经在顶层、已经被看板/导出/执行路径读了，再放一份等于两个真值来源——
+ * 迟早得到两批对不上的优先级。所以这里只放**为什么是这个优先级**：
+ * 影响什么资产、失败的后果、依据哪条规则。
+ */
+export const RiskSchema = z.object({
+  impact: z.enum(["funds-and-exposure", "authorization", "data-integrity", "availability", "information", "cosmetic"]),
+  reason: z.string().min(1),
+  ruleRefs: z.array(z.string().min(1)).default([]),
+}).strict();
+
+/** 一条结构化测试数据。金额与数量用十进制字符串，别用浮点。 */
+export const TestDatumSchema = z.object({
+  name: z.string().min(1),
+  value: z.string().min(1),
+  unit: z.string().optional(),
+  /** 这个值哪来的：规则 id、标的元数据、fixture。编出来的常数在这里露馅。 */
+  source: z.string().optional(),
+}).strict();
+
+export const TestDataSchema = z.object({
+  /** 需要哪个受控环境；没有就说没有，不要假装能跑。 */
+  fixtureRef: z.string().optional(),
+  accountRef: z.string().optional(),
+  values: z.array(TestDatumSchema).default([]),
+}).strict();
+
+/**
+ * 一条**独立**断言。
+ *
+ * v1 只有一个 `expected` 和一个 `oracle`：一条用例里但凡有两件事要核，就只能把它们
+ * 揉进一句话，而执行时它们同生共死——一个数对了另一个错了，报出来是同一个失败。
+ * 2026-09-11 实测抓到过反面：`expected` 说「只断言字段存在」，`oracle` 却断言「取值未变」，
+ * 两者互相矛盾还都通过了形状校验。拆成数组之后，每条断言各自带判据、各自可判。
+ */
+export const AssertionSchema = z.object({
+  id: z.string().min(1),
+  /** 这条断言主张什么，一句能失败的话。 */
+  statement: z.string().min(1),
+  /** 它依据哪条产品规则。没有依据的断言说明不了产品对错。 */
+  ruleRefs: z.array(z.string().min(1)).default([]),
+  oracle: MachineOracleSchema.optional(),
+  unit: z.string().optional(),
+}).strict();
+
+/**
+ * 这条用例现在能走到哪一步。
+ *
+ * 设计完成 ≠ 能执行。缺受控账户、缺持仓 fixture 的 P0 用例必须保留并标 blocked，
+ * 而不是删掉或降级——否则通过率好看了，覆盖缺口也一起消失了（21 §8 反例 7）。
+ */
+export const ReadinessSchema = z.object({
+  design: z.enum(["candidate", "reviewed"]),
+  execution: z.enum(["ready", "requires-fixture", "requires-session", "blocked", "not-executable"]),
+  reason: z.string().optional(),
+}).strict();
 
 export const TextCaseSchema = z.object({
   id: z.string().min(1),
@@ -133,6 +325,34 @@ export const TextCaseSchema = z.object({
    * 形状层只保证它是一组字符串。
    */
   sourceRefs: z.array(z.string()).default([]),
+  /** 与 Story 同义：这条用例验证的功能与规则（单元循环写入时按故事范围核对）。同样不给默认值。 */
+  featureRefs: z.array(z.string().min(1)).optional(),
+  ruleRefs: z.array(z.string().min(1)).optional(),
+
+  /* ---- v2 设计证据（2026-09-11，docs/v3/21 §2 与 §5）。
+   *
+   * 八个字段全部 `optional()`，一个默认值都不给。理由和 `priority` 那条一样，
+   * 而且在这里更要紧：这些字段是**证据**，给默认值等于替设计者答一遍，
+   * 让「没给证据」和「给了空证据」在归档里长得一模一样。旧产物读出来是 undefined，
+   * 界面显示为未提供，blob 一个字节都不改。
+   */
+
+  /** 这条用例兑现故事里的哪几条验收标准。 */
+  acRefs: z.array(z.string().min(1)).optional(),
+  /** 它覆盖哪几个测试条件（先有条件与覆盖项，再有用例）。 */
+  conditionRefs: z.array(z.string().min(1)).optional(),
+  /** 场景类型，和设计方法分开。见 `ScenarioType`。 */
+  scenarioType: ScenarioType.optional(),
+  /** 设计证据。声称用了某种方法，就要拿得出这一支要求的东西。 */
+  design: DesignEvidenceSchema.optional(),
+  /** 为什么是这个优先级：影响什么、后果是什么、依据哪条规则。 */
+  risk: RiskSchema.optional(),
+  /** 结构化测试数据：值、单位、出处、需要的 fixture。 */
+  testData: TestDataSchema.optional(),
+  /** 拆开的独立断言。给了它，`expected` 仍然是给人读的那一句。 */
+  assertions: z.array(AssertionSchema).min(1).optional(),
+  /** 设计就绪与执行就绪分开记。 */
+  readiness: ReadinessSchema.optional(),
 });
 export type TextCase = z.infer<typeof TextCaseSchema>;
 
@@ -216,6 +436,8 @@ export type SpecFlow = z.infer<typeof SpecFlowSchema>;
  * 和故事近乎一一对应，于是七列里六列只有一个故事——那不是图，是把列表横过来排了一行。
  */
 export const SpecModuleSchema = z.object({
+  parentId: z.string().min(1).nullable().optional(),
+  kind: z.enum(["module","submodule","function"]).optional(),
   id: z.string().min(1),
   name: z.string().default(""),
   /** 属于这个模块的流程 id。由 `computeModules` 填，模型改不动。 */
@@ -236,14 +458,16 @@ export const SpecRuleSchema = z.object({
    * 有值 = 原话确实在那份材料里；无值且 evidence 为空 = 整理者没给出处；
    * 无值但 evidence 有内容 = 那句"原话"在材料里查不到，也就是它不是原话。
    */
-  source: z.string().optional(),
+  source: z.string().nullish().transform((v) => v ?? undefined),
   /**
    * 海拔。只有屏幕规则的规格是一份屏幕清单，不是规格——由它推出的用例只能检查
    * 「屏幕还是不是原来的样子」。
    */
-  altitude: z.enum(["screen", "flow", "domain"]).optional(),
+  // 2026-09-08：runinfra 的 qwen3-8-27b 在约束解码下对不知道的可选字符串给 `null` 而不是省略，
+  // 整份规格因为 14 条 `about: null` 被拒。可选就是可选：null 与没给同义。
+  altitude: z.enum(["screen", "flow", "domain"]).nullish().transform((v) => v ?? undefined),
   /** 它约束的是哪一屏或哪一条流程。 */
-  about: z.string().optional(),
+  about: z.string().nullish().transform((v) => v ?? undefined),
 });
 export type SpecRule = z.infer<typeof SpecRuleSchema>;
 

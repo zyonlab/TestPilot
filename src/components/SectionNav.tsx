@@ -94,9 +94,7 @@ export function SectionPage({
            在同一屏上有两个页头高度不同的头，人会以为进了另一个产品。 */
         <div className="flex min-h-[2.875rem] flex-none items-center gap-x-2.5 border-b border-border px-3 py-2">
           <h2 className="flex-none text-[1.0625rem] font-semibold leading-tight text-foreground">{title}</h2>
-          <span className="min-w-0 flex-1 truncate text-[0.75rem] text-muted-foreground" title={subtitle}>
-            {subtitle}
-          </span>
+          <details className="relative ml-auto text-xs text-muted-foreground"><summary className="cursor-pointer">?</summary><div className="absolute right-0 top-full z-30 mt-2 w-80 max-w-[75vw] rounded-lg border border-border bg-card p-4 shadow-lg">{subtitle}{current?.why&&<p className="mt-2">{current.why}</p>}</div></details>
         </div>
       )}
 
@@ -129,11 +127,6 @@ export function SectionPage({
         </nav>
 
         <div className="flex min-h-0 min-w-0 flex-col">
-          {current?.why && (
-            <div className="border-b border-border px-4 py-1.5 text-xs text-muted-foreground">
-              {current.why}
-            </div>
-          )}
           <div className="flex min-h-0 flex-1 flex-col">
             <InSection.Provider value={true}>{current?.render()}</InSection.Provider>
           </div>

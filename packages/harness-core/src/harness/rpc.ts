@@ -66,7 +66,14 @@ export function supervisorChannel<Remote extends object, Local extends object>(
     // gets reaped); a 60s RPC timeout would just abort healthy work.
     timeout: -1,
     post: (data) => {
-      if (child.connected) child.send({ __rpc: data });
+      // `send` 在通道刚断时会同步抛（EPIPE）或异步触发 ChildProcess 的 'error'——两条都不能让网关整个进程死掉。
+      // 2026-09-07 实测：一个 runner 断了 IPC，`execOnRunner` 往它 send，未处理的 'error' 事件把网关打死了。
+      if (!child.connected) return;
+      try {
+        child.send({ __rpc: data });
+      } catch {
+        /* 对面没了：settleOnDeath 会把在途调用以「子进程已退出」结束 */
+      }
     },
     on: (fn) => {
       child.on("message", (m) => {
@@ -76,11 +83,13 @@ export function supervisorChannel<Remote extends object, Local extends object>(
   });
 
   // `close` 而不是 `exit`：exit 之后 IPC 还可能有残留消息，close 才是通道真的没了。
-  return settleOnDeath(rpc, (die) =>
+  return settleOnDeath(rpc, (die) => {
     child.once("close", (code, signal) =>
       die(new Error(`子进程已退出（code ${code ?? "null"}${signal ? `, ${signal}` : ""}），这次调用不会有回复了`)),
-    ),
-  );
+    );
+    // 没有这个监听，IPC 写失败会以未处理的 'error' 事件把宿主进程打死。
+    child.on("error", (e) => die(new Error(`子进程 IPC 出错：${e.message}`)));
+  });
 }
 
 /** Child side: talk to whoever forked us. */

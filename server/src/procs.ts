@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // (index → exec → procs), and capability recipes resolve `${env.*}` at registration time.
 // Without this the resolution silently produced empty strings.
 import "dotenv/config";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
 import {
   capabilityToSpec,
   EventBus,
@@ -115,6 +115,11 @@ export const setAgentObserver = (fn: (input: unknown) => Promise<unknown>): void
   observeForAgent = fn;
 };
 
+export async function observeProduct(input: unknown): Promise<unknown> {
+  if (!observeForAgent) throw new Error("observer_unavailable");
+  return observeForAgent(input);
+}
+
 let askForChild: ((input: unknown) => Promise<unknown>) | undefined;
 /** 让子进程能问模型。见 `extendParentApi` 里的 `askModel`。 */
 export const setChildAsk = (fn: (input: unknown) => Promise<unknown>): void => {
@@ -122,6 +127,19 @@ export const setChildAsk = (fn: (input: unknown) => Promise<unknown>): void => {
 };
 
 export const supervisor = new Supervisor(bus, {
+  /**
+   * 心跳容忍度放到 15 秒（默认是 1 秒 × 3）。
+   *
+   * 2026-09-12 实测：探索跑完 28 屏、打完回执，**3 秒后 runner 被 SIGKILL**
+   * （`no heartbeat for 3088ms`），整次运行 failed，四分钟的探索连材料都没写出来——
+   * 一晚上因此丢了 4 次完整探索。收尾那几步逐段计时过：回执摘要 1ms / 材料 0ms / 截图 57ms，
+   * 阻塞不在那里，而是探索结果那一大包（28 屏材料 + 状态图 + 回执）返回时的序列化，
+   * 叠上当时 10.7 的机器负载。
+   *
+   * **刚跑完一次长探索、正在把几兆结果序列化回来的进程，不是卡死。**
+   * 15 秒仍然抓得住真卡死（那种是分钟级的），而三秒抓的是繁忙。
+   */
+  missedBeats: 15,
   extendParentApi: (processId) => ({
     ...(lending.api(processId) as unknown as Record<string, (...args: never[]) => unknown>),
     execCase: async (input: never) => {
@@ -172,9 +190,7 @@ supervisor.register({
   env: {
     TP_REPO_ROOT: REPO_ROOT,
     TP_WF_DB: dataPath("workflows.db"),
-    // 思考开关要透传给 agent：模型客户端住在那个进程里。见 `modelFromEnv`。
-    ...(process.env.TP_MODEL_THINK ? { TP_MODEL_THINK: process.env.TP_MODEL_THINK } : {}),
-    ...(process.env.TP_MODEL_THINK_BUDGET ? { TP_MODEL_THINK_BUDGET: process.env.TP_MODEL_THINK_BUDGET } : {}),
+    // Planner transport arrives as the run snapshot over private RPC.
   },
   execArgv: TSX_ARGV,
   // The agent resumes from its checkpoint, so respawning is always the right move.
@@ -182,6 +198,22 @@ supervisor.register({
   heartbeatMs: 1000,
   readyTimeoutMs: 30_000,
 });
+
+/**
+ * 每个 runner 一份 Midscene 目录（07 T-04）：`midscene_run/<runner-id>/`，日志与报告按进程分开，
+ * `cache/` 是指回共享 `midscene_run/cache` 的符号链接——缓存按用例、跨 runner 共用，账按进程各记各的。
+ * 这样并发 > 1 时账不靠时间窗猜：一个 runner 一次只跑一条，它自己的日志就是这条的账。
+ */
+export const MIDSCENE_ROOT = resolve(__dirname, "..", "midscene_run");
+export const midsceneDirFor = (runnerId: string): string => resolve(MIDSCENE_ROOT, runnerId);
+function ensureRunnerMidsceneDir(runnerId: string): string {
+  const dir = midsceneDirFor(runnerId);
+  mkdirSync(resolve(MIDSCENE_ROOT, "cache"), { recursive: true });
+  mkdirSync(dir, { recursive: true });
+  const cacheLink = resolve(dir, "cache");
+  if (!existsSync(cacheLink)) symlinkSync(resolve(MIDSCENE_ROOT, "cache"), cacheLink, "dir");
+  return dir;
+}
 
 for (let i = 1; i <= RUNNER_COUNT; i++) {
   supervisor.register({
@@ -192,31 +224,13 @@ for (let i = 1; i <= RUNNER_COUNT; i++) {
     // the wallet build lives in .wallets/, and both must stay where the gateway reads them.
     cwd: resolve(__dirname, ".."),
     execArgv: TSX_ARGV,
-    /**
-     * Midscene 在调用时读这两个变量。它没有逐请求改 body 的钩子，所以**当需要
-     * 「不思考」时**，它的流量要走 no-think 代理。
-     *
-     * 但那个代理不能是**硬编码的默认值**。它此前写死成 `http://127.0.0.1:8010/v1`，
-     * 于是：代理没起来的时候，runner 打到一个空端口上，Midscene 报
-     * `MODEL_UNAVAILABLE: 404 status code (no body)`——**读起来像模型挂了，
-     * 其实是地址错了**。今天整整一天执行层一次都没连上模型，就是因为这一行，
-     * 而报出来的错把人引向模型服务。
-     *
-     * 现在默认开思考（见 `modelFromEnv`），no-think 代理**本身就是反的**。
-     * 所以顺序改成：显式配了代理就走代理，否则走和平台其余部分**同一个地址**。
-     * 一个组件的默认值不该是「一个可能没在跑的东西」。
-     */
     env: {
-      OPENAI_BASE_URL:
-        process.env.MIDSCENE_PROXY_URL ||
-        process.env.OPENAI_BASE_URL ||
-        process.env.MIDSCENE_MODEL_BASE_URL ||
-        "http://127.0.0.1:8010/v1",
-      MIDSCENE_MODEL_BASE_URL:
-        process.env.MIDSCENE_PROXY_URL ||
-        process.env.MIDSCENE_MODEL_BASE_URL ||
-        process.env.OPENAI_BASE_URL ||
-        "http://127.0.0.1:8010/v1",
+      MIDSCENE_RUN_DIR: ensureRunnerMidsceneDir(`runner-${i}`),
+      // Both roles arrive over private RPC. Ambient host credentials and old proxy URLs
+      // must not become a fallback when a saved project configuration clears a value.
+      ...Object.fromEntries(Object.keys(process.env)
+        .filter(k => /^(TP_PLANNER_|OPENAI_|ANTHROPIC_|MIDSCENE_(MODEL_|OPENAI_|USE_.*_VL$|VL_MODE$))/.test(k))
+        .map(k => [k, ""])),
     },
     // Deliberately never: a dead runner has a reason, and whether to retry the WORK
     // is the loop layer's decision, not the supervisor's.

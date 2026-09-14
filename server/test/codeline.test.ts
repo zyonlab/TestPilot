@@ -169,3 +169,22 @@ describe("what has been rewritten", () => {
     expect(await cl.changes(other.id)).toHaveLength(0);
   });
 });
+
+/**
+ * 2026-09-14：`acRefs`（这条用例了结了哪几条验收准则）到看板这一步被丢掉了，
+ * 于是导出的 spec 只说得出 `@story:`，说不出是哪条准则——一条测试红了，
+ * 人还是得回平台去猜它本来想证明什么。这里钉住这一列真的存得住。
+ */
+it("验收准则编号活得过 createCase——用例与用户故事之间那根线不能断在看板", () => {
+  const p = db.createProject("proj", "https://example.com");
+  const kase = db.createCase({
+    projectId: p.id, title: "看订单簿", priority: "P0", steps: [{ order: 1, text: "看" }],
+    storyId: "S-MB-01", acRefs: ["S-MB-01/AC-1", "S-MB-01/AC-2"],
+  });
+  expect(db.getCase(kase.id)!.acRefs).toEqual(["S-MB-01/AC-1", "S-MB-01/AC-2"]);
+  db.updateCase(kase.id, { acRefs: ["S-MB-01/AC-3"] });
+  expect(db.getCase(kase.id)!.acRefs).toEqual(["S-MB-01/AC-3"]);
+  // 老用例（这一列之前建的）读出来是空数组，不是 undefined——导出侧照着它决定要不要写标签。
+  const old = db.createCase({ projectId: p.id, title: "老的", priority: "P1", steps: [] });
+  expect(db.getCase(old.id)!.acRefs).toEqual([]);
+});

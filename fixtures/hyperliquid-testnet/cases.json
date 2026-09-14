@@ -1,0 +1,293 @@
+{
+  "$comment": "Hyperliquid testnet 永续合约 P0 用例——「影响用户资金」的那几条。判据尽量落在 info 接口的精确数上（kind:api），只有接口给不了的才看屏幕。界面文案已按 2026-09-07 首跑截图逐字校对（报告 run-mtr1h7wd-1001）：条款弹窗 Decline/Accept、钱包列表项叫 MetaMask、按钮 Enable Trading、弹窗 Establish Connection、复选框 Take Profit / Stop Loss、杠杆按钮显示 20x、持仓表有 Close All。 限价单价格必须在参考价 80% 带内（toast：Order price cannot be more than 80% away from the reference price），10000 被前端拒了，改 40000。确认框叫 Confirm Order，里面的确认按钮叫 Buy / Long。 Size 输入框下面有一个显示 0 的百分比框，模型定位「Size input showing 0」会选到它并被缓存固化（2026-09-07 T-28），步骤里明说「不是百分比框」。 「市价开多」拆成四步时，模型给 Size 生成的定位词是「showing '0'」，三轮都定到百分比框；写成一步（和「一键平仓」第一步同款）七轮全过。",
+  "environment": {
+    "name": "hl-testnet",
+    "baseUrl": "https://app.hyperliquid-testnet.xyz/trade/BTC",
+    "vars": {
+      "HL_INFO": "https://api.hyperliquid-testnet.xyz/info",
+      "HL_ADDRESS": "<TEST_ACCOUNT，即 server/.wallets/account.txt 里的地址>",
+      "TP_RESET_CMD": "node fixtures/hyperliquid-testnet/cancel-all.mjs --flatten"
+    },
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "login": {
+      "authRequired": true,
+      "$comment": "「登录态」= 启用交易。agent 授权存在浏览器 profile 里（不在 localStorage，探针验证过），每条用例都是新浏览器，所以每条跑之前都要过一遍；它和用例步骤一样走缓存。写成无条件步骤：带「如果」的步骤会把当次走的分支固化进缓存。登录态跑在 web3 settle 之前，所以第一步是等——等一个明确的东西（`waitFor:` 前缀 = aiWaitFor）而不是等 5 秒：等 5 秒不够时缓存的 xpath 解析不到，Midscene 回放会拿 undefined 坐标点鼠标（06 §6.1）。批次里登录态只跑一次（T-28 会话池），这一步的模型成本每批一次。条款弹窗按地址一次性，不在这里。**不要在这里关右下角的 Announcements 面板**（2026-09-07 T-27）：它是 #root 下排在 app 前面的兄弟节点，关掉是从 DOM 移除，app 从 div[3] 变 div[2]，之后所有绝对 xpath 整体位移；而「×」的缓存 xpath 指向标题栏、回放点不中，于是记录态与回放态不一致，二跑 49/49 失效。面板留着，撤单类步骤走 View All 整页（不被它盖住）。",
+      "steps": [
+        "waitFor:右侧下单面板底部出现 Enable Trading 按钮",
+        "点击右侧下单面板底部的 Enable Trading 按钮",
+        "在「Establish Connection」弹窗里点击 Establish Connection 按钮，然后等待 3 秒让签名完成"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "title": "连接注入钱包并启用交易",
+      "priority": "P0",
+      "priorityReason": "后面每一条都以「已启用交易」为前提；它现在是环境的登录态，这条用例只验证登录态跑完后接口能读到资金。",
+      "type": "e2e",
+      "tier": 1,
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "点击页面底部的 Balances 标签，查看账户余额"
+        }
+      ],
+      "expected": "接口能读到该地址的账户价值（说明地址已在 testnet 上有资金，且前端连接的是同一个地址）",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"clearinghouseState\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "marginSummary.accountValue",
+        "op": "gte",
+        "value": 1
+      },
+      "postSteps": [],
+      "precondition": "账户在 testnet 上已有 mock USDC，且在永续账户里、账户模式为 Manual（见 README「前提」）。"
+    },
+    {
+      "title": "市价开多 0.001 BTC 后持仓量等于 0.001",
+      "priority": "P0",
+      "priorityReason": "开仓是资金动作里最直接的一条；数量精度错一档就是十倍仓位。",
+      "type": "e2e",
+      "tier": 1,
+      "precondition": "账户没有 BTC 持仓（上一条的 teardown 已平）。",
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "在下单面板选择 Market 标签，选择 Buy / Long，在 Size 输入框（带 BTC 单位的那个）输入 0.001，点击 Place Order，在「Confirm Order」确认框里点击 Buy / Long"
+        }
+      ],
+      "expected": "接口里 BTC 持仓的 szi 等于 0.001",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"clearinghouseState\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "assetPositions[position.coin=BTC].position.szi",
+        "op": "eq",
+        "value": 0.001,
+        "settleMs": 2500
+      },
+      "postSteps": [
+        {
+          "text": "在持仓列表里找到 BTC 那一行，点击 Market Close 或 Close 并确认，把仓位平掉"
+        }
+      ]
+    },
+    {
+      "title": "限价买单挂出后出现在挂单列表且价格一致",
+      "priority": "P0",
+      "priorityReason": "挂单价格是用户手输的资金参数，前端传错一位就是错误成交。",
+      "type": "e2e",
+      "tier": 1,
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "在下单面板选择 Limit 标签"
+        },
+        {
+          "text": "选择 Buy / Long"
+        },
+        {
+          "text": "在 Price 输入框输入 40000（离市价约一半，在前端 80% 价格带内、又永远不会成交）"
+        },
+        {
+          "text": "在 Size 输入框（右侧带 BTC 单位的那个，不是下面的百分比框）输入 0.001"
+        },
+        {
+          "text": "点击 Place Order 按钮；如果弹出「Confirm Order」确认框，点击其中的 Buy / Long 按钮"
+        }
+      ],
+      "expected": "接口 openOrders 里 BTC 的挂单 limitPx 等于 10000",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"openOrders\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "[coin=BTC].limitPx",
+        "op": "eq",
+        "value": 40000,
+        "settleMs": 2500
+      },
+      "postSteps": [
+        {
+          "text": "点击底部的 Open Orders 标签，再点击订单表下方的 View All 链接进入 Open Orders 整页，点击表头最右侧的 Cancel All，在弹出的选项里点击 All"
+        }
+      ]
+    },
+    {
+      "title": "撤单后挂单从接口里消失",
+      "priority": "P0",
+      "priorityReason": "撤单失败但界面显示已撤，是资金类事故里最常见的一种。",
+      "type": "e2e",
+      "tier": 1,
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "在下单面板选择 Limit 标签，选择 Buy / Long，Price 输入 40000，Size 输入框（带 BTC 单位的那个，不是百分比框）输入 0.001，点击 Place Order，在「Confirm Order」确认框里点击 Buy / Long"
+        },
+        {
+          "text": "等待挂单列表出现这条 BTC 挂单"
+        },
+        {
+          "text": "点击底部的 Open Orders 标签，再点击订单表下方的 View All 链接进入 Open Orders 整页，点击这条挂单所在行最右边的 Cancel"
+        }
+      ],
+      "expected": "接口 openOrders 里不再有 BTC 的挂单",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"openOrders\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "[coin=BTC]",
+        "op": "absent",
+        "settleMs": 2500
+      },
+      "postSteps": []
+    },
+    {
+      "title": "带止盈止损开仓后接口里出现触发单",
+      "priority": "P0",
+      "priorityReason": "止盈止损是用户的风控；前端没把它随单发出去，用户以为有保护其实没有。",
+      "type": "e2e",
+      "tier": 1,
+      "precondition": "账户没有 BTC 持仓。",
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "在下单面板选择 Market 标签，选择 Buy / Long，Size 输入框（带 BTC 单位的那个，不是百分比框）输入 0.001"
+        },
+        {
+          "text": "勾选 Take Profit / Stop Loss 复选框"
+        },
+        {
+          "text": "在 Take Profit 那一行的 Gain 百分比输入框输入 30（即止盈价比当前价高 30%）"
+        },
+        {
+          "text": "在 Stop Loss 那一行的 Loss 百分比输入框输入 30（即止损价比当前价低 30%）"
+        },
+        {
+          "text": "点击 Place Order，在「Confirm Order」确认框里点击 Buy / Long"
+        }
+      ],
+      "expected": "接口 frontendOpenOrders 里存在 BTC 的 Take Profit 类型订单",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"frontendOpenOrders\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "[orderType=Take Profit Market].coin",
+        "op": "eq",
+        "value": "BTC",
+        "settleMs": 2500
+      },
+      "postSteps": [
+        {
+          "text": "点击底部的 Open Orders 标签，再点击订单表下方的 View All 链接进入 Open Orders 整页，点击表头最右侧的 Cancel All，在弹出的选项里点击 All，撤掉所有挂单与触发单"
+        },
+        {
+          "text": "在持仓列表里找到 BTC 那一行，点击 Market Close 并确认，把仓位平掉"
+        }
+      ]
+    },
+    {
+      "title": "一键平仓后接口里不再有 BTC 持仓",
+      "priority": "P0",
+      "priorityReason": "平仓是止损的最后一步；它失败而界面说成功，损失会继续扩大。",
+      "type": "e2e",
+      "tier": 1,
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "在下单面板选择 Market 标签，选择 Buy / Long，Size 输入框（带 BTC 单位的那个，不是百分比框）输入 0.001，点击 Place Order，在「Confirm Order」确认框里点击 Buy / Long"
+        },
+        {
+          "text": "等待持仓列表出现 BTC 仓位"
+        },
+        {
+          "text": "点击持仓行的 Market Close（或 Close All）并确认"
+        }
+      ],
+      "expected": "接口 clearinghouseState 的 assetPositions 里没有 BTC",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"clearinghouseState\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "assetPositions[position.coin=BTC]",
+        "op": "absent",
+        "settleMs": 2500
+      },
+      "postSteps": []
+    },
+    {
+      "title": "数量超过可用保证金时下单被拒且持仓不变",
+      "priority": "P0",
+      "priorityReason": "负例：前端应在下单前拦住；放过去是资金风险，拦住但界面没说是可用性问题。",
+      "type": "negative",
+      "tier": 2,
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "在下单面板选择 Market 标签，选择 Buy / Long"
+        },
+        {
+          "text": "在 Size 输入框（右侧带 BTC 单位的那个，不是下面的百分比框）输入 1000"
+        },
+        {
+          "text": "点击 Place Order 按钮（如果按钮不可点击就停在这里）"
+        }
+      ],
+      "expected": "接口里 BTC 持仓量在步骤前后不变",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"clearinghouseState\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "marginSummary.totalNtlPos",
+        "op": "unchanged",
+        "settleMs": 2500
+      },
+      "postSteps": []
+    },
+    {
+      "title": "杠杆调到 5x 后接口里的杠杆值等于 5",
+      "priority": "P1",
+      "priorityReason": "杠杆决定强平价；前端显示 5x 而后端记的是 20x，是资金类不一致。",
+      "type": "e2e",
+      "tier": 1,
+      "web3Mode": "injected",
+      "steps": [
+        {
+          "text": "点击下单面板顶部显示杠杆倍数的按钮（例如 20x）"
+        },
+        {
+          "text": "把杠杆调到 5x 并点击 Confirm"
+        },
+        {
+          "text": "在下单面板选择 Market 标签，选择 Buy / Long，Size 输入框（带 BTC 单位的那个，不是百分比框）输入 0.001，点击 Place Order，在「Confirm Order」确认框里点击 Buy / Long"
+        }
+      ],
+      "expected": "接口里 BTC 持仓的 leverage.value 等于 5",
+      "oracle": {
+        "kind": "api",
+        "url": "${env.HL_INFO}",
+        "method": "POST",
+        "body": "{\"type\":\"clearinghouseState\",\"user\":\"${env.HL_ADDRESS}\"}",
+        "path": "assetPositions[position.coin=BTC].position.leverage.value",
+        "op": "eq",
+        "value": 5,
+        "settleMs": 2500
+      },
+      "postSteps": [
+        {
+          "text": "在持仓列表里找到 BTC 那一行，点击 Market Close 并确认，把仓位平掉"
+        }
+      ]
+    }
+  ]
+}

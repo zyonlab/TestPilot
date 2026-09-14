@@ -25,6 +25,10 @@
  * 上拿到逐条 `OmniMessage`。没走，因为那套 API 没有公开契约，而这一层要在 Phase 3 之前
  * 保持能被一眼读懂。写在这里，是为了下一个人不必重新调研一遍。）
  */
+import { generationMessage, prepareSkillLaunch, type GenerationMessageInput } from "./runtime/skill-launch.js";
+import type { RunBudget } from "./runBudget.js";
+import { registeredStageProducts } from "./runStages.js";
+import { launchNativePenguin, nativeRunState, cancelNativeRun } from "./runtime/native-penguin.js";
 import { execFileSync, spawn } from "node:child_process";
 import {
   existsSync,
@@ -37,6 +41,9 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import type { RunModels } from "@testpilot/harness-core/model-profiles";
+import { launchManagedPenguin, managedRunState, cancelManagedRun, type ManagedModels } from "./runtime/managed-penguin.js";
+export { cancelManagedRun } from "./runtime/managed-penguin.js";
 import { bus } from "./procs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -49,11 +56,14 @@ export const REPO_ROOT = resolve(__dirname, "..", "..");
 export interface RunMeta {
   runId: string;
   stage: "g1" | "g2";
+  /** 哪个运行时跑的（07 P2）。缺省 = 旧条目。 */
+  runtime?: "penguin" | "claude-code" | "codex" | "pipeline";
   skillVersion?: string;
   promptsDigest?: { entries: Record<string, string>; combined: string };
   params?: Record<string, unknown>;
   ablated?: string[];
-  model?: { baseUrl: string; model: string; thinking: boolean };
+  model?: { baseUrl: string; model: string; thinking: boolean | null };
+  modelRoles?: RunModels;
   materialsHash?: string;
   startedAt?: string;
   finishedAt?: string;
@@ -126,7 +136,12 @@ export function node24Path(): string {
   } catch {
     /* 没装 nvm 就走下面那条 */
   }
-  return "/Users/admin/.nvm/versions/node/v24.20.0/bin/node";
+  if (Number(process.versions.node.split(".")[0]) >= 24) return process.execPath;
+  try {
+    const binary = execFileSync("node", ["-p", "Number(process.versions.node.split('.')[0]) >= 24 ? process.execPath : ''"], { encoding: "utf8", timeout: 5000 }).trim();
+    if (binary) return binary;
+  } catch { /* Actionable configuration error below. */ }
+  throw new Error("penguin_node_24_required: set TP_PENGUIN_NODE to a Node 24+ executable");
 }
 
 /** `penguin` 可执行文件。与 Node 24 同一个 `bin/`。 */
@@ -180,7 +195,6 @@ export const defaultWorkspace = (): string =>
  */
 const MCP_ENV_KEYS = [
   "OPENAI_BASE_URL",
-  "OPENAI_API_KEY",
   "MIDSCENE_MODEL_NAME",
   "TP_MODEL_THINK",
   "TP_MODEL_TIMEOUT_MS",
@@ -224,6 +238,7 @@ function readServerEnv(): Record<string, string> {
     const v = out[k] ?? process.env[k] ?? MCP_ENV_DEFAULTS[k];
     if (v !== undefined && v !== "") picked[k] = String(v);
   }
+  if (existsSync(file)) picked.TP_MODEL_ENV_FILE = file;
   return picked;
 }
 
@@ -301,7 +316,9 @@ export function writeAgentConfig(
   const original = readFileSync(path, "utf8");
   // 工具那头的 `DEFAULT_RUNS_DIR` 读它：MCP 子进程的 cwd 是包目录，不是工作区，
   // 不给这一条，skill 里不带 `runsDir` 的 `score_run` 会在 `packages/testpilot-mcp/runs` 底下找。
-  const runsEnv = { TP_RUNS_DIR: join(defaultWorkspace(), "runs") };
+  // `TP_RUNTIME`：MCP 把它写进 `meta.runtime`（07 T-22 的 binding 字段）。Claude Code 那条路由 `.mcp.json` 给；
+  // 这里不给，Penguin 上跑出来的分就缺一项 binding——2026-09-08 第一遍三运行时对比就是这么缺的。
+  const runsEnv = { TP_RUNS_DIR: join(defaultWorkspace(), "runs"), TP_RUNTIME: "penguin" };
   const block = renderMcpServers({ ...readServerEnv(), ...runsEnv, ...extraEnv }, [
     ...Object.keys(runsEnv),
     ...Object.keys(extraEnv),
@@ -338,6 +355,9 @@ export const newRunId = (): string =>
   new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
 
 export interface StartRunInput {
+  generationMode?: "skill" | "pipeline";
+  /** Web-managed run only. Native host runs inherit their own planning model. */
+  models?: ManagedModels;
   projectId?: string;
   agentId?: string;
   /** 工作区。不给就用默认那个（`workspaces/phase0`）。 */
@@ -348,6 +368,15 @@ export interface StartRunInput {
   message?: string;
   /** 最多几条故事。测试用 2。 */
   limit?: number;
+  /** 消融开关（07 T-12）：不写进起跑那句话，工具就不知道要关什么——两臂会一模一样。 */
+  ablate?: string[];
+  /**
+   * 这次运行的预算。不给就由 managed worker 退回 `configuredRunBudget()`。
+   *
+   * 单元循环必须显式给：默认那份是给「一次写整份」定的 10 分钟，
+   * 2026-09-11 实测把一个跑得好好的 27 单元运行在第 10 个单元上掐断（docs/v3/22）。
+   */
+  budget?: RunBudget;
   /** 运行 id（同时是产物目录名）。不给就现生成一个。 */
   runId?: string;
   /** 事件与运行记录归到哪个项目下。同时作为 `TP_PROJECT_ID` 传给 MCP 子进程。 */
@@ -364,24 +393,7 @@ export interface StartedRun {
 }
 
 /** 起跑那句话。**把 outDir 说死**，否则运行 id 由模型现编，事后对不上号。 */
-function runMessage(input: { materialsDir: string; outDir: string; limit?: number }): string {
-  const limit = input.limit ? `\n- \`limit\` = ${input.limit}` : "";
-  return [
-    "Use the testpilot-generate skill.",
-    "",
-    "Call the `run_pipeline` MCP tool exactly once, with:",
-    "",
-    "- `stage` = `g1`",
-    `- \`materialsDir\` = \`${input.materialsDir}\``,
-    `- \`outDir\` = \`${input.outDir}\``,
-    limit,
-    "",
-    "Use those paths verbatim — do not invent a different outDir, and do not change the",
-    "timestamp. Report the five numbers the tool returns and stop.",
-  ]
-    .filter((l) => l !== "")
-    .join("\n");
-}
+function runMessage(input: GenerationMessageInput): string { return generationMessage(input); }
 
 /** 后台跑着的那些。取消与状态查询用得上。 */
 const running = new Map<
@@ -409,16 +421,49 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   mkdirSync(workspace, { recursive: true });
   mkdirSync(outDir, { recursive: true });
 
+  const stageEnv = input.generationMode === "pipeline" ? { TP_GENERATION_MODE: "pipeline" } : prepareSkillLaunch({ runId, scopeProjectId: input.scopeProjectId, materialsDir, runtime: "penguin", limit: input.limit, ablate: input.ablate });
+
+  if (input.models) {
+    const { sessionId } = await launchManagedPenguin({
+      runId, projectId, agentId, root: penguinHome(), workspace, outDir,
+      message: input.message ?? runMessage({ materialsDir, outDir, limit: input.limit, ablate: input.ablate, generationMode: input.generationMode }),
+      nodeBin: node24Path(), penguinBin: penguinBin(), models: input.models,
+      ...(input.budget ? { budget: input.budget } : {}),
+      mcpEnv: { ...stageEnv, TP_REPO_ROOT: REPO_ROOT, TP_RUNS_DIR: join(workspace, "runs"), TP_RUNTIME: "penguin",
+        TP_SERVER_URL: process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`,
+        ...(input.scopeProjectId ? { TP_PROJECT_ID: input.scopeProjectId } : {}),
+        ...(input.envRef ? { TP_ENV_ID: input.envRef } : {}),
+        TP_ABLATE: input.ablate?.join(",") ?? "",
+      },
+    });
+    running.set(runId, { sessionId, workspace, outDir });
+    return { sessionId, workspace, runId, outDir };
+  }
+  if (input.generationMode !== "pipeline") {
+    const { sessionId } = await launchNativePenguin({ runId, projectId, agentId, root: penguinHome(), workspace, outDir, repoRoot: REPO_ROOT,
+      nodeBin: node24Path(), penguinBin: penguinBin(), message: input.message ?? runMessage({ materialsDir, outDir, limit: input.limit }),
+      mcpEnv: { ...stageEnv, TP_REPO_ROOT: REPO_ROOT, TP_RUNTIME: "penguin", TP_RUNS_DIR: join(workspace, "runs"),
+        TP_SERVER_URL: process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`,
+        ...(input.scopeProjectId ? { TP_PROJECT_ID: input.scopeProjectId } : {}), ...(input.envRef ? { TP_ENV_ID: input.envRef } : {}),
+        ...(existsSync(join(REPO_ROOT, "server/.env")) ? { TP_MODEL_ENV_FILE: join(REPO_ROOT, "server/.env") } : {}) },
+    });
+    running.set(runId, { sessionId, workspace, outDir });
+    return { sessionId, workspace, runId, outDir };
+  }
+
   // 每次起跑前对一次 MCP 声明。内容没变就不写（见 `writeAgentConfig`）——
   // 「工具凭空消失」是这一层最难查的一类故障，代价是一次 stat + 一次字符串比较。
   writeAgentConfig(projectId, agentId, {
+    ...stageEnv,
     // 工具要开浏览器时，拿这三样回 `:5301` 取当下那一份环境（baseUrl / 视口 / 会话）。
     TP_SERVER_URL: process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`,
     ...(input.scopeProjectId ? { TP_PROJECT_ID: input.scopeProjectId } : {}),
     ...(input.envRef ? { TP_ENV_ID: input.envRef } : {}),
+    // 消融开关走 env 兜底（`pipeline.ts::ablateFromEnv`）；`renderMcpServers` 会滤掉空值，没有消融臂时这个键不出现。
+    ...(input.ablate?.length ? { TP_ABLATE: input.ablate.join(",") } : {}),
   });
 
-  const message = input.message ?? runMessage({ materialsDir, outDir, limit: input.limit });
+  const message = input.message ?? runMessage({ materialsDir, outDir, limit: input.limit, ablate: input.ablate, generationMode: input.generationMode });
   const args = [
     "run",
     "--background",
@@ -540,6 +585,12 @@ export function watchRun(opts: {
    */
   onEvent?: (e: NodeEvent) => void;
   onDone: (r: { status: "done" | "failed"; error?: string; products?: RunProducts }) => void;
+  /**
+   * 这个运行时怎么回答「session 还在跑吗」。不给就问 `penguin ls`。
+   * 第二个运行时（`claudecode.ts`）的 session 是我们自己 spawn 的子进程，活着就是 running——
+   * 看门狗的其余部分（产物、events.jsonl、超时）对两边一样，所以只把这一问抽出来。
+   */
+  stateOf?: () => "running" | "idle" | "gone" | "unknown";
 }): void {
   const started = Date.now();
   const pollMs = opts.pollMs ?? 3000;
@@ -605,8 +656,12 @@ export function watchRun(opts: {
     }
 
     // ③ session 状态
-    const done = seenFiles.has("gate.json");
-    const state = done ? "idle" : sessionState(opts.sessionId, opts.projectId, opts.agentId);
+    let registered: ReturnType<typeof registeredStageProducts>;
+    try { registered = registeredStageProducts(opts.runId); }
+    catch { finished = true; stopWatching(opts.runId); return opts.onDone({ status: "failed", error: "registered_run_integrity_failed" }); }
+    const done = registered.protected ? registered.finalized : seenFiles.has("gate.json");
+    const managed = managedRunState(opts.runId) ?? nativeRunState(opts.runId);
+    const state = opts.stateOf ? opts.stateOf() : managed ?? (done ? "idle" : sessionState(opts.sessionId, opts.projectId, opts.agentId));
     if (state === "running") sawRunning = true;
     const timedOut = Date.now() - started > timeoutMs;
     /**
@@ -620,14 +675,15 @@ export function watchRun(opts: {
      *
      * `sawRunning` 与 90 秒宽限是为了不误伤刚投出去、还没翻成 running 的那几秒。
      */
-    const diedQuietly = state === "idle" && !done && (sawRunning || Date.now() - started > 90_000);
+    const diedQuietly = state === "idle" && !done && (managed !== undefined || sawRunning || Date.now() - started > 90_000);
 
-    if (done || timedOut || state === "gone" || diedQuietly) {
+    if ((done && state !== "running") || timedOut || state === "gone" || diedQuietly) {
       finished = true;
+      if (timedOut) { cancelManagedRun(opts.runId); cancelNativeRun(opts.runId); }
       stopWatching(opts.runId);
-      if (done) {
+      if (done && !timedOut && state !== "gone") {
         try {
-          const products = readRun(opts.workspace, opts.runId);
+          const products = registered.protected && registered.finalized ? registered.products : readRun(opts.workspace, opts.runId);
           // `events.jsonl` 已经报过 gate 结束了就别再报一遍——实测发出去两条
           // `gate end`，画布上那一步会闪两下，而进度条不会因此更准。
           if (!seenLines.size)
@@ -691,8 +747,19 @@ function sessionState(sessionId: string, projectId?: string, agentId?: string): 
     );
     const rows = JSON.parse(out) as Array<{ sessionId: string; status: string }>;
     return rows.find((r) => r.sessionId === sessionId)?.status ?? "gone";
-  } catch {
-    // 查不出来不等于没了——查询本身可能挂（server 忙）。当作还在跑，交给超时兜底。
+  } catch (e) {
+    /**
+     * **「penguin server 没起来」不是「查不出来」。**
+     *
+     * 那句话的意思是**一条 session 都不可能在跑**，所以这次运行已经没了——按 `gone` 收尾。
+     * 原来一律当 `unknown`（「可能 server 忙，交给超时兜底」），后果是：
+     * 2026-09-12 晚上 16 条运行永远停在「运行中」，每条还每 3 秒 spawn 一个 `penguin ls`
+     * 去问一个不存在的 server；超时是一小时，而开发时网关每改一行就重启，计时永远清零。
+     * 界面上那一排「运行中」一个都不会自己消失，机器也白烧着。
+     */
+    const said = `${(e as { stdout?: string; stderr?: string }).stdout ?? ""}${(e as { stderr?: string }).stderr ?? ""}${(e as Error).message ?? ""}`;
+    if (/No running server found|cannot auto-start/i.test(said)) return "gone";
+    // 真的只是查询挂了（server 忙）：当作还在跑，交给超时兜底。
     return "unknown";
   }
 }

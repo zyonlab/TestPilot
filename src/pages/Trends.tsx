@@ -1,3 +1,4 @@
+import { ProjectRevisionLinks } from '@/components/ProjectRevisionLinks';
 import { useEffect, useState } from "react";
 import { TrendingUp, Wand2, Zap, Ban } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
@@ -6,7 +7,7 @@ import { useT } from "@/lib/prefs";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import type { Trends, TrendsBatch } from "@/lib/types";
+import type { Trends, TrendsBatch, CostReport } from "@/lib/types";
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
@@ -41,6 +42,73 @@ function KpiCard({
       <div className="text-[0.8125rem] text-muted-foreground">{label}</div>
       <div className={cn("font-display text-2xl font-medium text-foreground", tone)}>{value}</div>
       {hint && <div className="mt-0.5 text-[0.6875rem] text-muted-foreground">{hint}</div>}
+    </div>
+  );
+}
+
+
+const ms = (n?: number) => (n == null ? "—" : n < 60000 ? `${Math.round(n / 1000)}s` : `${(n / 60000).toFixed(1)}m`);
+const PHASES: Array<[string, string]> = [
+  ["launchMs", "trends.cost.launch"], ["loginMs", "trends.cost.login"], ["settleMs", "trends.cost.settle"],
+  ["stepsMs", "trends.cost.steps"], ["assertMs", "trends.cost.assert"], ["teardownMs", "trends.cost.teardown"],
+];
+
+/**
+ * 成本块（07 T-21）：每条用例的账——`scripts/cost-report.mjs` 同一套聚合（`scripts/lib/cost-aggregate.mjs`），
+ * 这里只是把它画出来。数字带来源：n 与 attribution 列告诉你这一行是几次运行、
+ * 花费是记在 runner 上还是记在窗口上（并发时窗口数会把别的 runner 的账算进来）。
+ */
+function CostBlock({ projectId, t }: { projectId: string; t: (k: string) => string }) {
+  const [cost, setCost] = useState<CostReport | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    api.getCost(projectId, 10).then((c) => !cancelled && setCost(c)).catch((e) => !cancelled && setErr(String(e.message ?? e)));
+    return () => { cancelled = true; };
+  }, [projectId]);
+  if (err) return <div className="rounded-lg bg-bad-soft px-3 py-2 text-xs text-bad">{err}</div>;
+  if (!cost) return null;
+  const T = cost.totals;
+  const phaseSum = PHASES.reduce((a, [k]) => a + (T.phases[k] ?? 0), 0);
+  const fk = (c: CostReport["cases"][number]) =>
+    (["infra", "locate", "assert", "unknown"] as const).filter((k) => c.failures[k]).map((k) => `${k} ${c.failures[k]}`).join(" ");
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-1 font-display text-sm font-medium">{t("trends.cost.title")}</h2>
+      <ProjectRevisionLinks />
+      <div className="mb-3 text-[0.6875rem] text-muted-foreground">
+        {t("trends.cost.hint")} · runs {T.runs} · tokens {T.tokens} · {t("trends.cost.cacheHit")}{" "}
+        {T.hits + T.misses ? pct(T.hits / (T.hits + T.misses)) : "—"} · {t("trends.cost.attribution")} runner {T.attribution.runner} / window {T.attribution.window}
+        {T.phasedRuns > 0 && (
+          <> · {PHASES.map(([k, key]) => `${t(key)} ${ms(T.phases[k])}（${phaseSum ? Math.round(((T.phases[k] ?? 0) / phaseSum) * 100) : 0}%）`).join(" · ")}</>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[0.75rem]">
+          <thead>
+            <tr className="text-left text-muted-foreground">
+              <th className="py-1 pr-3">{t("trends.cost.case")}</th><th className="py-1 pr-3">n</th><th className="py-1 pr-3">{t("trends.cost.pass")}</th>
+              <th className="py-1 pr-3">{t("trends.cost.wall")}</th><th className="py-1 pr-3">{t("trends.cost.calls")}</th><th className="py-1 pr-3">tokens</th>
+              <th className="py-1 pr-3">{t("trends.cost.cacheHit")}</th><th className="py-1 pr-3">{t("trends.cost.failures")}</th><th className="py-1 pr-3">{t("trends.cost.healed")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cost.cases.map((c) => (
+              <tr key={c.caseId} className="border-t border-border">
+                <td className="py-1 pr-3">{c.title}</td>
+                <td className="py-1 pr-3 font-mono">{c.n}</td>
+                <td className={cn("py-1 pr-3 font-mono", c.passRate < 1 && "text-warn")}>{pct(c.passRate)}</td>
+                <td className="py-1 pr-3 font-mono">{ms(c.wallMedian)}{c.wallSpread ? ` ${c.wallSpread}` : ""}</td>
+                <td className="py-1 pr-3 font-mono">{c.modelCallsMedian ?? "—"}</td>
+                <td className="py-1 pr-3 font-mono">{c.tokensMedian ?? "—"}</td>
+                <td className="py-1 pr-3 font-mono">{c.cacheHitRate == null ? "—" : pct(c.cacheHitRate)}{c.stale ? ` ⚠${c.stale}` : ""}</td>
+                <td className="py-1 pr-3 font-mono">{fk(c) || (c.unobservable ? `unobs ${c.unobservable}` : "—")}</td>
+                <td className="py-1 pr-3 font-mono">{c.healedRuns || "—"}{c.degraded.total ? ` / ${t("trends.cost.degraded")} ${c.degraded.total}` : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -279,6 +347,9 @@ export function TrendsPage() {
               <h2 className="mb-3 font-display text-sm font-medium">{t("trends.outcomeBreakdown")}</h2>
               <StackedBars batches={trends.batches} />
             </div>
+
+            {/* 每条用例的账（07 T-21） */}
+            <CostBlock projectId={activeProjectId} t={t} />
           </div>
         )}
       </div>

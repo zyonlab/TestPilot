@@ -1,3 +1,5 @@
+import {settleOn} from './pageReady.js';
+export {settleOn} from './pageReady.js';
 // Interactive sessions: exploration and step-by-step debugging.
 //
 // Unlike a case run, these are *streamed* — the UI watches the page while the model
@@ -17,6 +19,7 @@ import {
   type StateFlowGraph,
   abstractionNameOf,
 } from "./sfg.js";
+import { CharterTracker, describeReport, matchTarget, routeAllowed, type ExplorationCharter, type ExplorationReport } from "../domain/index.js";
 
 /**
  * 做实验的三个等价类。
@@ -261,39 +264,6 @@ export function diffScreens(
  * `minMs` 是"至少等多久"，`maxMs` 是上限——等不到就走，
  * 但要把这件事说出来，而不是假装它安定了。
  */
-export async function settleOn(
-  page: { evaluate<T>(fn: () => T): Promise<T> },
-  opts: { minMs?: number; maxMs?: number } = {},
-): Promise<{ ms: number; controls: number; textLen: number; settled: boolean }> {
-  const minMs = opts.minMs ?? 600;
-  const maxMs = opts.maxMs ?? 12_000;
-  const probe = async (): Promise<{ n: number; len: number }> =>
-    page
-      .evaluate(() => ({
-        n: [...document.querySelectorAll("button, a, input, select, textarea, [role=button]")].filter(
-          (el) => (el as HTMLElement).offsetParent !== null,
-        ).length,
-        len: (document.body?.innerText ?? "").length,
-      }))
-      .catch(() => ({ n: 0, len: 0 }));
-
-  const began = Date.now();
-  if (minMs) await new Promise((r) => setTimeout(r, minMs));
-  let last = await probe();
-  let steady = 0;
-  while (Date.now() - began < maxMs) {
-    await new Promise((r) => setTimeout(r, 500));
-    const now = await probe();
-    // 只看"有没有长"，不看有没有缩：SPA 切换时会先清空再重画，
-    // 把"缩了"当成变化会让这里每次都等满上限。
-    if (now.n <= last.n && now.len <= last.len) steady += 1;
-    else steady = 0;
-    last = now;
-    if (steady >= 2 && (last.n > 0 || last.len > 0))
-      return { ms: Date.now() - began, controls: last.n, textLen: last.len, settled: true };
-  }
-  return { ms: Date.now() - began, controls: last.n, textLen: last.len, settled: false };
-}
 
 export type ProbeVariant = "empty" | "malformed" | "unmatched";
 
@@ -427,6 +397,8 @@ function shooter(spec: { execId: string; artifactDir: string }) {
 }
 
 export interface ObserveSpec {
+  /** Gateway scope for scenario planning; never contains planner credentials. */
+  projectId?: string;
   execId: string;
   url: string;
   artifactDir: string;
@@ -438,6 +410,15 @@ export interface ObserveSpec {
    * 按 DOM 顺序截前 60 个（交易页的下单区正好落在截断线之外）。
    */
   groupCap?: number;
+  /**
+   * 领域探索 charter（docs/v3/20 §6、21 §2）。
+   *
+   * 给了它，探索就按「规则包里的目标」决定先点什么：普通 button、checkbox、自定义控件
+   * 都能匹配，不再只认带 ARIA 组的 tab；goto 只去 charter 允许的路由，全局导航不再把
+   * 预算带走；每个目标都留下 attempted / observed_only / blocked / failed 的回执。
+   * 不给它，下面的一切行为和以前完全一样——它是可消融的那个变量。
+   */
+  charter?: ExplorationCharter;
   /**
    * 页内元素优先于未去过的路由。
    *
@@ -523,6 +504,8 @@ export interface ObserveResult {
   stopped?: { kind: string; n?: number };
   /** 走过的那张图。点和**边**都在——边此前是被丢掉的那一半。 */
   graph?: StateFlowGraph;
+  /** charter 模式下的逐目标回执与覆盖计数；计数由代码算，不是模型自述。 */
+  report?: ExplorationReport;
 }
 
 /**
@@ -574,6 +557,13 @@ export async function runObserve(
     role: string;
     /** 这一项当前是不是被选中的那一个。广度优先时用它认出"基线是哪一项"。 */
     selectedNow: boolean;
+    /**
+     * 这个控件所在**容器**的文案（弹窗 / 抽屉 / 对话框），不在任何容器里就是空。
+     *
+     * charter 的 `match.within` 靠它区分「弹窗里的那个」。2026-09-12 实测：
+     * `Buy / Long` 既是下单面板的方向切换、又是确认框的确认键，只按文案匹配点到哪个全看运气。
+     */
+    container: string;
     /**
      * 这个控件现在处于什么状态——选中、勾选、按下、展开、禁用，以及下拉当前选的是哪一项。
      *
@@ -640,6 +630,7 @@ export async function runObserve(
       url(): string;
       title(): Promise<string>;
       evaluate<T>(fn: () => T): Promise<T>;
+      evaluate<T, A>(fn: (arg: A) => T, arg: A): Promise<T>;
     };
     const title = await page.title().catch(() => "");
     const body = await page
@@ -713,11 +704,43 @@ export async function runObserve(
               el.tagName.toLowerCase() === "input" && ["submit", "button", "reset"].includes((e.type || "").toLowerCase())
                 ? ((e as HTMLInputElement).value || "").trim()
                 : "";
+            /**
+             * **输入框的文案在它的 `<label>` 上。**
+             *
+             * `<label><input type=checkbox> Reduce Only</label>` 是表单最常见的写法：
+             * 输入框自己没有一个字，四样兜底全空，于是它被记成「（无可见文案·输入框）」——
+             * 领域目标「Reduce Only」永远匹配不上它，价格 / 数量 / 杠杆三个框也全是无名氏。
+             * 屏幕上明明写着字，只是写在旁边。先看包裹它的 label，再看 `label[for]`。
+             * 这一条改变了控件文案，所以 collector 版本跟着升到 v3。
+             */
+            const labelText = ((): string => {
+              if (!["input", "select", "textarea"].includes(el.tagName.toLowerCase())) return "";
+              const wrap = el.closest("label") as HTMLElement | null;
+              const forOne = el.id ? (document.querySelector(`label[for="${CSS.escape(el.id)}"]`) as HTMLElement | null) : null;
+              const src = wrap ?? forOne;
+              if (src) {
+                // 只取 label 自己的文字，不带里面控件（按钮）的文案。
+                const own = [...src.childNodes].filter((n) => n.nodeType === 3).map((n) => (n.textContent ?? "").trim()).filter(Boolean).join(" ").slice(0, 60);
+                if (own) return own;
+              }
+              /**
+               * 没有 label 的输入框：看它左边那个兄弟。
+               *
+               * app.hyperliquid.xyz 的 Size / Price 框既无 label、placeholder，也无 aria-label，
+               * 「Size」是并排的一个 div。只认很短的兄弟文字（≤24 字），长了就不是标签。
+               */
+              const prev = (el.previousElementSibling as HTMLElement | null)?.innerText?.trim() ?? "";
+              if (prev && prev.length <= 24 && !/\d{3,}/.test(prev)) return prev.slice(0, 60);
+              const firstInParent = (el.parentElement?.firstElementChild as HTMLElement | null);
+              const head = firstInParent && firstInParent !== el ? (firstInParent.innerText?.trim() ?? "") : "";
+              return head && head.length <= 24 && !/\d{3,}/.test(head) ? head.slice(0, 60) : "";
+            })();
             const label =
               (e.innerText || "").trim() ||
               btnValue ||
               e.getAttribute("aria-label") ||
               e.placeholder ||
+              labelText ||
               e.getAttribute("name") ||
               "";
             // 站外链接标出来。不标，探索会顺着页脚的社交链接走出这个产品。
@@ -855,6 +878,28 @@ export async function runObserve(
               state: bits.join(","),
               selectedNow: ariaSel === "true",
               group: groupId,
+              /**
+               * 往上找最近的「容器」：带 dialog/alertdialog 角色、aria-modal、class 里带
+               * modal/dialog/popup/drawer 的祖先，**或者长得像浮层的祖先**——定位 + z-index≥10 + 够大。
+               * 最后这条是被真产品逼出来的：Hyperliquid 的确认框三样 ARIA 标记一个都没有
+               * （2026-09-12 在 testnet 页面上查过），只认 ARIA 的话容器判据在它身上等于没写。
+               * 找不到就是空——空意味着「不在任何弹窗里」，这正是 within 要区分的那件事。
+               * 下面 charter 文案扫的那一路有同样一段，改这里要一起改。
+               */
+              container: ((): string => {
+                let n: HTMLElement | null = el as HTMLElement;
+                for (let i = 0; n && i < 12; i++, n = n.parentElement) {
+                  const role = n.getAttribute?.("role") || "";
+                  const cls = typeof n.className === "string" ? n.className : "";
+                  const st = getComputedStyle(n);
+                  const floats = (st.position === "fixed" || st.position === "absolute")
+                    && (parseInt(st.zIndex || "0", 10) || 0) >= 10 && n.offsetWidth >= 200 && n.offsetHeight >= 100;
+                  if (role === "dialog" || role === "alertdialog" || n.getAttribute?.("aria-modal") === "true" ||
+                      /modal|dialog|popup|drawer|overlay/i.test(cls) || floats)
+                    return (n.innerText || "").replace(/\s+/g, " ").trim().slice(0, 120);
+                }
+                return "";
+              })(),
               // 能填的：文本类 input、textarea、select。checkbox/radio 这一版先不管——
               // 它们的「坏值」不是空字符串，需要另一套判断。
               width: Math.round(el.getBoundingClientRect().width),
@@ -890,7 +935,15 @@ export async function runObserve(
                 return "text";
               })(),
               form: formSel,
-              submit: type === "submit" || (tag === "button" && (el.getAttribute("type") || "submit") === "submit"),
+              /**
+               * **表单外的 `<button>` 不是提交控件。**
+               *
+               * HTML 把没写 type 的 button 默认成 submit，但提交这件事只在 `<form>` 里才存在。
+               * 实测 perp-lab（2026-09-10）：Limit / Isolated / TP-SL 这些切换按钮全是裸 `<button>`，
+               * 被记成 submit 之后，charter 的「不点提交控件」把整个交易面板拦住了——
+               * 而通用遍历档不看这一位，照点不误，回执里却一条都没有。
+               */
+              submit: !!form && (type === "submit" || (tag === "button" && (el.getAttribute("type") || "submit") === "submit")),
               clickable:
                 /^(button|a)$/.test(tag) ||
                 e.type === "submit" ||
@@ -906,6 +959,105 @@ export async function runObserve(
         note(`控件采集失败：${String(err).slice(0, 120)}`, "warn");
         return [] as Control[];
       });
+    /**
+     * **charter 目标文案驱动的补采：自定义控件。**
+     *
+     * 按 ARIA 角色采集是对的（否则订单簿几百行都成了控件），但 app.hyperliquid.xyz 的
+     * Market / Limit / Pro、Buy / Sell、Reduce Only、TP/SL、底部面板 tab 全是无 role 的
+     * `div`，对采集器不存在——实测这一页只认出 27 个控件，交易面板一个都不在。
+     * 有 charter 时，用目标的文案正则去认 `cursor: pointer` 的叶子元素；只认命中的，
+     * 所以不会把整页可点的东西都铺开。没有 charter 时这一段不跑，旧行为不变。
+     */
+    const extra: Control[] = spec.charter
+      ? await page
+          .evaluate(
+            (patterns: string[]) => {
+              const res: string[][] = [];
+              const seen = new Set<string>();
+              for (const el of document.querySelectorAll("body *")) {
+                const e = el as HTMLElement;
+                const tag = el.tagName.toLowerCase();
+                if (["svg", "path", "g", "script", "style", "input", "select", "textarea", "button", "a"].includes(tag)) continue;
+                if (el.getAttribute("role")) continue;
+                if (typeof e.checkVisibility === "function" && !e.checkVisibility()) continue;
+                const r = e.getBoundingClientRect();
+                if (!(r.width > 0 && r.height > 0)) continue;
+                if (getComputedStyle(e).cursor !== "pointer") continue;
+                const text = (e.innerText || "").trim().replace(/\s+/g, " ");
+                if (!text || text.length > 60) continue;
+                if (!patterns.some((p) => { try { return new RegExp(p, "i").test(text); } catch { return false; } })) continue;
+                // 取叶子：孩子里有同样文字的，说明这一层只是容器。
+                if ([...el.children].some((c) => ((c as HTMLElement).innerText || "").trim().replace(/\s+/g, " ") === text)) continue;
+                const parts: string[] = [];
+                let node: Element | null = el;
+                while (node && node !== document.body && parts.length < 8) {
+                  const parent: Element | null = node.parentElement;
+                  if (!parent) break;
+                  const t = node.tagName.toLowerCase();
+                  const same = [...parent.children].filter((c) => c.tagName === node!.tagName);
+                  parts.unshift(`${t}:nth-of-type(${same.indexOf(node) + 1})`);
+                  node = parent;
+                }
+                const selector = parts.length ? `body ${parts.join(" > ")}` : tag;
+                if (seen.has(selector)) continue;
+                seen.add(selector);
+                const bits: string[] = [];
+                for (const a of ["aria-selected", "aria-checked", "aria-pressed", "aria-expanded", "data-state"]) {
+                  const v = e.getAttribute(a);
+                  if (v !== null) bits.push(`${a.replace("aria-", "").replace("data-", "")}=${v}`);
+                }
+                const cls = typeof (e as unknown as { className?: unknown }).className === "string" ? (e.className as string) : "";
+                const marked = cls.match(/(^|[-_\s])(active|selected|checked|current|on)([-_\s]|$)/i);
+                if (marked) bits.push(`cls:${marked[2].toLowerCase()}`);
+                // 容器文案：charter 的 `match.within` 靠它区分「弹窗里的那个」。判据与上面那一路一致。
+                const container = ((): string => {
+                let n: HTMLElement | null = el as HTMLElement;
+                for (let i = 0; n && i < 12; i++, n = n.parentElement) {
+                  const role = n.getAttribute?.("role") || "";
+                  const cls = typeof n.className === "string" ? n.className : "";
+                  const st = getComputedStyle(n);
+                  const floats = (st.position === "fixed" || st.position === "absolute")
+                    && (parseInt(st.zIndex || "0", 10) || 0) >= 10 && n.offsetWidth >= 200 && n.offsetHeight >= 100;
+                  if (role === "dialog" || role === "alertdialog" || n.getAttribute?.("aria-modal") === "true" ||
+                      /modal|dialog|popup|drawer|overlay/i.test(cls) || floats)
+                    return (n.innerText || "").replace(/\s+/g, " ").trim().slice(0, 120);
+                }
+                return "";
+              })();
+                res.push([tag, text.slice(0, 60), selector, bits.join(","), String(Math.round(r.width)), container]);
+              }
+              return res;
+            },
+            spec.charter.featureTargets.flatMap((t) => t.match.label),
+          )
+          .then((rows) =>
+            rows
+              .filter(([, , selector]) => !elements.some((c) => c.selector === selector))
+              .map(([tag, text, selector, state, width, container]): Control => ({
+                display: `${tag}: ${text}`,
+                label: text!,
+                selector: selector!,
+                container: container ?? "",
+                href: "",
+                external: false,
+                role: "",
+                state: state!,
+                selectedNow: /selected=true|checked=true|cls:(on|active|selected)/.test(state!),
+                group: "",
+                width: Number(width),
+                fillable: false,
+                fieldKind: "",
+                form: "",
+                submit: false,
+                clickable: true,
+              })),
+          )
+          .catch((err: Error) => {
+            note(`charter 补采失败：${String(err).slice(0, 120)}`, "warn");
+            return [] as Control[];
+          })
+      : [];
+    if (extra.length) elements.push(...extra);
     /**
      * 组配额：一个控件组最多留 `groupCap` 项，其余按顺序丢，但**把丢了多少记下来**。
      *
@@ -961,7 +1113,10 @@ export async function runObserve(
    * 过紧会把探索过的当成新的（冗余，原地打转）。今天这两种我都撞过一次。
    * 所以它是可替换的一族函数，名字随图一起记下来。
    */
-  const abstract = abstractionOf(spec.stateAbstraction);
+  // charter 模式默认用看得见选中态的那把尺子：合约页的业务全在页内切换里，
+  // 只看控件集合的尺子会把每一次成功的切换记成「没有新界面」。显式传了名字仍以传的为准。
+  const abstractionName = spec.stateAbstraction ?? (spec.charter ? "route+controls+state/norm" : undefined);
+  const abstract = abstractionOf(abstractionName);
   const signatureOf = (screen: { url: string; controls: string[]; title?: string; states?: string[] }): string =>
     abstract(screen);
 
@@ -1027,6 +1182,26 @@ export async function runObserve(
     };
 
     const first = await snapshot("入口页");
+    const entryRoute = pathOf(first.url);
+    /**
+     * charter 记账。有 charter 时不再问模型猜故事：候选任务来自规则包，真正的故事
+     * 等产品模型出来之后才写。`session` 这个前提只在环境配了登录步骤时算满足。
+     */
+    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.login?.length ? ["session"] : []) : undefined;
+    if (spec.charter) note(`charter ${spec.charter.id}：${spec.charter.featureTargets.length} 个目标，规则包 ${spec.charter.rulePack.id}@${spec.charter.rulePack.version}`);
+    let charterShots = 0;
+    const charterShot = async (): Promise<string | undefined> => {
+      if (!session) return undefined;
+      try {
+        const dir = resolve(spec.artifactDir, "charter");
+        mkdirSync(dir, { recursive: true });
+        const path = resolve(dir, `${spec.execId}-${charterShots++}.jpg`);
+        writeFileSync(path, await session.page.screenshot({ type: "jpeg", quality: 60 }));
+        return path;
+      } catch {
+        return undefined;
+      }
+    };
 
     /**
      * **探索之前先问一次：这是什么业务，人在这里可能要完成哪些事。**
@@ -1041,7 +1216,7 @@ export async function runObserve(
      * 具体点哪个、怎么点，仍然由代码按选择器执行。
      */
     let plan: ScenarioPlan | undefined;
-    if (spec.ask && spec.scenarioFirst !== false) {
+    if (spec.ask && spec.scenarioFirst !== false && !spec.charter) {
       plan = await askForScenarios(spec, first, note).catch((e) => {
         note(`问业务场景失败，退回按控件表探索：${(e as Error).message}`, "warn");
         return undefined;
@@ -1087,6 +1262,10 @@ export async function runObserve(
       return id;
     };
     let currentId = idFor(first);
+    if (tracker) {
+      const found = tracker.noteState(currentId, entryRoute, first.elements, 0);
+      note(`入口页命中 ${found.length} 个 charter 目标：${found.map((t) => `${t.targetSpecId}=「${t.label}」`).join("，") || "（无）"}`);
+    }
     /**
      * 试过什么，按**地址**记，不按屏幕签名记。
      *
@@ -1252,6 +1431,12 @@ export async function runObserve(
           shape: string;
           /** 页内广度优先时它属于哪个控件组。切完要记"这一组的这一项试过了"。 */
           group?: string;
+          /** 这是 charter 里的一个目标。回执按它记，dry 计数对它豁免。 */
+          charter?: { stableId: string; specId: string; featureId: string };
+          /** charter 的 fill 目标要填的值（规则包声明）。 */
+          fillValue?: string;
+          /** charter 目标声明的容器文案（`match.within`）：点之前按它把元素重新找回来。 */
+          within?: string[];
         }
       | { key: string; kind: "goto"; href: string }
       /**
@@ -1266,6 +1451,19 @@ export async function runObserve(
        * 那是下一步的事。
        */
       | { key: string; kind: "probe"; form: string; submit: string; label: string; variant: ProbeVariant; rest: number; via: "submit" | "enter" };
+    /**
+     * charter 模式下，通用遍历档也不许碰这些：命中 state-change 目标的（Place Order、
+     * Cancel All）、命中禁点词表的。charter 已经对它们做了「blocked」这个决定，
+     * 通用档绕过去点一下，就把探索变成了下单。
+     */
+    const charterForbids = (c: Control): boolean => {
+      if (!spec.charter) return false;
+      const here = pathOf(current.url);
+      // 命中任何 charter 目标的控件都归 charter 档管：试过的不必再试，拦下的不许绕过。
+      // 实测（2026-09-10）：通用档按自己的去重键把 Isolated 又点了一次，把已经切回 cross 的模式再切走。
+      if (spec.charter.featureTargets.some((t) => matchTarget(c, t, here))) return true;
+      return spec.charter.actionsPolicy.forbidLabels.some((re) => { try { return new RegExp(re, "i").test(c.label); } catch { return false; } });
+    };
     const nextAction = (screen: { url: string; elements: Control[] }): Step | undefined => {
       const here = pathOf(screen.url);
       // 有密码框就先登录：凭证写在页面上（演示站的常见做法），那一句需要看着页面判断，
@@ -1312,6 +1510,30 @@ export async function runObserve(
         const back = probeReturn;
         probeReturn = undefined;
         return { key: `__probeback__${back}`, kind: "goto", href: back };
+      }
+
+      /**
+       * **charter 目标优先于一切遍历。**
+       *
+       * 这一档按规则包里目标的顺序（领域顺序）挑，不按 DOM 顺序；普通 button、
+       * checkbox、自定义控件都行，不要求它在某个 ARIA 组里——原探索把 Isolated /
+       * 10x / Reduce Only 这些普通按钮排在了路由之后，8 屏预算全花在离开交易页上。
+       * 副作用等级为 state-change 的目标永远不会从这里出来，它们在 noteState 时已记 blocked。
+       */
+      if (tracker) {
+        const pick = tracker.next(here, screen.elements);
+        if (pick)
+          return {
+            key: `__charter__${pick.target.stableId}`,
+            kind: "click",
+            selector: pick.control.selector,
+            label: pick.control.label,
+            shape: `charter:${pick.spec.id}`,
+            charter: { stableId: pick.target.stableId, specId: pick.spec.id, featureId: pick.spec.featureId },
+            ...(pick.spec.match.within.length ? { within: pick.spec.match.within } : {}),
+            // fill 目标：填这个声明好的值，而不是点它。值来自规则包，探索不自己编。
+            ...(pick.spec.action === "fill" && pick.spec.value ? { fillValue: pick.spec.value } : {}),
+          };
       }
 
       const submitBtn = screen.elements.find((e) => e.submit && e.form);
@@ -1398,6 +1620,7 @@ export async function runObserve(
       const inPageCandidates = ordered.filter(
         (c) =>
           !c.external &&
+          !charterForbids(c) &&
           !!c.group &&
           IN_PAGE_ROLES.has(c.role) &&
           !c.selectedNow &&
@@ -1458,6 +1681,7 @@ export async function runObserve(
         if (offsiteSection(c.href)) continue;
         if (deadHref.has(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
+        if (!routeAllowed(spec.charter, entryRoute, pathOf(new URL(c.href, screen.url).toString()))) continue;
         return { key: c.href, kind: "goto", href: c.href };
       }
 
@@ -1554,12 +1778,14 @@ export async function runObserve(
           continue;
         }
         if (sfgStates.some((st) => st.route === route)) continue;
+        if (!routeAllowed(spec.charter, entryRoute, route)) continue;
         return { key: href, kind: "goto", href };
       }
 
       for (const c of ordered) {
         // 外站不点：探索的对象是这个产品，不是它页脚链到的地方。
         if (c.external || !c.clickable || OFF_LIMITS.test(c.display)) continue;
+        if (charterForbids(c)) continue;
         /**
          * 指向别处的链接直接走过去；**指向当前地址的不是「没地方去」，是 JS 驱动的链接**。
          *
@@ -1572,6 +1798,7 @@ export async function runObserve(
         if (c.href && c.href !== here && !deadHref.has(c.href)) {
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           if (offsiteSection(c.href)) continue;
+          if (!routeAllowed(spec.charter, entryRoute, pathOf(new URL(c.href, screen.url).toString()))) continue;
           return { key: c.href, kind: "goto", href: c.href };
         }
         /**
@@ -1704,12 +1931,14 @@ export async function runObserve(
       // 页内切换按「路由::组::文案」记，同一项不再切第二次。选择器会随重渲染变，文案不会。
       if (next.kind === "click" && next.group)
         triedInPage.add(`${pathOf(current.url)}::${next.group}::${next.label}`);
+      if (next.kind === "click" && next.charter) tracker!.markAttempted(next.charter.stableId);
 
       try {
         const page = session!.page as unknown as {
           goto: (u: string) => Promise<unknown>;
           goBack: () => Promise<unknown>;
           $eval: (sel: string, fn: (el: unknown, arg?: unknown) => unknown, arg?: unknown) => Promise<unknown>;
+          evaluate: (fn: (arg: never) => unknown, arg?: unknown) => Promise<unknown>;
           press: (sel: string, key: string, opts?: { timeout?: number }) => Promise<unknown>;
           fill: (sel: string, value: string, opts?: { timeout?: number }) => Promise<unknown>;
         };
@@ -1800,6 +2029,64 @@ export async function runObserve(
            * `data-test` 这种名字屏幕上根本不显示，模型找不到，而且**不报错，只是什么都不做**
            * ——一次实测里连着四轮都是这样，每一轮都被记成「没有新界面」。
            */
+          if (next.fillValue !== undefined) {
+            /**
+             * 填一个**规则包声明过的**值。
+             *
+             * 为什么非要有这一步：2026-09-12 实测，会话签完之后 `Place Order` 出现了，
+             * 点它什么都没发生——Size 是空的。提交这个功能差的不是权限，是一个值。
+             * 用页内赋值 + input 事件，和点击那条路同一个理由：受控组件只认事件，不认键盘。
+             */
+            note(`第 ${rounds} 轮：往 ${next.label} 填 ${next.fillValue}（${next.selector}）`);
+            /**
+             * **填之前也要先把这个框找回来**——和点击那条路同一个理由，我先只改了点击。
+             *
+             * 2026-09-12 实测：链已经连成一段（填量紧挨着下单），填那一下的 effect 却是空的，
+             * 屏幕上是 `Est: 0%`；上一次填成功时会多出 `Est: 60.0000%`。原因是这个框的
+             * nth-of-type 路径在二十多轮重渲染之后指到了别处，值写进了看不见的地方，
+             * 然后产品拒单：`Order could not match against any resting orders`。
+             * 输入框的「文案」按采集时那套兜底认：aria-label / placeholder / 旁边的短标签 / name。
+             */
+            const filled = (await page.evaluate(((({ sel, label, v }: { sel: string; label: string; v: string }) => {
+              const named: HTMLElement[] = [];
+              const all = document.querySelectorAll("input,textarea");
+              for (let i = 0; i < all.length; i++) {
+                const el = all[i] as HTMLInputElement;
+                if (!el.offsetWidth || !el.offsetHeight || el.disabled) continue;
+                let name = (el.getAttribute("aria-label") || el.placeholder || "").trim();
+                if (!name) {
+                  const prev = (el.previousElementSibling as HTMLElement | null);
+                  const t = (prev?.innerText || "").trim();
+                  if (t && t.length <= 24) name = t;
+                }
+                if (!name) {
+                  const first = el.parentElement ? (el.parentElement.firstElementChild as HTMLElement | null) : null;
+                  const t = first && first !== el ? (first.innerText || "").trim() : "";
+                  if (t && t.length <= 24) name = t;
+                }
+                if (!name) name = el.getAttribute("name") || "";
+                if (name.slice(0, 60) === label) named.push(el);
+              }
+              const at = document.querySelector(sel) as HTMLInputElement | null;
+              const target = at && named.indexOf(at) >= 0 ? at : named.length === 1 ? (named[0] as HTMLInputElement) : null;
+              if (!target) return `ambiguous:${named.length}`;
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+              if (setter) setter.call(target, String(v)); else target.value = String(v);
+              target.dispatchEvent(new Event("input", { bubbles: true }));
+              target.dispatchEvent(new Event("change", { bubbles: true }));
+              return target === at ? "selector" : "relocated";
+            }) as unknown) as (arg: never) => unknown, { sel: next.selector, label: next.label, v: next.fillValue })) as string;
+            if (filled !== "selector") note(`第 ${rounds} 轮：${next.label} 这个框的路径已经过时（${filled}）`);
+            if (filled.startsWith("ambiguous")) {
+              if (next.charter && tracker)
+                tracker.record({
+                  targetId: next.charter.stableId, targetSpecId: next.charter.specId, featureId: next.charter.featureId,
+                  status: "blocked", stateBefore: currentId, reason: `field_${filled}`, round: rounds,
+                  controlsAfter: [], evidenceRefs: [`sfg:state:${currentId}`],
+                });
+              continue;
+            }
+          } else {
           note(`第 ${rounds} 轮：点 ${next.label}（${next.selector}）`);
           /**
            * **页内 DOM 点击，不是真实鼠标点击。**
@@ -1808,7 +2095,92 @@ export async function runObserve(
            * `el.click()` 换。这类链接靠 JS 处理，真实鼠标的落点到不了它的处理器上。
            * 探索要的是覆盖，不是交互保真——保真是执行用例那一层的事。
            */
-          await page.$eval(next.selector, (el) => (el as HTMLElement).click());
+          /**
+           * **点之前先核对这条路径还是不是那个控件。**
+           *
+           * 2026-09-12 实测：确认弹窗里的 `Buy / Long` 采集时路径是
+           * `body div:nth-of-type(1) > … > button:nth-of-type(1)`；等轮到点它，
+           * 交易页已经重渲染过，同一条路径上坐着的是上一个弹窗的按钮。回执上是
+           * 「T-CONFIRM-ACT attempted」，而历史委托里一条单都没有——**点了，点错了，
+           * 还记成点对了**。`stableId` 早就不用 nth-of-type（文案不会漂），
+           * 真正点下去的那一下却还在用采集那一刻的路径。
+           *
+           * 所以：路径上的控件文案对不上，就按文案（以及 charter 声明的容器）重新找。
+           * 找不到唯一的一个就不点——宁可这一轮空过，也不要一次点错被记成点对。
+           */
+          const clicked = (await page.evaluate(((({ sel, label, within }: { sel: string; label: string; within?: string[] }) => {
+            /**
+             * 这段在浏览器里跑，**不能出现具名函数**：tsx 会给 `const f = () => {}` 套一层
+             * `__name(...)`，那个辅助在页面里不存在，搬进去就是 `__name is not defined`——
+             * 2026-09-12 实测，整轮探索第 3 轮就 stuck，三个目标全记成 failed。所以下面全是循环。
+             */
+            const at = document.querySelector(sel);
+            if (at && ((at as HTMLElement).innerText || (at as HTMLInputElement).value || at.getAttribute("aria-label") || "")
+              .replace(/\s+/g, " ").trim() === label) { (at as HTMLElement).click(); return "selector"; }
+            const hits: HTMLElement[] = [];
+            const els = document.querySelectorAll("button,a,div,span,input,label");
+            for (let i = 0; i < els.length; i++) {
+              const e = els[i] as HTMLElement;
+              const t = (e.innerText || (e as HTMLInputElement).value || e.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+              if (t !== label || !e.offsetWidth || !e.offsetHeight) continue;
+              if (within && within.length) {
+                let container = "";
+                for (let n: HTMLElement | null = e, k = 0; n && k < 12; k++, n = n.parentElement) {
+                  const role = n.getAttribute ? n.getAttribute("role") || "" : "";
+                  const cls = typeof n.className === "string" ? n.className : "";
+                  const st = getComputedStyle(n);
+                  const floats = (st.position === "fixed" || st.position === "absolute")
+                    && (parseInt(st.zIndex || "0", 10) || 0) >= 10 && n.offsetWidth >= 200 && n.offsetHeight >= 100;
+                  if (role === "dialog" || role === "alertdialog" || (n.getAttribute && n.getAttribute("aria-modal") === "true") ||
+                      /modal|dialog|popup|drawer|overlay/i.test(cls) || floats) {
+                    container = (n.innerText || "").replace(/\s+/g, " ").trim().slice(0, 120);
+                    break;
+                  }
+                }
+                let ok = false;
+                for (let j = 0; j < within.length; j++) {
+                  try { if (new RegExp(within[j]!, "i").test(container)) { ok = true; break; } } catch { /* 坏正则当不匹配 */ }
+                }
+                if (!ok) continue;
+              }
+              hits.push(e);
+            }
+            /**
+             * 同一句文案常常同时命中按钮和它里面的 span——那不是歧义，是一个控件的两层。
+             * 先只留最里层（剔掉「包着另一个命中项」的那些），再优先按钮类。
+             */
+            const inner: HTMLElement[] = [];
+            for (let i = 0; i < hits.length; i++) {
+              let wraps = false;
+              for (let j = 0; j < hits.length; j++) if (i !== j && hits[i]!.contains(hits[j]!)) { wraps = true; break; }
+              if (!wraps) inner.push(hits[i]!);
+            }
+            let pick = inner;
+            if (pick.length > 1) {
+              const buttons: HTMLElement[] = [];
+              for (let i = 0; i < pick.length; i++) {
+                const el = pick[i]!;
+                const r = el.getAttribute ? el.getAttribute("role") || "" : "";
+                if (el.tagName === "BUTTON" || el.tagName === "A" || r === "button") buttons.push(el);
+              }
+              if (buttons.length === 1) pick = buttons;
+            }
+            if (pick.length !== 1) return `ambiguous:${pick.length}`;
+            pick[0]!.click();
+            return "relocated";
+          }) as unknown) as (arg: never) => unknown, { sel: next.selector, label: next.label, within: next.within })) as string;
+          if (clicked !== "selector") note(`第 ${rounds} 轮：${next.label} 的路径已经过时（${clicked}）`);
+          if (clicked.startsWith("ambiguous")) {
+            // 没点成要如实记：留空的话回执上是 `found_not_activated`，读起来像「预算没到」。
+            if (next.charter && tracker)
+              tracker.record({
+                targetId: next.charter.stableId, targetSpecId: next.charter.specId, featureId: next.charter.featureId,
+                status: "blocked", stateBefore: currentId, reason: `control_${clicked}`, round: rounds,
+                controlsAfter: [], evidenceRefs: [`sfg:state:${currentId}`],
+              });
+            continue;
+          }
+          }
         } else {
           // 日志里留模板，明文永不落盘——和执行用例同一条规矩。
           note(`第 ${rounds} 轮：${next.instruction}`);
@@ -1915,8 +2287,31 @@ export async function runObserve(
               ? { note: "状态未变" }
               : { note: "回到已知状态" }),
         });
+        if (next.kind === "click" && next.charter) {
+          const shotPath = await charterShot();
+          tracker!.record({
+            targetId: next.charter.stableId,
+            targetSpecId: next.charter.specId,
+            featureId: next.charter.featureId,
+            status: "attempted",
+            stateBefore: cameFrom,
+            stateAfter: toId,
+            action: { kind: "click", target: next.label, selector: next.selector },
+            ...(effect.changed
+              ? { effect: { controlsAdded: effect.controlsAdded, controlsRemoved: effect.controlsRemoved, stateChanged: effect.stateChanged, textAdded: effect.textAdded.slice(0, 12) } }
+              : { reason: "no_effect" }),
+            controlsAfter: after.controls,
+            evidenceRefs: [`sfg:edge:${sfgEdges.length - 1}`, `sfg:state:${toId}`, ...(shotPath ? [`shot:${shotPath}`] : [])],
+            round: rounds,
+          });
+          note(`charter 目标 ${next.charter.specId}：${effect.changed ? `有效果（+${effect.controlsAdded.length} 控件，${effect.stateChanged.length} 处状态变化）` : "没有变化——也记入回执"}`);
+        }
         currentId = toId;
         current = after;
+        if (tracker) {
+          const found = tracker.noteState(toId, pathOf(after.url), after.elements, rounds);
+          if (found.length) note(`这一屏新命中 ${found.length} 个 charter 目标：${found.map((t) => t.targetSpecId).join("，")}`);
+        }
         // 实验把页面带走了，而这张表单还有没做完的档——下一轮先回去。
         if (probeOrigin && pathOf(after.url) !== pathOf(probeOrigin)) probeReturn = probeOrigin;
         if (seen.has(sig)) {
@@ -1959,6 +2354,9 @@ export async function runObserve(
            */
           if (next.kind === "click" && next.group && !effect.changed)
             dryGroups.add(`${pathOf(current.url)}::${next.group}`);
+          // charter 目标是计划内的工作，不是原地打转：它没换来新界面也不吃 dry 预算，
+          // 否则三个不换屏的开关就能把一次探索提前结束。
+          if (next.kind === "click" && next.charter) continue;
           // 原地打转也要记一笔：它是「这个产品就这么大」和「探索走不动了」之间的区别。
           dry += 1;
           note(`没有新界面（连续 ${dry}/${dryLimit} 次）`, "warn");
@@ -1985,6 +2383,8 @@ export async function runObserve(
                 ? `${PROBE_WORDS[next.variant]} ${next.label}`
                 : next.instruction;
         missed.push(`${what} —— ${why}`);
+        if (next.kind === "click" && next.charter)
+          tracker!.record({ targetId: next.charter.stableId, targetSpecId: next.charter.specId, featureId: next.charter.featureId, status: "failed", stateBefore: currentId, action: { kind: "click", target: next.label, selector: next.selector }, controlsAfter: [], evidenceRefs: [`sfg:edge:${sfgEdges.length}`], reason: why, round: rounds });
         // 走不通也是一条边：它记的是「这条路走不过去」，而那正是下游「没有答案的地方」
         // 的来源之一。丢掉它，材料就只剩成功路径，看起来像这个产品没有走不通的地方。
         sfgEdges.push({
@@ -2076,7 +2476,7 @@ export async function runObserve(
     const graph: StateFlowGraph = {
       // 记**实际生效**的那把尺子。此前这里写 "route+controls"，而挑函数时回落到的是
       // "route+controls/norm"——两个回落值不一致，图从第一天起就在说谎。
-      abstraction: abstractionNameOf(spec.stateAbstraction),
+      abstraction: abstractionNameOf(abstractionName),
       /**
        * 这次探索走的是什么计划。
        *
@@ -2087,7 +2487,8 @@ export async function runObserve(
         ? { asked: true, business: plan.business, stories: plan.stories.map((s) => ({ id: s.id, title: s.title, priority: s.priority })) }
         : { asked: false, business: "", stories: [] },
       // 见 sfg.ts 的 `collector`：采集规则变了，同一个抽象公式算出来的签名也就变了。
-      collector: "aria-roles/v2",
+      // v3（2026-09-10）：输入框从包裹它的 <label> 取文案。见 snapshot 里 labelText 那段。
+      collector: "aria-roles/v3",
       entry: sfgStates[0]?.id ?? "",
       states: sfgStates,
       transitions: sfgEdges,
@@ -2095,6 +2496,9 @@ export async function runObserve(
       stopped,
       unvisited,
     };
+
+    const report = tracker?.report(graph, stopped ?? { kind: "unknown" }, { maxScreens, screens: screens.length, rounds, maxRounds });
+    if (report) note(`charter 回执：${report.completion}，目标 ${report.coverage.targetsPlanned}：已试 ${report.coverage.targetsAttempted} / 仅看见 ${report.coverage.targetsObservedOnly} / 阻塞 ${report.coverage.targetsBlocked} / 未找到 ${report.coverage.targetsNotFound}`);
 
     const coverage = [
       "===== 这次探索走到哪为止 =====",
@@ -2104,17 +2508,32 @@ export async function runObserve(
       "这份材料只覆盖上面列出的界面。没有出现在这里的功能，是没有被看到，不是不存在。",
     ].join("\n");
 
+    /**
+     * 收尾这几步是**同步的**，而 runner 的心跳阈值是 1 秒 × 3 次。
+     * 2026-09-12 实测：探索打完回执 3 秒后 runner 被 SIGKILL（`no heartbeat for 3097ms`），
+     * 整次运行连回执都没写出来——探索全跑完了，材料全丢了。所以这里逐段计时，
+     * 哪一段在逼近那三秒，日志上看得见。
+     */
+    const t0 = Date.now();
+    const summary = report ? `${describeGraph(graph)}\n\n${describeReport(report)}` : describeGraph(graph);
+    const t1 = Date.now();
+    const notes = budgeted(screens, summary, coverage);
+    const t2 = Date.now();
+    const shotRef = await shot(session);
+    note(`收尾用时：回执摘要 ${t1 - t0}ms / 材料 ${t2 - t1}ms / 截图 ${Date.now() - t2}ms`);
+
     return {
       // 图的摘要跟着材料一起走：下游整理规格时**先看结构再看正文**——
       // 实证研究的结论是「精简的功能级上下文」对 LLM 最有效，原始屏幕转储不是。
-      notes: budgeted(screens, describeGraph(graph), coverage),
+      notes,
       url: spec.url,
       log,
-      shotRef: await shot(session),
+      shotRef,
       screens: screens.length,
       stoppedBecause,
       stopped,
       graph,
+      ...(report ? { report } : {}),
     };
   } finally {
     await session?.cleanup();

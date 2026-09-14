@@ -4,6 +4,7 @@ import {
   captureSession,
   checkWallet,
   executeRun,
+  releaseRunSession,
   walletDappTest,
   runDebug,
   runExplore,
@@ -25,12 +26,16 @@ import {
 } from "@testpilot/harness-testing";
 import type { ChainAssertion, MachineOracle, StorageState } from "@testpilot/harness-testing";
 import type { ResolveContext } from "@testpilot/harness-core";
+import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
 
 /**
  * One execution = one browser session, then the process is free again. The runner is
  * stateless on purpose: everything it learns leaves in the result or on the event bus.
  */
 export interface ExecSpec {
+  /** Server resolves this project's executor before dispatch. */
+  scopeProjectId?: string;
+  modelSnapshotRunId?: string;
   execId: string;
   url: string;
   steps: string[];
@@ -38,20 +43,30 @@ export interface ExecSpec {
   /** Where step screenshots are written. Refs travel back, bytes do not. */
   artifactDir: string;
   opts: {
+    executorModel?: RoleModelConnection;
+    modelBudget?: { maxCalls?: number; deadlineAt?: number };
     injected?: boolean;
     wallet?: boolean;
     rpcUrl?: string;
     chainId?: number;
     cacheId?: string;
+    /** 批次级浏览器复用的 key（07 T-28）。 */
+    sessionKey?: string;
     login?: string[];
     postSteps?: string[];
     resolve?: ResolveContext;
     rowLabel?: string;
     extraHeaders?: Record<string, string>;
     query?: Record<string, string>;
+    /** 探索记下的控件文案与选择器；执行时先试它，验不过就交回模型。见 run.ts 的 byLocator。 */
+    locators?: Array<{ label: string; selector: string; featureId?: string }>;
     storageState?: StorageState | null;
     /** A check a program settles. When present the model is never asked for the verdict. */
     oracle?: MachineOracle;
+    /** v2 把判据挂在每条断言上；不带过来的话 tier 1 在执行时只是一个标签。见 run.ts。 */
+    assertions?: Array<{ id?: string; statement: string; oracle?: MachineOracle }>;
+    /** 这个被测对象要多大的视口。不给用执行器默认的 1024×720。 */
+    viewport?: { width?: number; height?: number };
     /**
      * 这一次要注进浏览器的变异体。
      *
@@ -80,13 +95,16 @@ export type ExecResult = Omit<RunResult, "pngBuffers" | "screenshots"> & {
 };
 
 export async function execCase(spec: ExecSpec): Promise<ExecResult> {
+  const controller = new AbortController();
+  live.set(spec.execId, { cancel: () => controller.abort() });
+  try {
   const dir = resolve(spec.artifactDir, "exec");
   mkdirSync(dir, { recursive: true });
   const { pngBuffers, screenshots: _dataUrls, ...rest } = await executeRun(
     spec.url,
     spec.steps,
     spec.expected,
-    spec.opts,
+    { ...spec.opts, signal: controller.signal },
   );
   void _dataUrls;
   const pngPaths = pngBuffers.map((buf, i) => {
@@ -95,7 +113,11 @@ export async function execCase(spec: ExecSpec): Promise<ExecResult> {
     return path;
   });
   return { ...rest, pngPaths };
+  } finally { live.delete(spec.execId); }
 }
+
+/** 批次结束时关掉复用的浏览器。 */
+export const releaseSession = (key: string): Promise<boolean> => releaseRunSession(key);
 
 /* ---- interactive sessions (explore / live debug) ---- */
 // These stream frames instead of returning one result. The frames go out on the event bus

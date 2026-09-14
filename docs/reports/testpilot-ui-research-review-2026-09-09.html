@@ -1,0 +1,1115 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TestPilot · 当前 UI 与本地实施计划</title><style>
+:root{--bg:#f7f6f1;--white:#fff;--ink:#233e38;--muted:#68736b;--green:#176559;--line:#d8ded5;--amber:#93611e}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:25px}body{margin:0;color:var(--ink);background:var(--bg);font:15px/1.85 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}a{color:var(--green);text-underline-offset:4px}a:focus-visible,button:focus-visible{outline:3px solid #c59345;outline-offset:5px}.layout{display:grid;grid-template-columns:235px minmax(0,1fr)}.rail{padding:34px 24px;position:sticky;top:0;height:100vh;border-right:1px solid var(--line);background:#eef1e9;display:flex;flex-direction:column}.wordmark{font-size:24px;letter-spacing:-1px;font-weight:750}.small{font-size:12px;color:var(--muted)}.rail nav{margin-top:36px;display:grid;gap:6px}.rail nav a{padding:10px 6px;text-decoration:none;color:var(--ink)}.rail nav a:hover{background:#e0e9dd}.rail footer{margin-top:auto;font-size:12px;color:var(--muted)}main{min-width:0;padding:48px 5vw 80px;max-width:1480px}.eyebrow{font-size:12px;letter-spacing:2px;color:var(--green);text-transform:uppercase}h1{font-size:clamp(34px,4.2vw,57px);font-weight:630;letter-spacing:-2px;line-height:1.18;margin:20px 0 23px;max-width:1000px}h2{font-size:29px;letter-spacing:-.8px;line-height:1.4;margin:0 0 12px}h3{font-size:22px;margin:38px 0 13px;line-height:1.45}h4,h5{font-size:17px;margin:28px 0 12px}.intro{font-size:18px;color:var(--muted);max-width:960px;line-height:1.8}.label{border:1px solid #cdd9cd;background:#eaf1e5;color:var(--green);padding:4px 9px;font-size:12px;border-radius:4px}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.button{display:inline-block;text-decoration:none;border:1px solid var(--green);border-radius:5px;padding:11px 17px;font-size:14px;background:var(--green);color:white}.button.secondary{background:transparent;color:var(--green)}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:23px;margin:34px 0}.fact{border-top:2px solid var(--green);padding-top:18px}.fact strong{display:block;font-size:21px;margin-bottom:7px}.fact p{font-size:14px;color:var(--muted);margin:0}.callout{border-left:4px solid #c18a37;background:#f7eddc;padding:20px 24px;margin:26px 0}.callout p{margin:5px 0}.chapter{padding-top:45px;margin-top:45px;border-top:1px solid var(--line)}.chapter-toc{display:flex;flex-wrap:wrap;gap:8px 18px;padding:18px 0;font-size:12px;border-bottom:1px solid var(--line)}.chapter-toc a{text-decoration:none}.chapter p,.chapter li{max-width:1120px}li{margin:7px 0}.tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);background:white;border-radius:5px}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.75}th,td{padding:14px 16px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;min-width:115px}th{background:#edf1e8;font-weight:600}tr:last-child td{border-bottom:0}code{font:12px/1.65 ui-monospace,SFMono-Regular,monospace;background:#e9eee5;padding:2px 5px;border-radius:3px;overflow-wrap:anywhere}pre{background:#1f3933;color:#e9eee6;padding:21px;overflow:auto;font-size:12px;border-radius:6px}pre code{background:transparent;color:inherit;padding:0}.screens{display:grid;grid-template-columns:repeat(3,1fr);gap:17px;margin:24px 0}.screens figure{margin:0}.screens img{width:100%;aspect-ratio:1/1;object-fit:cover;object-position:top;border:1px solid var(--line);border-radius:5px}.screens figcaption{font-size:12px;color:var(--muted);line-height:1.7;margin-top:9px}.flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:24px 0}.flow a{display:block;border:1px solid var(--line);padding:17px 13px;background:white;text-decoration:none;border-radius:5px}.flow small{display:block;font-size:11px;margin-top:5px;color:var(--muted)}.layers{display:grid;gap:9px;margin-top:24px}.layers div{padding:17px 20px;background:white;border-left:4px solid var(--green)}.layers strong{display:inline-block;min-width:145px;font-size:14px}.layers span{font-size:13px;color:var(--muted)}.caption{font-size:12px;color:var(--muted)}.end{margin-top:60px;font-size:12px;color:var(--muted)}@media(max-width:1000px){.layout{grid-template-columns:1fr}.rail{position:static;height:auto;padding:18px 22px}.rail nav{display:flex;flex-wrap:wrap;margin-top:12px;gap:0 18px}.rail footer{display:none}main{padding:32px 22px}.screens{grid-template-columns:1fr 1fr}.flow{grid-template-columns:repeat(3,1fr)}}@media(max-width:620px){.facts,.screens{grid-template-columns:1fr}.flow{grid-template-columns:1fr 1fr}.intro{font-size:16px}h1{letter-spacing:-1px}.layers strong{display:block}th,td{padding:11px;min-width:140px}}@media print{.rail,.button,.chapter-toc{display:none}.layout{display:block}main{padding:0;max-width:none}body{background:white;color:#111;font-size:11px}.chapter{break-before:page}h1{font-size:35px}table{font-size:10px}.tablewrap{overflow:visible}.screens{grid-template-columns:repeat(3,1fr)}a{color:inherit}pre{white-space:pre-wrap}.callout,.fact,figure{break-inside:avoid}}
+
+.rail{overflow-y:auto}.rail nav{margin-top:22px;gap:1px}.rail nav a{padding:7px 6px}.rail footer{padding-top:22px}.archive{margin-top:24px}.archive summary,.task summary{cursor:pointer}.task{margin:12px 0;border:1px solid var(--line);border-radius:6px;background:var(--white)}.task summary{display:flex;align-items:center;gap:12px;padding:16px}.task summary:before{content:'＋';color:var(--green)}.task[open] summary:before{content:'−'}.task summary span{flex:1;font-size:15px}.task summary code{font-size:13px}.task-status{font-size:11px;font-weight:500;color:var(--muted);white-space:nowrap}.task[data-status=blocked] .task-status{color:var(--amber)}.task-body{padding:0 20px 12px;border-top:1px solid var(--line)}.task-tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:22px}.task-tools input,.task-tools select{font:inherit;border:1px solid var(--line);border-radius:5px;padding:8px;background:white;color:var(--ink)}.task-tools input{min-width:200px;flex:1}.task-tools button{font:inherit;padding:7px 10px;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--green);cursor:pointer}#task-count{font-size:12px;color:var(--muted)}[hidden]{display:none!important}.task:target{border-color:var(--green)}.task summary:focus-visible,summary:focus-visible{outline:3px solid #c59345;outline-offset:2px}@media(max-width:620px){.task summary{flex-wrap:wrap;padding:12px}.task summary span{min-width:65%}.task-tools input{width:100%}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{.task-tools{display:none}.task-body{display:block!important}.task[hidden]{display:block!important}.task summary:before{display:none}}
+</style></head><body><div class="layout"><aside class="rail"><div class="wordmark">TestPilot</div><div class="small">UI / LOCAL CODE / RESEARCH</div><nav aria-label="报告目录"><a href="#overview">实施概览</a><a href="#walkthrough">当前 UI 路径</a><a href="#architecture">代码分层</a><a href="#codex-acceptance">Codex 宿主真实验收</a><a href="#implementation">本地实施与真实验收</a><a href="#tasks">本地实施任务与验收</a><a href="#design">当前 UI 与用户故事</a><a href="#product-model">产品结构、来源与知识</a><a href="#evaluation-guide">报告、基线与评测使用</a><a href="#research">论文与受控自进化</a><a href="#install">Claude / Codex 安装</a></nav><footer>2026-09-10 当前实施基线<br>P 台账是新任务状态源<br><a href="history/testpilot-ui-research-review-2026-09-10-before-implementation-plan.html">修改前报告</a></footer></aside><main><section id="overview">
+  <div class="eyebrow">Local implementation plan · 2026.09.10</div>
+  <h1>把当前工作台，<br>落到真实运行与证据。</h1>
+  <p class="intro">面向垂直领域的测试生成 Harness Agent。以当前原型为交互基线，在现有 React、运行服务与宿主协议上增量实施；产品闭环与论文证据分别验收。</p>
+  <div class="row"><span class="label">当前 UI 已对齐</span><span class="label">主链路已落地</span><span class="label">研究结论待验证</span></div>
+  <div class="facts">
+    <div class="fact"><strong>Flow 是首页</strong><p>选择 run 看节点与物料；产品结构从整理故事的产物进入，支持逐层审阅。</p></div>
+    <div class="fact"><strong>28 项实施任务</strong><p>12 项实施中，15 项待实施，1 项待外部条件。任务含已有基础、代码落点、依赖与验收，不代表项目从零开始。</p></div>
+    <div class="fact"><strong>领域与独立评测</strong><p>多入口、角色知识和受控改进都有对照要求。当前小样本未证明自进化收益。</p></div>
+  </div>
+  <div class="row"><a class="button" href="#tasks">查看实施顺序与任务</a><a class="button secondary" href="testpilot-review-prototype.html#view=ws&project=selftest&work=workflow">打开当前原型 ↗</a><a class="button secondary" href="#install">Claude / Codex 接手</a></div>
+  <div class="callout"><strong>已用 Hyperliquid Testnet 跑通生产主链路</strong><p>真实 Explore 最多 8 屏，产出 6 模块、6 故事、22 用例；16 条批准、6 条拒绝。最终执行 15 通过、1 条待审差异、0 环境错误。保留暂停续跑、自动化复核、新修订、失败与重跑证据；已修复页面就绪、模型上下文、范围切换和多处 UI 问题。</p><p><a href="#implementation">查看当前实施、运行结果和剩余任务</a> · <a href="http://localhost:5300/#/?open=canvas&amp;project=prj-mtveukwc-1001&amp;run=run-38041ca0-630b-44d5-bca4-9f47623400a4">打开本地工作台</a></p><p class="small">本次测试审批不计入真人 Gold；没有连接钱包或交易。产品路径验收不等于全部 P 项或论文结论完成。</p></div>
+  <div class="callout"><strong>新增 Codex 宿主实测：10 / 10 通过</strong><p>原生 Codex 复用同一冻结探索材料，产出 8 模块、6 故事、10 条公开页面冒烟用例；审核后由 Codex 通过 MCP 提交执行。内部生成 pipeline 调用 0 次。缺少负例的门禁警告仍保留。</p><p><a href="#codex-acceptance">查看原生调用、执行结果与边界</a></p></div>
+  <div class="screens">
+    <figure><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-flow.png"><img loading="lazy" src="../v3/evidence/hyperliquid-refactor-2026-09-10/final-flow.png" alt="实际七节点 Flow 工作台"></a><figcaption>生产工作台：同 run 的节点状态与最新产物。</figcaption></figure>
+    <figure><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-module-graph.png"><img loading="lazy" src="../v3/evidence/hyperliquid-refactor-2026-09-10/final-module-graph.png" alt="实际产品模块图与故事下钻"></a><figcaption>Explore 产出的模块图，点击联动故事列表。</figcaption></figure>
+    <figure><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-execution-report.png"><img loading="lazy" src="../v3/evidence/hyperliquid-refactor-2026-09-10/final-execution-report.png" alt="实际执行失败证据与复核入口"></a><figcaption>15/16 通过；失败字段、截图和用例复核相连。</figcaption></figure>
+  </div>
+</section>
+<section class="chapter" id="walkthrough">
+  <div class="eyebrow">Current UI / entry points</div><h2>以 Flow 为中心，沿产物下钻</h2>
+  <div class="flow">
+    <a href="testpilot-review-prototype.html#view=ws&project=selftest&work=workflow">01 工作台<small>创建 / 选择 run，节点与断点</small></a>
+    <a href="testpilot-review-prototype.html#view=as&project=selftest&section=stories">02 整理故事产物<small>产品结构 + 用户故事</small></a>
+    <a href="testpilot-review-prototype.html#view=as&project=selftest&section=structure&module=project">03 模块与功能<small>主模块 → 子模块 → 功能</small></a>
+    <a href="testpilot-review-prototype.html#view=as&project=selftest&section=cases&scope=US-01">04 用例复核<small>队列 / 修订 / 判据与证据</small></a>
+    <a href="testpilot-review-prototype.html#view=hi&project=selftest&section=runs">05 执行结果<small>报告与基线各自管理</small></a>
+  </div>
+  <p class="caption">链接打开离线原型中的自举参考数据。这些链接保留目标设计；生产落地与未完成部分以本次验收章为准。结构由运行产出。</p>
+  <div class="tablewrap"><table><thead><tr><th>入口</th><th>当前决定</th><th>本地代码任务</th></tr></thead><tbody>
+    <tr><td>工作台与设置</td><td>Flow 首页，侧栏可收起，底部语言 / theme；项目下拉新增项目。运行记录融入 run 选择器。</td><td><a href="#P-06">P-06</a> · <a href="#P-10">P-10</a></td></tr>
+    <tr><td>创建与输入</td><td>Spec 上传 / 引用、Explore 目标与范围；Code 暂不支持。宿主身份与来源类型分开。</td><td><a href="#P-25">P-25</a></td></tr>
+    <tr><td>产品结构与物料</td><td>故事节点联合产出结构与故事；图下联动列表，跨模块唯一故事，多入口审阅后融合。</td><td><a href="#P-02">P-02</a> · <a href="#P-03">P-03</a> · <a href="#P-26">P-26</a></td></tr>
+    <tr><td>专业节点</td><td>Role、Skill、领域知识与模型角色分开；每节点有冻结上下文、工具权限与加载证据。</td><td><a href="#P-07">P-07</a> · <a href="#P-27">P-27</a></td></tr>
+    <tr><td>报告与基线</td><td>报告：执行记录 / 批次 / 趋势；基线：待审批 / 当前参照 / 审批记录。去掉重复解释。</td><td><a href="#P-28">P-28</a></td></tr>
+    <tr><td>评测与进化</td><td>Gold 冻结评分依据，记分板看结果，Penguin 配套扩展组织候选实验与人工发布。</td><td><a href="#P-17">P-17</a> · <a href="#P-18">P-18</a> · <a href="#P-19">P-19</a></td></tr>
+  </tbody></table></div>
+  <details class="archive"><summary>查看 2026-09-09 旧页面问题证据</summary><p class="caption">以下是此前真实页面截图，用于追溯问题，不代表当前原型或本轮生产验收。</p><div class="screens">
+    <figure><a href="../v3/evidence/ui-review-2026-09-09/artifacts-context.jpg"><img loading="lazy" src="../v3/evidence/ui-review-2026-09-09/artifacts-context.jpg" alt="历史物料页的运行上下文混杂"></a><figcaption>旧物料上下文 → P-01 统一身份与真实读取。</figcaption></figure>
+    <figure><a href="../v3/evidence/ui-review-2026-09-09/stories-dead-end.jpg"><img loading="lazy" src="../v3/evidence/ui-review-2026-09-09/stories-dead-end.jpg" alt="历史读故事入口的迁移提示"></a><figcaption>旧故事入口中断 → P-01 / P-02 产物契约。</figcaption></figure>
+    <figure><a href="../v3/evidence/ui-review-2026-09-09/settings-models.jpg"><img loading="lazy" src="../v3/evidence/ui-review-2026-09-09/settings-models.jpg" alt="历史模型设置页"></a><figcaption>旧设置导航与长表单 → P-06 设置收简。</figcaption></figure>
+  </div></details>
+</section>
+<section class="chapter" id="architecture">
+  <div class="eyebrow">Implementation boundaries</div><h2>复用六层能力，补齐共同契约</h2>
+  <div class="layers">
+    <div><strong>页面与状态</strong><span>现有 React / AppNav / Workspace / Review / artifact viewers；Flow 与列表共用运行身份</span></div>
+    <div><strong>应用与编排 ↓</strong><span>runService / runStages / workflowOps / workflowExecution；节点尝试、检查点、融合与审批</span></div>
+    <div><strong>领域契约 ↓</strong><span>ProductBundle v2 · SourceRevision · KnowledgePack · SkillBinding · ContextManifest</span></div>
+    <div><strong>宿主与执行 ↓</strong><span>Web 或宿主规划模型 · 低成本 Midscene · 独立程序判据；通过相同命令服务</span></div>
+    <div><strong>持久化与证据</strong><span>复用 ledger / revisions / blobs / events / costs；版本和审批不可被页面状态覆盖</span></div>
+    <div><strong>独立研究与发布</strong><span>人工 Gold · 公平 manifest · 外部评分 · Penguin 扩展 · 留出与人工晋升</span></div>
+  </div>
+  <p class="caption">当前扩展仅支持 memory scoped/off。通用 Skill 自动改写列入 P-18，不能按已有功能宣传。</p>
+</section>
+<section class="chapter" id="codex-acceptance"><div class="eyebrow">CODEX-ACCEPTANCE</div><h2>Codex 宿主真实验收</h2><p class="caption">对应接手文档：<a href="../v3/19-Codex宿主Hyperliquid实测.md">19-Codex宿主Hyperliquid实测.md</a></p><div class="chapter-toc"><a href="#codex-acceptance-1">运行身份与来源</a><a href="#codex-acceptance-2">实际调用路径</a><a href="#codex-acceptance-3">发现与修复</a><a href="#codex-acceptance-4">结果如何解释</a><a href="#codex-acceptance-5">验证与复现</a></div><p>2026-09-10。原生 Codex 规划、独立复核、原生 MCP 提交执行、Midscene 浏览器执行、Web 查看物料和报告的链路通过。最终 <strong>10 / 10 通过，0 环境错误</strong>。本轮没有修改生成用例、expected 或 oracle 后重跑。</p>
+<h3 id="codex-acceptance-1">运行身份与来源</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>项目</th><th>实测值</th></tr>
+</thead>
+<tbody>
+<tr><td>TestPilot 项目</td><td>Hyperliquid Testnet · prj-mtveukwc-1001</td></tr>
+<tr><td>新 run</td><td>run-ca300440-422b-4b54-b86f-9f6da5fb8424</td></tr>
+<tr><td>宿主</td><td>Codex CLI 0.153.4，使用已有 ChatGPT 登录与原生规划配置</td></tr>
+<tr><td>规划模型名称</td><td>原生 exec 事件未报告，记录 unknown；没有替换成 Web planner</td></tr>
+<tr><td>执行模型</td><td>现有项目配置 qwen3-8-27b</td></tr>
+<tr><td>执行环境</td><td>Desktop 1440，1440 × 1000，未连接钱包</td></tr>
+<tr><td>输入</td><td>复用上轮冻结的 exploration.md，源与新材料 SHA256 完全一致</td></tr>
+<tr><td>新探索</td><td>本轮没有重新 Explore；浏览器测试执行是新运行</td></tr>
+<tr><td>产出</td><td>8 模块、6 故事、10 用例，均为公开页面导航/展示冒烟用例</td></tr>
+<tr><td>执行</td><td>exec-54fa4afb-89d6-43fb-888d-65207d02f0e4</td></tr>
+<tr><td>结果版本</td><td>rev-1c64f3bc-5e44-4fe9-a51f-8606610141b0</td></tr>
+</tbody>
+</table></div>
+<p><a href="http://localhost:5300/#/?open=canvas&amp;project=prj-mtveukwc-1001&amp;run=run-ca300440-422b-4b54-b86f-9f6da5fb8424">打开 Codex 工作台</a> · <a href="http://localhost:5300/#/?open=runs&amp;project=prj-mtveukwc-1001&amp;run=run-ca300440-422b-4b54-b86f-9f6da5fb8424&amp;artifact=rev-1c64f3bc-5e44-4fe9-a51f-8606610141b0">打开执行报告</a></p>
+<p>原 Web run 和其全部失败/重跑历史保留，未替换或融合。当前同一项目下有两个独立 workflow run。</p>
+<h3 id="codex-acceptance-2">实际调用路径</h3>
+<p>1. 原生适配器注册新 run 并冻结同一探索材料；提供此 run 的 MCP 凭证文件，凭证不交给规划模型。 2. Codex 通过 MCP 调用 begin_stage、load_run_instructions、retrieve_spec、write_stories、write_cases、gate_run、finalize_run；19 次阶段工具调用，内部 run_pipeline 调用 <strong>0 次</strong>。 3. Codex 停在 waiting_review。随后本地验收操作者通过真实 Web UI 复核并批准 10 个版本，备注明确“自动化工程验收，不是真人 Gold”。宿主没有批准自己的用例。 4. 第二个原生 Codex 会话沿用同一 TestPilot runId，调用 get_project_run、generate_execution、execute_approved。两阶段使用不同原生会话 ID；不把它描述成原生 Codex thread resume 已验收。 5. Midscene 执行 10 个批准版本，20 次转发模型请求，耗时 197.25 秒。报告、每条判据与截图在 Web 的同一 run 下可读。</p>
+<p>本轮测试的是 <code>server/src/codex.ts</code> 原生适配器、项目级 Skill 与真实 stdio MCP，不是公共插件市场发布或所有安装场景的复验。生成会话与执行提交会话的工具名、使用量、会话 ID 分别保存在证据中。</p>
+<h3 id="codex-acceptance-3">发现与修复</h3>
+<ul>
+<li><strong>宿主规划状态停留在 registered</strong>：原生宿主从冻结材料直接进入 instructions，没有经过 Web 的 source 开始事件。beginStage 现在为所有生成节点同步 running；断点仍先判断，已完成节点保持原版本。17 项控制/路由/Codex 回归通过。首次新增测试因缺少假执行模型配置失败，补齐隔离测试配置后复验通过。</li>
+<li><strong>运行列表无法直接区分宿主</strong>：工作台、复核、物料、运行报告的 run 选择器增加 Codex / Claude Code / PenguinHarness / Web 标识，节点详情继续展示规划来源与真实加载 Skill 摘要。</li>
+<li><strong>覆盖不足仍保留</strong>：门禁有 negative-ratio 警告，10 条全部是正常路径，负例比例 0。当前门禁的全局警告不计入被警告用例占比，规则评分仍为 100%。没有因此声称覆盖完整，也没有伪造负例去满足比例。</li>
+</ul>
+<h3 id="codex-acceptance-4">结果如何解释</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>对比项</th><th>上轮 Web</th><th>本轮 Codex</th></tr>
+</thead>
+<tbody>
+<tr><td>冻结探索材料</td><td>同一来源</td><td>相同内容哈希</td></tr>
+<tr><td>模块 / 故事 / 用例</td><td>6 / 6 / 22</td><td>8 / 6 / 10</td></tr>
+<tr><td>已批准 / 拒绝</td><td>16 / 6</td><td>10 / 0</td></tr>
+<tr><td>最终批准用例执行</td><td>15 通过 / 1 失败</td><td>10 通过 / 0 失败</td></tr>
+<tr><td>判据范围</td><td>包含多字段模型判定</td><td>10 条明确文本存在判据</td></tr>
+<tr><td>性质</td><td>工程调试验收</td><td>宿主接入与公开页面冒烟验收</td></tr>
+</tbody>
+</table></div>
+<p>不能用 10/10 对 15/16 得出 Codex 更专业或自进化改善：两次生成的用例数、断言复杂度、提示和调试历史不同。本轮未覆盖下单、保证金、清算、精度等核心金融规则，也没有加入独立领域知识或新增真人 Gold。</p>
+<p>Codex 规划与执行提交的原生使用量合计：input 1,494,022（其中 cached input 1,394,560）、output 4,882。宿主没有提供可核实的单次规划调用数或价格，因此费用和规划调用数保持 unknown；缓存 token 是 input 的子集。执行层 20 次真实请求单独记账，不能把二者混成“20 次大模型调用”。</p>
+<h3 id="codex-acceptance-5">验证与复现</h3>
+<ul>
+<li><a href="../v3/evidence/codex-hyperliquid-2026-09-10/summary.json">汇总</a>、<a href="../v3/evidence/codex-hyperliquid-2026-09-10/generation.json">生成调用</a>、<a href="../v3/evidence/codex-hyperliquid-2026-09-10/native-execution-dispatch.json">原生执行提交</a>。</li>
+<li><a href="../v3/evidence/codex-hyperliquid-2026-09-10/execution.json">执行结果</a>、<a href="../v3/evidence/codex-hyperliquid-2026-09-10/gate.json">门禁警告</a>、<a href="../v3/evidence/codex-hyperliquid-2026-09-10/spend.json">按角色记账</a>。</li>
+<li><a href="../v3/evidence/codex-hyperliquid-2026-09-10/ui-checks.json">UI 检查</a>：区分两种来源、原生模型/Skill 身份、跨模块故事、范围带入复核、门禁警告和执行报告。</li>
+<li><a href="../v3/evidence/codex-hyperliquid-2026-09-10/README.md">验证索引</a>：17 项定向回归、服务/前端类型检查、生产构建通过。</li>
+</ul>
+<p>在服务和原生 Codex 登录就绪后，从 TestPilot checkout 运行下列显式真实验收命令，会创建新 run；读取 stdout 的新 runId，不覆盖本轮原始证据：</p>
+<pre aria-label="sh"><code>TP_EVIDENCE_DIR=/absolute/path/to/new-evidence \
+pnpm --filter testpilot-server exec tsx scripts/verify-codex-project.ts --real \
+  --project prj-mtveukwc-1001 \
+  --source-run run-38041ca0-630b-44d5-bca4-9f47623400a4 \
+  --source-revision rev-6ca35f69-cb59-4923-a61f-39ea870937d0</code></pre>
+<p>在 Web 独立完成该 run 的复核后，用其新 ID 运行 <code>scripts/execute-codex-project.ts --real --project &lt;projectId&gt; --run &lt;newRunId&gt; --env &lt;environmentId&gt;</code>。该脚本只让 Codex 编译/提交执行，不自动审批。执行是异步的，是否通过以 API / Web 最终结果为准。</p></section><section class="chapter" id="implementation"><div class="eyebrow">IMPLEMENTATION</div><h2>本地实施与真实验收</h2><p class="caption">对应接手文档：<a href="../v3/18-本地UI重构与Hyperliquid验收.md">18-本地UI重构与Hyperliquid验收.md</a></p><div class="chapter-toc"><a href="#implementation-1">当前落地的闭环</a><a href="#implementation-2">实际执行记录</a><a href="#implementation-3">UI 与服务改动</a><a href="#implementation-4">真实联调暴露的问题与处理</a><a href="#implementation-5">数据重置与隔离</a><a href="#implementation-6">验证与证据</a><a href="#implementation-7">P 台账的边界与下一步</a><a href="#implementation-8">论文与自进化</a></div><p>更新：2026-09-10。本次已改动生产 React UI、服务和执行器。原型仍作为设计参考；下述结果来自本地真实模型与浏览器，不是原型模拟。</p>
+<h3 id="implementation-1">当前落地的闭环</h3>
+<p>工作台选择项目和 run → Explore 采集 → 产品结构与用户故事 → 用例设计 → 规则门禁 → 复核/修订 → 准备批准版本 → Midscene 执行 → 报告与证据。</p>
+<ul>
+<li>入口：<a href="http://localhost:5300/#/?open=canvas&amp;project=prj-mtveukwc-1001&amp;run=run-38041ca0-630b-44d5-bca4-9f47623400a4">实际工作台</a>。API 在 5301。</li>
+<li>项目：Hyperliquid Testnet；目标 <code>https://app.hyperliquid-testnet.xyz/trade</code>。</li>
+<li>run：<code>run-38041ca0-630b-44d5-bca4-9f47623400a4</code>。Explore 有 8 屏上限，产出 6 个模块、6 条故事、22 条用例。这个范围不包含登录、连接钱包或交易提交。</li>
+<li>复核：16 条批准，6 条因过弱的通用值判据被拒绝。审核备注声明为本地自动化验收，不能作为真人 Gold 标注。</li>
+<li>最终完整执行：16 条实际尝试，15 通过、1 失败、0 环境错误，耗时 4 分 53 秒，30 次转发到执行模型的请求。保留首次完整执行的 12 通过 / 4 失败及全部中间尝试。</li>
+</ul>
+<h3 id="implementation-2">实际执行记录</h3>
+<p>以下属于同一 Explore run 的七次执行尝试。修订、视口与执行上下文策略有变化，不能当成同一冻结配置下的七次重复实验。请求数包含执行层缓存的影响，不等于整个规划过程的模型用量。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>执行 ID 前缀</th><th>范围 / 实际尝试</th><th>通过</th><th>非环境失败</th><th>环境错误</th><th>转发请求</th><th>处理或结论</th></tr>
+</thead>
+<tbody>
+<tr><td>exec-bf31e5ab</td><td>全部 16 / 8</td><td>3</td><td>4</td><td>1</td><td>12</td><td>初始 SPA 空白等问题，结果保留</td></tr>
+<tr><td>exec-cbf93d1a</td><td>全部 16 / 2</td><td>1</td><td>0</td><td>1</td><td>1</td><td>模型 HTTP 400</td></tr>
+<tr><td>exec-6026ae62</td><td>C-02 / 1</td><td>0</td><td>0</td><td>1</td><td>1</td><td>明确分类为 context_limit</td></tr>
+<tr><td>exec-4b29b4c1</td><td>C-02 / 1</td><td>1</td><td>0</td><td>0</td><td>2</td><td>可见区域动作上下文复验通过</td></tr>
+<tr><td>exec-4703fa1a</td><td>全部 16 / 16</td><td>12</td><td>4</td><td>0</td><td>33</td><td>暴露视口和含糊观察步骤</td></tr>
+<tr><td>exec-c5e8a001</td><td>修订后 4 / 3</td><td>1</td><td>1</td><td>1</td><td>5</td><td>视口解决；等待上下文仍超限</td></tr>
+<tr><td>exec-aadc35e3</td><td>全部 16 / 16</td><td>15</td><td>1</td><td>0</td><td>30</td><td>最终结果；C-14 保留为待审差异</td></tr>
+</tbody>
+</table></div>
+<p>最终执行：<code>exec-aadc35e3-3db8-4b0b-bc53-d9525711c8ef</code>；结果版本：<code>rev-cf30f6da-16c5-4eaf-a2bf-20e4e236e002</code>。Desktop 1440 × 1000；16 条批准版本形成独立编译物料。C-14 当前 Portfolio 截图没有生成用例预期的五项字段，需核对观察来源与账户状态，不能据此直接断言交易产品有缺陷。</p>
+<p><a href="http://localhost:5300/#/?open=runs&amp;project=prj-mtveukwc-1001&amp;run=run-38041ca0-630b-44d5-bca4-9f47623400a4&amp;artifact=rev-cf30f6da-16c5-4eaf-a2bf-20e4e236e002">打开实际执行报告</a> · <a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-execution.json">最终结果 JSON</a> · <a href="../v3/evidence/hyperliquid-refactor-2026-09-10/c14-portfolio-evidence.png">C-14 页面证据</a></p>
+<h3 id="implementation-3">UI 与服务改动</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>用户操作</th><th>已落地行为</th><th>主要文件</th></tr>
+</thead>
+<tbody>
+<tr><td>从整体查看一次运行</td><td>Flow 首页、历史 run 选择、桌面七节点总览、绿/红/灰节点、最新产物优先、同屏详情</td><td>WorkflowBench、NodeDetail、useProjectRuns</td></tr>
+<tr><td>新项目 / 新运行</td><td>项目下拉新增；Spec 文本上传、Explore URL/屏数；Code 禁用；产物语言单独选</td><td>NewProjectDialog、NewRunForm、workflowOps</td></tr>
+<tr><td>模块下钻</td><td>故事产物内的模块图；选择主/子模块联动故事，复核复用同一范围</td><td>ProductStructure、ProjectReview</td></tr>
+<tr><td>审阅 / 修订</td><td>队列与详情、弱判据提示、批量审批、更新形成新 revision；筛选改变清空批量选择</td><td>ProjectReview、approvedRuns</td></tr>
+<tr><td>查看物料与证据</td><td>正文、用例、结构、代码、门禁和执行报告专用展示；失败优先、报告直达对应用例并支持刷新；来源 revision、导出及截图</td><td>RevisionViewer、GateReport、ExecutionReport</td></tr>
+<tr><td>断点与继续</td><td>未尝试节点才能新增断点，服务端在节点开始前停止；同 run 跨进程重启恢复</td><td>workflowControls、runStages、penguinRun、MCP begin_stage</td></tr>
+<tr><td>调试执行</td><td>选择一个或多个已批准用例，生成对应执行物料后执行；选择与编译范围必须一致</td><td>ExecutionControls、compiledReadiness</td></tr>
+<tr><td>设置与外壳</td><td>八项菜单，侧栏收起，语言/theme；双模型连接测试；环境新增测试视口</td><td>AppNav、ModelProfiles、ModelConfig</td></tr>
+<tr><td>报告 / 基线 / 评测</td><td>报告与基线菜单分组分开；记分板默认当前项目，研究历史单独选</td><td>surfaces、WorkflowReports、Scoreboard</td></tr>
+</tbody>
+</table></div>
+<p>材料与领域知识随 run 保存。节点按声明的角色范围返回知识，详情显示已加载 Skill 的真实 SHA256。这里仍是共享规划会话的角色分工；不能把名称显示说成独立 agent 上下文隔离，也没有通用 finance Skill 包导入/执行能力。</p>
+<h3 id="implementation-4">真实联调暴露的问题与处理</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>问题</th><th>证据与修复</th><th>结果口径</th></tr>
+</thead>
+<tbody>
+<tr><td>SPA DOM 就绪但页面空白</td><td><code>/outcomes</code> 初始 0 字符，约 4.5 秒后渲染；执行器复用探索器的页面稳定检测</td><td>空白页面归环境失败，不当作产品断言失败</td></tr>
+<tr><td>低成本模型上下文超限</td><td>HTTP 400 经脱敏分类为 context_limit；动作、等待、断言统一使用可见区域元素树</td><td>不修改被测 DOM；原始观察证据另存；缓存策略升级为 context-v4-viewport</td></tr>
+<tr><td>执行前置页面丢失</td><td>解析批准用例的显式页面前置条件，校验同源与冲突</td><td>C-02 从 /outcomes 开始，其他页面同理</td></tr>
+<tr><td>“View …” 被理解成点击</td><td>C-14/C-16 定位歧义；C-17 误入详情</td><td>通过新用例修订改成 waitFor；保留 expected/oracle；编译物料也生成 aiWaitFor</td></tr>
+<tr><td>默认视口导致市场字段截断</td><td>C-12 在 1024px 下缺 Funding / Countdown；1440px 复验通过</td><td>项目设置新增宽高；Desktop 1440 环境冻结到后续执行，不能把两种环境混成同一轮</td></tr>
+<tr><td>取消后晚到结果覆盖状态</td><td>回归测试捕获 cancelled 被进度更新覆盖</td><td>先检查取消，再记进度；保留取消状态</td></tr>
+<tr><td>单条切回整批仍使用旧范围</td><td>按创建时间找最近代码，在复用旧 revision 时选错</td><td>按 G2 最近成功事件选择代码，并核对选择的批准 revisions</td></tr>
+<tr><td>页面细节</td><td>下拉固定 25px 导致文字裁切；旧“未运行数量”误当待审数量；审核失效显示滞后</td><td>高度随内容；移除错误徽标；401 触发重新解锁；翻译函数稳定，避免详情请求循环</td></tr>
+</tbody>
+</table></div>
+<p>C-14 的后续实际断言仍发现 Portfolio 当前可见字段与采集来源描述不一致。保留失败与截图，需审阅来源时效、页面状态及采集边界，不直接认定为产品缺陷，不通过修改 expected 来消除失败。</p>
+<h3 id="implementation-5">数据重置与隔离</h3>
+<p>旧活动数据已移出服务目录，离线备份在 <code>/Users/admin/Midscene/testpilot-local-backups/before-hyperliquid-20260910T104128Z/application-data</code>。新活动数据只保留模型配置与本地凭据所需文件后重建；server/.env 未改动。当前用户项目是新建的 Hyperliquid Testnet，UI 验收临时空项目已删除。</p>
+<p>研究基准、既有 Gold/human-labels/held-out/rubric 和历史评审文档保留。研究历史在记分板显式切换，不应出现在当前项目的运行列表中。未连接钱包、提交交易、提交 Git 或发布代码。</p>
+<h3 id="implementation-6">验证与证据</h3>
+<ul>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/data-reset.json">数据重置记录</a></li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/paused-run.json">断点暂停与续跑</a></li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-ui-checks.json">16 项实际 UI 检查</a>：新项目、项目往返、缺失/跨项目 run、上传预览、三语言切换、主题、收起/窄屏、七个其他主菜单；无浏览器页面异常。</li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/observation-revisions.json">观察步骤修订</a>：记录原 revision，expected/oracle 保持相同。</li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/full-execution.json">首次完整执行原始结果</a></li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/workflow-summary.json">全部实际执行摘要</a></li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/checkpoint-integrity.json">检查点完整性</a>：同 run 续跑保留原观察、材料、指令和故事版本及内容哈希。</li>
+<li><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/README.md">验证索引</a>：真实模型尝试、UI 检查、拦截请求的异常分支测试分别记录。</li>
+</ul>
+<p>检查命令：<code>pnpm typecheck</code>、<code>pnpm test</code>、<code>pnpm test:hooks</code>、<code>pnpm check:drift</code>、<code>pnpm build</code>。最终退出结果和用例数在同目录 README；不将一次失败后未复验的检查写成通过。</p>
+<h3 id="implementation-7">P 台账的边界与下一步</h3>
+<p>本轮是产品主链路的工程切片，不等于 28 项完整验收全部关闭。P-01/06/25/02/07/09/10/03/04/28/17/20 已有实施证据，仍按各项剩余验收记 doing。</p>
+<ul>
+<li>P-01/06/25：补齐所有旧深链与归档兼容、完整三语言文案；宿主 Explore 与 Web 使用同一来源契约；探索的模型/环境/费用完全按 run 冻结。</li>
+<li>P-02/03/05：当前只有层级和跨模块引用的兼容字段；完整 ProductBundle v2、声明级来源、千级图与分页、同源离线产品包仍待实施。</li>
+<li>P-07/27：知识包和 Skill 包管理、ContextManifest、按工具权限隔离的独立角色上下文。当前节点返回知识范围不等于模型已经忘记上游共享上下文。</li>
+<li>P-08/09/10：不可变 workflow 定义、通用 only/from/selected 子图与新的 NodeAttempt；本轮完成的是节点前断点/同 ID 续跑、执行用例子集，不应混称任意节点编排完成。</li>
+<li>P-26：多入口产品模型的实体对齐、冲突裁决、baseRevision 并发和影响传播尚未实现。</li>
+<li>P-28：基线当前参照/审批记录、新 workflow execution 的完整基线投影；旧基线和套件/趋势仍有原数据模型，需继续统一。</li>
+<li>P-12/17/20：旧宿主安装能力保留，未把这次 Web 验收写成三宿主全部重跑；评测入口仍需正式 manifest 投影及更多异常分支验收。</li>
+</ul>
+<h3 id="implementation-8">论文与自进化</h3>
+<p>这次验证证明了一个实际 Explore→生成→审核→执行→报告路径，暴露了可重复的执行适配问题。它不能证明专业领域覆盖、自进化收益、人工审阅效率或发表水平。</p>
+<p>6 个模块/22 条用例主要来自未登录公共界面，不覆盖下单、保证金、精度、只减仓等核心金融规则。门禁 100% 是现有规则评分，不是测试有效率或产品覆盖率。6 条弱判据被本轮复核拒绝，说明规则门禁需要继续做语义校验研究。</p>
+<p>Gold 提供独立评分依据；记分板呈现绑定条件下的结果；Penguin 配套 UI 组织候选与晋级。本轮没有自动晋级策略，也没有新增真人标注或正式论文对照。P-13～24 的协议、独立缺陷家族、留出与真人条件继续保留。</p></section><section class="chapter" id="tasks"><div class="eyebrow">TASKS</div><h2>本地实施任务与验收</h2><p class="caption">对应接手文档：<a href="../v3/13-UI与论文路线任务台账.md">13-UI与论文路线任务台账.md</a></p><div class="task-tools"><input type="search" id="task-search" aria-label="搜索实施任务" placeholder="搜索任务、代码文件或验收条件"><select id="task-state" aria-label="筛选任务状态"><option value="all">全部状态</option><option value="todo">待实施</option><option value="doing">进行中</option><option value="done">已验收</option><option value="blocked">待外部条件</option><option value="dropped">已取消</option></select><button id="task-expand" type="button">展开匹配任务</button><button id="task-collapse" type="button">收起任务</button><span id="task-count" role="status"></span></div><div class="chapter-toc"><a href="#tasks-1">0. 实施顺序与交付规则</a><a href="#tasks-2">1. P0 · 身份、入口与节点上下文</a><a href="#tasks-3">2. P0 · 可运行的 Flow 工作台</a><a href="#tasks-4">3. P1 · 结构审阅、融合与产物</a><a href="#tasks-5">4. P1 · 报告、评测入口与宿主验收</a><a href="#tasks-6">5. P1 · 领域研究与独立基准</a><a href="#tasks-7">6. P1 · 受控进化、研究与论文</a><a href="#tasks-8">7. PC / SR 对照与验收证据</a></div><p>更新：2026-09-10。以下为当前本地代码的增量实施范围。保留 P-01～24 身份，新增 P-25～28，将 PC / SR 补充要求合并为验收条款；不维护三套重复状态。<a href="../v3/08-双入口双模型-优化任务与验收.md">08</a> 仍管理 N 系列历史与待条件项，本轮不改其状态。</p>
+<p>当前基线是 <a href="testpilot-review-prototype.html">原型</a> 与 <a href="#design">11 · 当前交互设计</a>，不是 09-09 旧布局。原型已有 60 项 DOM 检查；本地代码已有大量基础能力，但下面 28 项新的完整验收尚未关闭：12 doing、15 todo、1 blocked（真实人工 Gold）。本轮生产主链路已实施并做 Hyperliquid 真实验收，28 项完整验收尚未关闭；详见 <a href="#implementation">18 · 实施与验收</a>。不要将完成一次路径等同于整项架构或论文验收。</p>
+<h3 id="tasks-1">0. 实施顺序与交付规则</h3>
+<p>第一条切片：P-01 → P-06 → P-25 → P-02 → P-07 → P-27 → P-08 → P-09 → P-10。交付“真实材料创建 run → 整理结构 → 选择 run → 查看产物 → 断点续跑”，先用最小真实项目打通，再铺开大列表与融合。</p>
+<p>随后：P-03 → P-04 → P-26 → P-05；P-28、P-17、P-12 的依赖满足后即可接入，再完成 P-11 → P-20。本地产品验收 P-20 不再依赖正式论文结果、真人用户研究或新 Skill 自进化完成。</p>
+<p>研究先从 P-13 → P-14 开始准备；后续 P-15 → P-16 / P-22 → P-18 → P-23 → P-24。P-19 承接候选与 Web 证据联动；P-21 单独验收 RQ5。正式模型实验和真人条件按实际授权与可用数据开展，不伪造时间或审批。</p>
+<p>每项：认领 doing → 检查可复用实现 → 写目标契约/迁移 → 实现 UI 与服务 → 通过针对性测试与实际路径验收 → 写 evidence → done。仅原型按钮、仅接口返回成功或仅类型检查都不能满足完整验收。预计规模在第一切片结束后依据实际改动再估算。</p>
+<pre aria-label="sh"><code>node scripts/plan.mjs --doc docs/v3/13-UI与论文路线任务台账.md --next
+node scripts/plan.mjs --doc docs/v3/13-UI与论文路线任务台账.md --set P-01 doing</code></pre>
+<p>任务按下面展示顺序读取；编号保留追溯，不要求重排成数值顺序。依赖是必要条件，<code>--next</code> 可能列多个就绪任务；默认先 P-01，研究准备 P-13 可独立进行。本文中的新服务/组件名称是拟新增落点，未标为已有实现。</p>
+<h3 id="tasks-2">1. P0 · 身份、入口与节点上下文</h3>
+<details class="task" id="P-01" data-status="doing"><summary><code>P-01</code><span>统一身份、路由与真实物料读取</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：无</li>
+<li>已有基础：run ledger、artifact revisions 和展示注册器已存在；SurfaceContext 主要带 wfRunId，生产首页默认复核，旧 stories/spec 入口仍需归一。</li>
+<li>兑现：统一 projectId / runId / revisionId / nodeId 查询上下文；打通真实规格、故事、代码和证据 viewer；兼容旧深链与只读归档。</li>
+<li>落点：src/App.tsx、src/lib/open.ts、src/lib/wf.ts、src/lib/surfaces.tsx、src/lib/artifact/、src/pages/Artifacts.tsx、server/src/artifactViews.ts、server/src/runRoutes.ts</li>
+<li>验收：同项目 A→B run 切换与两个项目往返不串物料；返回、刷新、旧深链能恢复；缺失实体显示原因，不静默换成最近一次；正文清洗和服务端跨项目拒绝有效。</li>
+<li>验证：扩展 run-routes / artifact viewer 测试；真实已有 run 的 source→stories→case→code 往返验收。</li>
+<li>合并来源：PC-01、旧 F01/F02</li>
+</ul>
+</div></details>
+<details class="task" id="P-06" data-status="doing"><summary><code>P-06</code><span>Flow 导航外壳与全流程项目设置</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-01</li>
+<li>已有基础：AppNav、AppControls、NewProjectDialog、ModelProfiles 和模型配置服务已有；正式侧栏仍包含独立 wfruns，需按现原型调整。</li>
+<li>兑现：首页 Flow；八项主菜单；折叠图标侧栏、底部中英日 / theme、项目下拉新增项目；设置收简并显示配置来源。</li>
+<li>落点：src/App.tsx、src/lib/nav.ts、src/components/AppNav.tsx、AppControls.tsx、NewProjectDialog.tsx、SettingsDrawer.tsx、src/pages/ModelProfiles.tsx、server/src/modelProfilesRoutes.ts</li>
+<li>验收：空项目可创建并进独立工作台；没有流程 / 产品结构首页切换、没有工作流记录主菜单；宿主无需配规划模型，Web 默认继承 Midscene，env / 项目覆盖和重启后来源可查；产物语言独立。</li>
+<li>验证：导航与项目状态测试、model-profiles / model-snapshots；桌面、窄屏、三语言、主题与旧地址验收。</li>
+<li>合并来源：SR-03 设置部分</li>
+</ul>
+</div></details>
+<details class="task" id="P-25" data-status="doing"><summary><code>P-25</code><span>Spec / Explore 创建入口与来源材料导入</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-06</li>
+<li>已有基础：项目 materials、MaterialPicker 和 run registration 已有；来源入口、上传解析、宿主身份仍需统一成不同字段。</li>
+<li>兑现：创建 run 明确 sourceKind 与 runtime；Spec 上传多份文本 / 引用，Explore 设置 URL / 范围 / 环境，Code 明确暂不支持；落盘来源版本与 hash。</li>
+<li>落点：src/components/StartSheet.tsx、MaterialPicker.tsx、SpecDrawer.tsx、server/src/materials.ts、runRoutes.ts、runStages.ts、packages/harness-core/src/run-contracts.ts</li>
+<li>验收：Spec 与 Explore 均能从 Web 或宿主进入；文本上传先按原型 20 份 / 每份 2 MB，格式错误、重复、超限明确；不将本地绝对路径直接暴露给任意客户端；PDF / Word 未接解析器前不可承诺；Code 服务端同样拒绝。</li>
+<li>验证：上传/引用/解析契约与权限测试；真实文本来源定位、Explore 范围约束及创建失败恢复验收。</li>
+<li>合并来源：PC-02</li>
+</ul>
+</div></details>
+<details class="task" id="P-02" data-status="doing"><summary><code>P-02</code><span>ProductBundle v2 与来源、层级契约</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-25</li>
+<li>已有基础：StoryBundle 已有 modules / flows / stories / derivedFrom，缺稳定任意层级和跨模块多对多的完整版本契约。</li>
+<li>兑现：整理故事联合产出产品结构与故事；定义 module / submodule / feature、唯一 story、journey、验收条件、来源声明与 revision；旧格式只读迁移。</li>
+<li>落点：packages/harness-testing/src/casegen/types.ts、validate.ts、packages/harness-core/src/run-contracts.ts、server/src/runLedger.ts、artifactViews.ts、runStages.ts</li>
+<li>验收：主模块→子模块→功能可继续扩展深度；跨模块故事不复制；循环、悬空、跨项目引用拒绝；required / observed / inferred 不混淆；旧归档计数与重建参考分开。</li>
+<li>验证：schema、迁移和投影测试；旧 StoryBundle / 缺来源 / 千级功能 fixture；不修改原始 blob。</li>
+<li>合并来源：PC-03</li>
+</ul>
+</div></details>
+<details class="task" id="P-07" data-status="doing"><summary><code>P-07</code><span>KnowledgePack、Role 与 Skill 版本管理</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-02、P-06</li>
+<li>已有基础：已存在插件 Skill 资产、digest 下发和模型角色；原型知识绑定、角色目录尚未全部对应生产存储。</li>
+<li>兑现：知识包与 Skill 分表管理，显示来源 / digest / 版本 / 依赖 / 模块 / 角色范围；编辑形成候选，新 run 冻结批准或明确选择的实验版本。</li>
+<li>落点：packages/harness-core/src/run-contracts.ts、server/src/runStages.ts、src/pages/SettingsSections.tsx、src/lib/artifact/、plugins/testpilot/skills/</li>
+<li>验收：指定 finance Skill 先解析实际包与兼容性，不假定已安装；未解析 / 不兼容状态明确；引用版本停用有影响提示；旧运行不受修改；领域知识与 Gold 不同索引。</li>
+<li>验证：包解析、绑定版本、宿主兼容及停用引用测试；涉及 Skill 改动执行 drift 与插件重建检查。</li>
+<li>合并来源：PC-05</li>
+</ul>
+</div></details>
+<details class="task" id="P-27" data-status="todo"><summary><code>P-27</code><span>节点 ContextManifest 与角色权限隔离</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-07</li>
+<li>已有基础：loadRunInstructions 已记录资产与 memory，contextPolicy 目前主要为 memory scoped / off；角色名称不等于隔离上下文。</li>
+<li>兑现：每节点冻结 roleVersion、skill / knowledge digest、source chunks、product revision、tool grants、预算及实际加载证明；按角色给最小上下文与写权限。</li>
+<li>落点：server/src/runStages.ts、server/src/runtime/skill-launch.ts、packages/harness-core/src/run-contracts.ts、packages/testpilot-mcp/src/run-gateway.ts、宿主适配器</li>
+<li>验收：分析员只能写结构候选，设计不读留出答案，审阅独立于生成上下文，代码/修复不改批准 oracle；未知 grant 拒绝；不能靠同一对话换名字通过；恢复时 digest 不匹配阻断。</li>
+<li>验证：工具越权、跨节点污染、加载证据、截断预算、三个宿主隔离契约和拒绝用例。</li>
+<li>合并来源：PC-06</li>
+</ul>
+</div></details>
+<h3 id="tasks-3">2. P0 · 可运行的 Flow 工作台</h3>
+<details class="task" id="P-08" data-status="todo"><summary><code>P-08</code><span>标准 workflow 与实验定义版本分离</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-02、P-27</li>
+<li>已有基础：现有 wf graph 和 workflowOps 可复用；默认流程、工作草稿、实验版本与 run 快照需明确分开。</li>
+<li>兑现：日常直接跑垂直标准模板；流程编辑只在设置的高级实验区；保存新的不可变版本，run 引用确定版本及强制门禁。</li>
+<li>落点：src/lib/wf.ts、src/pages/Workspace.tsx、src/pages/SettingsSections.tsx、server/src/workflowOps.ts、packages/harness-core/src/run-contracts.ts</li>
+<li>验收：循环 / 端口 / 缺依赖拒绝，门禁不可通过删节点绕过；旧 run 展示自身版本；候选绑定不等于晋升；新建和复制具有明确来源。</li>
+<li>验证：graph 校验、定义保存冲突、旧版本运行读取及门禁不可绕过测试。</li>
+</ul>
+</div></details>
+<details class="task" id="P-09" data-status="doing"><summary><code>P-09</code><span>Run 与 NodeAttempt：选区、断点和续跑</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-08</li>
+<li>已有基础：workflowOps 的恢复、workflowExecution 的冻结执行与审批核验已有；通用 selected 子图和节点断点资格需补齐。</li>
+<li>兑现：统一 full / only / from / selected；同一 run 可继续，重试新增 attempt；断点只在范围内尚未尝试的节点开始前停；故事整理后支持结构确认检查点。</li>
+<li>落点：server/src/workflowOps.ts、workflowExecution.ts、runStages.ts、runRoutes.ts、packages/harness-core/src/run-contracts.ts、src/lib/workflowRuns.ts</li>
+<li>验收：缺上游与过期批准阻断；已成功节点不重跑；失败 / 已运行节点不可新增断点；重复继续幂等；跨过当前断点一次并保留后续断点；刷新/进程重启恢复；预算累计、执行副作用去重。</li>
+<li>验证：状态机与并发测试：cancel/pause/resume/retry、依赖复用、事件重放、节点已开始时设置断点竞争；明确 startOrder 的选区语义。</li>
+</ul>
+</div></details>
+<details class="task" id="P-10" data-status="doing"><summary><code>P-10</code><span>将运行记录、节点与 artifact 融入 Flow Bench</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-09、P-06</li>
+<li>已有基础：Workspace、WorkflowRuns、RunDetail 与费用展示已有；原型 run 选择器和状态联动需接真实服务。</li>
+<li>兑现：顶部选择历史 run / 准备新 run，画布恢复该次节点与产物；完成绿、暂停或失败红、未执行灰；节点详情呈现输入、角色、Skill、知识、attempt、日志和成本。</li>
+<li>落点：src/pages/Workspace.tsx、WorkflowRuns.tsx、src/components/RunDetail.tsx、RunSpendPanel.tsx、RunRail.tsx、src/lib/workflowRuns.ts、src/lib/wf.ts</li>
+<li>验收：不再出现独立运行记录导航或流程/结构平级 tab；历史选择不改活动 run；记录可搜；完成与失败有文字状态；单/多节点预览执行/复用/阻塞；artifact 打开真实内容且缺失明确。</li>
+<li>验证：真实 run→产物→返回、节点断点→暂停→同 ID 续跑、失败重试、运行中切记录与重连验收。</li>
+</ul>
+</div></details>
+<h3 id="tasks-4">3. P1 · 结构审阅、融合与产物</h3>
+<details class="task" id="P-03" data-status="doing"><summary><code>P-03</code><span>产品模块图与共享结构筛选</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-02、P-10</li>
+<li>已有基础：ProductMap、Review 和 Trace 已有视图；原型模块树 / 子模块 / 功能 / 故事筛选可作为交互参考。</li>
+<li>兑现：产品结构由故事节点产物进入；图中选择模块，下方联动故事 / 用例；产品结构 selector 为复核、物料和报告复用，支持旅程与跨模块关联。</li>
+<li>落点：src/pages/ProductMap.tsx、Review.tsx、Artifacts.tsx、Trace.tsx、src/lib/artifact/；新增共享结构组件与查询投影</li>
+<li>验收：新 run 未产出结构时显示未生成；同名功能不误合并；全局统计去重且标 revision；千级功能懒加载、分页/虚拟化、搜索定位、键盘、窄屏及空错态可用。</li>
+<li>验证：同项目真实产物端到端下钻；大数据 fixture 与渲染性能记录，不用原型六模块做固定产品结构。</li>
+<li>合并来源：PC-04</li>
+</ul>
+</div></details>
+<details class="task" id="P-04" data-status="doing"><summary><code>P-04</code><span>用例复核、修订影响与并发审批</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-03</li>
+<li>已有基础：Review、review service、冻结审批与 ReviewerSession 已有，保留队列+详情布局。</li>
+<li>兑现：统一按结构 / run 筛选、证据查看、修订 diff、批量范围预览；需求/验收/expected 更新传播到需重审和执行准入。</li>
+<li>落点：src/pages/Review.tsx、reviewFilter.ts、Trace.tsx、src/components/ReviewerSession.tsx、server/src/review.ts、approvedRuns.ts、exportIntegrity.ts</li>
+<li>验收：后代影响清单明确，旧审批不自动继承；并发报冲突，范围漂移重新确认；服务端执行只消费批准 revision；标题相同不能直接去重删除。</li>
+<li>验证：review、case-oracle-update、export / approved execution 回归；真实批量审阅与局部修订验收。</li>
+</ul>
+</div></details>
+<details class="task" id="P-26" data-status="todo"><summary><code>P-26</code><span>多入口产品模型融合与影响审阅</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-02、P-04</li>
+<li>已有基础：原型只按稳定 ID 合并和逐字段冲突；生产尚无完整声明级融合服务。</li>
+<li>兑现：选择同项目 Spec / Explore 候选，对齐实体，审阅新增与冲突，产出项目 ProductBundle 新版本；语义匹配只给候选建议。</li>
+<li>落点：server/src/runLedger.ts、artifactViews.ts、runRoutes.ts；新增产品模型融合服务；src/pages/ProductMap.tsx、Artifacts.tsx、Review.tsx</li>
+<li>验收：Spec 要求与 Explore 观察同时保留；冲突不自动以最新覆盖；baseRevision + idempotencyKey 防并发；跨项目/循环/孤儿拒绝；旧 run 不变；受影响用例需重审；Code 不进融合。</li>
+<li>验证：多 run 互补、同名异义、跨模块去重、冲突裁决、并发及回滚读取测试；真实来源链验收。</li>
+<li>合并来源：PC-07</li>
+</ul>
+</div></details>
+<details class="task" id="P-05" data-status="todo"><summary><code>P-05</code><span>同源产品物料与离线审阅包</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-26</li>
+<li>已有基础：现有 HTML 导出和原型产品文档可参考；不能复制模拟内容到生产。</li>
+<li>兑现：统一 ProductBundle 导出 HTML / Markdown / JSON，包含主/子模块图、功能、用户故事旅程、验收矩阵、规则与证据、未决项。</li>
+<li>落点：src/pages/Delivery.tsx、src/lib/artifact/、server/src/exportIntegrity.ts、现有 export 服务；新增同源报告投影</li>
+<li>验收：离线链接可下钻，图/表/导出数量一致，版本与来源完整；缺证/推测保留标识；产物语言独立；HTML 清洗，私密环境配置不导出；修订可重建。</li>
+<li>验证：export-layers / export 测试、生成包静态链接与 DOM 检查、真实报告往返验收。</li>
+</ul>
+</div></details>
+<h3 id="tasks-5">4. P1 · 报告、评测入口与宿主验收</h3>
+<details class="task" id="P-28" data-status="doing"><summary><code>P-28</code><span>运行报告与基线独立管理</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-01、P-06</li>
+<li>已有基础：RunReport / Suite / Trends / Baselines 和 pending-baselines / approve / verdict 接口存在；现有 group=exec 将多处内容混组。</li>
+<li>兑现：报告仅执行记录 / 批次 / 趋势；基线仅待审批 / 当前基线 / 审批记录；真实截图、性能、来源运行和版本审计联动。</li>
+<li>落点：src/lib/surfaces.tsx、nav.ts、src/pages/RunReport.tsx、Suite.tsx、Trends.tsx、Baselines.tsx、server/src/index.ts、db.ts</li>
+<li>验收：子项不跨主菜单；拒绝/保留移出待审并留事件；批准校验 case/run/step/版本归属和并发；幂等；首次基线规则统一纳入显式初始化审阅，不继续静默自动接受；与 Gold/实验 baseline 分开。</li>
+<li>验证：基线首次建立、重复批准、过期图片、跨项目 run、性能来源不匹配、刷新后审计恢复；报告筛选与深链回归。</li>
+<li>合并来源：SR-01、SR-02</li>
+</ul>
+</div></details>
+<details class="task" id="P-17" data-status="doing"><summary><code>P-17</code><span>记分板与 Gold 的可操作证据视图</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-01、P-06</li>
+<li>已有基础：Scoreboard.tsx / Gold.tsx、/api/scoreboard 和 gold service 已有，不另建评分器或标签库。</li>
+<li>兑现：结果优先、按能力筛选、版本条件比较、失败/成本证据下钻；Gold 搜索、划分、来源、人工审核与冻结状态；统一帮助说明 Penguin 职责。</li>
+<li>落点：src/pages/Scoreboard.tsx、Gold.tsx、server/src/gold.ts、index.ts、packages/testpilot-mcp/src/score-store.ts</li>
+<li>验收：同 Gold/input/model/runtime 条件才比较；缺价格为未知；未绑定历史不参与正式排名；Gold 冻结新谱系沿用真实服务；Web 仅显示激活策略和扩展入口；研究解释折叠。</li>
+<li>验证：scoreboard / gold / gold-stale 回归；筛选、权限不足、无数据、服务不可用；正式 manifest 接 P-16 后补 RQ→attempt 投影。</li>
+<li>合并来源：SR-04、SR-03 文案部分</li>
+</ul>
+</div></details>
+<details class="task" id="P-12" data-status="todo"><summary><code>P-12</code><span>Claude / Codex 安装与诊断接手</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-06</li>
+<li>已有基础：插件构建、setup/doctor、自检脚本及安装指南已存在，N 系列安装结果不抹掉重做。</li>
+<li>兑现：把新工作流 / 知识协议加入安装检查；独立收据、shim 引用关系、路径移动与旧服务身份诊断。</li>
+<li>落点：scripts/testpilot-setup.mjs、build-claude-plugin.mjs、build-codex-plugin.mjs、plugins/testpilot-claude/、plugins/testpilot-codex/、docs/v3/14-Claude-Code与Codex接入实操.md</li>
+<li>验收：双宿主正反顺序安装、升级、卸载都保留另一宿主及用户配置；doctor 不输出密钥，能区分服务/项目/协议错误；与当前 env 双模型约定一致。</li>
+<li>验证：现有 setup/plugin tests、check:drift；临时目录安装/卸载验收，指南命令与实际收据核对。</li>
+</ul>
+</div></details>
+<details class="task" id="P-11" data-status="todo"><summary><code>P-11</code><span>宿主与 Web 共用运行和节点协议</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-09、P-12</li>
+<li>已有基础：Claude、Codex、Penguin 原生适配及 MCP run gateway 已存在；需覆盖新增节点/知识/结构契约。</li>
+<li>兑现：三宿主创建和续跑同一类 run，读取共享物料与节点尝试，提交修订提案；Web 可管理和 review，规划身份仍来自宿主。</li>
+<li>落点：server/src/claudecode.ts、codex.ts、runtime/、runStages.ts、packages/testpilot-mcp/src/run-gateway.ts、runService.ts</li>
+<li>验收：每宿主一次 Spec 创建、节点调试、Web 审阅往返；不另填宿主规划端点；只能请求人类决定；digest / grant / 版本冲突拒绝，测试执行仍走 Midscene。</li>
+<li>验证：run-gateway、host adapters、model-snapshots 协议检查及三个宿主联调收据；协议通过不当质量对照。</li>
+</ul>
+</div></details>
+<details class="task" id="P-20" data-status="doing"><summary><code>P-20</code><span>本地产品全流程验收</span><b class="task-status">进行中</b></summary><div class="task-body">
+<ul>
+<li>状态：doing</li>
+<li>宿主复验：Codex 原生生成与 MCP 提交执行已通过，10/10 公开页面冒烟用例；范围、身份和证据见 <a href="#codex-acceptance">19</a>，其余验收仍待完成。</li>
+<li>本轮进度：已落地部分服务/UI并执行真实路径；代码、证据与剩余条款见 <a href="#implementation">18</a>。</li>
+<li>依赖：P-05、P-10、P-11、P-17、P-28</li>
+<li>已有基础：原型已有 60 项 DOM 检查，生产新交互尚未验收；原型测试不能替代真实服务。</li>
+<li>兑现：真实项目完成创建→Spec/Explore→结构→设计→审批→执行→报告/基线→Gold/记分板与 Penguin 入口；宿主接手和重启恢复。</li>
+<li>落点：src/、server/test/、scripts/verify-workflows-ui.cjs、verify-model-settings-ui.cjs、docs/v3/evidence/</li>
+<li>验收：11 文档全部用户故事有正/反路径证据；键盘、窄屏、语言主题、空错态、断网重连、跨项目隔离通过；不等待正式论文或真人研究才能验收本地产品。</li>
+<li>验证：pnpm typecheck、pnpm test、pnpm build、pnpm check:drift；真实浏览器完整路径与日志，服务收尾及遗留项记录。</li>
+</ul>
+</div></details>
+<h3 id="tasks-6">5. P1 · 领域研究与独立基准</h3>
+<details class="task" id="P-13" data-status="todo"><summary><code>P-13</code><span>近邻研究复核与创新性审计</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：无</li>
+<li>已有基础：12 文档保留 2026-09-09 文献快照；本轮不将旧检索称为最新综述。</li>
+<li>兑现：复核 WebTestPilot、REAG、强 plain LLM 与可运行基线；固定全文/实现版本/许可，收敛贡献与同名处理。</li>
+<li>落点：docs/v3/12-论文级研究与受控自进化.md、evals/、benchmark/ 的独立研究协议目录</li>
+<li>验收：每个差异有原文依据；不可复现记录替代适配和局限；不将 RAG/角色数量/界面图本身当创新。</li>
+<li>验证：primary sources 检索记录、差异矩阵、最小可运行基线脚本与适配条件。</li>
+</ul>
+</div></details>
+<details class="task" id="P-14" data-status="todo"><summary><code>P-14</code><span>冻结实验协议、消融与统计方案</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-13</li>
+<li>已有基础：已有 RQ1～5 与 pilot，不足以直接指定正式样本量。</li>
+<li>兑现：主指标/单位、数据拆分、预算、候选搜索成本、排除/停止规则与精度设计；纳入 Spec-only/Explore-only/融合、层级结构、领域及 ContextManifest 消融。</li>
+<li>落点：docs/v3/12-论文级研究与受控自进化.md、evals/ 与新协议 manifest</li>
+<li>验收：开发 pilot 决定规模；独立任务/缺陷家族作为统计单位，不以重复 case 当 n；协议在正式运行前冻结 hash；Code 暂不入组。</li>
+<li>验证：协议 schema、分组泄漏审计、成本口径与分析脚本的合成数据校验。</li>
+<li>合并来源：PC-08 协议</li>
+</ul>
+</div></details>
+<details class="task" id="P-15" data-status="todo"><summary><code>P-15</code><span>领域知识与独立判据扩充</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-02、P-14</li>
+<li>已有基础：已有数量精度 fixture 和领域候选；不能泛化为整个金融领域已验证。</li>
+<li>兑现：扩充分场所数量/价格边界、幂等、订单状态、保证金、只减仓等规则与正确/缺陷 fixture；标明单位、版本、有效期与冲突。</li>
+<li>落点：packages/harness-testing/src/exec/、casegen/、fixtures/、独立领域知识版本目录</li>
+<li>验收：权威来源逐条可审；正确/缺陷实现独立判别；知识公开部分不含私有 Gold/补丁；引用存在不等于判据语义正确。</li>
+<li>验证：精确数值、状态转移、时效、误报及独立变异家族测试；来源版本审阅。</li>
+</ul>
+</div></details>
+<details class="task" id="P-22" data-status="blocked"><summary><code>P-22</code><span>真实领域金标标注与冻结</span><b class="task-status">待外部条件</b></summary><div class="task-body">
+<ul>
+<li>状态：blocked · 需要实际领域标注者；可先准备数据与标注说明</li>
+<li>依赖：P-14、P-15</li>
+<li>已有基础：Gold 草稿/人工复核/冻结机制存在，当前仍缺正式真人标签条件。</li>
+<li>兑现：准备独立数据、标注手册和分歧裁决流程；实际双人标注、署名复核与冻结。</li>
+<li>落点：server/src/gold.ts、src/pages/Gold.tsx、独立评测数据新谱系；原 protected 数据保持</li>
+<li>验收：真实审核身份、分歧/一致率、划分和冻结 hash；不得代填真人确认，不以 UI 按钮测试冒充完成；数据准备可先进行。</li>
+<li>验证：人工审阅收据与可重算 hash、数据泄漏检查；明确标注者为外部条件。</li>
+</ul>
+</div></details>
+<details class="task" id="P-16" data-status="todo"><summary><code>P-16</code><span>公平实验执行器与 manifest</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-14、P-15</li>
+<li>已有基础：已有 evals、score_run、paired_eval、运行账本及 pilot 脚本。</li>
+<li>兑现：固定同 planner/executor/预算/材料，对强简单基线、相关方法和完整版本运行；绑定结构/知识/Skill/上下文版本及正确/缺陷 SUT。</li>
+<li>落点：packages/testpilot-mcp/src/、server/scripts/、evals/、packages/harness-core/src/run-contracts.ts</li>
+<li>验收：所有参试方法有等价隔离；失败、无效、截断和超时留在分母；历史缺 manifest 不混入正式实验；Gold 未冻结可做开发试跑，不启动正式结论。</li>
+<li>验证：manifest 校验、固定输入回放与账本完整性；逐臂配置 diff 和来源收据。</li>
+</ul>
+</div></details>
+<h3 id="tasks-7">6. P1 · 受控进化、研究与论文</h3>
+<details class="task" id="P-18" data-status="todo"><summary><code>P-18</code><span>有界策略候选与 Skill 适配</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-16、P-27</li>
+<li>已有基础：Penguin 扩展仅支持 memory scoped/off，现有真实候选被拒；通用 Skill 自动改写未实现。</li>
+<li>兑现：先保留 memory 基线，再为选定单一 Skill/检索策略增加版本化候选适配器与加载证明；固定搜索预算，保留失败分类。</li>
+<li>落点：server/src/evolution/worker.ts、runner.ts、sandbox.ts、candidateInstance.ts、store.ts、plugins/testpilot/skills/ 的候选副本</li>
+<li>验收：候选只写实验资产，不改 oracle/Gold/evaluator/审批；随机/反思与冻结基线等预算；真实消费候选 hash 可验证；没有改善就拒绝，不直接绑定生产。</li>
+<li>验证：隔离 canary、预算累计、候选加载、失败与超时；正式 Skill 晋升前验证可重建资产包和回滚。</li>
+<li>合并来源：SR-05 候选扩展</li>
+</ul>
+</div></details>
+<details class="task" id="P-19" data-status="todo"><summary><code>P-19</code><span>Penguin 实验、版本与 Web 证据深链</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-17、P-18</li>
+<li>已有基础：扩展配套 UI、发布门禁、CAS/回滚和 Web 激活指针已有，非 Penguin 原生自动接受优化器。</li>
+<li>兑现：双向链接同一 candidate / experiment / run；显示 diff、预算、配对结果、缺失门禁；激活版本与新 run 快照一致。</li>
+<li>落点：extensions/penguin-evaluation/ui.html、index.mjs、server/src/evolution/http.ts、releaseGates.ts、bridge.ts、src/pages/Scoreboard.tsx</li>
+<li>验收：缺实际冻结 Gold/留出/跨宿主收据不可晋升；一次留出、人工决定、CAS 冲突和回滚有效；服务停止/权限不足明确；旧 run 不追随激活指针改变。</li>
+<li>验证：evolution-release / evolution tests 与真实扩展联调；合成门禁验证单独标识。</li>
+<li>合并来源：SR-05 发布</li>
+</ul>
+</div></details>
+<details class="task" id="P-21" data-status="todo"><summary><code>P-21</code><span>人工结构审阅研究</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-14、P-20</li>
+<li>已有基础：只有可点击原型与自动检查，没有真实参与者结果。</li>
+<li>兑现：同数据/权限的图形层级 vs 列表对照，准备任务、盲评标准与匿名事件，再招募真实目标用户。</li>
+<li>落点：独立研究协议、脱敏事件导出、产品结构组件的对照视图</li>
+<li>验收：平衡顺序/学习效应，正确修订、耗时、漏检/工作负担和退出规则预声明；真人条件未满足不标完成；生成质量实验不必等待 RQ5。</li>
+<li>验证：试验材料校验、实际参与者同意/结果、预定分析；不得生成虚假参与者数据。</li>
+<li>合并来源：PC-08 审阅研究</li>
+</ul>
+</div></details>
+<details class="task" id="P-23" data-status="todo"><summary><code>P-23</code><span>正式实验与独立复现</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-16、P-18、P-22、P-26</li>
+<li>已有基础：N-16/N-22/N-21 只提供 pilot / 负结果；没有正式增益结论。</li>
+<li>兑现：冻结脚本运行主对比、单因素消融、双模型质量/成本、稳定性与受控适应；结果接入 P-17/P-19。</li>
+<li>落点：evals/、server/scripts/、独立研究 manifest / 分析脚本 / 证据目录</li>
+<li>验收：效应量与置信区间、任务/家族配对、全部尝试/排除/搜索成本完整；真实跨夜不能改日期；另一干净环境复现；负结果照实保留。</li>
+<li>验证：预注册分析、一致性回放、独立环境收据；长周期观察按实际完成度记录。</li>
+<li>合并来源：PC-08 主实验</li>
+</ul>
+</div></details>
+<details class="task" id="P-24" data-status="todo"><summary><code>P-24</code><span>论文与公开复现工件</span><b class="task-status">待实施</b></summary><div class="task-body">
+<ul>
+<li>状态：todo</li>
+<li>依赖：P-13、P-23</li>
+<li>已有基础：已有研究方案，无完成论文或投稿承诺。</li>
+<li>兑现：方法/边界图、证据链、主结果/消融/成本、威胁与限制、匿名工件、许可和复现说明。</li>
+<li>落点：docs/v3/12-论文级研究与受控自进化.md、论文与脱敏 artifact 目录</li>
+<li>验收：每项主张追到 manifest；若 P-21 未完成，明确不声称 UI 用户研究收益；发布/投稿是后续具体动作，不能用工程完成率代替论文成熟度。</li>
+<li>验证：引用核对、结果复算、脱敏/许可检查、独立复现报告。</li>
+</ul>
+</div></details>
+<h3 id="tasks-8">7. PC / SR 对照与验收证据</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>旧补充任务</th><th>唯一实施归属</th></tr>
+</thead>
+<tbody>
+<tr><td>PC-01 / PC-02 / PC-03 / PC-04</td><td>P-01 / P-25 / P-02 / P-03</td></tr>
+<tr><td>PC-05 / PC-06 / PC-07</td><td>P-07 / P-27 / P-26</td></tr>
+<tr><td>PC-08</td><td>P-14、P-15、P-16、P-21、P-23</td></tr>
+<tr><td>SR-01 / SR-02</td><td>P-28</td></tr>
+<tr><td>SR-03</td><td>P-06、P-17；文案原则同时适用于所有页面</td></tr>
+<tr><td>SR-04</td><td>P-17</td></tr>
+<tr><td>SR-05</td><td>P-18、P-19、P-22、P-23</td></tr>
+</tbody>
+</table></div>
+<p>每个任务证据目录 <code>docs/v3/evidence/p-xx/</code> 记录用户可见结果、代码差异、契约变化、验证命令与退出码、实际截图/日志、数据与权限条件、残留风险、服务收尾、下一任务。工作树可能含未提交改动，应记录 commit 与相关 diff hash，不能依赖 commit 单独复现。</p>
+<p>常用代码验证：<code>pnpm typecheck:app</code>、相关 server/package tests；跨层完成后 <code>pnpm typecheck</code>、<code>pnpm test</code>、<code>pnpm build</code>。修改 Skill / prompts 必须更新对应版本并通过 <code>pnpm check:drift</code>；不要为仅文档改动启动完整模型实验。执行范围与成本落在对应 evidence，不再默认跑所有模型。</p>
+<p>原型与报告构建：<code>python3 scripts/build-prototype-refinement.py</code>、<code>python3 scripts/build-ui-research-report.py</code>。不要直接改生成 HTML 来代替源码。正式前端采用 React 组件与真实接口，不能把 prototype 的 Map / 示例数据 / DOM 字符串直接复制为生产状态。</p></section><section class="chapter" id="design"><div class="eyebrow">DESIGN</div><h2>当前 UI 与用户故事</h2><p class="caption">对应接手文档：<a href="../v3/11-WebUI全流程评审与产品设计.md">11-WebUI全流程评审与产品设计.md</a></p><div class="chapter-toc"><a href="#design-1">1. 产品目的与边界</a><a href="#design-2">2. 当前导航与页面规则</a><a href="#design-3">3. 用户故事与验收路径</a><a href="#design-4">4. Flow、节点与产物交互</a><a href="#design-5">5. 产品结构、知识与融合数据</a><a href="#design-6">6. 复用本地代码的架构分层</a><a href="#design-7">7. 报告、Gold 与 Penguin 的实际职责</a><a href="#design-8">8. 实施范围与验证</a></div><p>更新：2026-09-10。设计依据为用户逐轮确认的 <a href="testpilot-review-prototype.html">当前原型</a>、本地 <code>src/</code> / <code>server/</code> / packages 代码，以及既有验证证据。本轮重新核对源码，没有启动生产 UI 或真实模型；09-09 截图保留为历史问题证据。</p>
+<p>本文替代此前“复核作为首页”“产品结构作为工作台平级模式”“工作流执行记录单列菜单”的方案。历史设计保存在 <a href="../v3/history/11-WebUI全流程评审与产品设计-2026-09-10-before-implementation.md">修改前快照</a>。实施状态只在 <a href="#tasks">13 · 实施台账</a> 维护，原型完成不代表本地代码已经实现。</p>
+<h3 id="design-1">1. 产品目的与边界</h3>
+<p>TestPilot 是自动生成可执行测试用例的垂直 Harness Agent。输入需求规格或实际产品观察，结合产品结构、领域知识和测试方法，形成可审阅的故事、验收判据、测试用例、执行代码与证据。目标同时包括可用的产品闭环和可发表研究所需的独立实证。</p>
+<p>Web UI 管项目、输入材料、工作流执行、产物与 review；Claude Code / Codex / PenguinHarness 宿主也通过相同应用服务管理这些对象。Penguin 的 TestPilot Evaluation 配套扩展管理受控候选与评估发布，不接管 Web 的全部工作流和产物管理。</p>
+<p>两个模型角色固定：思考规划由 Web 配置或宿主原生模型承担；Midscene 使用低成本执行模型。Web 暂时默认继承 Midscene 的同一模型，后续 env / 项目配置可独立覆盖；宿主不另配规划模型。业务 Role、Skill、领域知识与模型角色是不同概念，不能给每个节点强行增加一个模型配置。</p>
+<h3 id="design-2">2. 当前导航与页面规则</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>一级入口</th><th>页面内容与二级入口</th><th>必须保持的归属</th></tr>
+</thead>
+<tbody>
+<tr><td>工作台</td><td>Flow、run 选择、新建 / 继续、节点调试、节点产物</td><td>默认首页；执行记录在选择器里；无流程 / 产品结构平级切换</td></tr>
+<tr><td>复核</td><td>结构筛选、用例队列、详情 / 修订 / 证据、批量范围</td><td>产品模块图是筛选和下钻工具，保留现有并排审阅</td></tr>
+<tr><td>物料</td><td>产品结构、用户故事、文本用例、追溯、领域知识、Role / Skill、代码、变更、交付</td><td>可按 run / revision 查看；结构是整理故事产物</td></tr>
+<tr><td>运行报告</td><td>执行记录、套件批次、趋势</td><td>只反映被测产品测试结果，不混入基线审批</td></tr>
+<tr><td>基线</td><td>待审批、当前基线、审批记录</td><td>视觉 / 性能参照独立管理，不切换到运行报告</td></tr>
+<tr><td>记分板</td><td>能力筛选、实验结果、版本绑定、成本与证据、Penguin 入口</td><td>结果先于研究说明；不在 Web 实现第二个优化器</td></tr>
+<tr><td>Gold</td><td>标签、来源、开发 / 留出划分、人工复核、冻结谱系</td><td>评测依据独立于测试用例审批与领域知识</td></tr>
+<tr><td>设置</td><td>项目 / 目标、环境登录、模型、宿主接入、语言；高级流程 / Role / Skill 配置</td><td>配置来源和生效范围明确，专业设置按需展开</td></tr>
+</tbody>
+</table></div>
+<p>侧栏可收起为带可访问名称的图标；底部保留中 / EN / 日与主题；当前项目下拉有新增入口。偏好可以本地保存，真实项目与运行数据必须由服务管理。页面只显示一个当前内容标题，说明进帮助或折叠区；失败、缺内容、权限不足、实际操作结果仍直接显示。</p>
+<p>初始打开进入 Flow。历史生产 <code>#/?open=...</code> 继续兼容；原型 <code>#view=...</code> 用于设计导航，不直接当生产路由协议。正式实现复用/扩展当前 router 与 SurfaceContext，显式携带 project/run/revision/scope；旧 map、stories、wfruns 链接重定向到正确产物或 Flow 选择器，不能静默回到另一运行。</p>
+<h3 id="design-3">3. 用户故事与验收路径</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>ID</th><th>用户目标</th><th>完整路径</th><th>对应任务与失败场景</th></tr>
+</thead>
+<tbody>
+<tr><td>UI-01</td><td>新用户开始项目</td><td>新增项目 → 环境 / 模型 → Flow 空工作台</td><td>P-06；空列表、保存失败、重复名称、连接不可用</td></tr>
+<tr><td>UI-02</td><td>从规格生成测试</td><td>新 run → Spec → 上传 / 指定材料 → 绑定领域知识 → 解析 → 结构与故事 → 用例设计</td><td>P-25/P-02/P-07/P-09；错误格式、来源缺失、预算中止</td></tr>
+<tr><td>UI-03</td><td>从界面补充测试</td><td>新 run → Explore → 目标 / 限制 / 登录 → 观察 → 候选结构与故事</td><td>P-25/P-26；访问失败、越界动作、观察与规格冲突；Code 当前禁用</td></tr>
+<tr><td>UI-04</td><td>选择并调试运行</td><td>Flow 选择记录 → 查看该次节点与产物 → 单/多节点 → 未运行节点断点 → 继续原 run</td><td>P-08～10；缺上游、重启、并发继续、失败重试、断点资格</td></tr>
+<tr><td>UI-05</td><td>审阅大型产品</td><td>故事节点产物 → 主模块图 → 子模块 → 功能 → 跨模块故事 → 用例 / 原文</td><td>P-02/P-03；千级功能、同名功能、无故事模块、唯一故事去重</td></tr>
+<tr><td>UI-06</td><td>融合不同入口</td><td>选本项目 Spec/Explore 候选 → 实体对齐 → 冲突裁决 → 新产品版本 → 影响列表</td><td>P-26/P-04；跨项目、并发冲突、旧审批失效</td></tr>
+<tr><td>UI-07</td><td>修订并批准用例</td><td>产品结构筛选 → 队列 / 详情 → 改 expected / 来源 → diff → 审批 → 执行</td><td>P-04；权限、过期批准、批量范围漂移、修复偷改断言</td></tr>
+<tr><td>UI-08</td><td>查看执行与差异</td><td>执行报告 → run / case 证据；基线 → 对照 → 决定 → 当前参照 / 审计</td><td>P-28；缺截图、性能缺失、错误 run、重复或过期审批</td></tr>
+<tr><td>UI-09</td><td>管理知识与交付</td><td>知识 / Skill 候选 → 版本 / 角色范围 → 新 run 冻结 → 导出产品与测试报告</td><td>P-07/P-27/P-05；未解析 Skill、不兼容宿主、未知依据、敏感数据</td></tr>
+<tr><td>UI-10</td><td>用宿主接续任务</td><td>Claude/Codex 安装 → doctor → 宿主创建/续跑 → Web 审阅 → 宿主消费批准版本</td><td>P-12/P-11；旧服务、协议不符、共享 shim、工具越权</td></tr>
+<tr><td>UI-11</td><td>评估并改进 Agent</td><td>Gold 人工冻结 → Penguin 对照候选 → 记分板 → 留出/跨宿主 → 人工晋升/回滚</td><td>P-17～19/P-22/P-23；未冻结、缺绑定、无改善、不可晋升</td></tr>
+</tbody>
+</table></div>
+<p>P-20 验收 UI-01～11 的本地可用路径及未满足条件时的准确展示。UI-11 真实有效晋升另需研究发布证据；不能为了完成页面验收伪造候选收益或真实人工批准。</p>
+<h3 id="design-4">4. Flow、节点与产物交互</h3>
+<p>Flow 顶部只保留 run 选择、输入摘要、必要操作和主要执行按钮。选中的历史 run 决定流程版本、节点状态与物料；新 run 先是未执行节点和空产物。工作流执行记录不是被测产品的测试执行报告，也不再占一个独立侧栏入口。</p>
+<p>点击节点打开调试详情：职责、输入来源、Role / Skill / 领域版本、参数、attempt、日志、成本与输出。未执行节点展示预期产物类型；已完成节点展示其真实产物，点击产物进入对应 viewer。不要用同一“产品结构参考图”冒充所有 run 的输出。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>行为</th><th>生产语义</th></tr>
+</thead>
+<tbody>
+<tr><td>新建 run</td><td>新 ID，选择来源入口、runtime、材料与知识，冻结定义和模型配置</td></tr>
+<tr><td>继续 run</td><td>原 ID、原快照，跳过成功节点；不把当前设置覆盖到旧 run</td></tr>
+<tr><td>重试节点</td><td>原节点新增 attempt；保留失败输出与事件，副作用去重</td></tr>
+<tr><td>断点</td><td>只允许当前范围内尚未尝试的节点；在开始前暂停；失败或已完成不算未运行</td></tr>
+<tr><td>命中后继续</td><td>跨过当前断点一次，后续断点仍生效；服务端负责并发检查</td></tr>
+<tr><td>单节点 / 多节点</td><td>明确执行 / 复用 / 阻塞清单，缺上游不隐式扩成全流程</td></tr>
+<tr><td>配置改变</td><td>新 run 或显式实验工作副本；保留旧运行，不偷换知识、Skill 或批准版本</td></tr>
+</tbody>
+</table></div>
+<p>日常是垂直标准流程；重组只放「设置 → 高级实验流程」。任何模板都保留不可绕过的质量与审批约束。默认整理故事后形成结构检查点，首次生成或大幅变更需结构确认后再进入高成本设计；这种确认属于产品数据审批，不是研究晋升。</p>
+<h3 id="design-5">5. 产品结构、知识与融合数据</h3>
+<p>核心关系：SourceRevision → ProductBundle（模块树 + 故事 + 旅程 + 验收）→ CaseRevision → Approval → Execution → Evidence。每个 run 的候选单独保存，项目融合产生新 revision；共享筛选引用确定产品版本，而不是全局可变的“最新结构”。完整字段定义见 <a href="#product-model">16 · 产品结构与多入口知识契约</a>。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>对象</th><th>服务端必须固定的字段与语义</th></tr>
+</thead>
+<tbody>
+<tr><td>Run / NodeAttempt</td><td>project、workflowVersion、scope、input revisions、runtime、模型、node/attempt、状态、预算、事件</td></tr>
+<tr><td>SourceRevision</td><td>sourceKind、contentHash、来源定位、事实类型 required / observed / inferred、run 来源</td></tr>
+<tr><td>ProductBundle</td><td>任意层级 nodes、唯一 stories、多模块/功能关联、journeys、验收条件、parentRevision、来源与冲突</td></tr>
+<tr><td>ArtifactRevision</td><td>kind/mediaType、contentHash、run/node/attempt、来源及 schemaVersion；正文/图/代码按类型渲染</td></tr>
+<tr><td>KnowledgePack / SkillBinding</td><td>来源、适用模块/角色、版本/hash、依赖、权限、解析与兼容状态</td></tr>
+<tr><td>ContextManifest</td><td>实际加载知识/Skill/source片段、角色版本、工具授权、token预算、截断及消费收据</td></tr>
+<tr><td>Review / BaselineDecision</td><td>对象与旧/新 revision、操作来源（本地免登录，不等同验证身份）、理由/决定、时间、并发版本、幂等键</td></tr>
+<tr><td>EvaluationBinding</td><td>Gold/input/model/runtime/policy/SUT/预算/协议指纹与完整尝试，禁止缺绑定排名</td></tr>
+</tbody>
+</table></div>
+<p>Spec 需求与 Explore 观察互补，但互相矛盾时保留声明与来源，不能以观察覆盖规范。同名实体给对齐建议，用户裁决后保存新版本；跨模块故事唯一存储。大型应用采用子树查询、分页/虚拟化、搜索定位与去重统计。文本上传、图和 Markdown viewer 均需要输入校验与内容清洗。</p>
+<p>Role 定义职责与写边界；Skill 定义处理方法及依赖；领域知识提供业务规则；Agent 是承载上下文的执行者。用一个编排器、按需隔离的 LLM 阶段、确定性工具即可。不同节点不一定需要不同常驻 agent，但必须有可验证的上下文与权限边界。</p>
+<h3 id="design-6">6. 复用本地代码的架构分层</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>层</th><th>现有落点</th><th>本轮增量</th></tr>
+</thead>
+<tbody>
+<tr><td>React 页面与应用状态</td><td>App / AppNav、Workspace、Review、Artifacts、RunReport、Baselines、Scoreboard、Gold；store / wf / api</td><td>Flow 首页、统一身份、run 选择与结构筛选、简化标题与导航，保留原审阅布局</td></tr>
+<tr><td>应用服务与编排</td><td>runRoutes、runService、runStages、workflowOps、workflowExecution、review / approvedRuns</td><td>导入契约、节点状态机、上下文下发、结构确认、融合和影响传播</td></tr>
+<tr><td>领域契约与校验</td><td>harness-core/run-contracts、harness-testing/casegen/types / validate</td><td>ProductBundle v2、KnowledgeBinding、ContextManifest；迁移与强制引用校验</td></tr>
+<tr><td>执行适配</td><td>Claude / Codex / native Penguin / Web planner、MCP gateway、Midscene runner</td><td>相同服务协议与角色授权，不复制宿主模型配置、不放宽 oracle</td></tr>
+<tr><td>持久化与投影</td><td>现有 run ledger、artifact revisions、blobs、events、costs</td><td>增量 schema / 索引 / 查询投影；不再建一份独立前端运行事实库</td></tr>
+<tr><td>独立研究与发布</td><td>Gold、scoreboard、server/evolution、Penguin evaluation 扩展</td><td>证据深链、正式 manifest、受限策略适配；人工审核与私有留出数据隔离</td></tr>
+</tbody>
+</table></div>
+<p>生产当前仍有旧“迁移到 Penguin”注释与分组，实施应按实际代码和本次用户决策纠正。<code>nav.ts</code> 的 canvas→wfruns 高亮、<code>App.tsx</code> 无 run 时默认 review、<code>surfaces.tsx</code> 的 exec 混组都是明确入口改造点，不能仅给原型换链接。</p>
+<p>对服务实施数据库增量迁移和兼容只读投影；保存前校验 revision / 权限 / 输入，保存后追加事件。run 快照、批准记录、原始产物不可被新 UI 状态覆盖。UI 只负责展示与命令，服务端承担断点、审批、门禁和版本约束。</p>
+<h3 id="design-7">7. 报告、Gold 与 Penguin 的实际职责</h3>
+<p>运行报告回答被测产品结果，基线管理截图/性能参照；Gold 是人工冻结的评分依据；记分板是版本结果与成本证据；Penguin 配套扩展组织候选对照与发布审核。使用流程见 <a href="#evaluation-guide">17 · 报告基线与评测职责</a>。</p>
+<p>本地已经有 Scoreboard / Gold 服务与扩展，实施以接入为主。当前扩展只能改 memory scoped/off，通用 Skill 自动改写需要 P-18 的新适配和版本化资产；已有门禁框架不代表已有真实正向晋升。原型缺指纹时不可比较的规则应落实到服务，而不是只把按钮置灰。</p>
+<h3 id="design-8">8. 实施范围与验证</h3>
+<p>当前原型已验证：60 项 DOM 检查，包括八项导航、run/断点、产物、产品结构、知识/融合、报告/基线分离、Gold/记分板和语言主题。该证据不包含浏览器像素验收、真实上传提取、模型执行质量或生产数据库变更。原型的重建结构、模拟产物与演示审批不得进入真实数据或评测集。</p>
+<p>实际本地实施顺序、代码落点和验收统一见 <a href="#tasks">13 · 实施台账</a>。第一切片先打通真实数据与 Flow，再做大型结构审阅、多入口融合、报告与宿主接续。研究按 <a href="#research">12 · 论文与受控自进化</a> 独立推进；方法对照、独立标签、失败分母、置信区间与负结果继续保留。</p>
+<p>每次移植保留既有功能与用户改动，以相关测试和实际用户路径关闭任务，不用复制 HTML/Map 示例作为生产实现。仅本轮报告与计划更新不触发项目启动、模型调用、真实人工审批或任务 done。</p></section><section class="chapter" id="product-model"><div class="eyebrow">PRODUCT-MODEL</div><h2>产品结构、来源与知识</h2><p class="caption">对应接手文档：<a href="../v3/16-产品结构与多入口知识契约.md">16-产品结构与多入口知识契约.md</a></p><div class="chapter-toc"><a href="#product-model-1">1. 本次设计结论</a><a href="#product-model-2">2. 本轮原型可操作路径</a><a href="#product-model-3">3. 用户故事与端到端流程</a><a href="#product-model-4">4. 产品模型与数据边界</a><a href="#product-model-5">5. 多入口融合规则</a><a href="#product-model-6">6. 领域知识与 finance Skill</a><a href="#product-model-7">7. 当前职责评估与隔离目标</a><a href="#product-model-8">8. 论文级目标与自进化验证</a><a href="#product-model-9">9. 正式实施顺序与验收</a><a href="#product-model-10">10. 最新导航约束（2026-09-10）</a></div><p>&gt; 2026-09-10 · 本轮用户决策与 Claude 接手设计。原型已接入可审阅交互；本文件的数据契约与运行时隔离是正式实施目标，不代表生产服务已经实现。继续保留自动生成测试用例的垂直 Harness Agent、Web / 宿主双运行方式、规划 / Midscene 双模型及论文级评估目标。</p>
+<h3 id="product-model-1">1. 本次设计结论</h3>
+<p><strong>“产品结构 + 用户故事”是整理故事节点的联合产物，也是项目长期积累的产品模型。</strong> Flow 是运行入口；结构图是物料审阅与大列表筛选入口，两者共用版本与来源。</p>
+<p>产品结构采用树表示主模块、子模块、功能；用户故事通过多对多关系关联功能和模块。跨模块流程单独建图。不要把同一个跨模块故事复制到几个模块，也不要把页面清单当成功能或用户故事。</p>
+<p>Spec 表达产品要求，Explore 表达观察到的实际行为，Code 未来表达实现线索。不同入口的产出先作为候选，与项目产品模型对齐、去重、审阅冲突，再形成新版本；观察不能直接改写需求，代码行为也不能自动成为正确性判据。</p>
+<p>前置知识与 Skill 都需要，但应区分：知识提供规则、术语、边界和出处；Skill 提供处理方法、指令及可能的工具依赖。Role 决定职责和权限；Agent / 宿主是承载它的执行上下文。<strong>换一个角色名称或提示词不构成隔离。</strong></p>
+<h3 id="product-model-2">2. 本轮原型可操作路径</h3>
+<p>原型为 <a href="testpilot-review-prototype.html">现有 HTML 工作台</a>。刷新后使用。</p>
+<p>1. Flow 选历史 run → 点击节点下方的 artifact，或“更多 → 本次全部物料”。物料页的“运行物料”也保留同一 run 的查看入口。 2. 规格物料展示已嵌入正文；代码展示对应归档内容；门禁、判据、覆盖和修复可进入原有详情。没有原始内容的地方明确说明缺失，原始数据收进“数据与来源”。 3. 故事物料显示“产品结构 + 用户故事”。旧 <code>wf-mt0xaw2g</code> 只保留 20 故事计数，未嵌入完整明细；可另开从规格重建的 22 故事产品文档，标注重建参考，不改变旧 run 产量。 4. 新 run → 开始执行 → Spec / Explore / Code。Spec 支持上传 Markdown / TXT / JSON，多份、每份 2 MB、最多 20 份；可移除或查看。Explore 填写 HTTP(S) 地址与探索限制。Code 显示暂不支持。PDF / Word 解析暂不支持，错误明确展示。 5. 在创建表单或“物料 → 领域知识”添加知识 / Skill，上传文本或登记路径、标识，选择适用模块与节点。知识引用保存为候选，未解析的引用标记待解析；上传 <code>SKILL.md</code> 不运行其中的脚本。 6. 新 run 的整理故事节点完成后，可查看结构化产品文档示例：主模块 → 子模块 → 功能 → 故事。新模拟 run 使用内置规格示例展示结构，没有对用户上传材料执行模型提取。 7. 项目产品结构延续原有模块图；选择模块后可再筛子模块、功能。用例复核增加“按产品结构筛选”，直接过滤下方队列，保留原有队列 / 详情布局。 8. 产品文档 → 融合审阅 → 选择本项目候选 run → 逐项处理字段冲突 → 保存新版本。相同实体按稳定 ID 合并、关联和来源去重；跨项目、悬空父节点、循环层级、无效故事关联被拒绝。原型不做语义同义词自动匹配。 9. 导出产品功能文档，包含带锚点的模块层级图、功能关联、唯一故事详情与来源；没有脚本或外部依赖。所有本轮新增运行、材料、知识及融合版本仅本会话保存。</p>
+<p>原型并未调用模型、访问探索地址、执行上传 Skill、启动真实服务或产生真实研究结果。六个主模块和 22 故事是现有规格样例；大规模数据的性能与真实抽取质量需要单独验收。</p>
+<h3 id="product-model-3">3. 用户故事与端到端流程</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>用户故事</th><th>主路径</th><th>验收要点</th></tr>
+</thead>
+<tbody>
+<tr><td>产品 / QA 从规格开始</td><td>创建 Spec run → 上传多个规格 → 绑定领域知识 → 整理结构与故事 → 审阅 → 设计用例</td><td>每条需求保留源文档、段落及版本；未覆盖材料可见</td></tr>
+<tr><td>QA 从实际产品补充</td><td>Explore run → 配置目标和权限 → 观察 → 生成候选结构 / 故事 → 和项目版本对照</td><td>页面事实、业务能力、推测分开；探索范围不越权</td></tr>
+<tr><td>Review 大型产品</td><td>总体图 → 主模块 → 子模块 → 功能 → 故事 / 用例队列 → 原文 / 证据</td><td>同一结构版本驱动各列表，搜索命中后定位到路径</td></tr>
+<tr><td>跨模块业务审阅</td><td>选择关联模块 → 看到同一故事 → 展开旅程和相关功能</td><td>唯一 storyId，统计按去重实体；主责模块和参与模块明确</td></tr>
+<tr><td>领域专家维护知识</td><td>上传规则 / 指定知识包或 Skill → 设置适用模块、角色 → 保存版本 → 新 run 冻结</td><td>旧 run 不变；候选与已批准规则、有效期、来源明确</td></tr>
+<tr><td>多入口补全</td><td>选择 Spec / Explore 候选 → 实体对齐 → 冲突审阅 → 新产品模型版本</td><td>保留来源分歧，不把观察直接升级为验收标准</td></tr>
+<tr><td>Harness 开发调试</td><td>选择 run → 节点 Role / Skill / 知识快照 → 单节点 / 多节点 / 断点续跑</td><td>沿用原 run 定义、材料和知识版本；已完成节点不重复</td></tr>
+<tr><td>研究者评估进化</td><td>冻结产品与领域基准 → 修改一个能力版本 → 隔离对照 → 人工晋升</td><td>原型改善不算算法提升；模型、预算、数据和评估器可追溯</td></tr>
+</tbody>
+</table></div>
+<p>建议正式流程：</p>
+<pre aria-label="mermaid"><code>flowchart LR
+  S[Spec: 多份规格] --&gt; N[来源标准化 / 来源证据]
+  E[Explore: 页面与动作观察] --&gt; N
+  C[Code: 未来支持] -.-&gt; N
+  K[领域知识 + Skill 版本] --&gt; P[整理产品结构 + 用户故事]
+  N --&gt; P
+  P --&gt; A[按 run 保存产品候选]
+  A --&gt; M[项目模型对齐 / 融合审阅]
+  M --&gt; B[产品模型新版本]
+  B --&gt; D[测试设计 + Oracle]
+  D --&gt; G[独立规则检查与用例审批]
+  G --&gt; X[代码生成 / Midscene 执行]
+  B --&gt; R[模块图 / 故事 / 用例 / 物料筛选]</code></pre>
+<p>融合审阅属于项目模型管理，不需要把每次运行都扩展成可自由编辑的复杂图。默认流程可在整理故事后形成可审阅检查点；首次运行或需求变更明显时等待结构确认，再开展高成本设计。连续补充来源可以单跑来源与故事节点。</p>
+<h3 id="product-model-4">4. 产品模型与数据边界</h3>
+<p>正式实现建议扩展已有 StoryBundle，增加 schemaVersion，兼容迁移旧格式。下列名称是目标设计，不是当前服务已经支持的字段。</p>
+<pre aria-label="typescript"><code>type SourceKind = &#x27;spec&#x27; | &#x27;explore&#x27; | &#x27;code&#x27;;
+type SourceRef = {
+  revisionId: string; chunkId?: string; runId?: string;
+  kind: SourceKind; locator: string; contentHash: string;
+  assertion: &#x27;required&#x27; | &#x27;observed&#x27; | &#x27;implemented&#x27; | &#x27;inferred&#x27;;
+};
+type ProductNode = {
+  id: string; projectId: string; parentId: string | null;
+  kind: &#x27;module&#x27; | &#x27;submodule&#x27; | &#x27;feature&#x27;;
+  name: string; description: string; sourceRefs: SourceRef[];
+  status: &#x27;candidate&#x27; | &#x27;approved&#x27; | &#x27;deprecated&#x27;;
+};
+type ProductStory = {
+  id: string; title: string; actor: string; goal: string; benefit: string;
+  primaryModuleId: string; relatedModuleIds: string[]; featureIds: string[];
+  acceptance: { id: string; text: string; sourceRefs: SourceRef[] }[];
+  journeyIds: string[]; sourceRefs: SourceRef[];
+};
+type ProductBundle = {
+  schemaVersion: 2; projectId: string; revisionId: string;
+  parentRevision: string | null; sourceRunIds: string[];
+  nodes: ProductNode[]; stories: ProductStory[];
+  journeys: { id: string; storyIds: string[]; transitions: unknown[] }[];
+  conflicts: { id: string; entityId: string; field: string; sourceRefs: SourceRef[] }[];
+};</code></pre>
+<ul>
+<li>模块树层数不在数据库写死为三层；<code>parentId</code> 支持更深子模块，禁止环和跨项目父节点。UI 默认逐层展开，初屏只加载主模块及聚合数量。</li>
+<li>Feature 是可测试的产品能力；Story 是某类用户为达成目标串联这些能力，不要求一功能只能有一故事。当前原型的一故事一功能是样例整理方式，不能成为生产约束。</li>
+<li>Journey 描述跨模块业务顺序，与模块树分开；故事可关联多个旅程。模块数量不能直接当作故事覆盖分母。</li>
+<li>用例冻结 <code>productRevisionId / storyRevisionId / featureIds / criterionIds</code>；批量审批、报告、物料检索共用结构选择器。全项目统计对 caseId / storyId 去重，模块内可同时包含主责与参与关联。</li>
+<li>模型版本变化对已审批用例产生影响分析或待重验标记，不静默回写断言。旧执行结果继续绑定其原审批版本。</li>
+<li>Artifact viewer 根据真实 artifact kind / mediaType 选择结构、Markdown、代码、表格或证据预览；显示 runId、nodeId、revision、sourceRefs，不能仅提供摘要 JSON。</li>
+<li>大应用按子树懒加载、队列分页 / 虚拟化、搜索定位、可折叠分支；主路径只展示一到三个层级。验收需包含千级功能、跨模块旅程、同名不同模块与移动窄屏场景。</li>
+</ul>
+<h3 id="product-model-5">5. 多入口融合规则</h3>
+<p>1. <strong>先统一实体，保留事实类型。</strong> 同名不保证同一功能。稳定 ID 优先；没有 ID 时给出名称、父路径、验收内容和来源的对齐候选，由用户确认，不自动删旧实体。 2. <strong>新增互补内容。</strong> 未发现的功能、异常路径或用户旅程新增为候选，保留来源链。Spec 与 Explore 的同一能力可合并实体，但其 required 与 observed 声明仍分别保存。 3. <strong>冲突不覆盖。</strong> 例如规格要求“数量必须大于 0”，页面却接受负数，应形成产品缺陷或规格待确认，不能以“最新观察”为准替换需求。正式融合需字段级解决记录和审核人。 4. <strong>版本并发保护。</strong> 提交带 baseRevision / idempotencyKey；基准已变则要求重算差异。融合事件引用全部输入 revision；旧 run 和物料不可变。 5. <strong>审批后影响追踪。</strong> 新版本触及的功能 / 验收点，映射到故事、用例与执行缓存，标为待评审 / 待重验。未触及的结果仍可按完整输入与模型指纹复用。 6. <strong>每个入口单独评估贡献。</strong> 区分新增真实覆盖、重复、误补、冲突和审阅成本；材料越多、故事越多不等于质量越高。</p>
+<h3 id="product-model-6">6. 领域知识与 finance Skill</h3>
+<p>可以支持金融领域 Skill，但不把“finance”当作一个已存在、已安装或已验证的通用能力。先登记用户实际提供的包、来源与版本。原型没有访问或读取用户其他产品中的私有 Skill。</p>
+<p>Agent Skills 标准以 <code>SKILL.md</code> 描述技能，还可包含脚本、参考文档、资源和兼容性声明；因此 Skill 不等同于领域事实文件。<a href="https://agentskills.io/specification">Agent Skills 规范</a></p>
+<p>Claude Code 在标准之上提供宿主扩展能力。可移植的文本与参考资料可以纳入 TestPilot 的版本化材料，宿主专属字段、工具、脚本与动态上下文必须由适配层校验；不能假设不同宿主的执行语义一致。<a href="https://code.claude.com/docs/en/skills">Claude Code Skills 文档</a></p>
+<p>建议领域配置使用两张清单：</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>配置</th><th>字段与行为</th></tr>
+</thead>
+<tbody>
+<tr><td>KnowledgePack</td><td>名称、版本、sourceRefs、内容 hash、适用产品 / 模块、规则有效期、术语 / 边界 / 反例 / oracle、candidate / approved</td></tr>
+<tr><td>SkillBinding</td><td>skillId、包路径 / 来源、版本 / digest、角色范围、所需脚本 / MCP / 运行环境、权限、resolved / incompatible / blocked 状态</td></tr>
+</tbody>
+</table></div>
+<p>按需装载：项目事实与通用术语 → 本模块领域规则 → 当前 Role 的方法 Skill → 当前节点输入 / 检索片段。记录实际加载的资源及 hash、检索预算和被截断内容。引用待解析只算配置完成，不能算模型已经读取。</p>
+<p>以金融领域为例，通用财务报表分析 Skill 不一定适用于永续合约测试。需要进一步提供产品自己的数量精度、保证金模式、费用、只减仓、交易规则版本，以及可执行判据。Skill 给方法，权威材料给规则，独立 oracle 给验证；具体交易或金融规则在正式接入时仍需按来源核验。</p>
+<h3 id="product-model-7">7. 当前职责评估与隔离目标</h3>
+<p>已检查的本地实现：</p>
+<ul>
+<li><code>packages/harness-testing/src/casegen/types.ts</code> 的 StoryBundle 已有 modules、flows、stories、specText 和 derivedFrom；不是从零设计。但故事主要通过 activity / flowId 关联，仍需稳定层级节点、多功能、多模块和版本关系契约。</li>
+<li><code>server/src/runStages.ts</code> 的 <code>loadRunInstructions</code> 校验资产 digest、下发 run-c / stories / design 相关 Skill 与 memory，并记录实际下发信息。它不是按每个节点单独发放能力的完整隔离器。</li>
+<li><code>server/src/runtime/skill-launch.ts</code> 在宿主模式发出整个登记 run 的阶段任务，并要求按工具顺序写 stories / cases。是否创建隔离的子上下文仍取决于实际宿主适配，并非换 Role 名即可保证。</li>
+<li><code>packages/harness-core/src/run-contracts.ts</code> 已有材料 revision、模型绑定、skill / memory digest 和事件。contextPolicy 当前主要是 memory scoped / off；仍需每节点 ContextManifest、KnowledgeBinding、工具授权与加载证据。</li>
+<li>原型曾把 source.spec 绑定到 testpilot-explore，现已修正为内置文档解析。正式插件和提示词本轮未修改，避免将设计试验误算成已发布能力。</li>
+</ul>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>节点 / 职责</th><th>专属输入与知识</th><th>写入边界</th><th>隔离要求</th></tr>
+</thead>
+<tbody>
+<tr><td>Spec 材料解析</td><td>文档、格式、来源定位、术语</td><td>SourceBundle</td><td>确定性解析优先，不需要强行创建独立 LLM agent</td></tr>
+<tr><td>Explore 产品探索</td><td>范围、登录 / 环境引用、允许操作、领域术语</td><td>ObservationBundle</td><td>浏览能力限域；记录实际动作和页面证据</td></tr>
+<tr><td>产品分析 / 故事整理</td><td>来源声明、产品基准、业务规则、对齐 Skill</td><td>ProductBundle 候选</td><td>新节点上下文，不写批准版，不自行化解业务冲突</td></tr>
+<tr><td>测试设计</td><td>本范围故事与功能、规则、方法、oracle</td><td>CaseBundle 候选</td><td>不读取 gold / 留出答案；不继承无关整个对话</td></tr>
+<tr><td>用例检查 / 审阅</td><td>固定检查表、批准事实、独立判据</td><td>Finding / 审阅建议</td><td>确定性门禁优先；若用 LLM，独立会话，不接收生成者自评分</td></tr>
+<tr><td>代码生成</td><td>已批准用例、Midscene 方法、执行端约束</td><td>代码候选</td><td>不改验收条件、不替换 oracle</td></tr>
+<tr><td>代码检查与执行</td><td>固定规则、能力策略、执行数据</td><td>gate / execution / evidence</td><td>规则门禁与 Midscene 执行权限分离</td></tr>
+<tr><td>有界修复</td><td>失败证据、原批准断言、轮次预算</td><td>修复候选</td><td>不通过放宽断言获取成功，不读取或修改评估答案</td></tr>
+<tr><td>研究评估与晋升</td><td>冻结基准、独立标签、评估器、统计计划</td><td>evaluation / 人工发布决定</td><td>与生成 workspace、权限和账本分开；PenguinHarness 管理实验</td></tr>
+</tbody>
+</table></div>
+<p>采用“一个编排器 + 每个有需要的 LLM 阶段一个受限上下文 + 确定性工具”。不需要为每个节点创建一个常驻 agent。规划与执行仍是两个模型角色，不是每个业务 Role 配一个模型。</p>
+<p>ContextManifest 至少冻结：nodeId / attempt / roleVersion、skillDigests、knowledgeRevisions、sourceChunkIds、productRevision、toolGrant、tokenBudget、实际加载证明。后续知识修订不改变旧 run；因权限或解析缺失无法续跑时，应明确阻断或创建新的 run，不能偷换快照。</p>
+<h3 id="product-model-8">8. 论文级目标与自进化验证</h3>
+<p>这是候选研究方向，不能仅凭结构图、角色数或 Skill 绑定声称创新或性能提升。与 <a href="#research">12 · 论文与受控自进化</a> 合并执行。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>研究问题</th><th>对照条件</th><th>主要指标与约束</th></tr>
+</thead>
+<tbody>
+<tr><td>多入口是否提升有效测试覆盖</td><td>Spec-only、Explore-only、Spec+Explore 融合；固定预算与能力</td><td>独立真实需求 / 缺陷覆盖、无依据断言、重复率、有效执行率、成本；Code 暂不入组</td></tr>
+<tr><td>分层产品模型是否有价值</td><td>平面 story 列表 vs 层级功能 + 跨模块关系</td><td>跨模块旅程覆盖、遗漏 / 重复、审阅完成时间；相同源材料和模型预算</td></tr>
+<tr><td>专属领域知识是否有效</td><td>无知识、全局同包、按角色 / 模块检索、加入 Skill</td><td>规则违反、边界质量、oracle 可执行性 / 正确率、token 与调用成本；不让领域包含测试集答案</td></tr>
+<tr><td>上下文隔离是否有效</td><td>同会话多 Role vs 隔离 ContextManifest</td><td>冲突发现、信息越权、生成自评污染、失败恢复；隔离带来的调用开销也计算</td></tr>
+<tr><td>自进化是否可泛化</td><td>冻结基准版 vs 只修改一个 Skill / 检索策略版本</td><td>按项目划分留出集，多次运行、配对统计、效应量和置信区间；失败计划、预算中止全部保留</td></tr>
+</tbody>
+</table></div>
+<p>先完成独立标签和数据泄漏审计，再优化 Skill；训练 / 优化数据、调参数据、最终留出项目分开。逐条记录人类改写量、接受率、断言来源、执行稳定性。候选的融合版本、提示词、检索规则不能修改 gold、评估器或晋升门槛。当前原型模拟材料不得进入评估集。</p>
+<h3 id="product-model-9">9. 正式实施顺序与验收</h3>
+<p>PC-01～08 已映射到 <a href="#tasks">13 · 实施台账</a> 的 P 任务；下表保留需求与验收依据，不再独立维护状态。</p>
+<p>以下 PC 任务是本轮新增拆分，不替代 N / P 原有任务编号，也不将其自动标为完成。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>顺序</th><th>任务</th><th>原型状态</th><th>生产验收</th></tr>
+</thead>
+<tbody>
+<tr><td>PC-01</td><td>Artifact viewer 与 run / revision 统一读取</td><td>可查看归档正文、结构参考、代码、检查详情</td><td>任意真实 run 的物料可打开；缺失内容有原因；不跨项目 / run</td></tr>
+<tr><td>PC-02</td><td>SourceKind 与材料导入契约</td><td>Spec 上传文本 / Explore 配置 / Code 禁用</td><td>上传服务、解析器、内容 hash、引用权限；入口与宿主分字段</td></tr>
+<tr><td>PC-03</td><td>ProductBundle v2 与旧格式迁移</td><td>层级和关联示例、HTML 导出</td><td>稳定 ID、任意子树、跨模块故事、journey、schema 迁移、无重复 / 悬空 / 环</td></tr>
+<tr><td>PC-04</td><td>所有大列表复用产品结构筛选</td><td>结构页与用例复核已接入</td><td>用例 / 物料 / 报告共享 revision 与作用域；千级数据和键盘交互验收</td></tr>
+<tr><td>PC-05</td><td>KnowledgePack / SkillBinding 管理</td><td>文本读取、引用、角色 / 模块绑定、版本快照</td><td>私有材料权限、包解析、依赖兼容、实际加载证明；主流宿主适配</td></tr>
+<tr><td>PC-06</td><td>ContextManifest 与阶段权限</td><td>原型冻结职责、专属知识与工具策略</td><td>服务与宿主隔离上下文、工具授权、写入验证、留出数据不可见</td></tr>
+<tr><td>PC-07</td><td>多入口融合与影响分析</td><td>稳定 ID 合并、字段冲突、版本留存</td><td>语义对齐候选、声明级来源、并发控制、人工审阅、旧审批失效分析</td></tr>
+<tr><td>PC-08</td><td>对照研究与受控进化</td><td>已落研究设计，无提升证据</td><td>独立基准、留出项目、预注册指标、多次重复、成本公平、审阅研究</td></tr>
+</tbody>
+</table></div>
+<p>优先复用现有 artifact_revisions、run registration、sourceRefs 和冻结审批机制。不要另建与现有运行账本平行的第二套存储。先校正契约与真实物料可见性，再移植 UI；最后接入角色隔离和研究。每个任务交付目标、边界、验证记录与剩余项，方便 Claude 快速接续。</p>
+<h3 id="product-model-10">10. 最新导航约束（2026-09-10）</h3>
+<p>工作台不再提供“流程 / 产品结构”并列切换；侧栏不再单列工作流执行记录。run 在工作台选择，产品结构经整理故事节点的产物进入。未运行节点只说明预期输出；结构筛选仍供物料和用例复核共享。生产实现与原型演示均应遵循这一入口关系。</p></section><section class="chapter" id="evaluation-guide"><div class="eyebrow">EVALUATION-GUIDE</div><h2>报告、基线与评测使用</h2><p class="caption">对应接手文档：<a href="../v3/17-报告基线与评测职责.md">17-报告基线与评测职责.md</a></p><div class="chapter-toc"><a href="#evaluation-guide-1">1. 用户从哪里开始</a><a href="#evaluation-guide-2">2. 这次修缮的界面约束</a><a href="#evaluation-guide-3">3. Gold、领域知识与自进化如何配合</a><a href="#evaluation-guide-4">4. 现有代码真正实现到哪里</a><a href="#evaluation-guide-5">5. 记分板当前展示哪些证据</a><a href="#evaluation-guide-6">6. 后续实施与验收</a></div><p>日期：2026-09-10。本文是当前原型交互与正式接入的接手依据。原型只读取内嵌归档，审批演示仅保存在页面会话；本轮没有修改生产服务、启动实验或更新研究标签。</p>
+<h3 id="evaluation-guide-1">1. 用户从哪里开始</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>入口</th><th>回答的问题</th><th>用户操作</th></tr>
+</thead>
+<tbody>
+<tr><td>工作台</td><td>这一次 workflow 跑到哪里、产出了什么？</td><td>选择 run，看节点与物料，新建 / 继续 / 设置断点</td></tr>
+<tr><td>运行报告</td><td>被测产品的测试执行情况如何？</td><td>查执行记录、套件批次和趋势</td></tr>
+<tr><td>基线</td><td>此次视觉或性能变化是否应成为新参照？</td><td>查看差异，批准更新或保留原参照，追查审批记录</td></tr>
+<tr><td>Gold 基准</td><td>什么算正确、应覆盖哪些独立条目？</td><td>人工编写 / 上传、复核、划分开发与留出集、冻结</td></tr>
+<tr><td>记分板</td><td>哪个 Agent 版本在相同条件下表现更好？</td><td>按能力筛选、看指标与证据、比较可比版本</td></tr>
+<tr><td>PenguinHarness 评估扩展</td><td>如何提出改进并确认能否发布？</td><td>候选差异、对照实验、留出验证、宿主回归、人工晋升 / 回滚</td></tr>
+</tbody>
+</table></div>
+<p>产品基线是视觉 / 性能参照；实验中的 baseline 是 Agent 对照策略。两者可以叫基准，但实体、审批和数据来源必须分开。</p>
+<h3 id="evaluation-guide-2">2. 这次修缮的界面约束</h3>
+<ul>
+<li>运行报告的二级导航仅有「执行记录 / 套件批次 / 趋势」。</li>
+<li>基线的二级导航仅有「待审批 / 当前基线 / 审批记录」。切换子项不能改变所属主菜单。</li>
+<li><code>section=base</code> 旧链接继续有效；新增 <code>base-current</code>、<code>base-history</code> 都归属于「基线」。</li>
+<li>物料、设置、报告统一只显示当前子页标题。页面用途放「页面说明」；长说明按需展开。错误、缺失数据与操作结果继续就地显示。</li>
+<li>用户故事页直接呈现列表、产品文档与融合入口；选中 run 的物料放在可展开区。产品结构仍是整理故事的产物，不增加工作台的平级模式。</li>
+<li>记分板首屏展示结果表。研究假设、方案和旧评测样例收进「研究与历史材料」；Gold 提供搜索与数据划分筛选。</li>
+<li>当前 Gold 为只读归档；没有伪造冻结指纹、标签正文、截图或正式版本比较。</li>
+</ul>
+<p>基线原型的批准 / 保留均会移出待审批队列，并生成本会话审批记录。「当前基线」随演示决定更新；原始 <code>PERF</code>、<code>RUNS</code> 和 Gold 不变。视觉样例没有嵌入图像，显示缺失状态。真实接入后须使用服务返回的截图与版本，不能沿用演示值。</p>
+<h3 id="evaluation-guide-3">3. Gold、领域知识与自进化如何配合</h3>
+<p>使用顺序：人工准备 Gold → 冻结评测条件 → 在 PenguinHarness 扩展组织基准与候选实验 → 记分板审阅证据 → 留出 / 跨宿主检查 → 人工决定晋升或回滚。</p>
+<p>以领域测试设计为例：领域知识包告诉生成角色数量精度、边界和业务约束；Gold 由人工独立定义应发现的规则 / 缺陷和可验证结果；评估器将实际生成与执行结果对照 Gold 计分。增加生成条目数量不能代替缺陷检出、误报或可执行率。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>对象</th><th>管理者</th><th>约束</th></tr>
+</thead>
+<tbody>
+<tr><td>领域知识、Role、Skill 候选</td><td>产品 / 领域专家与受限 Agent</td><td>带来源、作用范围和版本；改进须独立评估</td></tr>
+<tr><td>Gold 标签与评估器</td><td>独立标注者、评估维护者</td><td>人工逐条复核，冻结后修改建新谱系；不向优化器暴露留出答案</td></tr>
+<tr><td>候选运行</td><td>PenguinHarness 评估扩展</td><td>优化器只见开发反馈；外部工具计算分数</td></tr>
+<tr><td>记分板证据</td><td>TestPilot 只读视图</td><td>绑定输入、模型、Gold、运行时与策略版本；条件不齐不能直接排名</td></tr>
+<tr><td>发布决定</td><td>人工审核者</td><td>先满足留出和宿主回归门禁，再晋升；保留历史与回滚</td></tr>
+</tbody>
+</table></div>
+<p>Gold 页面不是普通测试用例审批列表，也不是模型生成答案的自动收纳处。物料中的领域知识与 Gold 可以引用相同产品来源，但不能把候选生成内容自动提升为评判它自己的正确答案。</p>
+<h3 id="evaluation-guide-4">4. 现有代码真正实现到哪里</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>能力</th><th>实际位置与当前行为</th></tr>
+</thead>
+<tbody>
+<tr><td>记分板</td><td><code>src/pages/Scoreboard.tsx</code> 读取 <code>/api/scoreboard</code>；按能力筛选，展示版本与评测绑定、成本、样本，读取服务返回的 Penguin 地址。依据输入 / Gold / 模型 / 运行时分组。</td></tr>
+<tr><td>Gold 维护</td><td><code>src/pages/Gold.tsx</code>、<code>server/src/gold.ts</code>：人工标签、逐条审核、冻结指纹、谱系。正式写入需要审核身份。</td></tr>
+<tr><td>Penguin 入口</td><td><code>extensions/penguin-evaluation</code> 注册评估 workflow，并启动独立配套界面。当前集成不在 Penguin 原生页面内嵌入自进化页，也不调用它的自动接受优化器。</td></tr>
+<tr><td>当前候选范围</td><td>仅 <code>contextPolicy.memory = scoped / off</code>。通用 Role / Skill / 参考文件自动改写尚未接入，需要版本化资产及可验证适配器。</td></tr>
+<tr><td>实验与发布</td><td><code>server/src/evolution</code>：受限候选进程、外部评分、开发改善后待审、留出与跨宿主门禁、人工晋升、原子版本更新与回滚。</td></tr>
+<tr><td>正式回读</td><td>TestPilot 读取激活版本，新 run 冻结 <code>agentVersion</code>、<code>contextPolicy</code> 与实际记忆摘要；不回写旧运行快照。</td></tr>
+</tbody>
+</table></div>
+<p>当前端口默认 7365，TestPilot 通过服务返回的 <code>TP_PENGUIN_EVALUATION_URL</code> 链接；实际接入操作见 <a href="../../extensions/penguin-evaluation/README.md">扩展 README</a>。本文不启动服务。</p>
+<p>现有工程门禁不等于已有正向进化证据。实际人工冻结的领域 Gold、完整留出 / 宿主运行和合格候选仍需完成。默认缺少相应发布依据时必须保持不可晋升。原型「模拟绑定新版本」只演示工作副本配置，不能解释为已通过自进化发布。</p>
+<h3 id="evaluation-guide-5">5. 记分板当前展示哪些证据</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>记录</th><th>对照结果</th><th>可得结论</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="../v3/evidence/n-16/README.md">N-16 领域探针</a></td><td>关闭 / 开启领域参考，各 3/3</td><td>此小样本未显示提升</td></tr>
+<tr><td><a href="../v3/evidence/n-22/README.md">N-22 运行记忆</a></td><td>无 / 有记忆，计划有效 2/3 与 3/3</td><td>缺证分类仍错误；不是视觉执行效果验证</td></tr>
+<tr><td><a href="../v3/evidence/n-21/README.md">N-21 受控进化</a></td><td>基准 / 候选计划有效均 0/3</td><td>候选被拒绝，不能解释为等效或进化成功</td></tr>
+</tbody>
+</table></div>
+<p>原型只摘录已存在的实验摘要；完整模型、Gold、输入指纹未嵌入，因此禁用正式版本比较，不把不同任务的不同指标合并排名。原始归档和审计保留。</p>
+<p>论文目标继续按 <a href="#research">研究方案</a> 推进：冻结独立数据、严格对照与消融、多个种子 / 重复、置信区间、跨任务留出，以及成本与质量共同报告。界面收简不减少这些要求。</p>
+<h3 id="evaluation-guide-6">6. 后续实施与验收</h3>
+<p>SR-01～05 已合并到 <a href="#tasks">13 · 实施台账</a>：报告与基线 P-28，页面收简 P-06/P-17，评测引导 P-17，正式进化 P-18/P-19/P-22/P-23。下表保留原需求映射，状态只更新 P 台账。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>顺序</th><th>任务</th><th>验收</th></tr>
+</thead>
+<tbody>
+<tr><td>SR-01</td><td>正式 UI 分离报告 / 基线路由与导航归属</td><td>三个报告子项、三个基线子项各自保持主菜单选中；深链恢复正确</td></tr>
+<tr><td>SR-02</td><td>接真实基线队列、当前版本和审批审计</td><td>决策绑定 case / run / 原参照 / 候选版本；审批需服务端复核，重复请求幂等</td></tr>
+<tr><td>SR-03</td><td>将物料与设置的通用说明改为按需帮助</td><td>常用动作和错误可见，首屏不堆重复标题；模块 / 故事 / 用例下钻不断链</td></tr>
+<tr><td>SR-04</td><td>记分板与 Gold 增加共同使用引导</td><td>证据可追溯，缺绑定禁止比较；Gold 冻结规则清楚，候选无标签写权限</td></tr>
+<tr><td>SR-05</td><td>实际评测闭环验收</td><td>真实人工冻结、绑定实验、留出 / 宿主门禁与人工发布分别有证据；通用 Skill 改写另立实现任务</td></tr>
+</tbody>
+</table></div>
+<p>以上是待移植的生产任务，没有因为原型完成而标记为生产完成，也不覆盖既有 PC / P / N 任务。</p>
+<p>原型源为 <code>docs/reports/prototype-src/surface-review.js</code> / <code>.css</code>，由 <code>scripts/build-prototype-refinement.py</code> 嵌入。导航集成在 <code>refinement.js</code>。验证包含菜单隔离、审批演示、物料下钻、结果筛选、Gold 留出筛选和项目隔离；详见 <a href="../v3/evidence/prototype-surface-review-2026-09-10/README.md">本轮验证</a>。</p></section><section class="chapter" id="research"><div class="eyebrow">RESEARCH</div><h2>论文与受控自进化</h2><p class="caption">对应接手文档：<a href="../v3/12-论文级研究与受控自进化.md">12-论文级研究与受控自进化.md</a></p><div class="chapter-toc"><a href="#research-1">1. 研究定位与贡献候选</a><a href="#research-2">2. 最近相关工作及差异</a><a href="#research-3">3. 当前证据成熟度</a><a href="#research-4">4. 数据集与人工依据</a><a href="#research-5">5. 实验设计与基线</a><a href="#research-6">6. 指标与统计口径</a><a href="#research-7">7. 自进化的边界与流程</a><a href="#research-8">8. 复现包与论文结构</a></div><p>2026-09-09 · 研究设计草案，尚未预注册、未完成正式实验。目标是把 TestPilot 建成可被独立复核的垂直测试生成 harness agent；本文不保证录用，也不宣称已经证明有效。本文的实验改进建议是基于已核查资料和当前工程证据的推论。</p>
+<h3 id="research-1">1. 研究定位与贡献候选</h3>
+<p>拟定题目方向：Evidence-Grounded Test Generation for Derivatives Interfaces with a Versioned Harness and Controlled Adaptation（基于证据和版本化 harness 的衍生品界面测试生成与受控适应）。暂不以“首个自动生成 Web 测试的 agent”叙述创新性。</p>
+<p>目标对象是需求到可执行测试与可信判据的生成，不是让 agent 自己修好 SUT 后证明自己通过。代码修复是一个独立使用场景；主实验冻结 buggy/fixed SUT，生成器看不到缺陷补丁和隐藏答案。界面顺利执行、文本用例数量、引用了 skill、某一次通过，均不是测试质量本身。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>贡献候选</th><th>可证伪主张</th><th>所需新增机制/证据</th></tr>
+</thead>
+<tbody>
+<tr><td>C1 领域规则约束的生成与判据</td><td>在相同模型与预算下，更准确地产生能区分正确/缺陷实现的用例</td><td>产品作用域、时间/单位/精度/状态不变量的结构契约；独立 oracle 与多个缺陷家族；比较去领域规则和纯模型</td></tr>
+<tr><td>C2 从需求到证据的可修订关系</td><td>结构化来源与影响传播减少无依据断言和漏审，且修订可复现</td><td>版本化模块/故事/验收点/判据关系；独立关系标注；图形 review 与列表 review 的对照任务</td></tr>
+<tr><td>C3 在预算与隔离下的受控自进化</td><td>通过开发集反馈改变策略，在未知任务上保持或提升质量，同时不增加关键误报</td><td>有界候选空间、固定开发/验证/测试划分、外部评分、配对预算、一次留出与人工晋级；负结果完整保留</td></tr>
+</tbody>
+</table></div>
+<p>双模型分工、多个宿主兼容和 Web 管理属于工程贡献；是否构成研究贡献要由对照实验支持。第一篇优先聚焦 C1，C2 是可审查性机制；C3 先以严格的受控适应实验呈现。若 C3 无效，明确报告负结果，不为写“自进化”牺牲结论可信度。</p>
+<h3 id="research-2">2. 最近相关工作及差异</h3>
+<p>核查时间为 2026-09-09；论文事实以原文为准。没有把外部论文的结果数值当作本项目的效果。</p>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>相关工作</th><th>已有内容</th><th>对本项目的约束</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://arxiv.org/abs/2602.11724v3">WebTestPilot，2026，v3</a></td><td>GUI 符号化，并将自然语言需求转为带前后置条件的 E2E 测试；包含注入缺陷的 Web 评测</td><td>与本项目题目和名称高度相近，必须直接比较方法和可执行基线；研究标题突出衍生品领域与可证实的新机制，不能只换名字</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2608.12970">REAG，2026</a></td><td>面向 LLM 软件，检索需求/领域知识/persona 构造 oracle，并通过校准的级联判定处理不确定性；页面标注 ASE2026 接收</td><td>“RAG + 领域知识 + 判据”本身不够新；我们的独立程序判据、金融数值/状态规则和冻结因果比较需具体化。任务对象不同，不能直接搬用其分数</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2402.09171">TestGen-LLM，2024</a></td><td>生成并筛选已有单元测试的增强版本，使用构建、通过及覆盖条件</td><td>借鉴可执行筛选；本项目必须另证缺陷检出与错误判据率，不能只看健康实现通过</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2403.16218">CoverUp，2024</a></td><td>利用代码上下文和覆盖反馈迭代生成 Python 测试</td><td>反馈驱动测试生成并非新贡献；若借用其反馈基线，需说明是 E2E 适配，不直接比较跨任务分数</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2601.09695v2">较新模型复评研究，2026，v2</a></td><td>复现四种测试生成方法；其数据和指标下，较强 plain LLM 可超过复杂方法</td><td>必须有强、同模型的简单基线和等预算重试；不能通过过时模型或薄弱提示制造优势</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2506.09289">UTBoost，ACL 2025</a></td><td>用增强测试揭示 SWE-Bench 中原测试不足导致的误判</td><td>“补丁通过现有测试”不等于修复成功；独立缺陷判据与错误实现区分力是核心</td></tr>
+<tr><td><a href="https://arxiv.org/abs/2507.19457">GEPA，2025</a></td><td>以执行反馈反思和搜索改进提示策略</td><td>当前一次 memory 开关候选不是 GEPA 复现；自进化应与等预算随机搜索/反思或可运行的 GEPA 适配比较</td></tr>
+</tbody>
+</table></div>
+<p>这些资料并非系统综述。正式写论文前建立检索式、日期、纳入/排除规则和复现可用性表；优先复核 WebTestPilot 全文、代码、许可证和任务适配。源代码不可获得时明确记录，不把自行复刻称为官方实现，也不能省掉强 plain LLM 基线。</p>
+<h3 id="research-3">3. 当前证据成熟度</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>项目内证据</th><th>能支持什么</th><th>不能支持什么</th></tr>
+</thead>
+<tbody>
+<tr><td>N-13 三宿主各一次真实运行</td><td>接口与阶段协议可用</td><td>模型、任务不同且每宿主 n=1，不能比较宿主质量</td></tr>
+<tr><td>N-15 数量步长独立 fixture</td><td>已有精确十进制判据能发现一个取整缺陷家族</td><td>不代表衍生品全域正确、更多家族检出或真实交易所泛化</td></tr>
+<tr><td><a href="../v3/evidence/n-16/README.md">N-16</a> 开/关领域参考各 n=3</td><td>探索性可运行；预定数量探针两臂均 3/3，健康实现误报为 0</td><td>没有显示领域参考提升；多个 case probe 命中不能计成多个独立 bug；缺正式人工 gold</td></tr>
+<tr><td><a href="../v3/evidence/n-22/README.md">N-22</a> 执行环境作用域记忆实验</td><td>6 次真实请求，off 2/3 有效、on 3/3 有效；有效计划 selector 可用</td><td>缺证分类两臂均错误；这是离线 DOM selector 检查，不能证明 Midscene 视觉定位改善</td></tr>
+<tr><td><a href="../v3/evidence/n-21/README.md">N-21</a> 真实候选与外部评估</td><td>真实模型/隔离/拒绝流程已跑通；候选 no_strict_improvement 被拒</td><td>baseline/candidate 所有 6 个计划无效；0 对 0 不能证明进化有效；原分类错误保留审计</td></tr>
+<tr><td>N-24 发布门禁与合成 UI 验收</td><td>人工按钮、CAS/回滚、私有收据校验机制可测试</td><td>没有真实人工晋级，没有合格候选的正式留出效果</td></tr>
+<tr><td>N-18 稳定性</td><td>一晚同一冻结导出的多次尝试</td><td>不是五晚；未证明 30 P0/10 分钟与目标 flake</td></tr>
+</tbody>
+</table></div>
+<p>工程功能关闭数与论文成熟度分开。N-01～27 的 22 项关闭是上一轮工程验收口径，不能写成“论文完成 81%”。当前是有机制、有 pilot、有负结果，正式数据与因果证据不足。</p>
+<h3 id="research-4">4. 数据集与人工依据</h3>
+<p>数据单位是独立任务及缺陷家族。每个任务绑定产品版本、需求快照、环境 manifest、可观察接口、正确实现，以及一组独立验证的缺陷实现；多次模型采样嵌套于任务。对同一缺陷生成十条用例，仍只算一个独立缺陷检出。</p>
+<p>按产品/规则家族分组切分开发、验证与最终留出，避免仅打散同一需求的改写。先做样本盘点、合法发布条件、难度与规则家族矩阵，再用开发集 pilot 估计变异和效应，进行功效/精度设计确定任务数及重复数。不能把每臂 n=3 当正式规模；在冻结前写明纳入、排除、最小有意义效应、主指标、预算与停止条件。</p>
+<p>范围至少覆盖数量/价格边界、拒单与状态一致性、幂等/重复提交、杠杆保证金、只减仓/持仓模式等若干独立家族；这是采集计划，不是当前已有数据。把真实历史缺陷与人工变异分开报告。等价、不可达、不稳定变异由独立规则审查后标识，不事后只移除不利样本；排除前后数量都公布。</p>
+<p>金标由实际领域人员根据冻结需求/官方来源建立。至少两位独立标注者对覆盖关系、expected 和缺陷类别进行标注，盲于方法臂，分歧裁决留痕；按标签性质报告原始一致率及合适的一致性指标。不得生成“人类确认”事件。既有 protected assets 保持原样，新增正式数据在独立版本/目录创建，由实际人类冻结。</p>
+<p>领域知识库可包含业务规则；私有 evaluator 包含隐藏缺陷标识、测试金标与结果。优化器及生成宿主不能读取后者的文件、HTTP 页面、检索内容或日志。当前 macOS 候选隔离已有验证，普通宿主未因此自动具备同等隔离；正式实验要对所有参试方法提供等价的受限访问。UI 的“只读”不是隐藏。</p>
+<h3 id="research-5">5. 实验设计与基线</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>RQ</th><th>主比较</th><th>主要结果与判定</th></tr>
+</thead>
+<tbody>
+<tr><td>RQ1 领域 harness 是否提高有效缺陷检出</td><td>B0 强 plain LLM、B1 等预算通用检索/执行反馈、B2 可复现的最近 NL→E2E 方法、TestPilot</td><td>独立缺陷检出、健康误报、有效产物率；相同 planner、executor、材料、环境、预算；相关方法能力差异明确记录</td></tr>
+<tr><td>RQ2 哪些机制有效</td><td>完整版本 vs 去领域包、去结构化关系、去确定性判据、去反馈、去记忆，分别单因素</td><td>不删除运行所需的基本依赖；记录约束失效和输出无效率；次级比较作多重检验校正</td></tr>
+<tr><td>RQ3 双模型是否有性价比</td><td>planner/executor 相同强模型、相同廉价模型、强规划+廉价执行；当前相同模型配置作现实基线</td><td>质量—成本曲线与预声明非劣界；同环境/任务。只换 executor 时 planner 固定；未知价格不补零</td></tr>
+<tr><td>RQ4 受控适应是否泛化</td><td>冻结策略、等预算随机候选、反思/GEPA 适配、TestPilot 有界策略搜索</td><td>开发反馈→验证选优→单次留出；预算含所有失败候选和搜索成本；负向与无改进结果也发布</td></tr>
+<tr><td>RQ5 结构下钻是否改善人工 review</td><td>同数据/权限下图形层级 vs 列表/现有界面</td><td>漏检错误率、正确修订率、任务完成时间、定位步数、工作负担；真实参与者的随机平衡交叉设计</td></tr>
+</tbody>
+</table></div>
+<p>B0 必須是经过开发集调好的合理提示，提供相同公开需求与目标接口；B0 可使用相同输出 schema 和执行器，但不使用被研究的领域/图约束，记录提示。另比较 token/call 预算匹配与端到端时间/费用匹配，不能只选对自己有利的一种。换模型实验与换 harness 实验分开，不用 Claude 与 Qwen 的差异证明框架优势。</p>
+<p>消融“去确定性判据”仍要由外部 evaluator 判断是否发现真实缺陷，否则模型自判会污染评价。不能为了测试消融而允许生产流程绕过审核；研究实例与生产权限分离。</p>
+<h3 id="research-6">6. 指标与统计口径</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>指标</th><th>定义与边界</th></tr>
+</thead>
+<tbody>
+<tr><td>End-to-end defect recall</td><td>在所有符合预注册条件的独立缺陷实例上，生成用例能在正确实现通过、在缺陷实现因目标行为失败的比例；无效生成保留在端到端分母</td></tr>
+<tr><td>Conditional detection</td><td>仅有效生成条件下的检出率，与有效率同时展示；不能替代主指标</td></tr>
+<tr><td>False positive rate</td><td>健康任务/实现中被错误报告为产品缺陷的比例；环境故障单列，并给出其数量占总尝试的比例</td></tr>
+<tr><td>Oracle correctness</td><td>独立金标检查用例预期与规则是否一致；输入、单位、精度、时间条件分别分析；引用存在不等于语义正确</td></tr>
+<tr><td>Requirement coverage</td><td>被独立核验为真正测试的验收条件 / 适用验收条件；另报有效执行覆盖。关键词命中仅作代理指标</td></tr>
+<tr><td>Mutation score</td><td>杀死的非等价、可达变异 / 适用变异；真实 bug 检出另报；同家族变异聚类</td></tr>
+<tr><td>Validity / failure taxonomy</td><td>JSON/schema 有效、可执行、判据有效、健康通过逐层漏斗；truncated、invalid_plan、infra、budget、missing_evidence、assertion_failure 区分</td></tr>
+<tr><td>Cost / latency</td><td>全部模型调用、token、缓存、节点时延、p50/p95、重试与搜索开销；按成功任务/独立缺陷同时报告；价格未知为 null</td></tr>
+<tr><td>Stability</td><td>固定输入/SUT 的重复一致性、flaky 比例、环境噪声；跨夜观察按真实日期，不改时间戳凑样本</td></tr>
+</tbody>
+</table></div>
+<p>配对单位是任务/缺陷家族，非每条 case probe。主分析在任务层配对，用聚类 bootstrap 置信区间或合适的层级模型；只有满足独立二元配对前提才用 McNemar 等方法。报告效应量、区间与原始计数，不只 p 值。预声明一个主要结局和有限次级指标；功效不足时报告不确定性，不把“未显著”写成等效。</p>
+<p>RQ5 用不同但匹配难度的任务组平衡顺序，避免参与者记住同一答案。预先定义正确修订评分与时间截断，记录放弃任务；招募实际目标用户并取得适当同意，公开匿名汇总而非未经许可的行为轨迹。可用性不能只靠 agent 点击速度。</p>
+<h3 id="research-7">7. 自进化的边界与流程</h3>
+<p>“自进化”先定义为有界策略适应：改检索预算/规则选择策略/固定结构的记忆策略/技能草稿；不自动改隐藏答案、评价程序、批准策略和 oracle gold。技能内容改动与模型参数微调是不同工作，当前没有训练模型权重。</p>
+<p>流程：冻结开发任务与基线→收集失败分类→候选生成→静态/协议检查→隔离运行→开发集评分→固定预算内验证选优→独立留出一次→人工审核→CAS 激活→监测回归→回滚。研究留出不是每次产品晋级都可反复使用的数据池；消耗后该版本测试集退役，下一周期另建测试集。</p>
+<p>保留所有候选，包括失败、拒绝、超时、截断和回滚；隔离 canary 失败则不运行。Web 显示当前激活版本、候选所依据的证据摘要和 Penguin 深链；Penguin 展示候选变更 diff、配对结果、失败样本、预算消耗、评估协议及晋级门禁。宿主可以提出和管理候选，不拥有虚构评分或代替人的权力。</p>
+<p>控制奖励投机：新增用例数量不作为唯一目标；拒绝缺证时适当 abstain，不能靠少报所有错误获得高通过率；把健康误报和关键缺陷漏报作为独立约束。回归集含领域正确性和行为隔离用例，安全通过也不等于质量提高。</p>
+<h3 id="research-8">8. 复现包与论文结构</h3>
+<p>每次实验 manifest 固定代码 commit/dirty patch hash、schema/skill/role/domain/workflow 版本、模型 ID/端点类型/采样参数、输入及公开知识 hash、SUT镜像/环境/浏览器/依赖锁文件、试验单位/随机化种子、预算/重试/超时、数据划分摘要和授权范围。LLM 即使设置 seed 仍可能非确定，记录提供商版本和真实响应证据；凭证只保留引用。</p>
+<p>复现包包含：安装脚本、无密钥样例配置、任务目录、公开需求与许可、正确/缺陷环境部署、原始尝试索引、外部评分脚本、统计脚本、生成图表、失败样本、排除清单、数据字典、硬件与运行时说明。私有资料说明获取条件并提供可公开替代集；若不能公开主数据，要明确复现限制。</p>
+<p>论文建议结构：问题与研究缺口→领域挑战与形式化定义→方法/信任边界→实验设计→主要与消融结果→成本/稳定性→受控适应→人工 review 研究（如完成）→威胁与限制→可用工件。把 UI 截图作为可审查机制证据，不能替代主要实验表。</p>
+<p>投稿准备门槛：最近工作差异明确；独立冻结数据完成；同模型强基线可运行；主结果含区间及负结果；消融与成本完整；至少一次独立复现；所有结论能追到实验 manifest。论文级不是新增一个“评测”页面即可达到。</p></section><section class="chapter" id="install"><div class="eyebrow">INSTALL</div><h2>Claude / Codex 安装</h2><p class="caption">对应接手文档：<a href="../v3/14-Claude-Code与Codex接入实操.md">14-Claude-Code与Codex接入实操.md</a></p><div class="chapter-toc"><a href="#install-1">1. 两个目录、两个模型职责</a><a href="#install-2">2. 服务准备</a><a href="#install-3">3. 安装 Codex</a><a href="#install-4">4. 安装 Claude Code</a><a href="#install-5">5. 首次使用与成功检查</a><a href="#install-6">6. Penguin 与升级卸载</a><a href="#install-7">7. 排障与已验证范围</a><a href="#install-8">8. 2026-09-10 · 新增原生 Codex 实测</a></div><p>2026-09-09，针对当前源码安装器。依赖：已取得 TestPilot checkout、Node 22+ 和 pnpm；服务的 better-sqlite3 安装与启动使用相同 Node 主版本。Penguin/Web 当前规划适配需要独立 Node 24+ 与 Penguin CLI，doctor 会提示路径问题。尚未公开发布插件市场。</p>
+<h3 id="install-1">1. 两个目录、两个模型职责</h3>
+<p>TestPilot checkout 是服务/插件源码；workspace 是你要测试的应用仓库。安装命令在前者运行，--workspace 指向后者。当前安装把绝对 Node、MCP 和 env 文件路径写入配置，移动源码目录或换机器后应重新安装，不是可任意搬动的单文件包。</p>
+<p>宿主 Claude/Codex/Penguin 使用自己的原生规划模型和登录态，不要求再填写规划模型。Midscene 使用 TestPilot 服务项目配置或 server/.env 中的执行配置。Web 用户则配置两个角色，当前可使用相同模型；以后单独修改 TP_PLANNER_*。</p>
+<h3 id="install-2">2. 服务准备</h3>
+<p>本机已有依赖与 server/.env，可直接 doctor。新机器在 TestPilot checkout：</p>
+<pre aria-label="sh"><code>pnpm install --frozen-lockfile
+pnpm setup --entry web
+pnpm doctor --entry web</code></pre>
+<p>setup 仅在 env 文件不存在时创建样例，不覆盖已有配置。编辑私有 server/.env，使用实际端点与密钥；以下仅示意字段，不要将占位值覆盖本机已有文件：</p>
+<pre aria-label="dotenv"><code>MIDSCENE_MODEL_NAME=your-execution-model
+MIDSCENE_MODEL_BASE_URL=https://your-provider.example/v1
+MIDSCENE_MODEL_API_KEY=your-private-key
+TP_PLANNER_MODEL_NAME=your-planning-model
+TP_PLANNER_BASE_URL=https://your-provider.example/v1
+TP_PLANNER_API_KEY=your-private-key
+TP_PLANNER_THINK=0
+TP_PLANNER_TIMEOUT_MS=900000</code></pre>
+<p>执行层也兼容旧 OPENAI_BASE_URL/OPENAI_API_KEY；具体优先级看 server/.env.example 与 connections-env.ts。同名环境变量可能覆盖文件值。项目设置保存后优先于 env，已有运行继续使用冻结快照。仅修改 env 须重启服务；当前没有完整的 UI 恢复环境默认路径，切换前确认覆盖来源。</p>
+<p>仅宿主管理时启动 API 即可；Web review 需要 Web：</p>
+<pre aria-label="sh"><code># 终端 A：在 TestPilot checkout
+pnpm server:dev
+# 终端 B：在 TestPilot checkout
+pnpm dev</code></pre>
+<p>也可使用 node scripts/testpilot-setup.mjs start --entry web 同时启动。Web 默认 http://localhost:5300，API 默认 http://127.0.0.1:5301。在 Web 设置→项目，新建或选择项目，记住项目 ID（不是标题）；项目可对应独立目标应用 URL。需要真实执行时启动目标应用。</p>
+<p>停止时在启动终端 Ctrl+C，再检查下面命令没有残留监听；只关闭自己启动的进程，不按进程名批量杀掉用户服务：</p>
+<pre aria-label="sh"><code>lsof -nP -iTCP:5300 -iTCP:5301 -sTCP:LISTEN</code></pre>
+<h3 id="install-3">3. 安装 Codex</h3>
+<p>先安装并登录 Codex 原生客户端。本机已有，doctor 已识别 codex-cli 0.153.4；这是本机验证版本，不是全平台最低版本承诺。在 TestPilot checkout 执行，替换 workspace 为实际被测仓库：</p>
+<pre aria-label="sh"><code>node scripts/testpilot-setup.mjs install --entry codex \
+  --workspace &quot;/absolute/path/to/application&quot; \
+  --model-env &quot;/Users/admin/Midscene/testpilot/server/.env&quot; \
+  --server http://127.0.0.1:5301
+node scripts/testpilot-setup.mjs doctor --entry codex \
+  --workspace &quot;/absolute/path/to/application&quot;</code></pre>
+<p>其他机器把 --model-env 改为自己的 TestPilot 路径。可选 --project-id 实际项目ID；未提供时，运行注册需要显式给出项目。不要使用 --env-file 代替 --model-env。</p>
+<p>安装产物：workspace/.codex/config.toml 中的 TestPilot MCP 段、.agents/skills 下的十个技能、.testpilot/bin shim 与安装收据。宿主原有模型和其他 MCP 保留。官方说明项目级 MCP 仅在受信任项目加载；Codex 从仓库 .agents/skills 发现技能。<a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli">MCP 配置</a>、<a href="https://learn.chatgpt.com/docs/build-skills">技能发现</a>。</p>
+<p>在 Codex 中打开对应 workspace 的本地任务，按原生项目提示启用自己的项目配置；若未出现新技能/MCP，重启客户端或新开该项目会话。在该项目终端执行 codex mcp list；交互界面的 /mcp 可检查连接。也可用自然语言明确要求使用 testpilot-run-c，避免依赖不同客户端的选择器样式。</p>
+<p>若 PATH 中旧 Codex 无法调用宿主当前模型，用 TP_CODEX_BIN 指向已安装的新版本；不要换掉用户的模型来掩盖版本错误。诊断程序识别哪个可执行文件，不代表另一个终端的 PATH 已同步。</p>
+<h3 id="install-4">4. 安装 Claude Code</h3>
+<p>先安装并登录 Claude Code。然后在 TestPilot checkout 执行：</p>
+<pre aria-label="sh"><code>node scripts/testpilot-setup.mjs install --entry claude-code \
+  --workspace &quot;/absolute/path/to/application&quot; \
+  --model-env &quot;/Users/admin/Midscene/testpilot/server/.env&quot; \
+  --server http://127.0.0.1:5301
+node scripts/testpilot-setup.mjs doctor --entry claude-code \
+  --workspace &quot;/absolute/path/to/application&quot;</code></pre>
+<p>安装写 workspace/.mcp.json 和 .claude/skills，不复制规划密钥。在目标 workspace 启动 claude，在项目 MCP 提示中启用 testpilot，然后用 /mcp 或 claude mcp list 查看连接。项目 .mcp.json 第一次需要 Claude 自身的启用确认，这是宿主的加载机制。技能可用 /testpilot-run-c 或自然语言触发。<a href="https://code.claude.com/docs/en/mcp">Claude MCP</a>、<a href="https://code.claude.com/docs/en/skills">Claude skills</a>。</p>
+<p>目前两宿主共用一个安装收据：同一个 workspace 连续安装 Claude 和 Codex 会覆盖收据，影响后续升级/卸载。P-12 将修复；目前每个 workspace 安装一个宿主，或使用各自独立 checkout。不要把两次独立干净目录测试声称为共存已验收。</p>
+<h3 id="install-5">5. 首次使用与成功检查</h3>
+<p>可粘贴给宿主的提示（替换项目 ID、材料路径和目标 URL）：</p>
+<pre aria-label="text"><code>使用 TestPilot 的 testpilot-run-c 技能。
+TestPilot 项目 ID 是 &lt;实际项目ID&gt;，目标是 &lt;测试环境URL&gt;。
+读取 &lt;需求材料路径&gt;，先确认需求和领域规则的出处，再注册本次运行。
+由你自己的规划模型完成故事与用例设计；通过 TestPilot MCP 写入并执行阶段门禁。
+将结果停在 waiting_review，给出 runId 和 Web 中的对应入口；不要代替人批准。</code></pre>
+<p>正常工具链是 register_run→load_run_instructions→retrieve_spec→write_stories→write_cases→gate_run→finalize_run。具体输入 schema 以当前 MCP tools/list 为准，不手工拼过时 payload。检索返回的 chunk ID 和阶段 revision 必须保留。注册重试沿用同一幂等参数；宿主不知道准确模型身份时标为未知。</p>
+<p>检查：宿主能看到 register_run/finalize_run；注册后的 run 在 Web 同项目出现；故事与用例有不可变 revision；finalize 后是 waiting_review。人类在 Web 核对来源/expected，直接作出审批决定（无需身份验证），再 generate_execution / execute_approved。单纯 doctor ready、MCP 在线或出现目录不是这些结果的替代。</p>
+<p>2026-09-10 用户决定取消本地审核身份验证。Web 不再显示身份或解锁控件；无需 TP_REVIEW_TOKEN，服务不再生成 reviewer-token。审批记录使用 local-operator，表示本地操作来源，不能当作已验证的真人身份。显式带 agent Authorization 的请求仍不能审批；无凭证的本地 API 已不构成客户端身份隔离。宿主 MCP 的 run 能力和版本检查保留，宿主仍须等待操作方的审批决定。</p>
+<h3 id="install-6">6. Penguin 与升级卸载</h3>
+<p>Penguin 先创建 agent，然后在 TestPilot checkout 使用 pnpm setup --entry penguin --agent-id 实际ID --project 实际项目ID。宿主保留原生 planner；配套评估 UI 当前单独运行，见 <a href="../../extensions/penguin-evaluation/README.md">扩展安装和门禁</a>。不要把仅装技能等同于评估扩展已经启动。</p>
+<p>同宿主重复 install 更新托管内容；升级前保留自己修改过的技能，因为 install 的复制更新不同于 uninstall 的哈希保留策略。卸载在 TestPilot checkout：</p>
+<pre aria-label="sh"><code>node scripts/testpilot-setup.mjs uninstall --workspace &quot;/absolute/path/to/application&quot;</code></pre>
+<p>卸载删除收据追踪且哈希未变的文件，保留改过技能和用户材料。数据/env 不删除，宿主模型与账号保留。当前 plugins/testpilot-codex 是有效插件目录，公共市场安装未发布；项目级安装是本指南已验证路径。</p>
+<h3 id="install-7">7. 排障与已验证范围</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr><th>表现</th><th>检查</th></tr>
+</thead>
+<tbody>
+<tr><td>菜单打开但项目空、Failed to fetch</td><td>服务是否是当前 checkout；5301 旧进程会导致新版前端 API / CORS 不匹配。只读 health 200 不足以证明版本一致</td></tr>
+<tr><td>MCP 未出现</td><td>workspace 是否正确、项目配置是否启用、CLI 路径是否可执行、checkout/env 引用是否仍存在</td></tr>
+<tr><td>doctor ready 但运行失败</td><td>doctor 当前只作 CLI/依赖/配置预检，不测试真实 provider、MCP 会话、API 作用域或 SUT</td></tr>
+<tr><td>收到 installed_skills_changed / stale revision</td><td>新注册/明确续跑并重新绑定版本；不删除旧证据或伪造 gate</td></tr>
+<tr><td>Web 失败 session 不在了</td><td>查看最后阶段/输入/预算与日志；先判断是否可续，可直接恢复，无需审核登录，不盲目再次创建</td></tr>
+<tr><td>配置改了仍用旧模型</td><td>当前项目是否覆盖 env；服务是否重启；查看运行被冻结的模型快照</td></tr>
+</tbody>
+</table></div>
+<p>本轮 node --test scripts/test/setup.test.mjs 四项通过，含 Claude/Codex 独立干净目录与含空格路径、重复安装、真实 stdio 握手 tools/list、修改后卸载保留；Web env 保留与 Penguin 配置合并。模型 API 使用合成配置，没有收费模型请求；本轮没有重新执行三宿主端到端生成。日志在 evidence/ui-review-2026-09-09/install-tests.tap。</p>
+<h3 id="install-8">8. 2026-09-10 · 新增原生 Codex 实测</h3>
+<p>已对 Hyperliquid 项目的冻结 Explore 材料做原生 Codex → MCP → Web 独立复核 → 原生 MCP 提交执行 → Midscene 报告的真实验证：8 模块、6 故事、10 用例，10/10 通过。不是重新 Explore、公共市场安装或完整金融领域测试。原生适配器使用 0.153.4 与既有登录态，不配置独立 planner；过程、命令与证据见 <a href="#codex-acceptance">19</a>。前述 §7 的“未重新执行”仅描述 09-09 安装检查。</p></section><p class="end">由 scripts/build-ui-research-report.py 从版本化文档构建，可离线阅读。生产代码增量实施按 P 台账推进；验证见 <a href="../v3/evidence/ui-implementation-plan-2026-09-10/README.md">本轮检查</a>。</p></main></div><script>
+const taskCards=[...document.querySelectorAll('details.task')], taskSearch=document.getElementById('task-search'), taskState=document.getElementById('task-state');
+function filterTasks(){let count=0;for(const card of taskCards){card.hidden=!(card.textContent.toLowerCase().includes(taskSearch.value.trim().toLowerCase())&&(taskState.value==='all'||card.dataset.status===taskState.value));if(!card.hidden)count++;}document.getElementById('task-count').textContent=count+' / '+taskCards.length+' 项';}
+taskSearch.addEventListener('input',filterTasks);taskState.addEventListener('change',filterTasks);
+document.getElementById('task-expand').onclick=()=>taskCards.filter(t=>!t.hidden).forEach(t=>t.open=true);
+document.getElementById('task-collapse').onclick=()=>taskCards.forEach(t=>t.open=false);
+function revealTask(){const target=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(target?.matches('details.task')){taskSearch.value='';taskState.value='all';filterTasks();target.open=true;target.querySelector('summary').focus({preventScroll:true});target.scrollIntoView?.({block:'start'});}}
+window.addEventListener('hashchange',revealTask);document.addEventListener('click',e=>{if(e.target.closest('a[href^="#P-"]'))setTimeout(revealTask,0);});
+let printState=[];window.addEventListener('beforeprint',()=>{printState=taskCards.map(t=>t.open);taskCards.forEach(t=>t.open=true);});window.addEventListener('afterprint',()=>taskCards.forEach((t,i)=>t.open=printState[i]||false));
+filterTasks();revealTask();
+</script></body></html>

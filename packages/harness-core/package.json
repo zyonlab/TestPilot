@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./obs": "./src/obs/index.ts",
-    "./harness": "./src/harness/index.ts"
+    "./harness": "./src/harness/index.ts",
+    "./model-profiles": "./src/model/profiles.ts",
+    "./run-contracts": "./src/run-contracts.ts"
   },
   "scripts": {
     "test": "vitest run",

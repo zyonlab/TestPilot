@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "testpilot": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/../../packages/testpilot-mcp/bin/testpilot-mcp.mjs"
+      ],
+      "env": {
+        "TP_RUNTIME": "claude-code"
+      }
+    }
+  }
+}

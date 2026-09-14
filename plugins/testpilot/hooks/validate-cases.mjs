@@ -21,7 +21,7 @@
  * 规则本身在 `harness-testing/src/casegen/provenance.ts`，A 臂 `design.cases` 节点用的是同一份。
  */
 import path from "node:path";
-import { input, answer, abstain, config, deny, loadRepo, writeFileArgs, zodBrief } from "./lib/tp.mjs";
+import { input, answer, abstain, config, deny, loadRepo, writeFileArgs } from "./lib/tp.mjs";
 import { idsFromIndex, retrievedIdsFromTrace } from "./lib/provenance.mjs";
 
 const NAME = "cases.json";
@@ -33,87 +33,20 @@ try {
   if (!/[/\\]runs[/\\][^/\\]+[/\\]cases\.json$/.test(args.file_path)) abstain();
 
   const runDir = path.dirname(args.file_path);
-  let parsed;
-  try {
-    parsed = JSON.parse(args.content);
-  } catch (err) {
-    deny(runDir, "validate-cases", "schema",
-      `${NAME} 不是合法 JSON：${err.message}。重写一遍这个文件，只写 JSON，不要带 Markdown 代码围栏。`,
-      { file: NAME, valid: false, kind: "json" });
-  }
-
-  const { types, provenance, fence } = await loadRepo();
-  const result = types.CaseBundleSchema.safeParse(parsed);
-  if (!result.success) {
-    deny(runDir, "validate-cases", "schema",
-      `${NAME} 不符合 CaseBundleSchema：${zodBrief(result.error)}。` +
-        `形状见 skill testpilot-design 的 REFERENCE.md；改完再写一次。`,
-      { file: NAME, valid: false, kind: "schema", issues: result.error.issues.length });
-  }
-
-  const b = result.data;
-  // 孤儿在这里就能看出来，但**不拦**：它是门禁①的一条 finding（`traceability`），
-  // 由 gate1 打分。校验管形状，门禁管质量，两件事不要混在一个 deny 里。
-
-  /* ------------------------------------------------------------- 出处 */
   const cfg = config();
+  const { validate, fence } = await loadRepo();
+  // 出处的两个基底从这次运行的 trace 与材料索引读（`lib/provenance.mjs`）；判决在共享的 validate.ts 里，
+  // 和 MCP 的 write_cases 同一份——两份实现各自演化的教训见 00-架构.md §12。
+  let basis;
   if (cfg.requireProvenance !== false) {
     const workspace = path.dirname(path.dirname(runDir));
     const traced = retrievedIdsFromTrace(msg.trace_path, (t) => fence.SPEC_FENCE.unwrap(t));
-    const indexed = idsFromIndex(workspace);
-
-    // 基底：取过的段优先；一次都没取过就退到索引；索引也没有就没有基底。
-    const known = traced.ids.size ? traced.ids : indexed ?? new Set();
-    const basis = traced.ids.size ? "trace" : indexed ? "index" : "none";
-
-    if (traced.calls === 0) {
-      deny(runDir, "validate-cases", "grounding",
-        `这次运行还没有调用过 retrieve_spec，${NAME} 里的用例没有任何一段材料可以作为出处。` +
-          `顺序是先读再写：先用 retrieve_spec 取和每条故事相关的规格段，把返回的 chunk id 逐字写进每条用例的 sourceRefs，再写 ${NAME}。`,
-        { file: NAME, valid: false, kind: "provenance", cases: b.cases.length });
-    }
-
-    const report = provenance.checkProvenance(b.cases, known);
-    if (report.unreferenced.length || report.unknown.length || basis === "none") {
-      const what = provenance.describeProvenance(report);
-      const how =
-        basis === "none"
-          ? "本次没有任何可核对的段 id（trace 里 retrieve_spec 没有返回段，materials/.index 也没有）——先调 retrieve_spec。"
-          : `sourceRefs 只能填 retrieve_spec 这次返回过的 chunk id（形如 docs/x.md#3），逐字抄；` +
-            `没取到的段先用 retrieve_spec 的 chunkIds 参数取一遍再引用。`;
-      deny(runDir, "validate-cases", "provenance", `${NAME} 的出处对不上：${what || "没有可核对的基底"}。${how}`, {
-        file: NAME,
-        valid: false,
-        kind: "provenance",
-        basis,
-        known: report.known,
-        unreferenced: report.unreferenced.length,
-        unknown: report.unknown.length,
-        cases: b.cases.length,
-      });
-    }
-
-    answer({
-      output: {
-        file: NAME,
-        valid: true,
-        cases: b.cases.length,
-        stories: b.stories.length,
-        provenance: basis,
-        anchored: report.anchored,
-        known: report.known,
-      },
-      reason:
-        `${NAME} 通过 CaseBundleSchema：${b.cases.length} 条用例 / ${b.stories.length} 条故事；` +
-        `出处全部对上（基底 ${basis}，${report.known} 个已知段）`,
-    });
-    process.exit(0);
+    basis = { retrieved: traced.ids, retrieveCalls: traced.calls, indexed: idsFromIndex(workspace) };
   }
-
-  answer({
-    output: { file: NAME, valid: true, cases: b.cases.length, stories: b.stories.length },
-    reason: `${NAME} 通过 CaseBundleSchema：${b.cases.length} 条用例 / ${b.stories.length} 条故事`,
-  });
+  const v = validate.validateCases(args.content, basis);
+  if (!v.ok) deny(runDir, "validate-cases", v.gate, v.reason, v.output);
+  // 孤儿在这里就能看出来，但**不拦**：它是门禁①的一条 finding（`traceability`），由 gate1 打分。
+  answer({ output: v.output, reason: v.reason });
 } catch (err) {
   process.stderr.write(`validate-cases 自身出错：${err?.stack ?? err}`);
   process.exit(1);

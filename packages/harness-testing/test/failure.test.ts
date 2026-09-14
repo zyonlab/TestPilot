@@ -65,3 +65,21 @@ describe("a driver that could not plan the instruction", () => {
     expect(classifyFailure('expected the page to show "$7.99" but it showed "$8.99"').attribution).toBe("assert");
   });
 });
+
+it("blank startup is an environment failure, not a product assertion", () => {
+  expect(classifyFailure("PAGE_NOT_READY: the target page remained blank before execution")).toMatchObject({code:"EXEC_ENV",attribution:"infra",retryable:true});
+  expect(classifyFailure("The page is blank with no visible elements").attribution).toBe("infra");
+});
+it('ambiguous locators are execution grounding failures, not failed product assertions',()=>{
+ expect(classifyFailure('locate: multiple elements found, length = 5')).toMatchObject({code:'EXEC_LOCATE',attribution:'locate',retryable:true});
+});
+
+/**
+ * 2026-09-13 exec-1f7d2cdd：用例把一句前置确认写进了 `steps`，Midscene 放弃规划并把
+ * 理由写在冒号后面——一个字都不沾旧的那三句措辞，于是掉进兜底档 `EXEC_ASSERT`，
+ * 一条措辞问题被记成「产品是坏的」。
+ */
+it("放弃规划的理由五花八门，但开头那句是固定的", () => {
+  const msg = "Failed to plan actions: 右侧区域当前显示的是交易下单面板，而非订单簿（Order Book）。";
+  expect(classifyFailure(msg)).toMatchObject({ code: "EXEC_PLAN", attribution: "locate", retryable: true });
+});

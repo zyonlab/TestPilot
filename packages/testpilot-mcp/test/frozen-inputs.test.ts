@@ -90,11 +90,12 @@ describe("inputHash lineage in paired_eval", () => {
   });
 
   // 两边都没有 inputHash = 冻结机制之前的旧运行 / 整条流水线从 docs 起跑 → 老路，照比。
-  it("compares two runs that both have no inputHash (the old whole-pipeline path)", async () => {
+  it("refuses formal comparison when either or both input hashes are missing", async () => {
     const a = writeRun("run-a", {});
     const b = writeRun("run-b", {});
-    const entry = await pairedEval({ a, b, goldPath: writeGold() });
-    expect(entry.inputHash).toBeUndefined();
+    await expect(pairedEval({ a, b, goldPath: writeGold() })).rejects.toThrow(/both frozen inputHash/);
+    const c=writeRun("run-c", {inputHash:"1111111111111111"});
+    await expect(pairedEval({a:c,b,goldPath:writeGold()})).rejects.toThrow(/both frozen inputHash/);
   });
 });
 

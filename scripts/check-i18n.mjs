@@ -32,13 +32,13 @@ if (known.size < 100) {
 }
 
 /** `t("key")` / `tr("key")` / `tOutsideReact("key")` / `translate("key"` 里的字面量。 */
-const CALL = /\b(?:t|tr|tOutsideReact|translate)\(\s*"([a-zA-Z][\w.]*)"/g;
+const CALL = /\b(?:t|tr|tOutsideReact|translate)\(\s*(["'])([a-zA-Z][\w.]*)\1/g;
 const missing = [];
 for (const file of walk(join(ROOT, "src"))) {
   if (file.endsWith("src/lib/i18n.ts")) continue;
   const src = readFileSync(file, "utf8");
   for (const m of src.matchAll(CALL)) {
-    const key = m[1];
+    const key = m[2];
     // 一个不带点的字符串多半不是文案 key（`t("zh")` 之类），跳过。
     if (!key.includes(".")) continue;
     if (!known.has(key)) missing.push(`${file.slice(ROOT.length)}  ${key}`);

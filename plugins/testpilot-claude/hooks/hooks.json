@@ -1,0 +1,28 @@
+{
+  "description": "TestPilot 的门禁：写 stories/cases/memory 前校验形状与出处，停之前要求产物齐。规则在 plugins/testpilot/hooks/*.mjs，这里只是入口。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "TP_HOOK_CONFIG=\"${CLAUDE_PLUGIN_ROOT}/tp-config.json\" node \"${CLAUDE_PLUGIN_ROOT}/../testpilot/hooks/adapters/claude-code.mjs\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "TP_HOOK_CONFIG=\"${CLAUDE_PLUGIN_ROOT}/tp-config.json\" node \"${CLAUDE_PLUGIN_ROOT}/../testpilot/hooks/adapters/claude-code.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

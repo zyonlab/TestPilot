@@ -8,7 +8,8 @@ import {
   comparePaired,
   gated,
   mcnemar,
-  modelFromEnv,
+  plannerModel,
+  plannerConnectionFromEnv,
   methodMix,
   parseAblation,
   scoreCoverage,
@@ -298,7 +299,7 @@ export async function scoreRun(req: {
   // misses says which of them are real gaps — a second number, deliberately not the main
   // one, because a model in the measurement makes runs no longer comparable to each other.
   const semantic = req.semantic
-    ? await adjudicateMisses(gold, cases, coverage, traced(gated(modelFromEnv()), { name: "eval.adjudicate" }))
+    ? await adjudicateMisses(gold, cases, coverage, traced(gated(plannerModel(plannerConnectionFromEnv())), { name: "eval.adjudicate" }))
     : undefined;
 
   return {
@@ -591,7 +592,7 @@ export async function runCritique(req: CritiqueRequest): Promise<Record<string, 
     repairRounds,
     spend,
   });
-  const result = await critique(evidence, traced(gated(modelFromEnv()), { name: "harness.critic" }), {
+  const result = await critique(evidence, traced(gated(plannerModel(plannerConnectionFromEnv())), { name: "harness.critic" }), {
     ablatable: ALL_ABLATABLE,
   });
 

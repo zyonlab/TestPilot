@@ -1,3 +1,5 @@
+vi.mock("../src/runService.js", () => ({ registerWebRun: () => undefined, freezeGraphSources: () => undefined, runLedger: () => ({ registration: () => undefined }) }));
+vi.mock("../src/modelSnapshots.js", () => import("./helpers/model-snapshot.js"));
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**

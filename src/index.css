@@ -168,15 +168,9 @@
     line-height: 1.35;
   }
 
-  /*
-   * 下拉要写死高度，不能只给下限。
-   *
-   * `<select>` 有一段浏览器自己加的固有高度（这里约 2px），内边距怎么调都减不掉——
-   * 同样的字号和 padding，`<button>` 25px，它 27px。这两像素在一排控件里看得出来。
-   * 多选与列表形态的 select 排除在外：给它们钉一个 25px 会把列表压成一行。
-   */
+  /* Allow each toolbar's padding and font size to determine its readable height. */
   select:not([multiple]):not([size]) {
-    height: 1.5625rem;
+    height: auto;
   }
 
   /*

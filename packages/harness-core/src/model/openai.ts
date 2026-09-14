@@ -1,3 +1,5 @@
+import { flavorOf } from './flavor.js';
+export { flavorOf } from './flavor.js';
 import type { ChatRequest, ChatResponse, ModelClient } from "./client.js";
 
 export interface OpenAIModelOptions {
@@ -16,6 +18,8 @@ export interface OpenAIModelOptions {
    * limit with thinking on, and 1.0s with the answer when it is off.
    */
   noThink?: boolean;
+  /** Role profile explicitly requests provider defaults: send no thinking switches. */
+  providerThinkingDefault?: boolean;
   /** 涨预算重发时说一声。留空则不说——这个类不该假设调用方有什么日志设施。 */
   onLog?: (message: string) => void;
   /** 开着思考时，推理最多写多长。见 `max_tokens` 那段。 */
@@ -24,6 +28,8 @@ export interface OpenAIModelOptions {
   guided?: boolean;
   /** 网络层失败重试几次。默认 3。 */
   retries?: number;
+  /** Fixed-budget experiments must not silently increase output tokens on truncation. */
+  growOnTruncation?: boolean;
   /** 退避基数（毫秒），第 n 次等 n×这个数。默认 2000。 */
   retryBackoffMs?: number;
   /**
@@ -36,15 +42,6 @@ export interface OpenAIModelOptions {
   flavor?: "openai" | "groq";
 }
 
-/** 从 baseUrl 猜方言。只认得出 Groq；别的都当 vLLM 一族的 OpenAI 兼容。 */
-export function flavorOf(baseUrl: string, explicit?: "openai" | "groq"): "openai" | "groq" {
-  if (explicit) return explicit;
-  try {
-    return new URL(baseUrl).hostname.endsWith("groq.com") ? "groq" : "openai";
-  } catch {
-    return "openai";
-  }
-}
 
 /**
  * An OpenAI-compatible chat client that speaks this project's request shape.
@@ -98,7 +95,7 @@ export class OpenAIModel implements ModelClient {
     let asked = req.maxTokens ?? 1024;
     for (let grow = 0; ; grow++) {
       const out = await this.once({ ...req, maxTokens: asked });
-      if (!out.truncated || grow >= 2 || asked >= ceiling) return out;
+      if (!out.truncated || this.opts.growOnTruncation === false || grow >= 2 || asked >= ceiling) return out;
       const next = Math.min(ceiling, asked * 2);
       if (next === asked) return out;
       this.opts.onLog?.(
@@ -138,7 +135,9 @@ export class OpenAIModel implements ModelClient {
       temperature: 0,
     };
     const flavor = flavorOf(this.opts.baseUrl, this.opts.flavor);
-    if (flavor === "groq") {
+    if (this.opts.providerThinkingDefault) {
+      // No provider-specific thinking fields. null in the role binding remains unknown.
+    } else if (flavor === "groq") {
       // Groq：关思考是 reasoning_effort=none；开着思考时把推理藏起来，content 里只剩答案。
       // 它不认 thinking_budget，预算只能靠 max_tokens 兜。
       if (this.opts.noThink !== false) body.reasoning_effort = "none";
@@ -150,6 +149,13 @@ export class OpenAIModel implements ModelClient {
         // alone silently leaves thinking on.
         body.enable_thinking = false;
         body.chat_template_kwargs = { enable_thinking: false };
+        /**
+         * 再加标准字段。上面两个是厂商扩展，**有的兼容端点两个都不认**。
+         * 2026-09-11 在 api.runinfra.ai 实测：只发那两个，`reasoning_tokens` 还是 22–28；
+         * 加上这一个才降到 0。推理吃掉 `max_tokens` 的表现是 `finish_reason=length`
+         * 且 `content` 为空串——在下游看是「模型返回空内容」，很难追回这里。
+         */
+        body.reasoning_effort = "none";
       }
     }
     if (req.schema && this.guidedSupported)
@@ -194,7 +200,7 @@ export class OpenAIModel implements ModelClient {
         await new Promise((r) => setTimeout(r, attempt * backoff));
       }
     }
-    if (!res.ok && req.schema && this.guidedSupported) {
+    if ([400, 415, 422].includes(res.status) && req.schema && this.guidedSupported) {
       // Guided decoding is a nice-to-have: an endpoint that rejects it should degrade to a
       // plain call (the reply is validated by schema afterwards either way), and it should
       // only be discovered once rather than on every call.
@@ -250,13 +256,14 @@ export class OpenAIModel implements ModelClient {
 
   /** 开着思考才有推理预算；关着时是 0，`max_tokens` 与不思考完全一致。 */
   private get thinkBudget(): number {
+    if (this.opts.providerThinkingDefault) return 0;
     return this.opts.noThink === false ? (this.opts.thinkBudget ?? 1024) : 0;
   }
 
   private post(body: Record<string, unknown>): Promise<Response> {
     return fetch(`${this.opts.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.apiKey}` },
+      headers: { "Content-Type": "application/json", ...(this.opts.apiKey ? { Authorization: `Bearer ${this.opts.apiKey}` } : {}) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.opts.timeoutMs ?? 900_000),
     });
@@ -286,7 +293,7 @@ export function modelFromEnv(env: NodeJS.ProcessEnv = process.env): OpenAIModel 
      * **默认开着思考。**`TP_MODEL_THINK=0` 关掉。
      *
      * 这个默认值是量出来的，不是拍的。PetClinic 上两臂条件完全一致地各跑三轮
-     * （见 `docs/spec/13-重新规划.md` 阶段 C）：
+     * （见 `docs/archive/spec/13-重新规划.md` 阶段 C）：
      *
      *   语义覆盖      关 0.723 ± 0.078　开 0.630 ± 0.128　——**看不出差别**
      *   门禁①        关 0.982 ± 0.025　开 **1.000 ± 0.000**

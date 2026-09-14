@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLayers, expandPlan, slugIdent } from "../src/exportLayers.js";
+import { buildLayers, expandPlan, flowKey, slugIdent } from "../src/exportLayers.js";
 import { buildExportFiles } from "../src/export.js";
 import type { Project, TestCase } from "../src/db.js";
 
@@ -98,7 +98,7 @@ describe("导出的工程结构", () => {
       kase("c2", ["打开首页", "点 FIND OWNERS", "点第一行"], { title: "点一行", activity: "主人" }),
     ]);
     expect(Object.keys(files)).toContain("tests/flows/index.ts");
-    const spec = files["tests/主人/p1-看表格.spec.ts"]!;
+    const spec = files["tests/主人/看表格.spec.ts"]!;
     expect(spec).toMatch(/from "\.\.\/flows"/);
     // 没用到 actions 就不该 import 它
     expect(spec).not.toMatch(/from "\.\.\/actions"/);
@@ -110,7 +110,7 @@ describe("导出的工程结构", () => {
     const files = buildExportFiles(project, [kase("c1", ["打开首页", "点 A"], { title: "单条" })]);
     expect(Object.keys(files)).not.toContain("tests/flows/index.ts");
     expect(Object.keys(files)).not.toContain("tests/actions/index.ts");
-    expect(files["tests/_/p1-单条.spec.ts"]).toContain("打开首页");
+    expect(files["tests/_/单条.spec.ts"]).toContain("打开首页");
   });
 });
 
@@ -125,8 +125,40 @@ describe("数据驱动的导出", () => {
 
   it("没绑数据集就是普通的一个 test", () => {
     const files = buildExportFiles(project, [kase("c1", ["点 A"], { title: "普通" })]);
-    const spec = files["tests/_/p1-普通.spec.ts"]!;
+    const spec = files["tests/_/普通.spec.ts"]!;
     expect(spec).not.toContain("for (const");
     expect(Object.keys(files).some((f) => f.startsWith("tests/data/"))).toBe(false);
   });
 });
+
+/**
+ * 2026-09-14：抽取门槛（至少两条用例用它）让**成员资格随用例增删而变**——
+ * 加一条用例，某步骤从 1 个调用方变 2 个，突然被抽走，原本内联它的 spec 跟着改；
+ * 删一条则名字消失，所有 import 它的 spec 一起改。后者是破坏性的。
+ * 记忆让这一层单调：名字只增不减。
+ */
+describe("抽取层的记忆", () => {
+  const c = (id: string, ...steps: string[]) => kase(id, steps);
+
+  it("没有记忆时，只剩一个调用方的步骤会失去名字", () => {
+    const two = buildLayers([c("a", "点击 X", "看 A"), c("b", "点击 X", "看 B")]);
+    expect(two.actions.map((x) => x.text)).toContain("点击 X");
+    const one = buildLayers([c("a", "点击 X", "看 A")]);
+    expect(one.actions.map((x) => x.text)).not.toContain("点击 X");
+  });
+
+  it("记忆里有的，一个调用方也保留名字——增量导出不该搅动已有的 spec", () => {
+    const kept = buildLayers([c("a", "点击 X", "看 A")], { actions: new Set(["点击 X"]), flows: new Set() });
+    expect(kept.actions.map((x) => x.text)).toContain("点击 X");
+    // 名字仍然由内容决定，两次抽出来是同一个。
+    expect(kept.actions.find((x) => x.text === "点击 X")!.name)
+      .toBe(buildLayers([c("a", "点击 X", "看 A"), c("b", "点击 X", "看 B")]).actions.find((x) => x.text === "点击 X")!.name);
+  });
+
+  it("共享前置同理，而且展开之后仍然逐字等于原步骤", () => {
+    const steps = ["打开首页", "登录"];
+    const layers = buildLayers([c("a", ...steps, "看 A")], { actions: new Set(), flows: new Set([flowKey(steps)]) });
+    expect(layers.flows).toHaveLength(1);
+    expect(expandPlan(layers.plan.get("a")!, layers)).toEqual([...steps, "看 A"]);
+  });
+})

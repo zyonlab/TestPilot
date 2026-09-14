@@ -1,0 +1,27 @@
+.run-input-form { display:flex; flex-direction:column; gap:12px; }
+.run-input-form .input-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.input-option:disabled { opacity:.5; cursor:not-allowed; }
+.input-document-list .row { justify-content:flex-start; margin:6px 0; }
+.knowledge-bindings { border-top:1px solid var(--hair); padding-top:12px; }
+.knowledge-bindings .row { margin:8px 0; }
+.knowledge-roles { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; margin:14px 0; }
+.knowledge-roles > strong { grid-column:1/-1; }
+.product-hierarchy { display:flex; gap:20px; overflow:auto; padding:14px 0; }
+.product-hierarchy-column { min-width:180px; flex:1; border-left:1px solid var(--hair); padding-left:12px; }
+.product-hierarchy-column > strong { display:block; font-size:11px; color:var(--muted); margin-bottom:8px; }
+.product-hierarchy-node { width:100%; display:flex; flex-direction:column; gap:5px; text-align:left; padding:10px; margin:6px 0; border:1px solid var(--hair); background:var(--surface); border-radius:6px; color:var(--ink); }
+.product-hierarchy-node small { font-size:10px; color:var(--muted); }
+.product-hierarchy-node[aria-pressed=true], .product-child-level button[aria-pressed=true] { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+.product-hierarchy-node:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.product-child-level { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+.product-child-level button { padding:7px 10px; border:1px solid var(--hair); border-radius:5px; background:var(--surface); color:var(--ink); }
+.product-child-level.features { border-left:2px solid var(--hair); padding-left:12px; }
+.product-drilldown { padding:0 24px; }
+.product-graph-filter { background:var(--ground); border-bottom:1px solid var(--hair); padding:0 18px; flex:none; }
+.product-graph-filter[open] { max-height:45vh; overflow:auto; }
+.product-graph-filter > summary { cursor:pointer; font-size:12px; padding:10px 0; color:var(--accent); }
+.artifact-readable .source-excerpt { max-height:55vh; overflow:auto; }
+.artifact-readable .review-table-wrap { max-height:60vh; overflow:auto; }
+.bench-artifact { cursor:pointer; }
+.bench-artifact .card-t { white-space:normal; line-height:1.4; }
+@media(max-width:700px){.run-input-form .input-options{grid-template-columns:1fr}.knowledge-roles{grid-template-columns:1fr}.product-hierarchy-column{min-width:150px}}

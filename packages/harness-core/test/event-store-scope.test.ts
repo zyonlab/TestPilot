@@ -4,7 +4,7 @@ import { SqliteEventStore } from "../src/obs/store.js";
 /**
  * 事件按运行取，而不是"先取最旧一万条再切尾"。
  *
- * 钉的是 docs/spec/17 的 U-23。原来的取法是 `since(0, 10_000).slice(-limit)`，
+ * 钉的是 docs/archive/spec/17 的 U-23。原来的取法是 `since(0, 10_000).slice(-limit)`，
  * 而 `since` 是 `WHERE id > ? ORDER BY id ASC LIMIT ?`——两者合起来，一旦库里事件
  * 超过一万条，拿到的永远是**最旧一万条里的最后一千条**。历史运行的轨迹于是永远是空的，
  * 而界面把这个取数缺陷说成了一句关于那次运行的事实陈述。

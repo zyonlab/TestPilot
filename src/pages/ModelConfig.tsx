@@ -549,6 +549,7 @@ function blankEnvForm() {
     id: undefined as string | undefined,
     name: "",
     baseUrl: "",
+    viewportWidth: "", viewportHeight: "",
     vars: [{ key: "", value: "" }] as VarRow[],
     headers: [] as VarRow[],
     query: [] as VarRow[],
@@ -566,6 +567,7 @@ function formFromEnv(env: Environment) {
     id: env.id,
     name: env.name,
     baseUrl: env.baseUrl,
+    viewportWidth: String(env.viewport?.width??""), viewportHeight: String(env.viewport?.height??""),
     vars: vars.length ? vars : [{ key: "", value: "" }],
     headers: toRows(env.headers),
     query: toRows(env.query),
@@ -752,6 +754,7 @@ export function EnvironmentsCard() {
         query: rowsToMap(form.query) as Record<string, string>,
         login,
         isDefault: form.isDefault,
+        viewport: { ...(Number(form.viewportWidth)>0?{width:Number(form.viewportWidth)}:{}), ...(Number(form.viewportHeight)>0?{height:Number(form.viewportHeight)}:{}) },
       });
       setEnvs((es) => {
         const has = es.some((e) => e.id === environment.id);
@@ -868,6 +871,8 @@ export function EnvironmentsCard() {
               className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
+
+          <fieldset className="grid grid-cols-2 gap-3"><legend className="mb-2 text-xs text-muted-foreground">{t('bench.viewport')}</legend><label className="text-xs">{t('bench.viewportWidth')}<input id="envViewportWidth" type="number" min={320} max={7680} placeholder="1024" value={form.viewportWidth} onChange={e=>setForm(f=>({...f,viewportWidth:e.target.value}))} className="mt-1 w-full rounded border border-border bg-background px-3 py-2"/></label><label className="text-xs">{t('bench.viewportHeight')}<input id="envViewportHeight" type="number" min={240} max={4320} placeholder="768" value={form.viewportHeight} onChange={e=>setForm(f=>({...f,viewportHeight:e.target.value}))} className="mt-1 w-full rounded border border-border bg-background px-3 py-2"/></label></fieldset>
 
           {/* Test data (non-secret vars) — batch import + array support */}
           <div>

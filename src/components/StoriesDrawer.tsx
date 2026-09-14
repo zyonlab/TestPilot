@@ -50,6 +50,8 @@ export function StoriesDrawer({ wfRunId, onClose }: { wfRunId: string; onClose: 
         </span>
       }
       resizeKey="stories"
+      /* 物料正文抽屉：整屏打开，收合按钮可切回常规宽度。 */
+      fullscreen
       defaultWidth={860}
     >
       {error && <div className="p-4 text-[0.8125rem] text-bad">{error}</div>}

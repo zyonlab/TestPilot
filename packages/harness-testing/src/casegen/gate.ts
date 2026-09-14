@@ -34,6 +34,77 @@ const DEFAULTS: Required<GateOptions> = {
 };
 
 /** Words that promise nothing: an assertion built from them cannot fail honestly. */
+/**
+ * 一句「确认/验证 X 显示 Y」是状态，不是动作。见下面 `step-not-an-action` 的注释。
+ *
+ * 两段都要命中才算：光有「确认」不够——`确认下单`、`点击 Confirm` 是真动作，
+ * 第二段那些状态词把它们排除在外。
+ */
+const CHECK_VERB = /^\s*(确认|验证|检查|断言|校验|观察|assert|verify|ensure|check|confirm)\b|^\s*(确认|验证|检查|断言|校验|观察)/i;
+const STATE_WORD =
+  /显示|可见|不可见|存在|不存在|出现|未出现|处于|激活|为空|非空|勾选|选中|保持|仍是|应该|是默认|为|\bis\b|\bare\b|shows?|displays?|contains?|exists?|visible|present|remains?/i;
+/**
+ * 第二种形状：**纯观察**。
+ *
+ * 2026-09-13 跑 `trade-panel.order-entry` 之前逐条看出来的：TC-013 / TC-016 / TC-017
+ * 的第 2 步是「查看面板方向按钮区域」「查看面板 Size 输入框旁」——它连一个状态词都没有，
+ * 上面那条「检查动词 + 状态词」两段全中的规则**漏了**。而它同样不是动作：
+ * 「看一眼某个区域」在浏览器里没有对应操作，规划器只能放弃。
+ *
+ * 这类句子的判据是它自己：以观察动词开头，而且**整句里没有任何可执行的动词**。
+ * 「查看更多」（点展开）不在此列——那里的 `更多` 后面跟着可点的东西，
+ * 所以只在句子里没有出现任何动作动词时才算。
+ */
+const LOOK_VERB = /^\s*(查看|看一?下|观察|留意|注意|浏览|look at|observe|inspect|view)/i;
+/**
+ * 动作动词不能被控件名字咬住：`按钮` 里有「按」、`输入框` 里有「输入」、
+ * `选择器` 里有「选择」——不排掉的话「查看面板方向按钮区域」会被当成一个动作句放过去。
+ */
+const ACTION_VERB =
+  /点击|单击|双击|点一?下|点选|点按|轻点|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|选择(?!器|框)|切换(?!器)|打开|关闭|滚动|拖动|悬停|提交|导航|上传|清空|等待|click|tap|type|fill|enter|select|toggle|open|close|scroll|drag|hover|submit|navigate|upload|press|wait/i;
+const STEP_IS_ASSERTION = {
+  test: (s: string) => (CHECK_VERB.test(s) && STATE_WORD.test(s)) || (LOOK_VERB.test(s) && !ACTION_VERB.test(s)),
+};
+
+/**
+ * 「这条准则要求用户动手吗」与「这条用例真的动手了吗」。
+ * 服务端那份同义实现在 `server/src/acceptanceIndex.ts`——两边都要判，各自独立。
+ */
+/**
+ * **动作动词表是拿真语料调出来的，不是想出来的。**
+ *
+ * 2026-09-14 第一版只认「点击/单击/双击」，而重跑那一轮模型写的是「用户点「Limit」」
+ * ——光杆的「点」。154 条真实验收准则里，判成动作的从 89 条掉到本该有的 107 条，
+ * 12 条故事被误报成「一条动作型准则都没有」，而契约正拿这份错标注在教模型写用例。
+ *
+ * 所以光杆的「点」要认，但得排掉名词性用法：`节点/终点/观点/重点/焦点/地点/起点`
+ * 用负向后顾排，`点差/点位/点评` 用负向先行排。同理 `按` 只认 `按下/按住/长按`
+ * （否则「按钮」全中），`输入` 不认 `输入框`，`选择` 不认 `选择器/选择框`。
+ * `挂单` 也不能进表——「查看挂单档位」里它是名词。
+ *
+ * 第三版（同日）补的：重写时把 `打开/关闭` 弄丢了，`执行/设为/切到/勾上` 也没有,
+ * 于是「打开持仓面板」「执行 Transfer to Spot」「将杠杆设为 20x」又被判成看一眼。
+ * 三轮运行的 258 条去重语料现在判出 173 条动作型，剩下的逐条复核过：
+ * 全是 `用户查看X` / `页面加载完成` / `订单成交` / `行情触及 TP 价` 这类观察与系统事件。
+ */
+const ACCEPTANCE_ACTION =
+  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|下单|撤单|撤掉|撤销|取消|平仓|开仓|转账|充值|提现|划转|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
+const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
+function whenClause(text: string): string {
+  // 只认子句开头的 When（句首，或 `/ ， ; 换行` 之后）——2026-09-14 实测模型两种分隔都用。服务端同义实现见 acceptanceIndex.ts。
+  return (/(?:^|[/,，;；\n])\s*When\s+([^/,，;；\n]+)/i.exec(text))?.[1]?.trim() ?? "";
+}
+function normalizeRef(x: string): string {
+  return x.replace(/[\s“”"'（）()、,，。.]/g, "");
+}
+/** 步骤里有没有一个既不是导航、也不是「看一眼」的真实动作。 */
+function caseHasAction(c: { steps?: string[] }): boolean {
+  return (c.steps ?? []).some(
+    (step) => !NAV_STEP.test(step) && ACCEPTANCE_ACTION.test(step) && !STEP_IS_ASSERTION.test(step),
+  );
+}
+
+
 const VAGUE = /正常|合理|符合预期|友好|良好|恰当|适当|没有问题|正确显示|流畅|works? (correctly|fine)|as expected|properly|reasonable/i;
 
 /**
@@ -141,7 +212,30 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     // The tier used to be a label nobody could check, so every case could claim 1 and be
     // judged by a model anyway. Now it is a claim with a fact behind it: either there is an
     // oracle a program can settle, or the case is tier 3 whatever it says about itself.
-    if (cfg.gradeOracles && c.tier <= 2 && !c.oracle)
+    /**
+     * **判据也可以挂在断言上。**
+     *
+     * v2 把 `expected` 一句话拆成了 `assertions[]`，每条各带自己的 `oracle`——一条用例
+     * 于是可以完全不写顶层 `oracle` 而仍然处处可判。这条规则却只看顶层：2026-09-11
+     * 第二轮实测，一条臂的 53 条用例**每一条都有断言级判据**（其中 27 条是接口判据），
+     * 却被 51 条 `tier-unbacked` 点名，分数 0.038。这不是它写得差，是门禁看不见。
+     */
+    const oracles = [c.oracle, ...(c.assertions ?? []).map((a) => a.oracle)].filter(Boolean) as NonNullable<TextCase["oracle"]>[];
+    /**
+     * **判决必须在屏幕上。**
+     *
+     * 这个产品产出的是端到端 UI 测试：一条用例驱动界面、再对界面上出现的东西下判断。
+     * 去问被测产品自己的后端接口，判的就不是用户看得见的那件事——接口说下单成功而屏幕上
+     * 没有那一行，这条用例会通过，而产品其实是坏的。2026-09-12 用户明确这条口径之前，
+     * 提示词里写的是反的（「涉及资金或持仓状态的用例**必须**带接口判据」），
+     * `fixtures/hyperliquid-testnet/cases.json` 那 8 条也全是接口判据——那些是旧口径的产物。
+     *
+     * 拦在这里而不只是写进提示词：提示词管的是模型愿不愿意，门禁管的是什么算合格。
+     */
+    for (const o of oracles)
+      if (o.kind === "api")
+        add("oracle-offsite", `verdict is read from the product's own API, not from the screen: ${o.url}`, c.id, "warn", { field: "expected" });
+    if (cfg.gradeOracles && c.tier <= 2 && !oracles.length)
       add(
         "tier-unbacked",
         `claims tier ${c.tier} but carries no machine-checkable oracle — at execution time a model will decide it`,
@@ -154,6 +248,24 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
         c.id,
         "info",
       );
+    /**
+     * **`steps` 里只能是动作。**
+     *
+     * 2026-09-13 实测（exec-1f7d2cdd）：81 条里 14 条把一句前置状态确认写进了步骤——
+     * TC-001 的第 2 步是「确认右侧区域显示订单簿（Order Book 标签处于激活态…）」。
+     * 那是用户故事里的 Given，不是用户要做的事。执行侧把每个 step 交给 `aiAction`，
+     * 而 `aiAction` 只会规划动作：Midscene 拆不动，抛 `Failed to plan actions: <理由>`，
+     * 于是一条措辞问题被记成产品缺陷。
+     *
+     * 前置状态属于 `precondition`，事后判断属于 `assertions`——两处都有地方放，
+     * 唯独 `steps` 没有。`warn` 而不是 `error`：按 caseId 计分，等于挡住这条过关。
+     */
+    for (const s of c.steps)
+      if (STEP_IS_ASSERTION.test(s.trim()))
+        add("step-not-an-action", `step states a condition instead of an action — preconditions belong in precondition, checks in assertions: "${s.slice(0, 60)}"`, c.id, "warn", {
+          args: { step: s.slice(0, 60) },
+          field: "steps",
+        });
     for (const s of c.steps)
       if (/密码\s*[:：=]\s*\S|password\s*[:=]\s*\S/i.test(s) && !s.includes("${"))
         add("secret", `credential written into a step instead of a placeholder: "${s.slice(0, 50)}"`, c.id, "warn", {
@@ -179,7 +291,22 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   // 4. Method mix and the happy-path check.
   const methods: Record<string, number> = {};
   for (const c of cases) methods[c.designMethod] = (methods[c.designMethod] ?? 0) + 1;
-  const negatives = (methods.negative ?? 0) + (methods.boundary ?? 0);
+  /**
+   * **负例要按场景数，不是按方法数。**
+   *
+   * v2 把 `negative` 从设计方法拆成了 `scenarioType`（21 §5：一条负例同样可以用边界或
+   * 判定表设计出来）。这一行却一直只数 `designMethod`——于是新契约产出的用例越规范，
+   * 这个比例越低。2026-09-11 实测：一批 53 条用例里 13 条 `scenarioType: "negative"`，
+   * 门禁报出来的负例比例是 0.057，真值 0.245，差了四倍多，而低于阈值那条告警照样开。
+   *
+   * 三者取并集而不是相加：一条 `scenarioType: "negative"` 且 `designMethod: "boundary"`
+   * 的用例只能算一条，相加会让比例超过 1。
+   */
+  const negativeIds = new Set<string>();
+  for (const c of cases)
+    if (c.scenarioType === "negative" || c.designMethod === "negative" || c.designMethod === "boundary")
+      negativeIds.add(c.id);
+  const negatives = negativeIds.size;
   const negativeRatio = cases.length ? negatives / cases.length : 0;
   if (cases.length && negativeRatio < cfg.minNegativeRatio)
     add(
@@ -188,9 +315,59 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     );
 
   // 5. Stories nobody wrote a case for.
+  const subsumed = new Set(bundle.stories.flatMap((s) => s.subsumes ?? []));
   for (const s of bundle.stories)
-    if (!cases.some((c) => c.storyId === s.id))
+    // 被覆盖的故事本来就没有自己的用例——那是设计，不是漏洞。它的准则在下面单独查。
+    if (!subsumed.has(s.id) && !cases.some((c) => c.storyId === s.id))
       add("story-uncovered", `story ${s.id} has no cases`, undefined, "warn", { args: { storyId: s.id } });
+
+  /**
+   * 5.1 **一条要求用户动手的验收准则，没有任何用例真的动手去做它。**
+   *
+   * 2026-09-13 实测（81 条用例 / 29 条故事）量出的那条闭合链：
+   * 模型改写 `acRefs`（85 条里 21 条），把「When 用户勾选 Reduce Only 并提交」
+   * 换成「When 用户查看面板」→ 用例不需要动作（81 条里 24 条除了导航什么都不做）→
+   * 判据退化成「页面上有这个字面量」→ 那种判据在初始页面上就成立
+   * （`trade-panel.order-entry` 通过 9 条里 6 条是这样）→ **通过时什么都没证明**。
+   *
+   * 契约与服务端已经从两头堵：验收准则带编号交出去，`acRefs` 填不出编号就拒收。
+   * 门禁这一条管的是另一件事——**编号对上了，动作却没做**。
+   * S-08「输入超出 szDecimals 小数位的数量」「切换计价单位」两条动作型准则，
+   * 当时一条用例都没认领，而 TC-016/017 认领它时把 When 改成了「查看」。
+   *
+   * 按 storyId 计分而不是 caseId：漏掉的是一条准则，不是某一条用例的毛病。
+   */
+  /**
+   * 被覆盖的故事，它的准则由**覆盖它的那条故事的用例**了结（`StorySchema.subsumes`）。
+   * 所以这里不能只看 `storyId` 相等的用例——那样长故事刚把短用例合并掉，
+   * 门禁就会反过来报「这些准则没人认领」，把想要的结构判成缺陷。
+   */
+  const coveredBy = new Map<string, string>();
+  for (const s of bundle.stories) for (const id of s.subsumes ?? []) coveredBy.set(id, s.id);
+  for (const s of bundle.stories) {
+    const owner = coveredBy.get(s.id) ?? s.id;
+    const mine = cases.filter((c) => c.storyId === s.id || c.storyId === owner);
+    (s.acceptance ?? []).forEach((text, i) => {
+      if (!ACCEPTANCE_ACTION.test(whenClause(text) || text)) return;
+      const id = `${s.id}/AC-${i + 1}`;
+      const claimed = mine.filter((c) => (c.acRefs ?? []).some((r) => r === id || normalizeRef(r) === normalizeRef(text)));
+      if (!claimed.length)
+        add("acceptance-uncovered", `${id} 要求用户动手（When ${(whenClause(text) || text).slice(0, 34)}），却没有任何用例认领它`, undefined, "warn", { args: { storyId: s.id, acId: id } });
+      else if (!claimed.some(caseHasAction))
+        add("acceptance-uncovered", `${id} 要求用户动手，而认领它的 ${claimed.map((c) => c.id).join("/")} 步骤里只有导航和查看——没有人真的做过这个动作`, undefined, "warn", { args: { storyId: s.id, acId: id } });
+    });
+  }
+
+  /**
+   * 5.2 **一条用例除了导航之外什么都不做。**
+   *
+   * 81 条里 24 条是这样，其中 11 条是纯「打开页面 + 看一眼」。这种用例的判据必然是
+   * 「页面上有某个字面量」，而它在初始页面上就已经成立——它测的是「这一页还在」。
+   * 展示型需求确实存在，所以是 `warn` 不是 `error`；但它得被数出来。
+   */
+  for (const c of cases)
+    if ((c.steps ?? []).length && !caseHasAction(c))
+      add("case-without-action", `除了导航之外没有任何动作，步骤只是看：${(c.steps ?? []).join(" | ").slice(0, 70)}`, c.id, "warn", { field: "steps" });
 
   /**
    * 6. 这条「故事」是不是一条故事。
@@ -253,6 +430,50 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    */
   const known = new Set(bundle.stories.flatMap(() => [] as string[]));
   for (const f of bundle.flows ?? []) for (const tr of f.transitions ?? []) known.add(tr);
+  /**
+   * **`flows` 为空时不能就此放行。**
+   *
+   * 原来这里是 `if (known.size)`：一份没有流程的产物，任何 `covers` 值都免检。
+   * 2026-09-11 实测（docs/v3/22）：一条臂的 67 条用例里有 27 条填了 `covers`，
+   * 值形如 `/trade~6 --[点「Trades」]--> /trade~7`——那是状态转移图**人类可读摘要里的一行**，
+   * 不是转移 id。产物的 `flows` 是空的，于是这 27 条编造的引用一条都没被点到，
+   * 门禁还给了满分，而结构覆盖率凭空多了 27 条谁也走不到的边。
+   *
+   * 「查不了」和「查过了没问题」是两件事。没有可对照的流程时，一条 `covers` 是
+   * **无法核实的主张**，必须说出来。
+   */
+  /**
+   * 没有流程可对照时，退一步看**用例自己的状态模型**。
+   *
+   * 上面那条规则原来一律记 warn。它抓对过一次（27 条编造的 id），但它也把另一种情况
+   * 一起判了：一条带 `design.technique: "state-transition"` 的用例，它的 `covers` 和
+   * `design.transitionIds` 是同一批边，还写明了 `stateModelRef`——这批边**查得到出处**，
+   * 只是产品侧还没有一份转移清单可以对照。
+   *
+   * 2026-09-11 第二轮实测：两条臂都被这一条打到 0 分，其中一条的 112 条用例里有 85 条
+   * 带真正的程序判据、66 条带完整状态证据，另一条 53 条一个判据都没有。一条把两者判成
+   * 同一个分数的规则，没有区分能力，也就没有用。
+   *
+   * 所以按证据分档：说得出自己的状态模型、且 `covers` 与 `transitionIds` 一致的，记 info
+   * （缺口在产品模型没有转移清单，不在这条用例）；说不出的，仍然记 warn。
+   */
+  if (!known.size)
+    for (const c of cases) {
+      const covers = c.covers ?? [];
+      if (!covers.length) continue;
+      const d = c.design;
+      const selfDeclared =
+        d?.technique === "state-transition" && covers.every((cv) => d.transitionIds.includes(cv));
+      add(
+        "covers-unverifiable",
+        selfDeclared
+          ? `names transitions from its own state model ${d.stateModelRef}, but the product model carries no transition inventory to check them against`
+          : "names transitions to cover, but this bundle carries no flows to check them against",
+        c.id,
+        selfDeclared ? "info" : "warn",
+        { args: { transitions: covers.join(", ") }, field: "covers" },
+      );
+    }
   if (known.size)
     for (const c of cases)
       for (const cv of c.covers ?? [])
@@ -261,6 +482,19 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
             args: { transition: cv },
             field: "covers",
           });
+  /**
+   * 声称用了某种设计方法，却没给设计证据（21 §5）。
+   *
+   * 记 **info** 而不是 warn：这些字段 2026-09-11 才进 schema，历史产物一条都没有，
+   * 记 warn 会把每一批旧归档的分数一起改掉——而分数要能重放。它的作用是让缺口**可见**，
+   * 不是把旧账翻出来重判。等新链路稳定产出之后再考虑提级，那要单独决定。
+   */
+  for (const c of cases)
+    if (!c.design && c.designMethod !== "negative")
+      add("design-evidence-missing", `claims ${c.designMethod} but gives no design evidence`, c.id, "info", {
+        args: { method: c.designMethod },
+        field: "designMethod",
+      });
   for (const c of cases)
     if (!(c.covers ?? []).length && c.designMethod === "state-transition")
       add("no-transition", "claims to be a state-transition case but names no transition", c.id, "info", {
@@ -384,7 +618,9 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   // deliver. A gap between them is the number worth watching.
   const tiersBacked: Record<string, number> = {};
   for (const c of cases) {
-    const real = c.oracle ? String(tierOf(c.oracle)) : "3";
+    // 同上：断言级判据也算数，取这条用例能交付的**最硬**的那一层。
+    const all = [c.oracle, ...(c.assertions ?? []).map((a) => a.oracle)].filter(Boolean) as NonNullable<TextCase["oracle"]>[];
+    const real = all.length ? String(Math.min(...all.map((o) => tierOf(o)))) : "3";
     tiersBacked[real] = (tiersBacked[real] ?? 0) + 1;
   }
 

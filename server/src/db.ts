@@ -1,4 +1,5 @@
 import { DATA_DIR } from "./datadir.js";
+import type { RunSpend } from "@testpilot/harness-testing";
 import type {
   ChainAssertion,
   MachineOracle,
@@ -24,6 +25,15 @@ export const db = new Database(resolve(DATA_DIR, "testpilot.db"));
 db.pragma("journal_mode = WAL");
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS model_profiles (
+  projectId TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('planner', 'executor')),
+  version INTEGER NOT NULL, profileJson TEXT NOT NULL, keyEnc TEXT,
+  createdAt TEXT NOT NULL, PRIMARY KEY(projectId, role, version)
+);
+CREATE TABLE IF NOT EXISTS run_model_snapshots (
+  runId TEXT PRIMARY KEY, projectId TEXT, bindingJson TEXT NOT NULL,
+  connectionsEnc TEXT NOT NULL, createdAt TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, targetUrl TEXT NOT NULL, createdAt TEXT NOT NULL
 );
@@ -87,6 +97,7 @@ CREATE TABLE IF NOT EXISTS environments (
   queryJson TEXT NOT NULL DEFAULT '{}',     -- fixed query-string params appended to navigations
   sessionEnc TEXT NOT NULL DEFAULT '',      -- captured login state (storageState), AES-encrypted
   viewportJson TEXT NOT NULL DEFAULT '{}',   -- 这个被测对象要多大的视口（见 U-69）
+  visualThresholdPct REAL,                   -- 这个被测对象的视觉差异阈值；空=用默认 0.5
   isDefault INTEGER NOT NULL DEFAULT 0,
   createdAt TEXT NOT NULL,
   UNIQUE(projectId, name)
@@ -195,6 +206,8 @@ if (!runCols.has("reportPath")) db.exec("ALTER TABLE runs ADD COLUMN reportPath 
 if (!runCols.has("visualJson"))
   db.exec("ALTER TABLE runs ADD COLUMN visualJson TEXT NOT NULL DEFAULT '[]'");
 if (!runCols.has("tokens")) db.exec("ALTER TABLE runs ADD COLUMN tokens INTEGER");
+// 一次运行的账（模型调用数/毫秒/缓存三态），见 harness-testing `RunSpend`。tokens 单列保留，spendJson 是它的展开。
+if (!runCols.has("spendJson")) db.exec("ALTER TABLE runs ADD COLUMN spendJson TEXT");
 if (!runCols.has("perfJson")) db.exec("ALTER TABLE runs ADD COLUMN perfJson TEXT");
 if (!runCols.has("oracleJson"))
   db.exec("ALTER TABLE runs ADD COLUMN oracleJson TEXT NOT NULL DEFAULT '[]'");
@@ -213,7 +226,7 @@ if (!runCols.has("infraError")) {
       "failureReason LIKE '%ECONNREFUSED%' OR failureReason LIKE '%502%' OR failureReason LIKE '%timeout%')",
   );
 }
-// Structured failure attribution (docs/spec/06). `infraError` stays for compatibility;
+// Structured failure attribution (docs/archive/spec/06). `infraError` stays for compatibility;
 // these two say WHICH kind of failure it was, which is what the statistics bucket by.
 if (!runCols.has("failCode")) db.exec("ALTER TABLE runs ADD COLUMN failCode TEXT");
 if (!runCols.has("failKind")) db.exec("ALTER TABLE runs ADD COLUMN failKind TEXT");
@@ -299,6 +312,32 @@ if (!genCols.has("degraded")) db.exec("ALTER TABLE test_cases ADD COLUMN degrade
 if (!genCols.has("activity")) db.exec("ALTER TABLE test_cases ADD COLUMN activity TEXT DEFAULT ''");
 if (!genCols.has("coversJson"))
   db.exec("ALTER TABLE test_cases ADD COLUMN coversJson TEXT NOT NULL DEFAULT '[]'");
+/**
+ * `acRefs` 同理，而且是这三根线里最直接的一根：**这条用例了结的是哪条验收准则**。
+ *
+ * 2026-09-14 之后它才真正值钱——那天起 `acRefs` 从自由文本变成了稳定编号
+ * （`S-05/AC-2`，见 `acceptanceIndex.ts`），95 条引用里 0 条是模型自己编的。
+ * 而它到看板这一步就被丢掉了，于是导出的 spec 只说得出 `@story:S-MB-01`，
+ * 说不出是哪条准则——一条测试红了，人还是得回平台去猜它本来想证明什么。
+ */
+if (!genCols.has("acRefsJson"))
+  db.exec("ALTER TABLE test_cases ADD COLUMN acRefsJson TEXT NOT NULL DEFAULT '[]'");
+
+/**
+ * 抽取层的记忆：这个项目里曾经被命名过的步骤与共享前置。
+ *
+ * 见 `exportLayers.ts` 的 `LayerMemory`——门槛（至少两条用例用它）会让成员资格随
+ * 用例增删而变，于是加一条用例会把一批不相干的 spec 一起改。记住命名过的内容，
+ * 让这一层只增不减；导出对增量就没有多余的 diff。
+ *
+ * 按**内容**记，不按名字：名字本来就是内容的函数（slug 化的原文）。
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS export_layer_memory (
+    projectId TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    PRIMARY KEY (projectId, kind, key))`);
 
 // Review decisions live apart from the cases, because a rejection has no case to hang on:
 // the point of recording it is that the queue stops offering it again.
@@ -391,6 +430,8 @@ if (envCols.size && !envCols.has("sessionEnc"))
   db.exec("ALTER TABLE environments ADD COLUMN sessionEnc TEXT NOT NULL DEFAULT ''");
 if (envCols.size && !envCols.has("viewportJson"))
   db.exec("ALTER TABLE environments ADD COLUMN viewportJson TEXT NOT NULL DEFAULT '{}'");
+if (envCols.size && !envCols.has("visualThresholdPct"))
+  db.exec("ALTER TABLE environments ADD COLUMN visualThresholdPct REAL");
 
 export type Priority = "P0" | "P1" | "P2";
 /** `unobservable`：判据没量到——没有判决，不是通过也不是失败（harness-testing/exec/oracle.ts）。 */
@@ -561,6 +602,7 @@ export interface TestCase {
   storyId?: string; // the user story it was designed from
   activity?: string; // 所属模块。规格里算出来的路由聚类，故事地图的横轴
   covers?: string[]; // 走了哪些状态转移（`from->to`）——唯一来自产品本身的追溯线
+  acRefs?: string[]; // 了结了哪几条验收准则（`S-05/AC-2`）——用例与用户故事之间那根线
   designMethod?: string; // equivalence / boundary / state-transition / decision-table / negative
   tier?: number; // how hard its verdict is: 1 assert, 2 invariant, 3 judge
   gateScore?: number; // what gate ① thought of the batch it arrived in
@@ -614,6 +656,16 @@ export interface Environment {
    * 都跟着变贵，而大多数界面在 1024 下是完整的。不配就沿用默认。
    */
   viewport?: { width?: number; height?: number };
+  /**
+   * 这个被测对象的视觉差异阈值（百分比）。不配就用默认的 0.5。
+   *
+   * 放在环境上，和视口同一个理由：**它是被测对象的属性，不是全局口味**。
+   * 2026-09-11 在 Hyperliquid 主网上实测：130 个可比步骤里 40 步逐像素相同，
+   * 其余 90 步的差异中位数 1.21%、最大 3.27%——价格区每秒都在动，而 0.5%
+   * 这个默认值是给静态界面定的。结果是 90 条待审批差异里没有一条是真回归，
+   * 全是行情在跳。把阈值调成全局的会让静态应用跟着变迟钝；不给出口则这一页没法用。
+   */
+  visualThresholdPct?: number;
   login: LoginFlow;
   isDefault: boolean;
   createdAt: string;
@@ -646,6 +698,8 @@ export interface RunRecord {
   screenshots?: string[];
   reportPath?: string;
   tokens?: number;
+  /** 一次运行的账：`RunSpend`（模型调用数、毫秒、缓存命中/未命中/失效）。 */
+  spend?: RunSpend;
   visual?: VisualDiff[];
   perf?: unknown; // PerfResult from perf.ts (stored opaque to avoid coupling)
   oracle?: OracleCheck[];
@@ -713,11 +767,12 @@ export interface BatchRun {
 /* ---- serialization ---- */
 type CaseRow = Omit<
   TestCase,
-  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions" | "oracle" | "degraded" | "covers"
+  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions" | "oracle" | "degraded" | "covers" | "acRefs"
 > & {
   steps: string;
   postSteps: string;
   coversJson: string;
+  acRefsJson: string;
   hasCode: number;
   quarantined: number;
   chainAssertionsJson: string;
@@ -728,6 +783,7 @@ const rowToCase = (r: CaseRow): TestCase => ({
   ...r,
   oracle: r.oracleJson ? (JSON.parse(r.oracleJson) as MachineOracle) : undefined,
   covers: JSON.parse(r.coversJson || "[]"),
+  acRefs: JSON.parse(r.acRefsJson || "[]"),
   degraded: !!r.degraded,
   hasCode: !!r.hasCode,
   quarantined: !!r.quarantined,
@@ -738,8 +794,9 @@ const rowToCase = (r: CaseRow): TestCase => ({
 });
 type RunRow = Omit<
   RunRecord,
-  "logs" | "screenshots" | "visual" | "perf" | "oracle" | "healed" | "infraError" | "origin"
+  "logs" | "screenshots" | "visual" | "perf" | "oracle" | "healed" | "infraError" | "origin" | "spend"
 > & {
+  spendJson?: string | null;
   /** As stored: 'board' or 'workflow'. The ledger refines 'board' into suite/case. */
   origin?: string;
   logs: string;
@@ -756,6 +813,7 @@ const rowToRun = (r: RunRow): RunRecord => ({
   screenshots: JSON.parse(r.screenshots || "[]"),
   visual: JSON.parse(r.visualJson || "[]"),
   perf: r.perfJson ? JSON.parse(r.perfJson) : undefined,
+  spend: r.spendJson ? JSON.parse(r.spendJson) : undefined,
   oracle: JSON.parse(r.oracleJson || "[]"),
   healed: !!r.healed,
   infraError: !!r.infraError,
@@ -869,6 +927,7 @@ export function createCase(input: Partial<TestCase> & { projectId: string; title
     storyId: input.storyId,
     activity: input.activity,
     covers: input.covers ?? [],
+    acRefs: input.acRefs ?? [],
     designMethod: input.designMethod,
     tier: input.tier,
     gateScore: input.gateScore,
@@ -877,13 +936,14 @@ export function createCase(input: Partial<TestCase> & { projectId: string; title
     degraded: input.degraded,
   };
   db.prepare(
-    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt,storyId,designMethod,tier,gateScore,sourceRunId,oracleJson,degraded,activity,coversJson)
-     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt,@storyId,@designMethod,@tier,@gateScore,@sourceRunId,@oracleJson,@degraded,@activity,@coversJson)`,
+    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt,storyId,designMethod,tier,gateScore,sourceRunId,oracleJson,degraded,activity,coversJson,acRefsJson)
+     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt,@storyId,@designMethod,@tier,@gateScore,@sourceRunId,@oracleJson,@degraded,@activity,@coversJson,@acRefsJson)`,
   ).run({
     ...c,
     storyId: c.storyId ?? null,
     activity: c.activity ?? "",
     coversJson: JSON.stringify(c.covers ?? []),
+    acRefsJson: JSON.stringify(c.acRefs ?? []),
     designMethod: c.designMethod ?? null,
     tier: c.tier ?? null,
     gateScore: c.gateScore ?? null,
@@ -912,9 +972,20 @@ export function updateCase(id: string, patch: Partial<TestCase>): TestCase | und
   db.prepare(
     `UPDATE test_cases SET title=@title,priority=@priority,priorityReason=@priorityReason,
      runStatus=@runStatus,hasCode=@hasCode,precondition=@precondition,expected=@expected,
-     type=@type,requirementId=@requirementId,envRef=@envRef,dataKey=@dataKey,web3Mode=@web3Mode,chainAssertionsJson=@chainAssertionsJson,postSteps=@postSteps,quarantined=@quarantined,steps=@steps,code=@code WHERE id=@id`,
+     type=@type,requirementId=@requirementId,envRef=@envRef,dataKey=@dataKey,web3Mode=@web3Mode,chainAssertionsJson=@chainAssertionsJson,postSteps=@postSteps,quarantined=@quarantined,steps=@steps,code=@code,
+     oracleJson=@oracleJson,degraded=@degraded,coversJson=@coversJson,acRefsJson=@acRefsJson WHERE id=@id`,
   ).run({
     ...next,
+    /**
+     * 判据、降级标记、覆盖点三列此前**不在这条 UPDATE 里**：看板或 API 改了判据，
+     * 返回值回显的是合并后的对象，库里还是旧的——下一次运行照旧判。2026-09-07 在
+     * hyperliquid 基准上把限价从 10000 改成 40000，运行仍报「要求 eq 10000」才发现。
+     * 一个回显成功、落库失败的更新，比一个报错的更新糟。写法照 createCase。
+     */
+    oracleJson: next.oracle ? JSON.stringify(next.oracle) : null,
+    degraded: next.degraded ? 1 : 0,
+    coversJson: JSON.stringify(next.covers ?? []),
+    acRefsJson: JSON.stringify(next.acRefs ?? []),
     web3Mode: next.web3Mode ?? "",
     chainAssertionsJson: JSON.stringify(next.chainAssertions ?? []),
     expected: next.expected ?? "",
@@ -937,6 +1008,15 @@ export const getRun = (id: string): RunRecord | undefined => {
   const r = db.prepare("SELECT * FROM runs WHERE id=?").get(id) as RunRow | undefined;
   return r ? rowToRun(r) : undefined;
 };
+/** 成本账要的原始行（07 T-21）：不解析，交给 `scripts/lib/cost-aggregate.mjs`——脚本读的也是这几列。 */
+export const listProjectRunRows = (projectId: string, limit = 2000): Array<Record<string, unknown>> =>
+  db
+    .prepare(
+      `SELECT id, caseId, caseTitle, priority, status, durationMs, startedAt, tokens, spendJson, oracleJson, infraError, failKind, healed, attempts
+         FROM runs WHERE projectId = ? ORDER BY startedAt DESC LIMIT ?`,
+    )
+    .all(projectId, limit) as Array<Record<string, unknown>>;
+
 export const listRuns = (caseId?: string): RunRecord[] =>
   (
     caseId
@@ -1030,22 +1110,24 @@ export function updateRunResults(
   patch: {
     reportPath?: string;
     tokens?: number;
+    spend?: RunSpend;
     visual?: VisualDiff[];
     perf?: unknown;
     oracle?: OracleCheck[];
   },
 ): void {
   const cur = db
-    .prepare("SELECT reportPath, tokens, visualJson, perfJson, oracleJson FROM runs WHERE id=?")
+    .prepare("SELECT reportPath, tokens, spendJson, visualJson, perfJson, oracleJson FROM runs WHERE id=?")
     .get(id) as
-    | { reportPath: string | null; tokens: number | null; visualJson: string | null; perfJson: string | null; oracleJson: string | null }
+    | { reportPath: string | null; tokens: number | null; spendJson: string | null; visualJson: string | null; perfJson: string | null; oracleJson: string | null }
     | undefined;
   if (!cur) return;
   db.prepare(
-    "UPDATE runs SET reportPath=?, tokens=?, visualJson=?, perfJson=?, oracleJson=? WHERE id=?",
+    "UPDATE runs SET reportPath=?, tokens=?, spendJson=?, visualJson=?, perfJson=?, oracleJson=? WHERE id=?",
   ).run(
     patch.reportPath ?? cur.reportPath ?? null,
     patch.tokens ?? cur.tokens ?? null,
+    patch.spend !== undefined ? JSON.stringify(patch.spend) : cur.spendJson,
     JSON.stringify(patch.visual ?? JSON.parse(cur.visualJson || "[]")),
     patch.perf !== undefined ? JSON.stringify(patch.perf) : cur.perfJson,
     JSON.stringify(patch.oracle ?? JSON.parse(cur.oracleJson || "[]")),
@@ -1084,6 +1166,7 @@ type EnvRow = {
   headersJson: string;
   queryJson: string;
   viewportJson: string;
+  visualThresholdPct: number | null;
   sessionEnc: string;
   isDefault: number;
   createdAt: string;
@@ -1111,6 +1194,7 @@ const rowToEnv = (r: EnvRow): Environment => {
       // 空对象不发：一个 `viewport: {}` 在界面上看起来像"配过了"，而它什么都没说。
       return vp.width || vp.height ? { viewport: vp } : {};
     })(),
+    ...(typeof r.visualThresholdPct === "number" ? { visualThresholdPct: r.visualThresholdPct } : {}),
     login,
     isDefault: !!r.isDefault,
     createdAt: r.createdAt,
@@ -1146,6 +1230,7 @@ export function upsertEnvironment(
     headers: input.headers ?? existing?.headers ?? {},
     query: input.query ?? existing?.query ?? {},
     ...(input.viewport ?? existing?.viewport ? { viewport: input.viewport ?? existing?.viewport } : {}),
+    ...(input.visualThresholdPct ?? existing?.visualThresholdPct ? { visualThresholdPct: input.visualThresholdPct ?? existing?.visualThresholdPct } : {}),
     // Preserve the captured session across saves: the UI never round-trips the blob, so
     // only overwrite it when the caller explicitly provides `session` (object or null).
     login: input.login
@@ -1167,9 +1252,9 @@ export function upsertEnvironment(
   if (env.isDefault)
     db.prepare("UPDATE environments SET isDefault=0 WHERE projectId=?").run(env.projectId);
   db.prepare(
-    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,viewportJson,sessionEnc,isDefault,createdAt)
-     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@viewportJson,@sessionEnc,@isDefault,@createdAt)
-     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,viewportJson=@viewportJson,sessionEnc=@sessionEnc,isDefault=@isDefault`,
+    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,viewportJson,visualThresholdPct,sessionEnc,isDefault,createdAt)
+     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@viewportJson,@visualThresholdPct,@sessionEnc,@isDefault,@createdAt)
+     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,viewportJson=@viewportJson,visualThresholdPct=@visualThresholdPct,sessionEnc=@sessionEnc,isDefault=@isDefault`,
   ).run({
     id: env.id,
     projectId: env.projectId,
@@ -1180,6 +1265,7 @@ export function upsertEnvironment(
     headersJson: JSON.stringify(env.headers),
     queryJson: JSON.stringify(env.query),
     viewportJson: JSON.stringify(env.viewport ?? {}),
+    visualThresholdPct: env.visualThresholdPct ?? null,
     sessionEnc,
     isDefault: env.isDefault ? 1 : 0,
     createdAt: env.createdAt,
@@ -1292,14 +1378,21 @@ export function logQuarantine(e: Omit<QuarantineEntry, "id" | "at">): Quarantine
   return row;
 }
 
-/** 一个项目（或一条用例）的隔离台账，新的在前。 */
+/**
+ * 一个项目（或一条用例）的隔离台账，新的在前。
+ *
+ * **按 `at` 排序不够**：`at` 是毫秒精度的 ISO 串，同一毫秒里写进来的两条会并列，
+ * SQLite 于是按 rowid 升序返回——**老的排到了前面**，而「新的在前」正是这张台账的全部意义
+ * （「这条用例现在到底是隔离着还是解除了」看的就是第一条）。用 rowid 兜底：它单调递增，
+ * 表达的正是写入顺序。2026-09-11：全量测试里偶发失败过两次，单跑必过——就是这个。
+ */
 export function listQuarantineLog(projectId: string, caseId?: string): QuarantineEntry[] {
   const rows = (
     caseId
       ? db
-          .prepare("SELECT * FROM quarantine_log WHERE projectId=? AND caseId=? ORDER BY at DESC")
+          .prepare("SELECT * FROM quarantine_log WHERE projectId=? AND caseId=? ORDER BY at DESC, rowid DESC")
           .all(projectId, caseId)
-      : db.prepare("SELECT * FROM quarantine_log WHERE projectId=? ORDER BY at DESC LIMIT 200").all(projectId)
+      : db.prepare("SELECT * FROM quarantine_log WHERE projectId=? ORDER BY at DESC, rowid DESC LIMIT 200").all(projectId)
   ) as Array<Record<string, unknown>>;
   return rows.map((r) => ({
     id: String(r.id),
@@ -1421,3 +1514,20 @@ export const getBatchRuns = (batchId: string): BatchRun[] =>
   (db.prepare("SELECT * FROM batch_runs WHERE batchId=?").all(batchId) as (Omit<BatchRun, "healed"> & { healed: number })[]).map(
     (r) => ({ ...r, healed: !!r.healed }),
   );
+
+/** 这个项目曾经命名过的步骤与前置。见 export_layer_memory 的建表注释。 */
+export function exportLayerMemory(projectId: string): { actions: Set<string>; flows: Set<string> } {
+  const rows = db.prepare("SELECT kind, key FROM export_layer_memory WHERE projectId=?").all(projectId) as Array<{ kind: string; key: string }>;
+  return {
+    actions: new Set(rows.filter((r) => r.kind === "action").map((r) => r.key)),
+    flows: new Set(rows.filter((r) => r.kind === "flow").map((r) => r.key)),
+  };
+}
+/** 记下这一次抽出来的名字。只增不删——忘掉一个名字就等于让下次导出把一批 spec 改回去。 */
+export function rememberExportLayers(projectId: string, seen: { actions: readonly string[]; flows: readonly string[] }): void {
+  const put = db.prepare("INSERT OR IGNORE INTO export_layer_memory VALUES (?,?,?)");
+  db.transaction(() => {
+    for (const key of seen.actions) put.run(projectId, "action", key);
+    for (const key of seen.flows) put.run(projectId, "flow", key);
+  })();
+}

@@ -39,14 +39,14 @@ beforeEach(async () => {
   tr = await import("../src/trace.js");
   outputs["wf-1:stories"] = {
     stories: [
-      { id: "US-01", title: "新建项目", acceptance: ["目标端为 web 时可选启用 web3 能力"], source: "docs/spec/02.md" },
-      { id: "US-02", title: "登录", acceptance: [], source: "docs/spec/02.md" },
+      { id: "US-01", title: "新建项目", acceptance: ["目标端为 web 时可选启用 web3 能力"], source: "docs/archive/spec/02.md" },
+      { id: "US-02", title: "登录", acceptance: [], source: "docs/archive/spec/02.md" },
     ],
   };
   // 喂进这次运行的原始材料（没有 rules，所以按形状认得出是材料）。
   outputs["wf-1:docs"] = {
     text: "目标端为 web 时可选启用 web3 能力。登录失败时显示「用户名或密码错误」。",
-    origin: "docs/spec/02.md",
+    origin: "docs/archive/spec/02.md",
   };
 });
 

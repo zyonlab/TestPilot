@@ -1,0 +1,305 @@
+{
+  "generatedAt": "2026-09-09T14:12:16.994Z",
+  "version": "2026-09-09.3",
+  "tasks": [
+    {
+      "id": "N-01",
+      "title": "固化双角色配置与运行绑定契约",
+      "status": "done"
+    },
+    {
+      "id": "N-02",
+      "title": "Web 双模型设置与项目绑定",
+      "status": "done"
+    },
+    {
+      "id": "N-03",
+      "title": "规划与执行调用彻底分路",
+      "status": "done"
+    },
+    {
+      "id": "N-04",
+      "title": "让宿主真正完成规划，并由 MCP 强制阶段门禁",
+      "status": "done"
+    },
+    {
+      "id": "N-05",
+      "title": "统一运行、物料版本和事件契约",
+      "status": "done"
+    },
+    {
+      "id": "N-06",
+      "title": "Web workflow 管理与运行详情",
+      "status": "done"
+    },
+    {
+      "id": "N-07",
+      "title": "完成 g2 与跨运行时审批续跑",
+      "status": "done"
+    },
+    {
+      "id": "N-08",
+      "title": "项目物料、产物与 review 贯通",
+      "status": "done"
+    },
+    {
+      "id": "N-09",
+      "title": "保护测试意图和有效审批",
+      "status": "done"
+    },
+    {
+      "id": "N-10",
+      "title": "失败、取消、环境复位与成本预算语义",
+      "status": "done"
+    },
+    {
+      "id": "N-11",
+      "title": "补齐 Codex 宿主与运行适配",
+      "status": "done"
+    },
+    {
+      "id": "N-12",
+      "title": "两种安装路径与可诊断 onboarding",
+      "status": "done"
+    },
+    {
+      "id": "N-13",
+      "title": "三宿主一致性矩阵",
+      "status": "done"
+    },
+    {
+      "id": "N-14",
+      "title": "冻结可控领域基准与人工 gold",
+      "status": "waiting_review"
+    },
+    {
+      "id": "N-15",
+      "title": "领域判据的语义与执行正确性",
+      "status": "done"
+    },
+    {
+      "id": "N-16",
+      "title": "有效消融、缺陷检出与统计报告",
+      "status": "waiting_review"
+    },
+    {
+      "id": "N-17",
+      "title": "分角色成本与可靠性账本",
+      "status": "done"
+    },
+    {
+      "id": "N-18",
+      "title": "缓存、导出与稳定性验证",
+      "status": "waiting_observation"
+    },
+    {
+      "id": "N-19",
+      "title": "CI gate 与 Stop hook 的真实边界",
+      "status": "waiting_release"
+    },
+    {
+      "id": "N-20",
+      "title": "Web 与宿主共用一条完整产品演示",
+      "status": "done"
+    },
+    {
+      "id": "N-21",
+      "title": "Penguin 评估接缝与 UI 能力验证",
+      "status": "done"
+    },
+    {
+      "id": "N-22",
+      "title": "记忆实际消费与收益实验",
+      "status": "done"
+    },
+    {
+      "id": "N-23",
+      "title": "候选生成与固定预算评估循环",
+      "status": "done"
+    },
+    {
+      "id": "N-24",
+      "title": "人工晋级、留出验证与回滚",
+      "status": "waiting_review"
+    },
+    {
+      "id": "N-25",
+      "title": "可靠评估存储与版本展示",
+      "status": "done"
+    },
+    {
+      "id": "N-26",
+      "title": "文档、发布准备与 Claude 交接收敛",
+      "status": "done"
+    },
+    {
+      "id": "N-27",
+      "title": "专业性与自进化证据包",
+      "status": "done"
+    },
+    {
+      "id": "N-28",
+      "title": "可选：DEX/链上垂直扩展",
+      "status": "todo"
+    }
+  ],
+  "completion": {
+    "done": 22,
+    "required": 27,
+    "optional": 1
+  },
+  "verification": {
+    "at": "2026-09-09",
+    "vitest": {
+      "passed": 1086,
+      "failed": 0,
+      "files": 130
+    },
+    "nodeTests": {
+      "modelEnv": 4,
+      "hooks": 23,
+      "installerAndGates": 7,
+      "failed": 0
+    },
+    "typecheck": true,
+    "drift": true,
+    "build": true,
+    "frozenReplay": 1,
+    "codexPluginValidator": true,
+    "remoteCI": false,
+    "published": false,
+    "targetedFinalRegression": {
+      "memoryScopeAndRunRoutes": 12,
+      "source": "memory-scope-regression.log"
+    },
+    "diffWhitespaceCheck": true
+  },
+  "domain": [
+    {
+      "arm": "off",
+      "runs": 3,
+      "validRuns": 3,
+      "cases": 11,
+      "healthyFalsePositives": 0,
+      "killedCaseProbes": 6,
+      "predeclaredFractionalProbe": {
+        "TP": 3,
+        "FN": 0,
+        "unscored": 0
+      },
+      "unobservable": 0,
+      "infra": 0,
+      "distinctInputs": [
+        "0.0016",
+        "0.002",
+        "0.0004",
+        "0.0009"
+      ],
+      "wallMs": [
+        186686,
+        75507,
+        198529
+      ]
+    },
+    {
+      "arm": "on",
+      "runs": 3,
+      "validRuns": 3,
+      "cases": 11,
+      "healthyFalsePositives": 0,
+      "killedCaseProbes": 4,
+      "predeclaredFractionalProbe": {
+        "TP": 3,
+        "FN": 0,
+        "unscored": 0
+      },
+      "unobservable": 0,
+      "infra": 0,
+      "distinctInputs": [
+        "0.0016",
+        "0.002",
+        "0.0004",
+        "0.001",
+        "0.0009"
+      ],
+      "wallMs": [
+        71231,
+        93241,
+        215231
+      ]
+    }
+  ],
+  "memory": [
+    {
+      "arm": "off",
+      "n": 3,
+      "validBindings": 2,
+      "infraOrInvalidResponses": 1,
+      "observationFailureRate": 0,
+      "misleadingAssertionRate": 1,
+      "usd": null
+    },
+    {
+      "arm": "on",
+      "n": 3,
+      "validBindings": 3,
+      "infraOrInvalidResponses": 0,
+      "observationFailureRate": 0,
+      "misleadingAssertionRate": 1,
+      "usd": null
+    }
+  ],
+  "evolution": {
+    "candidateId": "candidate-2ad7e533-3db4-4d49-9c64-3dc055f7a020",
+    "status": "rejected",
+    "reason": "no_strict_improvement",
+    "forwardedCalls": 7,
+    "outputTokens": 6355,
+    "corrected": [
+      {
+        "arm": "baseline",
+        "n": 3,
+        "score": 0,
+        "p0Failures": 0,
+        "unobservable": 3,
+        "invalid": 3
+      },
+      {
+        "arm": "candidate",
+        "n": 3,
+        "score": 0,
+        "p0Failures": 0,
+        "unobservable": 3,
+        "invalid": 3
+      }
+    ]
+  },
+  "stability": {
+    "manifestHash": "0697a6e3f6e51e61e304387d1bfa4d472f301513a1a3d9e68c8f07a1c392aac6",
+    "nights": [
+      "2026-09-09"
+    ],
+    "nightsRequired": 5,
+    "contiguousFiveNights": false,
+    "attempts": 7,
+    "failedAttempts": 0,
+    "attemptFailureRate": 0,
+    "flakeRate": null,
+    "reason": "A failure rate is not flakiness without paired reruns on identical inputs. Five-night and flake goals remain pending until sufficient actual observations.",
+    "records": [
+      "1d6001f6a187671884525e2b8a3811909a1fb60b25d05bb8e0b92b8c24ea5ea0",
+      "4ccc4aed099b644960cd8d60333bf089d20f01b24f43ac26a0557136b300f846"
+    ]
+  },
+  "demonstration": {
+    "runId": "run-a013caca-4808-4731-bfab-ba7d790ecad0",
+    "passed": true
+  },
+  "limits": [
+    "No actual human gold freeze or promotion",
+    "No demonstrated reliable gain from domain reference or memory",
+    "One observed night; four further nights required",
+    "Remote CI and release not performed",
+    "Candidate sandbox currently verified only on macOS"
+  ]
+}

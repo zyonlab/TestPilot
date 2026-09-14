@@ -1,3 +1,4 @@
+import { ProjectRevisionLinks } from "@/components/ProjectRevisionLinks";
 import { useEffect, useMemo, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { useT } from "@/lib/prefs";
@@ -74,6 +75,7 @@ export function ArtifactsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <ProjectRevisionLinks />
       <TopBar
         title={t("surface.artifacts")}
         actions={

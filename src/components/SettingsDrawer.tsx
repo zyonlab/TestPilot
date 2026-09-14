@@ -5,6 +5,7 @@ import { SectionPage } from "@/components/SectionNav";
 import { ProjectsPage } from "@/pages/Projects";
 import { ChainConfigPage } from "@/pages/ChainConfig";
 import { DangerSection, EnvSection, PrefsSection } from "@/pages/SettingsSections";
+import { ModelProfilesSection } from "@/pages/ModelProfiles";
 
 /**
  * 设置：一个抽屉，不是一扇门。
@@ -15,15 +16,8 @@ import { DangerSection, EnvSection, PrefsSection } from "@/pages/SettingsSection
  * 分节的依据是「谁会来改它、改一次影响谁」：环境属于项目，提示词模板属于 harness（改它会进
  * 指纹、影响每一次后续运行），语言与调试属于这个人，端点与进程属于运行时。
  *
- * **v3 删掉了「属于 harness / 运行时」的那四节**——模型端点、提示词模板、进程、能力与 chat。
- * 上面那条分节依据正是删它们的理由：改一次影响每一次后续运行的东西，现在归 PenguinHarness
- * （`docs/v3/00-架构.md` §1/§2：prompts 随 skill 走进 plugin，进程与能力归 penguin-core，
- * 模型端点归 session）。留在这里的只剩「属于这个项目」和「属于这个人」的五节：
- * 项目 / 环境 / Web3 / 危险区 / 语言与主题。
- *
- * Phase 3：`pages/Processes.tsx` / `pages/Capabilities.tsx` 已删（入口早就断了）；
- * `pages/ModelConfig.tsx` 只删了作为独立页面的那半（`ModelConfigPage`），
- * `EnvironmentsCard` / `SecretsCard` / `DebugPromptsCards` 三张卡还在，是本文件下面用的活代码。
+ * 2026-09-09：按双入口双模型决策恢复项目模型设置。
+ * 项目、环境、模型与 review 留在 TestPilot；自进化评估由 Penguin UI 承担。
  */
 /**
  * 设置的内容本身，与「它装在抽屉里还是占满一屏」无关。
@@ -45,6 +39,13 @@ export function SettingsBody({ compact }: { compact?: boolean }) {
         fallback="projects"
         compact={compact}
         sections={[
+          {
+            id: "models",
+            group: t("settings.groupProject"),
+            label: t("modelRoles.title"),
+            why: t("modelRoles.help"),
+            render: () => <ModelProfilesSection />,
+          },
           {
             id: "projects",
             group: t("settings.groupProject"),

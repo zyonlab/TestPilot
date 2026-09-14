@@ -2,7 +2,7 @@
  * Episodic 记忆：这次运行踩了什么坑，从产物里**算**出来，不由模型叙述。
  *
  * 借 commerce-agents 的 `commerce_common/memory.py` 四条机制，不借它的内容（它记顾客偏好，
- * 我们只记 episodic——研究结论：episodic +7.56% p<0.001，semantic 单独不显著）：
+ * 我们只记 episodic；收益须由项目内对照验证）：
  *
  * 1. **事实有形状**：key ≤ 64、value ≤ 200、category 固定枚举、带来源运行的指纹。
  *    此前是自由 markdown，进化器读不了，也没法判「这条是不是同一件事」。

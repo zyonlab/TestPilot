@@ -8,7 +8,7 @@ import { CapabilityRecipeSchema } from "@testpilot/harness-core";
  * 能力正是 app（`harness.config.ts` 六个里四个）。**症状不是校验失败，是模型不会写**
  * ——约束解码只允许它在给定的取值里选，于是它被迫选一个错的。
  *
- * 一边加了取值而另一边忘了，是一个静默漂移（见 docs/refactor/18 的 A 类）。
+ * 一边加了取值而另一边忘了，是一个静默漂移（见 docs/archive/refactor/18 的 A 类）。
  */
 describe("chat capability schema", () => {
   it("offers the model exactly the kinds the validator accepts", async () => {

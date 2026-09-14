@@ -1,7 +1,7 @@
 # TestPilot v3：可优化项、是否迁出 PenguinHarness、人工 UI 是否完备
 
 > 2026-09-06。目标按你的话定：**产品要摸到第四档——让 agent 能安全地改交易前端**。所有判断以此为准。
-> 依据：`server/src/penguin.ts` / `penguinRun.ts`（Penguin 接缝）、`src/pages` 19 屏与 `server/src` 全部路由、`docs/spec/17` 的 80/80 任务记录、`MigratedToPenguin.tsx`、前几轮读过的架构与评测文档。未在你机器上启动 UI，屏幕级结论是从路由、页面文件和文档推断的，标了「推断」。
+> 依据：`server/src/penguin.ts` / `penguinRun.ts`（Penguin 接缝）、`src/pages` 19 屏与 `server/src` 全部路由、`docs/archive/spec/17` 的 80/80 任务记录、`MigratedToPenguin.tsx`、前几轮读过的架构与评测文档。未在你机器上启动 UI，屏幕级结论是从路由、页面文件和文档推断的，标了「推断」。
 
 ---
 
@@ -64,7 +64,7 @@
 
 **先说结论：对「人复核 agent 产物」这个角色，UI 已经超过完备；对「人拥有第四档的判定资产」这个角色，缺三块。**
 
-`docs/spec/17` 的 80 项任务全部 done（P0 事实与正确性 25、P1 画对 11、P2 队列换画布 7、P3 七屏 11、P4 chat 作为条目 composer 5、P5 后端 21）。19 个页面、约 130 条 API。按人的四类工作核对：
+`docs/archive/spec/17` 的 80 项任务全部 done（P0 事实与正确性 25、P1 画对 11、P2 队列换画布 7、P3 七屏 11、P4 chat 作为条目 composer 5、P5 后端 21）。19 个页面、约 130 条 API。按人的四类工作核对：
 
 **按例外复核（完备）。** `review` 批次、逐条 patch、approve、regenerate、gap-case；`pending` 只出待办；`reviewFilter`；holds 计数；chat 作为条目上的 composer 而不是独立聊天（P4 的选择正确，符合「不要自己造 chat」）。
 

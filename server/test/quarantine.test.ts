@@ -40,4 +40,17 @@ describe("U-51 · 隔离要留痕", () => {
     expect(log[0].on).toBe(false);
     expect(log[1].on).toBe(true);
   });
+
+  it("同一毫秒里写进来的两条，新的仍然在前", () => {
+    const at = new Date().toISOString();
+    const realIso = Date.prototype.toISOString;
+    // 把时间戳钉死，逼出并列——全量测试里偶发的那次失败就是这么来的。
+    Date.prototype.toISOString = function () { return at; };
+    try {
+      logQuarantine({ caseId: "tie", projectId: pid, on: true, reason: "同一毫秒 A", by: "joe" });
+      logQuarantine({ caseId: "tie", projectId: pid, on: false, reason: "同一毫秒 B", by: "joe" });
+    } finally { Date.prototype.toISOString = realIso; }
+    const log = listQuarantineLog(pid, "tie");
+    expect(log.map((e) => e.reason)).toEqual(["同一毫秒 B", "同一毫秒 A"]);
+  });
 });

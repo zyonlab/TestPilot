@@ -268,5 +268,14 @@
     "by": "claude-test-engineer",
     "at": "2026-09-03T06:41:28.001263Z",
     "heldOut": true
+  },
+  {
+    "goldId": "G-11",
+    "caseId": "S-01-1-6-位小数数量按-5-位小数截断",
+    "runId": "20260908T135151",
+    "covered": true,
+    "by": "human",
+    "at": "2026-09-09T14:19:44.702Z",
+    "heldOut": false
   }
 ]

@@ -13,6 +13,8 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { RunGateway } from "./run-gateway.js";
 import {
   CalibrateJudgeInput,
   DriveSutInput,
@@ -25,6 +27,10 @@ import {
   ScoreRunInput,
   Held,
   heldResult,
+  WriteStoriesInput,
+  WriteCasesInput,
+  RunCaseInput,
+  RunP0Input,
 } from "./contracts.js";
 import { runPipeline, type ProgressEvent } from "./pipeline.js";
 import { fencedRetrieveText, retrieveSpec } from "./retrieve.js";
@@ -33,6 +39,8 @@ import { pairedEval, scoreRun } from "./score.js";
 import { driveSut, mutateAndDetect } from "./exec.js";
 import { calibrateJudge } from "./calibrate.js";
 import { DEFAULT_RUNS_DIR, readDecisions, resolveRunDir } from "./runs.js";
+import { writeArtifact } from "./write.js";
+import { runCase, runP0 } from "./runcase.js";
 
 const log = (e: ProgressEvent) => process.stderr.write(JSON.stringify(e) + "\n");
 
@@ -62,6 +70,7 @@ function progressMessage(e: ProgressEvent): string | undefined {
 }
 
 const server = new McpServer({ name: "testpilot", version: "0.2.0" });
+const runs = new RunGateway();
 
 /**
  * 一次工具调用的回复。
@@ -94,6 +103,90 @@ const fail = (e: unknown) =>
         isError: true,
       };
 
+const RegisterRunInput = {
+  projectId: z.string().min(1), externalId: z.string().min(1), idempotencyKey: z.string().min(1),
+  runtime: z.enum(["penguin", "claude-code", "codex"]), model: z.string().optional(), provider: z.string().optional(),
+  materials: z.array(z.object({ name: z.string().min(1), text: z.string().min(1) })).min(1),
+  parameters: z.record(z.unknown()).optional(),
+};
+server.registerTool("register_run", {
+  title: "Register a host-planned project run",
+  description: "Starts or resumes one idempotent skill-mode run in the TestPilot project. Uses this host for planning and the project's executor profile for Midscene. Freezes the supplied material text and returns public run metadata; never configures a separate planner.",
+  inputSchema: RegisterRunInput,
+}, async ({ projectId, ...input }) => { try { return ok(await runs.register(projectId, input)); } catch (e) { return fail(e); } });
+server.registerTool("generate_execution", {
+  title: "Compile the approved case revisions",
+  description: "Compiles the current human-approved immutable case revisions into Midscene actions and runs the code gate. No planner model is called. Rejected, stale or unapproved revisions cannot be executed.",
+  inputSchema: { runId: z.string(), revisionIds: z.array(z.string()).optional() },
+}, async ({ runId, ...input }) => { try { return ok(await runs.call(runId, "stages/g2", input)); } catch (e) { return fail(e); } });
+server.registerTool("get_project_run", {
+  title: "Read a registered project run", description: "Reads project-scoped run binding, stage states and immutable artifact revisions from the same store as the Web UI.",
+  inputSchema: { projectId: z.string(), runId: z.string() },
+}, async ({ projectId, runId }) => { try { return ok(await runs.read(projectId, runId)); } catch (e) { return fail(e); } });
+server.registerTool("read_run_artifact", {
+  title: "Read a registered immutable artifact", description: "Reads a server-verified revision of this run, including upstream stories or cases needed when continuing at a checkpoint.",
+  inputSchema: { runId: z.string(), revisionId: z.string() },
+}, async ({ runId, revisionId }) => { try { return ok(await runs.artifact(runId, revisionId)); } catch (e) { return fail(e); } });
+server.registerTool("execute_approved", {
+  title: "Execute approved compiled cases", description: "Starts a project run from a server-verified g2 revision. Checks current human approvals, preserves the oracle and executor snapshot, and returns an execution ID. Reuse idempotencyKey only when retrying the same request.",
+  inputSchema: { runId: z.string(), codeRevision: z.string(), idempotencyKey: z.string(), envRef: z.string().optional() },
+}, async ({ runId, ...input }) => { try { return ok(await runs.call(runId, "stages/execute", input)); } catch (e) { return fail(e); } });
+server.registerTool("begin_stage", {title:"Begin a workflow node", description:"Call BEFORE planning or executing each node: modules, instructions, stories, cases, gate, finalize. A paused/cancelled response means stop this turn immediately; do not plan, write or call later nodes. Only explicit user resume may continue the same run.", inputSchema:{runId:z.string(),node:z.enum(['source','modules','instructions','stories','cases','gate','finalize','g2','execution'])}}, async ({runId,node})=>{try{return ok(await runs.call(runId,'begin-stage',{node}));}catch(e){return fail(e);}});
+/**
+ * 模块规划节点（docs/v3/24 §6、§8）。
+ *
+ * 这里只有**提议**和**读状态**两个工具，没有冻结——冻结那一步必须是人，
+ * 服务端的冻结路由带 Authorization 头就 403。模型提议完就停在这儿，这是设计，不是缺口。
+ */
+server.registerTool("plan_modules", {
+  title: "Propose the product module tree",
+  description: "Proposes this product's module tree before stories. The tree must have at least two levels: 3-7 top-level modules, each with child modules whose parentId points at it — a flat one-level list is reported as module_tree_is_a_list, and dropping the dots from the ids does not make a flat list a tree. Each module: stable dot-separated id, name, parentId (hierarchy goes in parentId, NOT in the name — an id with a dot and no parentId is refused), purpose stated as what it means to the user, and evidence citing material section ids (every module needs at least one). Every material section must be claimed by some module's evidence or declared in the top-level outOfScope:[{sectionId,reason}] (the key is sectionId, and it must be one of the material section ids) with a reason — 'I could not see it in the UI' is a coverage gap, not out of scope. Cut modules by what the user is trying to do, not by screen regions. Every leaf module is a commitment: in the next node you will write at least two user stories for it, so a tree with more leaves than you can fill is finer than the product itself — the server reports each empty leaf back to you there. A blocked result names the offending module. After a validated proposal STOP: a human must freeze the tree before stories can be split along it; you cannot freeze it yourself.",
+  inputSchema: { runId: z.string(), content: z.unknown() },
+}, async ({ runId, content }) => { try { return ok(await runs.call(runId, "stages/modules", { content })); } catch (e) { return fail(e); } });
+server.registerTool("module_plan_state", {
+  title: "Read the module plan and whether a human froze it",
+  description: "Returns the current module proposal, its machine findings, and whether a human has frozen it. Stories units are split along the frozen tree; while a proposal exists unfrozen, claiming story units is refused.",
+  inputSchema: { runId: z.string() },
+}, async ({ runId }) => { try { return ok(await runs.call(runId, "stages/modules/state", {})); } catch (e) { return fail(e); } });
+for (const [name, action, description] of [
+  ["load_run_instructions", "instructions", "Loads the exact frozen-version planning skills and domain references for this registered run. Call before retrieving specifications or writing stages. Returns the server-delivered digest."],
+  ["gate_run", "gate", "Runs the deterministic design gate on the validated case revision. Returns actionable findings. Agents cannot supply scores or thresholds."],
+  ["finalize_run", "finalize", "Finalizes the registered generation run for human review only after validated stories, cases and a passing current gate. Rejects missing, stale or forged stages. Does not approve or execute cases."],
+] as const) server.registerTool(name, { title: name, description, inputSchema: { runId: z.string() } },
+  async ({ runId }) => { try { return ok(await runs.call(runId, `stages/${action}`, {})); } catch (e) { return fail(e); } });
+/**
+ * 单元循环（docs/v3/22）。
+ *
+ * 拆分与合并都在服务端：`claim_unit` 交出一个单元的范围、上下文清单和它自己的材料，
+ * `write_unit` 只校验这个单元。整份 `write_stories` / `write_cases` 在开了单元的 run 上会被拒——
+ * 边界靠服务端强制，不靠这段描述。
+ */
+server.registerTool("claim_unit", {
+  title: "Claim the next work unit",
+  description: "Returns ONE bounded unit of a node (a module subtree for stories, a single story for cases) with its scope, ContextManifest, and only the features, rules, observations and conflicts in that scope. Reason about this unit alone, then call write_unit. A null unit means the node is finished and the server has merged it. The split is computed by the server from the product model; agents cannot widen it.",
+  inputSchema: { runId: z.string(), node: z.enum(["stories", "cases"]) },
+}, async ({ runId, ...body }) => { try { return ok(await runs.call(runId, "stages/units/claim", body)); } catch (e) { return fail(e); } });
+server.registerTool("write_unit", {
+  title: "Write one claimed work unit",
+  description: "Writes the stories or cases of one claimed unit. Validated against that unit's scope only: ids must be unique across units, feature and rule references must be inside the unit, a rule with riskFloor P0 forces priority P0, and every story needs a role, a benefit and acceptance criteria. A blocked result names the exact jsonPointer and repairScope; fix that unit and call again. When the last unit of a node is written the server merges and validates the whole bundle.",
+  inputSchema: { runId: z.string(), unitId: z.string(), content: z.unknown() },
+}, async ({ runId, ...body }) => { try { return ok(await runs.call(runId, "stages/units/write", body)); } catch (e) { return fail(e); } });
+server.registerTool("unit_status", {
+  title: "Read work unit progress",
+  description: "Lists this run's work units with their status, attempts and output revisions. Use it to resume after an interruption; counts are computed by the server.",
+  inputSchema: { runId: z.string(), node: z.enum(["stories", "cases"]).optional() },
+}, async ({ runId, ...body }) => { try { return ok(await runs.call(runId, "stages/units/status", body)); } catch (e) { return fail(e); } });
+server.registerTool("merge_units", {
+  title: "Merge the finished work units of a node",
+  description: "Runs the server-side merge and the whole-bundle validation (provenance, frozen upstream) for a node whose units are all written. The merge also runs automatically when the last unit is written; call this to retry after fixing what the whole-bundle validation refused, without rewriting a unit.",
+  inputSchema: { runId: z.string(), node: z.enum(["stories", "cases"]) },
+}, async ({ runId, ...body }) => { try { return ok(await runs.call(runId, "stages/units/merge", body)); } catch (e) { return fail(e); } });
+server.registerTool("import_run_artifact", {
+  title: "Import an untrusted host artifact revision",
+  description: "Imports existing output into a run registered in this MCP session. Identical retries retain one revision. Imported output is not a gate result or approval; stage validation and finalize are still required.",
+  inputSchema: { runId: z.string(), name: z.string(), kind: z.enum(["spec", "stories", "cases", "code", "report"]), content: z.unknown(), parentRevision: z.string().nullable().optional(), sourceRefs: z.array(z.string()).optional() },
+}, async ({ runId, ...body }) => { try { return ok(await runs.call(runId, "artifacts", body)); } catch (e) { return fail(e); } });
+
 server.registerTool(
   "run_pipeline",
   {
@@ -107,6 +200,7 @@ server.registerTool(
     inputSchema: RunPipelineInput,
   },
   async (args, extra) => {
+    if (runs.registered || process.env.TP_GENERATION_MODE === "skill") return held(new Held("binding", "Registered skill sessions use the host planner and stage tools; run_pipeline is available only in a separate explicit A comparison session."));
     // 进度令牌由客户端在请求 _meta 里给；没有就只往 stderr 记，不发通知。
     const token = (extra as { _meta?: { progressToken?: string | number } } | undefined)?._meta?.progressToken;
     const send = (extra as { sendNotification?: (n: unknown) => Promise<void> } | undefined)?.sendNotification;
@@ -131,6 +225,50 @@ server.registerTool(
   },
 );
 
+/** 这个 MCP 进程里 `retrieve_spec` 返回过的段 id 与调用次数——`write_cases` 的出处基底。 */
+const provenanceBasis = { retrievedIds: new Set<string>(), retrieveCalls: 0 };
+const writeTool = (name: "stories" | "cases", args: { runId: string; runsDir?: string; content: unknown; materialsDir?: string }) =>
+  runs.has(args.runId) ? runs.call(args.runId, `stages/${name}`, { content: args.content }) : writeArtifact(name, args, provenanceBasis);
+
+server.registerTool(
+  "write_stories",
+  {
+    title: "Write runs/<runId>/stories.json (validated)",
+    description:
+      "Writes the user stories of a run after validating their shape (StoryBundle). This is the only sanctioned way " +
+      "to write stories.json: an invalid bundle is refused with the exact zod findings and recorded in holds.jsonl. " +
+      "Fix the content and call again; do not write the file with a generic file tool.",
+    inputSchema: WriteStoriesInput,
+  },
+  async (args) => {
+    try {
+      return ok(await writeTool("stories", args));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "write_cases",
+  {
+    title: "Write runs/<runId>/cases.json (validated: shape + provenance)",
+    description:
+      "Writes the test cases of a run after validating their shape (CaseBundle) and their provenance: every case's " +
+      "sourceRefs must be chunk ids that retrieve_spec returned in this session (fallback: ids present in the " +
+      "materials index). Read first, then write — a call before any retrieve_spec is refused (gate grounding). " +
+      "Refusals are recorded in holds.jsonl. This is the only sanctioned way to write cases.json.",
+    inputSchema: WriteCasesInput,
+  },
+  async (args) => {
+    try {
+      return ok(await writeTool("cases", args));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
 server.registerTool(
   "retrieve_spec",
   {
@@ -140,13 +278,18 @@ server.registerTool(
       "with a hint naming what was left out and how to ask for it. Use it before writing anything that has to " +
       "agree with the specification — a user story, a test case, a review note — instead of pasting the whole " +
       "document or truncating it blindly.",
-    inputSchema: RetrieveSpecInput,
+    inputSchema: { ...RetrieveSpecInput, materialsDir: RetrieveSpecInput.materialsDir.optional(), runId: z.string().optional().describe("Registered run; retrieves only its immutable material revisions. Required for skill-mode generation.") },
   },
   async (args) => {
     try {
       // 材料是第三方文本：模型读到的 `content` 包在 `<spec_material>` 里（过滤见 retrieve.ts），
       // 宿主读 `structuredContent`。两份是同一个结果，只是一份多了边界标记。
-      const result = retrieveSpec(args);
+      if (!args.runId && !args.materialsDir) throw new Error("runId_or_materialsDir_required");
+      const result = args.runId ? await runs.call(args.runId, "stages/retrieve", args) as unknown as ReturnType<typeof retrieveSpec>
+        : retrieveSpec({ ...args, materialsDir: args.materialsDir! });
+      // 出处的基底（T-09）：这个进程里真正返回过的段 id。`write_cases` 只认它们。
+      provenanceBasis.retrieveCalls += 1;
+      for (const c of result.chunks ?? []) if (typeof c?.id === "string") provenanceBasis.retrievedIds.add(c.id);
       return {
         content: [{ type: "text" as const, text: fencedRetrieveText(result) }],
         structuredContent: result as unknown as Record<string, unknown>,
@@ -239,6 +382,47 @@ server.registerTool(
 );
 
 server.registerTool(
+  "run_case",
+  {
+    title: "Run one test case of a project against its environment (verdict + cost)",
+    description:
+      "Runs one case of a TestPilot project through the gateway and returns the verdict: passed / failed / " +
+      "unobservable, the machine oracle results (each with who decided it — never the model), the failure kind " +
+      "(infra / locate / assert) and the spend (model calls, tokens, cache hits). Screenshots are not returned; the " +
+      "report path is. Use it after changing the product to check one behaviour; use run_p0 for the whole suite.",
+    inputSchema: RunCaseInput,
+  },
+  async (args) => {
+    try {
+      return ok(await runCase(args));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "run_p0",
+  {
+    title: "Run a project's P0 suite (verdicts + cost, no model judgement)",
+    description:
+      "Runs every P0 case of a TestPilot project (batch-level browser reuse, per-case reset, cached replay) and " +
+      "returns the gate (pass/fail), per-case verdicts with their machine oracle results and failure kinds, and the " +
+      "summed spend. Verdicts come from machine oracles at execution time — the model is never asked whether a case " +
+      "passed. Unobservable is reported separately from failed. Logs are clipped to 2KB per case; screenshots stay " +
+      "on disk (reportPath).",
+    inputSchema: RunP0Input,
+  },
+  async (args) => {
+    try {
+      return ok(await runP0(args));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
   "extract_episodes",
   {
     title: "Compute episodic memory candidates from a run's artifacts",
@@ -280,6 +464,10 @@ server.registerTool(
   },
   async ({ runId, runsDir }) => {
     try {
+      if (runs.has(runId)) {
+        const result = await runs.call(runId, "stages/decisions", {});
+        return ok({ runId, ...result });
+      }
       const dir = resolveRunDir(runId, runsDir ?? DEFAULT_RUNS_DIR);
       const decisions = readDecisions(dir);
       return ok({ runId, decisions, count: decisions.length });
@@ -317,6 +505,10 @@ const TOOLS = [
   "paired_eval",
   "mutate_and_detect",
   "drive_sut",
+  "run_case",
+  "run_p0",
+  "write_stories",
+  "write_cases",
   "read_decisions",
   "calibrate_judge",
 ];

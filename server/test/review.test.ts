@@ -32,10 +32,9 @@ vi.mock("../src/graphs.js", () => ({
 
 // Everything else in harness-core is real — the gate that re-scores an edited batch must be
 // the same code the run used, or the two numbers would not be comparable.
-vi.mock("@testpilot/harness-core", async (actual) => {
-  const core = (await actual()) as Record<string, unknown>;
-  const { FakeModel } = core as { FakeModel: new (r: () => string) => unknown };
-  return { ...core, modelFromEnv: () => new FakeModel(() => replies.shift() ?? "{}") };
+vi.mock("../src/modelProfiles.js", async () => {
+  const { FakeModel } = await import("@testpilot/harness-core");
+  return { projectPlannerModel: () => new FakeModel(() => replies.shift() ?? "{}") };
 });
 
 vi.mock("../src/db.js", () => ({

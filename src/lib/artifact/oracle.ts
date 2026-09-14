@@ -38,6 +38,12 @@ export function describeOracle(
             : "artifact.oracle.deltaFlat",
         { v: o.value, by: o.by ?? "" },
       );
+    case "api":
+      return t("artifact.oracle.api", {
+        path: o.path,
+        op: o.op,
+        v: o.value === undefined ? (o.by !== undefined ? String(o.by) : "") : String(o.value),
+      });
     default:
       return "";
   }
@@ -49,4 +55,5 @@ export function describeOracle(
  * 和 `tierOf`（harness 侧）同义：delta 要比较两次观察，是 2；其余是 1。
  * 界面用它来揭穿「声称 tier 1 但判据只能给 tier 2」这种不一致。
  */
-export const tierDelivered = (o: MachineOracle): 1 | 2 => (o.kind === "delta" ? 2 : 1);
+export const tierDelivered = (o: MachineOracle): 1 | 2 =>
+  o.kind === "delta" || (o.kind === "api" && (o.op === "increased" || o.op === "decreased" || o.op === "unchanged")) ? 2 : 1;

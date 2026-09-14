@@ -12,7 +12,7 @@ import type { ArtifactCase, ArtifactFinding, ArtifactStory } from "./types";
  *
  * 「Generative UI」有强弱两个版本：弱版本是模型产出受约束的结构化数据、**宿主**按类型
  * 选组件；强版本是模型自己决定渲染什么。这个仓库已经为强版本付过两次代价
- * （三千字符的列头、被拼死的英文句子，见 `docs/refactor/16-GenerativeUI.md`），
+ * （三千字符的列头、被拼死的英文句子，见 `docs/archive/refactor/16-GenerativeUI.md`），
  * 而想要的那件事——「新增一种产物呈现时模型侧不需要改」——弱版本本来就给。
  *
  * 所以这里登记的是**类型 → 组件**。加一种产物呈现，改的是这张表和一个 React 文件；

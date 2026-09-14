@@ -34,6 +34,47 @@
 }
 ```
 
+## v2 设计证据（2026-09-11，docs/v3/21 §2 与 §5）
+
+下面八个字段**都是可选的**，一个默认值都没有——「没给证据」和「给了空证据」在归档里必须分得开。
+但只要给了，服务端就会确定性地核对；对不上直接拒绝写入，并指出是哪一条、哪个字段路径。
+
+```json
+{
+  "acRefs": ["AC-RO-PARTIAL"],
+  "conditionRefs": ["COND-REDUCE-LONG"],
+  "scenarioType": "positive",
+  "design": {
+    "technique": "boundary",
+    "ruleId": "R-SIZE-PRECISION", "dimension": "数量", "unit": "BTC",
+    "bound": "0.001", "inclusivity": "inclusive", "step": "0.001",
+    "points": [{ "at": "below", "value": "0.0009" }, { "at": "at", "value": "0.001" }]
+  },
+  "risk": { "impact": "funds-and-exposure", "reason": "数量取整错误会改变实际敞口", "ruleRefs": ["R-SIZE-PRECISION"] },
+  "testData": { "fixtureRef": "perp-deterministic-v1", "values": [{ "name": "size", "value": "0.001", "unit": "BTC", "source": "R-SIZE-PRECISION" }] },
+  "assertions": [{ "id": "A-SIZE", "statement": "仓位表里 BTC 那一行的数量列显示 0.001", "ruleRefs": ["R-SIZE-PRECISION"], "oracle": { "kind": "text", "value": "0.001" } }],
+  "readiness": { "design": "candidate", "execution": "requires-fixture", "reason": "缺可控持仓 fixture" }
+}
+```
+
+> `assertions[].oracle` 和顶层 `oracle` 是同一套判据，**同样只能从屏幕读**（CLAUDE.md 红线；
+> 门禁规则 `oracle-offsite` 两边都查）。2026-09-13 之前这里的示例写的是 `kind: "api"`——
+> 红线定了之后它没跟上，实测有用例照着它写出了断言被测站接口的判据，复核时被驳回。
+
+| 字段 | 给了就会被核对的事 |
+|---|---|
+| `scenarioType` | 和 `designMethod` 分开：负例同样是用某种方法设计出来的。标了负向场景又标了方法，却不给 `design`，会被拒 |
+| `design.technique` | 必须和 `designMethod` 说同一种方法 |
+| `design`（boundary） | `points` 里必须有 `at: "at"` 那一点——边界值分析的核心就是边界上那个值；`unit` 必填，数量的步长和价格的精度不能混用 |
+| `design`（decision-table） | `assignment` 的键必须**正好**是自己列出的 `conditionIds`：多一个、少一个都会被拒。一张有空格的判定表说不出这一行测的是什么 |
+| `design`（state-transition） | `transitionIds` 必须也出现在 `covers` 里，两处说的是同一批边 |
+| `risk` | 有 `risk` 就必须有 `priority`——理由不能解释一个不存在的判断 |
+| `assertions` | id 不重复；声称 tier 1/2 时，断言自己或用例本身至少有一个判据 |
+| `readiness` | `execution` 不是 `ready` 时必须写 `reason`，否则它和「忘了填」分不开 |
+
+**一个追不回来源的边界、步长或常数，不要写进用例。** 宁可留空——服务端对「缺字段」和「编造的字段」处理方式不同，
+前者只是缺口，后者是错误。
+
 ## 硬约束（hook 会拒的那些）
 
 | 字段 | 规则 |
@@ -41,7 +82,7 @@
 | `cases[].id` | 非空 |
 | `cases[].storyId` | 非空。指向 `stories[]` 里真实存在的 id——指不到的会被门禁记 `traceability` |
 | `cases[].title` | 非空 |
-| `cases[].designMethod` | 只能是 `equivalence` / `boundary` / `state-transition` / `decision-table` / `negative` |
+| `cases[].designMethod` | 只能是 `equivalence` / `boundary` / `state-transition` / `decision-table` / `negative` / `exploratory` |
 | `cases[].steps` | **至少一个**元素，每个元素非空字符串 |
 | `cases[].expected` | 非空 |
 | `cases[].tier` | 只能是 1 / 2 / 3 |

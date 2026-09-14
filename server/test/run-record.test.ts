@@ -1,9 +1,11 @@
+vi.mock("../src/runService.js", () => ({ registerWebRun: () => undefined, freezeGraphSources: () => undefined, runLedger: () => ({ registration: () => undefined }) }));
+vi.mock("../src/modelSnapshots.js", () => import("./helpers/model-snapshot.js"));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * 一次运行的记录说的话对不对。
  *
- * 这一组钉的全是 P0 那一批（docs/spec/17 的 U-02、U-04、U-07、U-09、U-10、U-12）——
+ * 这一组钉的全是 P0 那一批（docs/archive/spec/17 的 U-02、U-04、U-07、U-09、U-10、U-12）——
  * 它们的共同形状是**界面在对自己的状态撒谎**，而"记录里写的是不是真的"是可判定的，
  * 所以每一条都该有一根钉子。没有钉子的要求，模型和代码都会漂。
  */
@@ -154,6 +156,12 @@ describe("U-12 · 取消要分得清停下了和进程已经不在了", () => {
 });
 
 describe("U-11 · 续跑点按产物反推", () => {
+  it("does not attribute today's models to a legacy run without a snapshot", async () => {
+    const { wfRunId } = await startRun({ graphId: GRAPH, target: {} });
+    const row = outputStore.getRun(wfRunId)!;
+    outputStore.saveRun({ ...row, detail: { ...(row.detail ?? {}), modelRoles: undefined } });
+    await expect(startRun({ graphId: GRAPH, wfRunId, target: {} })).rejects.toThrow("legacy_run_model_snapshot_missing");
+  });
   it("什么都没产出 = 接不上（那叫整跑）", async () => {
     const { wfRunId } = await startRun({ graphId: GRAPH, target: { url: "http://127.0.0.1:5301" } });
     expect(await resumePoint(wfRunId)).toBeUndefined();

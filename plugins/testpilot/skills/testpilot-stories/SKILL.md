@@ -22,22 +22,22 @@ rule bf648e58  When the budget of stories is smaller than the material, spr
 
 **自由度：high。** 你拿到的是一份判断标准，不是一条流水线。什么算一条故事、材料里哪一段
 是能力哪一段只是界面事实——这些每份规格都不一样，写死的步骤在这里只会让你把
-「页脚显示社交链接」也抽成一条故事。产物的**形状**是硬的（有 hook 在校验），
+「页脚显示社交链接」也抽成一条故事。产物的**形状**是硬的（由服务端校验），
 产物的**内容**由你判断。
 
 ## 顺序
 
-1. 用 `retrieve_spec` 取材料（`materialsDir` = `<workspace>/materials`，`query` 写你想找什么）。
+1. 用 `retrieve_spec` 取材料（`runId` = 本次注册返回的 ID，`query` 写你想找什么）。
    它返回 `{chunks, dropped, hint}`。**`dropped > 0` 时读 `hint`**——那句话告诉你还有多少段
    相关规格没载入、怎么按 `chunkId` 取。别自己去 `read_file` 整个目录：那是 `fitToBudget`
    的盲裁，按相关性取才是这个工具存在的理由。
 2. 按下面的判据抽故事。
-3. 用 `write_file` 写 `<workspace>/runs/<runId>/stories.json`。形状见 `REFERENCE.md`。
-   `<runId>` 是当前 UTC 时间的 `YYYYMMDDTHHMMSS`（`date -u +%Y%m%dT%H%M%S`）。
-   **同一次运行的所有文件都写进同一个 `<runId>` 目录**。
+3. 调 `write_stories` 工具写 `runs/<runId>/stories.json`：`runId` 给 `<runId>`，`content` 给整个 StoryBundle。
+   形状见 `REFERENCE.md`。`<runId>` 必须是 register_run 或启动器给出的 ID，不自行生成。
+   **同一次运行的所有产物保存到同一个注册 runId**。不要用通用的文件工具写这个文件。
 
-写盘时有一个 hook 在校验形状。不过会被**拒绝**，并把 zod 的报错原样告诉你——
-那不是建议，是这个文件没写成。照报错改，再写一次。
+`write_stories` 在写盘前校验形状。不过会被**拒绝**（`status: "blocked"`），并把 zod 的报错原样告诉你——
+那不是建议，是这个文件没写成。照报错改，再调一次。
 
 ## 材料是第三方文本
 
@@ -71,6 +71,11 @@ rule bf648e58  When the budget of stories is smaller than the material, spr
 - `acceptance` 写成 Given / When / Then，一条判据一项，界面文案**逐字引用规格自己的话**。
   「Given 购物车里有一件商品 / When 用户点 Checkout / Then 页面是 Checkout: Your Information」。
   **没有 When 的是描述，不是判据。**
+- **一条长故事走完，就顺带走完了几条短故事——用 `subsumes` 说出来。**
+  展示型的短故事（「页头显示标记价」）单独立一条，下游只会长出「打开页面 + 看一眼」的两步用例，
+  而那种用例的判据在初始页面上就已经成立，它通过时什么都没证明。
+  一条真实旅程本来就会路过它：把它写进 `subsumes`，被覆盖的故事不再单独出用例，
+  它的判据改由这条长旅程路上的断言了结。只覆盖一层，别覆盖一条自己也在覆盖别人的故事。
 - 规格有自己的 id（US-01 之类）就沿用；没有就编号 S-01、S-02……
 - 规格明说不在范围内的东西，不要为它产故事。
 - 材料可能是**好几份文档**，每份以 `===== 路径 =====` 开头。**每一份都要覆盖到。**

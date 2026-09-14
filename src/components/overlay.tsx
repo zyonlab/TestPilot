@@ -42,8 +42,14 @@ function useEscapeToClose(active: boolean, onClose: () => void) {
  */
 const widths = new Map<string, number>();
 
-/** 展开到最宽时能占到哪：留一条能看见画布的缝，好让人记得自己是从哪儿进来的。 */
-const wideOf = (): number => Math.max(420, window.innerWidth - 80);
+/**
+ * 展开到最宽时能占到哪。
+ *
+ * 原来一律留 80px 的缝「好让人记得自己是从哪儿进来的」。但从 Flow 点开的节点抽屉里放的是
+ * 物料正文——规格、故事、用例表、执行报告，那条缝换来的是正文被挤窄。
+ * 2026-09-11 用户明确要它整屏。所以按用途分：`fullscreen` 的抽屉占满，其余保留那条缝。
+ */
+const wideOf = (full = false): number => (full ? window.innerWidth : Math.max(420, window.innerWidth - 80));
 
 /**
  * 没拖过时该多宽。
@@ -72,6 +78,7 @@ export function Drawer({
   widthClass = "w-[38.75rem] max-w-[92vw]",
   resizeKey,
   defaultWidth = 880,
+  fullscreen = false,
   tabs,
   children,
 }: {
@@ -82,6 +89,11 @@ export function Drawer({
   /** Enables dragging, and names the bucket the chosen width is remembered in. */
   resizeKey?: string;
   defaultWidth?: number;
+  /**
+   * 默认整屏打开（仍可拖窄，标题栏的收合按钮在整屏与常规宽度之间来回）。
+   * 给的是**放正文**的抽屉：节点物料、执行报告、规格。
+   */
+  fullscreen?: boolean;
   /** Sibling views of the same object, shown as tabs beside the title. */
   tabs?: Array<{ id: string; label: string; active: boolean; onSelect: () => void }>;
   children: React.ReactNode;
@@ -89,7 +101,7 @@ export function Drawer({
   const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(() =>
-    resizeKey ? (widths.get(resizeKey) ?? roomyDefault(defaultWidth)) : 0,
+    resizeKey ? (widths.get(resizeKey) ?? (fullscreen ? wideOf(true) : roomyDefault(defaultWidth))) : 0,
   );
   const drag = useRef<{ x: number; w: number } | null>(null);
   /**
@@ -99,10 +111,10 @@ export function Drawer({
    * 只提供「变宽」而不提供「回去」，等于逼人重新拖一次那条 1.5px 的边。
    */
   const restoreTo = useRef<number | null>(null);
-  const wide = resizeKey ? width >= wideOf() - 4 : false;
+  const wide = resizeKey ? width >= wideOf(fullscreen) - 4 : false;
   const toggleWide = () => {
     if (!resizeKey) return;
-    const next = wide ? (restoreTo.current ?? roomyDefault(defaultWidth)) : wideOf();
+    const next = wide ? (restoreTo.current ?? roomyDefault(defaultWidth)) : wideOf(fullscreen);
     if (!wide) restoreTo.current = width;
     setWidth(next);
     widths.set(resizeKey, next);
@@ -122,7 +134,7 @@ export function Drawer({
       // a 40px sliver and a drawer that hides the canvas it came from are both dead ends.
       const next = Math.max(
         420,
-        Math.min(window.innerWidth - 80, drag.current.w + (drag.current.x - e.clientX)),
+        Math.min(wideOf(fullscreen), drag.current.w + (drag.current.x - e.clientX)),
       );
       setWidth(next);
       widths.set(resizeKey, next);

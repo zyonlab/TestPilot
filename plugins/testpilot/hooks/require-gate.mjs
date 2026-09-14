@@ -25,6 +25,25 @@ const REQUIRED = ["stories.json", "cases.json", "gate.json", "meta.json"];
 try {
   const msg = await input();
   if (msg.hook !== "stop") abstain();
+  if (process.env.TP_RUN_GRANT_FILE) {
+    const { runId, projectId, token } = JSON.parse(readFileSync(process.env.TP_RUN_GRANT_FILE, "utf8"));
+    const base = process.env.TP_SERVER_URL || "http://127.0.0.1:5301";
+    const stateFile = `${process.env.TP_RUN_GRANT_FILE}.stop-state`;
+    let nudges = 0;
+    try { const prior = JSON.parse(readFileSync(stateFile, "utf8")); if (prior.runId === runId) nudges = Number(prior.nudges) || 0; } catch { /* First stop attempt. */ }
+    if (nudges >= MAX_NUDGES) {
+      answer({ decision: "stop", reason: `${runId} 阶段验证仍未通过，已达到提醒上限；这不是通过或合入许可`, output: { runId, complete: false, blocked: true, gaveUp: true, nudges } });
+      process.exit(0);
+    }
+    writeFileSync(stateFile, JSON.stringify({ runId, nudges: nudges + 1 }), { mode: 0o600 });
+    const response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/stages/status`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(10000),
+    });
+    const status = await response.json();
+    if (response.ok && status.finalized) answer({ decision: "stop", reason: `${runId} 服务端阶段凭证完整，等待用户复核`, output: { runId, complete: true, evidence: "server-finalization" } });
+    else answer({ decision: "continue", input: `运行 ${runId} 尚未被服务端 finalize 接纳。检查 get_project_run，按 instructions → retrieve_spec → write_stories → write_cases → gate_run → finalize_run 补齐。若服务失败，报告原错误。`, output: { runId, complete: false } });
+    process.exit(0);
+  }
 
   const ws = workspaceOf(msg.trace_path);
   if (!ws) abstain();

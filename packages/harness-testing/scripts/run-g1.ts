@@ -18,7 +18,8 @@ import {
   MemoryOutputStore,
   RecordedModel,
   modelFingerprint,
-  modelFromEnv,
+  plannerModel,
+  plannerConnectionFromEnv,
   runGraph,
   scoreCoverage,
   methodMix,
@@ -36,7 +37,8 @@ const RECORDING = `${FIXTURES}recordings/g1.json`;
 const record = process.argv.includes("--record");
 const replay = process.argv.includes("--replay");
 
-const live = modelFromEnv();
+const connection = replay && !record ? undefined : plannerConnectionFromEnv();
+const live = connection ? plannerModel(connection) : { chat: async () => { throw new Error("offline_replay_has_no_live_model"); } };
 let recording: Recording = {};
 try {
   recording = JSON.parse(readFileSync(RECORDING, "utf8")) as Recording;
@@ -50,12 +52,13 @@ try {
  * 然后打印旧模型的成绩。那不是「省时间」，那是静悄悄地报告一个错误的成绩。
  * 不含密钥：这个指纹会被写进录像文件，而录像文件进版本库。
  */
-const configFp = modelFingerprint({
-  model: process.env.TP_MODEL_NAME,
-  baseUrl: process.env.TP_MODEL_BASE_URL,
-  noThink: process.env.TP_MODEL_THINK === "0",
-  ...(process.env.TP_MODEL_THINK_BUDGET ? { thinkBudget: Number(process.env.TP_MODEL_THINK_BUDGET) } : {}),
-});
+const configFp = connection ? modelFingerprint({
+  model: connection.model,
+  baseUrl: connection.endpoint,
+  noThink: connection.thinking === false,
+  providerThinkingDefault: connection.thinking === null,
+  ...(connection.thinkBudget !== undefined ? { thinkBudget: connection.thinkBudget } : {}),
+}) : undefined; // Offline replay reports recorded evidence, not the current environment's score.
 
 let mismatches = 0;
 const model =

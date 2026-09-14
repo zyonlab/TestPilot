@@ -27,7 +27,9 @@ jobs:
       - name: typecheck
         run: pnpm typecheck
       - name: unit tests (packages)
-        run: pnpm -r --filter './packages/**' test
+        run: pnpm test
+      - name: installer, fixture and gate contracts
+        run: node --test scripts/test/*.test.mjs
       - name: hook tests (子进程，喂 stdin 断 stdout)
         run: pnpm test:hooks
       - name: prompt drift (两臂提示词逐条认领)

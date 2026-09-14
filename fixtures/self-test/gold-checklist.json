@@ -1,7 +1,7 @@
 {
   "id": "testpilot-self-v1",
-  "spec": "docs/spec/02-业务规格与用户故事.md + docs/spec/03-UI交互规格.md",
-  "note": "TestPilot 自举用的黄金清单。逐条**手工**从 docs/spec/03 的「断言点」抽取，没有让模型生成——这个数的全部意义来自它是人写的。抽取人：本次开发会话；**需要你复核后才算数**，尤其是 heldOut 的四条。匹配规则是双语关键词（界面是中文，规格也是中文，但节点类型与 API 是英文）。",
+  "spec": "docs/archive/spec/02-业务规格与用户故事.md + docs/archive/spec/03-UI交互规格.md",
+  "note": "TestPilot 自举用的黄金清单。逐条**手工**从 docs/archive/spec/03 的「断言点」抽取，没有让模型生成——这个数的全部意义来自它是人写的。抽取人：本次开发会话；**需要你复核后才算数**，尤其是 heldOut 的四条。匹配规则是双语关键词（界面是中文，规格也是中文，但节点类型与 API 是英文）。",
   "items": [
     {
       "id": "S-01",

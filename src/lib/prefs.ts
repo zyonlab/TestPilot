@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 // User preferences: UI language + light/dark theme. Persisted to localStorage and
 // applied to <html> (the `dark` class drives Tailwind's `dark:` variants, which are
 // already written throughout the app). Kept separate from the data store on purpose.
@@ -61,7 +62,7 @@ export const usePrefs = create<PrefsState>((set, get) => {
 // Translation hook: re-renders components when the language changes.
 export function useT(): (key: string, vars?: Record<string, string | number>) => string {
   const lang = usePrefs((s) => s.lang);
-  return (key, vars) => translate(key, lang, vars);
+  return useCallback((key: string, vars?: Record<string, string | number>) => translate(key, lang, vars), [lang]);
 }
 
 /**

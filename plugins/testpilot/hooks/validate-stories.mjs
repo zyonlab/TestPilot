@@ -23,30 +23,13 @@ try {
   if (!/[/\\]runs[/\\][^/\\]+[/\\]stories\.json$/.test(args.file_path)) abstain();
 
   const runDir = path.dirname(args.file_path);
-  let parsed;
-  try {
-    parsed = JSON.parse(args.content);
-  } catch (err) {
-    deny(runDir, "validate-stories", "schema",
-      `${NAME} 不是合法 JSON：${err.message}。重写一遍这个文件，只写 JSON，不要带 Markdown 代码围栏。`,
-      { file: NAME, valid: false, kind: "json" });
-  }
-
-  const { types } = await loadRepo();
-  const result = types.StoryBundleSchema.safeParse(parsed);
-  if (!result.success) {
-    deny(runDir, "validate-stories", "schema",
-      `${NAME} 不符合 StoryBundleSchema：${zodBrief(result.error)}。` +
-        `形状见 skill testpilot-stories 的 REFERENCE.md；改完再写一次。`,
-      { file: NAME, valid: false, kind: "schema", issues: result.error.issues.length });
-  }
-
+  // 判决来自共享的 validate.ts（和 MCP 的 write_stories 同一份）；这里只负责把它说成 deny / 记录。
+  const { validate } = await loadRepo();
+  const v = validate.validateStories(args.content);
+  if (!v.ok) deny(runDir, "validate-stories", v.gate, v.reason, v.output);
   // 通过：不给 decision（弃权），只留一条记录。
   // 给 `allow` 会绕过宿主的审批回调——那是安全边界，校验 hook 没有资格替它做主。
-  answer({
-    output: { file: NAME, valid: true, stories: result.data.stories.length },
-    reason: `${NAME} 通过 StoryBundleSchema：${result.data.stories.length} 条故事`,
-  });
+  answer({ output: v.output, reason: v.reason });
 } catch (err) {
   // 崩溃 = 弃权 = 静默放行（契约 §2）。所以自己把话说清楚：非 0 退出，让 stderr 进 hook 事件。
   process.stderr.write(`validate-stories 自身出错：${err?.stack ?? err}`);

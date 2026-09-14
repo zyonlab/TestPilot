@@ -1,3 +1,4 @@
+import { ProjectRevisionLinks } from "@/components/ProjectRevisionLinks";
 import { useEffect, useRef, useState } from "react";
 import { LAST_PLACE, safeGet, safeSet } from "@/lib/local";
 import { Check, X, ChevronDown, ChevronRight, Wand2, Undo2, Replace, Save } from "lucide-react";
@@ -2156,6 +2157,7 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
      * 三栏会一起把页面撑长，又变回一根长列。
      */
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <ProjectRevisionLinks />
       {/*
         顶栏。一行说清「这是哪一屏、看的是哪一批、门禁多少分、决定了几条」。
         副标题走等宽体不是装饰：批次号、百分比、分数都是拿来对齐着扫的。

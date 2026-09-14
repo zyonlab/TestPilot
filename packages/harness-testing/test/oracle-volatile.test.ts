@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runGate } from "../src/casegen/gate.js";
+import { MachineOracleSchema, evaluateOracle, describeOracle } from "../src/exec/oracle.js";
 
 /**
  * 把上一批"满分但下次必挂"的用例钉成红的那一枪。
@@ -83,5 +84,25 @@ describe("断言钉在易变值上要被拦下", () => {
     const f = r.findings.find((x) => x.rule === "oracle-volatile");
     expect(f?.severity).toBe("warn");
     expect(f?.field).toBe("expected");
+  });
+});
+
+/**
+ * tier 3 的 `{"kind":"none"}`：三处清单曾经互相打架（docs/v3/24 §33）。
+ *
+ * skill 明写「tier 3 写 {"kind":"none"}」、受限解码的枚举里也有 none，
+ * 而校验 schema 的 union 里没有——模型照着写，校验一律
+ * `Invalid discriminator value` 拒收（实测 75 条用例里 4 条 tier 3 全挂）。
+ * 反过来红线禁止的 `api` 校验反而放行。
+ */
+describe("tier 3 的 none 判据", () => {
+  it("schema 认它，而且它不冒充机器判据", () => {
+    const parsed = MachineOracleSchema.safeParse({ kind: "none" });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    // 求值时明说「没量到」，不是 pass——skipped 与 pass 不是一回事。
+    const v = evaluateOracle(parsed.data, { url: "http://x", text: "随便什么", title: "" } as never);
+    expect(v.status).toBe("unobservable");
+    expect(describeOracle(parsed.data)).toContain("没有机器判据");
   });
 });

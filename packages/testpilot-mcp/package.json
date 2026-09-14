@@ -8,12 +8,15 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./contracts": "./src/contracts.ts"
+    "./contracts": "./src/contracts.ts",
+    "./score": "./src/score.ts",
+    "./score-store": "./src/score-store.ts",
+    "./run-gateway": "./src/run-gateway.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "start": "tsx src/server.ts",
-    "test": "vitest run"
+    "test": "vitest run && node --test test/model-env.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

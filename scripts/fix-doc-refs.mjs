@@ -75,9 +75,9 @@ function defLine(srcLines, name) {
 }
 
 const REF = /`([a-zA-Z0-9_./@-]+\.(?:ts|tsx|mjs)):(\d+)(?:([-–:])(\d+))?`/g;
-const targets = readdirSync(resolve(ROOT, "docs/refactor"))
+const targets = readdirSync(resolve(ROOT, "docs/archive/refactor"))
   .filter((f) => f.endsWith(".md"))
-  .map((f) => `docs/refactor/${f}`);
+  .map((f) => `docs/archive/refactor/${f}`);
 
 let fixed = 0;
 const unsure = [];

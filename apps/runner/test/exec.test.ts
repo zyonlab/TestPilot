@@ -7,6 +7,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventBus, EventKind, MemoryEventStore, Supervisor, type Envelope } from "@testpilot/harness-core";
 import type { DebugSpec, ExecResult, ExecSpec } from "../src/exec.js";
+import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
+
+// No steps/assertions means this deliberately unreachable model must never be called.
+const executorModel: RoleModelConnection = { role: "executor", model: "unused-vision", endpoint: "http://127.0.0.1:1/v1", apiKey: "test-only", thinking: false };
 
 // End-to-end across the process boundary, WITHOUT the vision model: a case with no steps
 // and no assertion still exercises everything this migration is about — launch, screenshot
@@ -71,7 +75,7 @@ it("captures a screenshot and perf metrics inside the runner process", async () 
     steps: [],
     expected: "",
     artifactDir,
-    opts: {},
+    opts: { executorModel },
   });
 
   expect(result.status).toBe("passed");
@@ -120,7 +124,7 @@ it("streams a debug session's frames over the bus and cleans up after it", async
     plan: [],
     expected: "",
     resolve: { env: {}, secrets: {} },
-    launch: {},
+    launch: { executorModel },
   });
 
   expect(frames.map((f) => f.type)).toEqual(["start", "navigated", "done"]);
@@ -133,3 +137,20 @@ it("streams a debug session's frames over the bus and cleans up after it", async
   // Cancelling something that already finished is a no-op, not an error.
   expect(await sup.rpc<DebugApi>("runner-1")!.cancel("dbg-test")).toBe(false);
 }, 120_000);
+
+it("cancels a normal execution while page navigation is pending and closes the browser", async () => {
+  let received!: () => void; const requested = new Promise<void>(r => { received = r; });
+  site = createServer(() => { received(); });
+  await new Promise<void>(r => site!.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(site.address() as AddressInfo).port}`;
+  artifactDir = mkdtempSync(join(tmpdir(), "tp-cancel-"));
+  sup = new Supervisor(new EventBus(new MemoryEventStore(), { coalesceMs: 0 }));
+  sup.register({ id: "runner-1", kind: "node", entry: ENTRY, execArgv: ["--import", "tsx"], restart: "never", readyTimeoutMs: 30_000 });
+  await sup.start("runner-1");
+  const rpc = sup.rpc<RunnerApi & DebugApi>("runner-1")!;
+  const pending = rpc.exec({ execId: "cancel-navigate", url, steps: [], expected: "", artifactDir, opts: { executorModel } });
+  await requested; expect(await rpc.cancel("cancel-navigate")).toBe(true);
+  const result = await pending;
+  expect(result.status).toBe("failed"); expect(result.infraError).toBe(true); expect(result.failureReason).toBe("EXEC_CANCELLED");
+  expect(await rpc.cancel("cancel-navigate")).toBe(false);
+}, 45_000);

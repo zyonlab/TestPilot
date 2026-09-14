@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { normalizeCase } from "./normalizeOracle.js";
 import { z } from "zod";
 import { computeFlows, computeModules, describeFlows } from "../exec/flows.js";
 import { scanSmells } from "./smells.js";
@@ -19,8 +20,7 @@ import {
   storiesVariable,
   COMPOSE_STABLE,
   composeVariable,
-  COMPOSE_SCHEMA,
-} from "./prompts.js";
+  COMPOSE_SCHEMA, DOMAIN_PERP } from "./prompts.js";
 import { locate, overlaps, splitDocuments } from "./attribute.js";
 import { runGate } from "./gate.js";
 import {
@@ -1093,7 +1093,9 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
                 if (ctx.ablated.has(ABLATABLE.caseCleanup)) return CASES_STABLE_NO_CLEANUP;
                 return CASES_STABLE;
               })() +
-              (params.oracleGuidance === "strict" ? ORACLE_STRICT : ""),
+              (params.oracleGuidance === "strict" ? ORACLE_STRICT : "") +
+              // 领域 REFERENCE 臂（07 T-10）：默认带，`ablate: ["domain-perp"]` 去掉。
+              (ctx.ablated.has(ABLATABLE.domainPerp) ? "" : DOMAIN_PERP),
             // `hint` 一起送进去：模型该知道的不是「内容被截断了」，而是「还剩什么、怎么拿」。
             variable: casesVariable(
               specForCall.hint ? `${specForCall.text}\n\n[retrieval] ${specForCall.hint}` : specForCall.text,
@@ -1106,7 +1108,8 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
             label: `design.cases:${story.id}`,
           });
           ctx.spend({ calls: 1, tokens: res.tokens });
-          const shape = z.object({ cases: z.array(TextCaseSchema.omit({ id: true, storyId: true })) });
+          // 扁平全必填 schema 回来的 oracle 先剥占位符（`normalizeOracle.ts`），再给 zod。
+          const shape = z.object({ cases: z.array(z.preprocess(normalizeCase, TextCaseSchema.omit({ id: true, storyId: true }))) });
           const parsed = parseJson(res.text, shape, `design.cases:${story.id}`, {
             truncated: res.truncated,
             maxTokens: params.perStoryMaxTokens,

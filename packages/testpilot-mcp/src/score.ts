@@ -1,3 +1,4 @@
+import {storeScoreboardEntry} from './score-store.js';
 /**
  * 打分。**分数由工具算，模型不写分**（架构 §3 的第一条红线）。
  *
@@ -11,13 +12,13 @@
  *    （`runs.ts` 的 `readMeta`）。没有印记的分数进了 scoreboard，就再也分不清它能不能比。
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   adjudicateMisses,
   gated,
   mcnemar,
   methodMix,
-  judgeModelFromEnv,
+  evaluationPlannerModel,
   judgePromptDigest,
   scoreCoverage,
   type CandidateCase,
@@ -60,6 +61,8 @@ export interface ScoreRunOptions {
   goldPath: string;
   runsDir?: string;
   semantic?: boolean;
+  /** 要不要追加到 `benchmark/<cap>/scoreboard.yaml`。默认追加；`scripts/replay.mjs` 这种对夹具重打分的传 false——夹具的分不是记分。 */
+  scoreboard?: boolean;
 }
 
 export async function scoreRun(opts: ScoreRunOptions): Promise<ScoreboardEntry> {
@@ -78,7 +81,7 @@ export async function scoreRun(opts: ScoreRunOptions): Promise<ScoreboardEntry> 
    * 而且答案单独放一栏、单独标名字（`semantic.ts` 开头的那笔账）。
    */
   const semantic = opts.semantic
-    ? await adjudicateMisses(gold, cases, coverage, gated(judgeModelFromEnv())) // 语义裁决走判官模型（P2）
+    ? await adjudicateMisses(gold, cases, coverage, gated(evaluationPlannerModel())) // Semantic evaluation uses the planner connection.
     : undefined;
 
   const entry: ScoreboardEntry = {
@@ -130,7 +133,28 @@ export async function scoreRun(opts: ScoreRunOptions): Promise<ScoreboardEntry> 
   };
 
   writeFileSync(entryPath(runDir), JSON.stringify(entry, null, 2));
+  if (opts.scoreboard !== false) appendScoreboard(path, entry);
   return entry;
+}
+
+
+/**
+ * 追加到记分板（07 T-18）。
+ *
+ * 记分板是 `benchmark/<cap>/scoreboard.yaml`——它跟 gold 住在一个目录，所以由 `goldPath` 找。
+ * 文件是「JSON 兼容的 YAML」：头部注释原样保留，`entries: [...]` 整段是一个 JSON 数组，
+ * 网关 `GET /api/scoreboard` 用同一条正则读它。目录里**没有** scoreboard.yaml 就不写：
+ * 对着一份临时 gold 打的分不该凭空造出一张记分板。
+ *
+ * 之前 README 里写着「由 score_run / paired_eval 追加」，代码里却没有一处追加——
+ * 2026-09-07 做 T-18 屏时才发现两张记分板从来都是空的。
+ */
+export function appendScoreboard(goldPath: string, entry: ScoreboardEntry): string | undefined {
+  const dir = dirname(resolve(goldPath));
+  const file = join(dir, "scoreboard.yaml");
+  if (!existsSync(file)) return undefined;
+  storeScoreboardEntry(file, entry);
+  return file;
 }
 
 /* ------------------------------------------------------------ 配对评测 */
@@ -178,6 +202,7 @@ export async function pairedEval(opts: PairedEvalOptions): Promise<ScoreboardEnt
   const bDir = resolveRunDir(opts.b, runsDir);
   const aMeta = readMeta(aDir);
   const bMeta = readMeta(bDir);
+  if (!aMeta.inputHash || !bMeta.inputHash) throw new Held("lineage", "Formal paired comparison requires both frozen inputHash values; a missing input is unknown, not equal.");
   const { gold, path, hash } = loadGold(opts.goldPath);
 
   /**
@@ -296,6 +321,7 @@ export async function pairedEval(opts: PairedEvalOptions): Promise<ScoreboardEnt
     methodMix: methodMix(gold, bCoverage),
     misses: bCoverage.misses.map((x) => ({ id: x.id, title: x.title, heldOut: !!x.heldOut })),
   };
+  appendScoreboard(path, entry);
   return entry;
 }
 
@@ -306,6 +332,10 @@ export function bindingDrift(a: RunMeta, b: RunMeta): string[] {
   if (a.promptsDigest.combined !== b.promptsDigest.combined) moved.push("promptsDigest");
   if (a.materialsHash !== b.materialsHash) moved.push("materialsHash");
   if (JSON.stringify(a.model) !== JSON.stringify(b.model)) moved.push("model");
+  // 07 T-22：运行时也是 binding 的一项——同一份 skill + gold + MCP 换 harness 跑，差的就是它。
+  if ((a.runtime ?? "penguin") !== (b.runtime ?? "penguin")) moved.push("runtime");
+  // 消融开关：装 / 卸一个可选文件（07 T-12 的领域 REFERENCE）就是一臂。
+  if (JSON.stringify([...(a.ablated ?? [])].sort()) !== JSON.stringify([...(b.ablated ?? [])].sort())) moved.push("ablated");
   // 冻结输入的差也算一样东西——两边 inputHash 都在且不同已在上面拒了，能走到这里的
   // 只剩「一臂冻结一臂没冻结」这种混搭；把它摆进 note，别让读的人以为只差了 skill。
   if ((a.inputHash ?? undefined) !== (b.inputHash ?? undefined)) moved.push("frozenInput");

@@ -149,9 +149,8 @@ export function applyModelEnv(): void {
   if (saved.useQwenVL !== undefined) process.env.MIDSCENE_USE_QWEN3_VL = saved.useQwenVL ? "1" : "0";
 }
 
-// 落盘值在**模块最早期**写回 env：此后任何 import 顺序下，
-// `modelFromEnv()` 与三个子进程读到的都是它。没有落盘就什么都不做。
-applyModelEnv();
+// N-03: no import-time environment mutation. New runs use explicit role snapshots.
+// applyModelEnv remains a legacy utility, never called by production routes.
 
 export const PORT = Number(process.env.PORT) || 5301;
 

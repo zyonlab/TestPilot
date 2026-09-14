@@ -17,6 +17,7 @@ import {
   type DappVerifySpec,
   type DappVerifyResult,
   type WalletCheckResult,
+  releaseSession,
 } from "./exec.js";
 
 /**
@@ -45,7 +46,7 @@ const child = startChild({
       try {
         const result = await execCase(spec);
         // Cost is attributed per process: this is where the vision-model time is actually spent.
-        child.addSpend({ calls: spec.steps.length + (spec.expected ? 1 : 0) });
+        if (result.modelRequests) child.addSpend({ calls: result.modelRequests.filter(r => r.forwarded).length });
         child.emit(
           EventKind.runProgress,
           {
@@ -96,6 +97,7 @@ const child = startChild({
             ask: async (req) =>
               String(
                 await child.parent.askModel({
+                  projectId: spec.projectId,
                   prompt: req.prompt,
                   imageDataUrl: req.imageDataUrl,
                   schema: req.schema,
@@ -154,6 +156,8 @@ const child = startChild({
     },
     /** The UI closed the stream: stop the work rather than leave a browser open. */
     cancel: async (execId: string): Promise<boolean> => cancelInteractive(execId),
+    /** 批次结束：关掉这个 key 下复用的浏览器（07 T-28）。 */
+    releaseSession: async (key: string): Promise<boolean> => releaseSession(key),
     /**
      * "Stop what you are doing" from the process page. Interactive sessions cancel
      * cooperatively; a case run in progress is not interruptible yet, so the caller is

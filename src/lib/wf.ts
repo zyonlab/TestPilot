@@ -502,7 +502,7 @@ export const useWf = create<WfState>((set, get) => ({
    *
    * 此前只清了 nodeRuns / outputs / breakpoints / draft，却留着 wfRunId、runStatus、
    * artifacts 和 trace。而事件只按 wfRunId 过滤、按 nodeId 打状态，产物卡只按"这个 node id
-   * 在当前图上有位置"来挂——三张图共用 docs/spec/stories/design/gate 五个节点 id。
+   * 在当前图上有位置"来挂——三张图共用 docs/archive/spec/stories/design/gate 五个节点 id。
    * 于是从 g1-text-cases 切到 selftest-g1，上一次运行的产物卡原地挂到同名节点下，
    * 正在跑的那次运行还继续把它们点亮：**一张从没跑过的图看起来正在跑，而且已经产出了
    * 几十条用例**，而运行下拉此时因为 graphId 不匹配是空的，人更没有线索。

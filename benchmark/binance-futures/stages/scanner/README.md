@@ -9,7 +9,7 @@
 ## 和 stories/design 的一处不同：不走 run_pipeline 的 from
 
 `frozenInputsDir` / `from` 是 `run_pipeline` 内部续跑机制，只对流水线节点
-（`docs/spec/stories/design/gate`）成立。**scanner 不是流水线节点**，它是一条独立 skill，
+（`docs/archive/spec/stories/design/gate`）成立。**scanner 不是流水线节点**，它是一条独立 skill，
 输入是一批已经产好的 cases。所以这一层的「冻结」是把那批 cases 定住，让 scanner 反复审同一批——
 机制上不经过 `run_pipeline`，`inputHash` 也不由 `run_pipeline` 自动算（见下）。
 

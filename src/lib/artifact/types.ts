@@ -18,7 +18,20 @@ export type MachineOracle =
   | { kind: "noText"; value: string }
   | { kind: "url"; value: string }
   | { kind: "count"; value: string; op?: "eq" | "gte" | "lte"; n: number }
-  | { kind: "delta"; value: string; direction: "increased" | "decreased" | "unchanged"; by?: number };
+  | { kind: "delta"; value: string; direction: "increased" | "decreased" | "unchanged"; by?: number }
+  | {
+      /** 问接口而不是看屏幕。交易页的真值（持仓/挂单/余额）在接口里是精确的数。 */
+      kind: "api";
+      url: string;
+      method?: "GET" | "POST";
+      body?: string;
+      headers?: Record<string, string>;
+      path: string;
+      op: "eq" | "neq" | "gte" | "lte" | "exists" | "absent" | "increased" | "decreased" | "unchanged";
+      value?: string | number | boolean;
+      by?: number;
+      settleMs?: number;
+    };
 
 /**
  * 门禁的一条 finding。

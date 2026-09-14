@@ -13,6 +13,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { RunModelsSchema } from "@testpilot/harness-core/model-profiles";
+export { RunBindingSchema, ArtifactRevisionSchema, RunRegistrationSchema, RunEventSchema } from "@testpilot/harness-core/run-contracts";
 
 /* ------------------------------------------------------------ 三态结果 */
 
@@ -32,7 +34,7 @@ import { z } from "zod";
 export class Held extends Error {
   readonly status = "blocked" as const;
   constructor(
-    readonly gate: "binding" | "lineage" | "provenance" | "grounding" | "workspace" | "sut",
+    readonly gate: "binding" | "lineage" | "provenance" | "grounding" | "workspace" | "sut" | "schema",
     message: string,
   ) {
     super(message);
@@ -43,7 +45,7 @@ export class Held extends Error {
 /** 拦下时回给调用方的形状。宿主按 `status` 分流，模型读 `reason` 知道该补什么。 */
 export const HeldResultSchema = z.object({
   status: z.literal("blocked"),
-  gate: z.enum(["binding", "lineage", "provenance", "grounding", "workspace", "sut"]),
+  gate: z.enum(["binding", "lineage", "provenance", "grounding", "workspace", "sut", "schema"]),
   reason: z.string(),
 });
 export type HeldResult = z.infer<typeof HeldResultSchema>;
@@ -73,7 +75,7 @@ export type TextDigestShape = z.infer<typeof TextDigestSchema>;
 export const ModelBindingSchema = z.object({
   baseUrl: z.string(),
   model: z.string(),
-  thinking: z.boolean(),
+  thinking: z.boolean().nullable(),
 });
 
 /**
@@ -86,11 +88,18 @@ export const ModelBindingSchema = z.object({
 export const RunMetaSchema = z.object({
   runId: z.string().min(1),
   stage: z.enum(["g1", "g2"]),
+  /**
+   * 哪个运行时跑出来的（07 P2）：Penguin / Claude Code / Codex，或不经 agent 直接跑流水线。
+   * 可选，缺省 = 旧条目（那时只有 Penguin）。它进 scoreboard 的 binding——运行时不同的两条分数不可比。
+   */
+  runtime: z.enum(["penguin", "claude-code", "codex", "pipeline"]).optional(),
   skillVersion: z.string().min(1),
   promptsDigest: TextDigestSchema,
   params: z.record(z.unknown()),
   ablated: z.array(z.string()),
   model: ModelBindingSchema,
+  /** N-01: absent on legacy runs; never infer two roles from the old model field. */
+  modelRoles: RunModelsSchema.optional(),
   materialsHash: z.string().min(1),
   startedAt: z.string(),
   finishedAt: z.string(),
@@ -431,6 +440,8 @@ export type Calibration = z.infer<typeof CalibrationSchema>;
  * `z.object(...)`，所以这里导出的是形状对象；需要整体校验时用 `z.object(SHAPE)`。
  */
 export const RunPipelineInput = {
+  approvedRunId: z.string().optional().describe("G2 only: registered generation run whose case revisions have current human approvals."),
+  approvedRevisionIds: z.array(z.string()).optional().describe("G2 only: exact approved case revisions to compile; omitted selects all currently approved cases."),
   stage: z.enum(["g1", "g2"]).describe('Pipeline stage. "g1" designs cases from documents.'),
   materialsDir: z.string().describe("Directory holding the specification documents (*.md / *.txt)."),
   outDir: z.string().describe("Run directory to write stories.json, cases.json, gate.json, meta.json and events.jsonl into."),
@@ -483,6 +494,38 @@ export const RetrieveSpecInput = {
   budgetTokens: z.number().int().min(200).max(200_000).describe("Token budget for the returned specification text."),
   chunkIds: z.array(z.string()).optional().describe("Fetch these chunks by id instead of searching, for following up on a hint."),
   rebuild: z.boolean().optional().describe("Rebuild the index even if the cached one matches the materials hash."),
+};
+
+/**
+ * 写产物的两个工具（07 T-09）：门禁挪进工具里。Codex 没有 PreToolUse 这类 hook，模型直接 `write_file`
+ * 就绕过了校验；让它只能通过这两个工具写 `stories.json` / `cases.json`，形状与出处在工具里核（和 hook 同一份
+ * `validate.ts`），不过就拒写并记 `holds.jsonl`。Claude Code / Penguin 上 hook 仍在，这是双保险。
+ */
+export const WriteStoriesInput = {
+  runId: z.string().describe("Run to write into: runs/<runId>/stories.json."),
+  runsDir: z.string().optional().describe('Directory holding run directories. Default "runs" (or TP_RUNS_DIR).'),
+  content: z.union([z.string(), z.record(z.unknown())]).describe("The stories.json content: a JSON string or the object itself. Shape: StoryBundle (see skill testpilot-stories REFERENCE.md)."),
+};
+export const WriteCasesInput = {
+  runId: z.string().describe("Run to write into: runs/<runId>/cases.json."),
+  runsDir: z.string().optional().describe('Directory holding run directories. Default "runs" (or TP_RUNS_DIR).'),
+  content: z.union([z.string(), z.record(z.unknown())]).describe("The cases.json content: a JSON string or the object itself. Shape: CaseBundle; every case's sourceRefs must be chunk ids this session's retrieve_spec returned."),
+  materialsDir: z.string().optional().describe("Materials directory whose .index/index.json is the fallback provenance basis. Default <workspace>/materials next to runsDir."),
+};
+
+/** 面向执行的两个工具（07 T-14）。判决由执行器的 oracle 层下，工具不问模型。 */
+export const RunCaseInput = {
+  projectId: z.string().describe("TestPilot project holding the case (its default environment supplies URL, session, viewport, variables)."),
+  caseId: z.string().optional().describe("Case id (tc-…). Give this or title."),
+  title: z.string().optional().describe("Case title (exact or unique substring) when the id is not at hand."),
+  retries: z.number().int().min(0).max(3).optional().describe("Self-heal retries. Default 0: report what happened, do not repair."),
+  apiBase: z.string().optional().describe("Where the TestPilot gateway is. Default http://127.0.0.1:5301."),
+};
+export const RunP0Input = {
+  projectId: z.string().describe("TestPilot project whose P0 suite to run."),
+  filter: z.enum(["P0", "P1", "P2", "all"]).optional().describe('Which priority to run. Default "P0".'),
+  retries: z.number().int().min(0).max(3).optional().describe("Self-heal retries per case. Default 0."),
+  apiBase: z.string().optional().describe("Where the TestPilot gateway is. Default http://127.0.0.1:5301."),
 };
 
 export const ExtractEpisodesInput = {

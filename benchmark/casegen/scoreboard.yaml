@@ -4,4 +4,3387 @@
 # 每条 entry 必须带完整 binding（RunMeta），缺 skillVersion / promptsDigest / model /
 # materialsHash 任一项拒收（数据契约 §2）。
 # goldHash 必须是 2405209c3fe70ac7；不同即新谱系，跨谱系不比。
-entries: []
+entries: [
+  {
+    "id": "sb-mtrfe8uf",
+    "at": "2026-09-07T15:59:03.495Z",
+    "agentState": "76e3d8a3e34b6edf",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtrdvdwe",
+    "coverage": 0,
+    "heldOutCoverage": 0,
+    "cases": 16,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtrdvdwe",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 2,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://model.inferx.net/endpoints/v1",
+        "model": "Qwen3.8-27B-FP8",
+        "thinking": false
+      },
+      "materialsHash": "d82c19ac6d39937d",
+      "startedAt": "2026-09-07T15:16:23.965Z",
+      "finishedAt": "2026-09-07T15:17:58.784Z",
+      "spend": {
+        "calls": 4,
+        "tokens": 16017,
+        "ms": 94819
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "S-01-1-使用正确的用户名和密码登录成功",
+          "title": "使用正确的用户名和密码登录成功"
+        },
+        {
+          "id": "S-01-2-密码错误时登录被拒绝",
+          "title": "密码错误时登录被拒绝"
+        },
+        {
+          "id": "S-01-3-用户名为空时登录被拒绝",
+          "title": "用户名为空时登录被拒绝"
+        },
+        {
+          "id": "S-01-4-密码为空时登录被拒绝",
+          "title": "密码为空时登录被拒绝"
+        },
+        {
+          "id": "S-01-5-用户名为纯空白字符串时登录被拒绝",
+          "title": "用户名为纯空白字符串时登录被拒绝"
+        },
+        {
+          "id": "S-01-6-密码大小写不匹配时登录被拒绝",
+          "title": "密码大小写不匹配时登录被拒绝"
+        },
+        {
+          "id": "S-01-7-用户名和密码超长时页面不异常",
+          "title": "用户名和密码超长时页面不异常"
+        },
+        {
+          "id": "S-01-8-登录失败后再次登录成功时错误文案消失",
+          "title": "登录失败后再次登录成功时错误文案消失"
+        },
+        {
+          "id": "S-02-1-输入正确用户名和错误密码-登录被拒绝并显示统一错误文案",
+          "title": "输入正确用户名和错误密码，登录被拒绝并显示统一错误文案"
+        },
+        {
+          "id": "S-02-2-用户名为空且密码正确-登录被拒绝并显示统一错误文案",
+          "title": "用户名为空且密码正确，登录被拒绝并显示统一错误文案"
+        },
+        {
+          "id": "S-02-3-用户名正确且密码为空-登录被拒绝并显示统一错误文案",
+          "title": "用户名正确且密码为空，登录被拒绝并显示统一错误文案"
+        },
+        {
+          "id": "S-02-4-用户名为纯空白字符串且密码正确-登录被拒绝并显示统一错误文案",
+          "title": "用户名为纯空白字符串且密码正确，登录被拒绝并显示统一错误文案"
+        },
+        {
+          "id": "S-02-5-密码大小写与账户密码不一致-登录被拒绝并显示统一错误文案",
+          "title": "密码大小写与账户密码不一致，登录被拒绝并显示统一错误文案"
+        },
+        {
+          "id": "S-02-6-连续两次密码错误-第二次提交后仍显示统一错误文案且个人面板不出现",
+          "title": "连续两次密码错误，第二次提交后仍显示统一错误文案且个人面板不出现"
+        },
+        {
+          "id": "S-02-7-密码为-200-个字符-登录被拒绝并显示统一错误文案-页面无异常",
+          "title": "密码为 200 个字符，登录被拒绝并显示统一错误文案，页面无异常"
+        },
+        {
+          "id": "S-02-8-用户名和密码均为空-登录被拒绝并显示统一错误文案",
+          "title": "用户名和密码均为空，登录被拒绝并显示统一错误文案"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 0
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-15",
+        "title": "删除项目需要二次确认",
+        "heldOut": true
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsbhwq7",
+    "at": "2026-09-08T06:57:42.127Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsbee76",
+    "coverage": 0.0833,
+    "heldOutCoverage": 0.25,
+    "cases": 21,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsbee76",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T06:54:58.144Z",
+      "finishedAt": "2026-09-08T06:57:24.609Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 45894,
+        "ms": 146465
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [
+            "S-03-6-验证无效会话格式的拒绝"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "S-02-1-删除项目时显示二次确认对话框"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "S-01-1-web端显示web3能力启用选项",
+          "title": "Web端显示web3能力启用选项"
+        },
+        {
+          "id": "S-01-2-ios端隐藏web3能力启用选项",
+          "title": "iOS端隐藏web3能力启用选项"
+        },
+        {
+          "id": "S-01-3-android端隐藏web3能力启用选项",
+          "title": "Android端隐藏web3能力启用选项"
+        },
+        {
+          "id": "S-01-4-切换目标端从web到ios时web3选项消失",
+          "title": "切换目标端从Web到iOS时web3选项消失"
+        },
+        {
+          "id": "S-01-5-切换目标端从ios到web时web3选项出现",
+          "title": "切换目标端从iOS到Web时web3选项出现"
+        },
+        {
+          "id": "S-02-2-确认删除后级联清理所有关联数据",
+          "title": "确认删除后级联清理所有关联数据"
+        },
+        {
+          "id": "S-02-3-取消删除操作不改变任何数据",
+          "title": "取消删除操作不改变任何数据"
+        },
+        {
+          "id": "S-02-4-非管理员角色无法执行删除操作",
+          "title": "非管理员角色无法执行删除操作"
+        },
+        {
+          "id": "S-02-5-删除不存在的项目返回明确错误",
+          "title": "删除不存在的项目返回明确错误"
+        },
+        {
+          "id": "S-02-6-删除有活跃运行的项目需额外警告",
+          "title": "删除有活跃运行的项目需额外警告"
+        },
+        {
+          "id": "S-02-7-快速连续点击删除只执行一次",
+          "title": "快速连续点击删除只执行一次"
+        },
+        {
+          "id": "S-02-8-删除后导航自动跳转至项目列表首页",
+          "title": "删除后导航自动跳转至项目列表首页"
+        },
+        {
+          "id": "S-03-1-验证-ui-步骤登录配置",
+          "title": "验证 UI 步骤登录配置"
+        },
+        {
+          "id": "S-03-2-验证-api-登录配置",
+          "title": "验证 API 登录配置"
+        },
+        {
+          "id": "S-03-3-验证粘贴会话-cookie-storagestate-登录配置",
+          "title": "验证粘贴会话 (Cookie/StorageState) 登录配置"
+        },
+        {
+          "id": "S-03-4-验证密钥引用格式及不回显明文",
+          "title": "验证密钥引用格式及不回显明文"
+        },
+        {
+          "id": "S-03-5-验证切换登录方式时旧配置清理",
+          "title": "验证切换登录方式时旧配置清理"
+        },
+        {
+          "id": "S-03-7-验证空登录配置的默认状态",
+          "title": "验证空登录配置的默认状态"
+        },
+        {
+          "id": "S-03-8-验证多方式共存时的优先级或互斥逻辑",
+          "title": "验证多方式共存时的优先级或互斥逻辑"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 2
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsbqs2f",
+    "at": "2026-09-08T07:04:35.991Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsbhvut",
+    "coverage": 0.1667,
+    "heldOutCoverage": 0.25,
+    "cases": 22,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsbhvut",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T06:57:40.996Z",
+      "finishedAt": "2026-09-08T07:00:53.387Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 39043,
+        "ms": 192391
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [
+            "S-02-8-多语言环境下删除确认文案正确"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [
+            "S-01-1-新建项目选择-web-端时显示-web3-能力选项"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "S-02-1-删除项目时弹出二次确认对话框"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "S-01-2-新建项目选择-ios-端时隐藏-web3-能力选项",
+          "title": "新建项目选择 iOS 端时隐藏 Web3 能力选项"
+        },
+        {
+          "id": "S-01-3-新建项目选择-android-端时隐藏-web3-能力选项",
+          "title": "新建项目选择 Android 端时隐藏 Web3 能力选项"
+        },
+        {
+          "id": "S-01-4-从-web-切换到-ios-时动态隐藏-web3-选项",
+          "title": "从 Web 切换到 iOS 时动态隐藏 Web3 选项"
+        },
+        {
+          "id": "S-01-5-从-ios-切换回-web-时重新显示-web3-选项",
+          "title": "从 iOS 切换回 Web 时重新显示 Web3 选项"
+        },
+        {
+          "id": "S-01-6-web-端默认不启用-web3-能力",
+          "title": "Web 端默认不启用 Web3 能力"
+        },
+        {
+          "id": "S-02-2-取消二次确认后不执行删除",
+          "title": "取消二次确认后不执行删除"
+        },
+        {
+          "id": "S-02-3-确认删除后级联删除关联数据",
+          "title": "确认删除后级联删除关联数据"
+        },
+        {
+          "id": "S-02-4-无权限用户尝试删除项目被拒绝",
+          "title": "无权限用户尝试删除项目被拒绝"
+        },
+        {
+          "id": "S-02-5-删除包含大量数据的项目时进度可见",
+          "title": "删除包含大量数据的项目时进度可见"
+        },
+        {
+          "id": "S-02-6-网络中断时删除失败并给出明确原因",
+          "title": "网络中断时删除失败并给出明确原因"
+        },
+        {
+          "id": "S-02-7-删除最后一个项目后导航栏更新",
+          "title": "删除最后一个项目后导航栏更新"
+        },
+        {
+          "id": "S-03-1-验证环境配置中登录方式支持-ui-步骤",
+          "title": "验证环境配置中登录方式支持 UI 步骤"
+        },
+        {
+          "id": "S-03-2-验证环境配置中登录方式支持-api-登录",
+          "title": "验证环境配置中登录方式支持 API 登录"
+        },
+        {
+          "id": "S-03-3-验证环境配置中登录方式支持粘贴会话",
+          "title": "验证环境配置中登录方式支持粘贴会话"
+        },
+        {
+          "id": "S-03-4-验证选择粘贴会话时提供-cookie-storagestate-输入能力",
+          "title": "验证选择粘贴会话时提供 cookie/storageState 输入能力"
+        },
+        {
+          "id": "S-03-5-验证密钥在登录配置中仅以引用形式存在",
+          "title": "验证密钥在登录配置中仅以引用形式存在"
+        },
+        {
+          "id": "S-03-6-验证切换不同登录方式时表单内容动态更新",
+          "title": "验证切换不同登录方式时表单内容动态更新"
+        },
+        {
+          "id": "S-03-7-验证未选择登录方式时的默认状态或提示",
+          "title": "验证未选择登录方式时的默认状态或提示"
+        },
+        {
+          "id": "S-03-8-验证保存环境配置后登录方式持久化",
+          "title": "验证保存环境配置后登录方式持久化"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 1
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 1
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 1
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsbqsiy",
+    "at": "2026-09-08T07:04:36.586Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsbmfal",
+    "coverage": 0,
+    "heldOutCoverage": 0,
+    "cases": 16,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsbmfal",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T07:01:12.812Z",
+      "finishedAt": "2026-09-08T07:04:21.275Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 53485,
+        "ms": 188463
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "US-02-1-验证登录方式选项包含ui步骤",
+          "title": "验证登录方式选项包含UI步骤"
+        },
+        {
+          "id": "US-02-2-验证登录方式选项包含api登录",
+          "title": "验证登录方式选项包含API登录"
+        },
+        {
+          "id": "US-02-3-验证登录方式选项包含粘贴会话",
+          "title": "验证登录方式选项包含粘贴会话"
+        },
+        {
+          "id": "US-02-4-验证密钥引用格式为占位符而非明文",
+          "title": "验证密钥引用格式为占位符而非明文"
+        },
+        {
+          "id": "US-02-5-验证选择ui步骤后显示对应配置项",
+          "title": "验证选择UI步骤后显示对应配置项"
+        },
+        {
+          "id": "US-02-6-验证选择api登录后显示对应配置项",
+          "title": "验证选择API登录后显示对应配置项"
+        },
+        {
+          "id": "US-02-7-验证选择粘贴会话后显示对应配置项",
+          "title": "验证选择粘贴会话后显示对应配置项"
+        },
+        {
+          "id": "US-02-8-验证未选择登录方式时的默认状态或提示",
+          "title": "验证未选择登录方式时的默认状态或提示"
+        },
+        {
+          "id": "US-03-1-用例生成完成后展示故事树",
+          "title": "用例生成完成后展示故事树"
+        },
+        {
+          "id": "US-03-2-点击故事节点展开测试点",
+          "title": "点击故事节点展开测试点"
+        },
+        {
+          "id": "US-03-3-再次点击故事节点收起测试点",
+          "title": "再次点击故事节点收起测试点"
+        },
+        {
+          "id": "US-03-4-无测试点的故事节点不可展开或为空",
+          "title": "无测试点的故事节点不可展开或为空"
+        },
+        {
+          "id": "US-03-5-孤儿用例在故事树中被高亮标记",
+          "title": "孤儿用例在故事树中被高亮标记"
+        },
+        {
+          "id": "US-03-6-每条用例可追溯到唯一故事",
+          "title": "每条用例可追溯到唯一故事"
+        },
+        {
+          "id": "US-03-7-深层嵌套故事的展开性能",
+          "title": "深层嵌套故事的展开性能"
+        },
+        {
+          "id": "US-03-8-刷新页面后故事树状态重置",
+          "title": "刷新页面后故事树状态重置"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 0
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-15",
+        "title": "删除项目需要二次确认",
+        "heldOut": true
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtscx2p4",
+    "at": "2026-09-08T07:37:29.320Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsc7noc",
+    "coverage": 0,
+    "heldOutCoverage": 0.25,
+    "cases": 21,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsc7noc",
+      "stage": "g1",
+      "runtime": "penguin",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T07:17:43.451Z",
+      "finishedAt": "2026-09-08T07:20:15.470Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 48308,
+        "ms": 152019
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "US-02-1-删除项目需二次确认"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "US-01-1-web端配置选项显示web3能力开关",
+          "title": "Web端配置选项显示web3能力开关"
+        },
+        {
+          "id": "US-01-2-ios端配置选项隐藏web3能力开关",
+          "title": "iOS端配置选项隐藏web3能力开关"
+        },
+        {
+          "id": "US-01-3-android端配置选项隐藏web3能力开关",
+          "title": "Android端配置选项隐藏web3能力开关"
+        },
+        {
+          "id": "US-01-4-切换目标端从web到ios时web3选项消失",
+          "title": "切换目标端从Web到iOS时web3选项消失"
+        },
+        {
+          "id": "US-01-5-切换目标端从ios到web时web3选项出现",
+          "title": "切换目标端从iOS到Web时web3选项出现"
+        },
+        {
+          "id": "US-01-6-web端启用web3能力后保存配置",
+          "title": "Web端启用web3能力后保存配置"
+        },
+        {
+          "id": "US-01-7-web端禁用web3能力后保存配置",
+          "title": "Web端禁用web3能力后保存配置"
+        },
+        {
+          "id": "US-02-2-取消二次确认后项目保留",
+          "title": "取消二次确认后项目保留"
+        },
+        {
+          "id": "US-02-3-确认删除后级联删除关联数据",
+          "title": "确认删除后级联删除关联数据"
+        },
+        {
+          "id": "US-02-4-无权限用户无法触发删除",
+          "title": "无权限用户无法触发删除"
+        },
+        {
+          "id": "US-02-5-空项目删除无需级联但仍需确认",
+          "title": "空项目删除无需级联但仍需确认"
+        },
+        {
+          "id": "US-02-6-删除过程中网络中断不产生脏数据",
+          "title": "删除过程中网络中断不产生脏数据"
+        },
+        {
+          "id": "US-03-1-验证登录方式选项包含ui步骤",
+          "title": "验证登录方式选项包含UI步骤"
+        },
+        {
+          "id": "US-03-2-验证登录方式选项包含api登录",
+          "title": "验证登录方式选项包含API登录"
+        },
+        {
+          "id": "US-03-3-验证登录方式选项包含粘贴会话",
+          "title": "验证登录方式选项包含粘贴会话"
+        },
+        {
+          "id": "US-03-4-验证选择ui步骤后出现对应配置项",
+          "title": "验证选择UI步骤后出现对应配置项"
+        },
+        {
+          "id": "US-03-5-验证选择api登录后出现对应配置项",
+          "title": "验证选择API登录后出现对应配置项"
+        },
+        {
+          "id": "US-03-6-验证选择粘贴会话后出现对应配置项",
+          "title": "验证选择粘贴会话后出现对应配置项"
+        },
+        {
+          "id": "US-03-7-验证密钥引用格式在ui中正确显示",
+          "title": "验证密钥引用格式在UI中正确显示"
+        },
+        {
+          "id": "US-03-8-验证未选择任何登录方式时的默认状态",
+          "title": "验证未选择任何登录方式时的默认状态"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 1
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtscx390",
+    "at": "2026-09-08T07:37:30.036Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtscb35l",
+    "coverage": 0.1667,
+    "heldOutCoverage": 0.5,
+    "cases": 17,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtscb35l",
+      "stage": "g1",
+      "runtime": "penguin",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T07:20:23.478Z",
+      "finishedAt": "2026-09-08T07:27:49.972Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 47390,
+        "ms": 446494
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [
+            "S-02-6-runner进程崩溃后不自动重启"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [
+            "S-03-6-验证无效密钥格式提交被拒绝"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [
+            "S-02-4-未绑定项目的状态下禁用批准入库按钮"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "S-02-1-删除项目时弹出二次确认对话框"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "S-01-1-目标端为-web-时显示-web3-能力选项",
+          "title": "目标端为 Web 时显示 web3 能力选项"
+        },
+        {
+          "id": "S-02-2-取消删除后项目数据保持不变",
+          "title": "取消删除后项目数据保持不变"
+        },
+        {
+          "id": "S-02-3-确认删除后级联清理用例-运行和基线",
+          "title": "确认删除后级联清理用例、运行和基线"
+        },
+        {
+          "id": "S-02-5-深链打开对应屏幕并高亮导航组",
+          "title": "深链打开对应屏幕并高亮导航组"
+        },
+        {
+          "id": "S-02-7-杀掉runner后页面3秒内反映状态变化",
+          "title": "杀掉Runner后页面3秒内反映状态变化"
+        },
+        {
+          "id": "S-02-8-生成的recipe通过schema校验前隐藏保存按钮",
+          "title": "生成的Recipe通过Schema校验前隐藏保存按钮"
+        },
+        {
+          "id": "S-03-1-验证-ui-步骤登录方式配置",
+          "title": "验证 UI 步骤登录方式配置"
+        },
+        {
+          "id": "S-03-2-验证-api-登录方式配置",
+          "title": "验证 API 登录方式配置"
+        },
+        {
+          "id": "S-03-3-验证粘贴会话登录方式配置",
+          "title": "验证粘贴会话登录方式配置"
+        },
+        {
+          "id": "S-03-4-验证密钥引用格式及明文隐藏",
+          "title": "验证密钥引用格式及明文隐藏"
+        },
+        {
+          "id": "S-03-5-验证空登录配置提交被拒绝",
+          "title": "验证空登录配置提交被拒绝"
+        },
+        {
+          "id": "S-03-7-验证切换登录方式后配置状态保持",
+          "title": "验证切换登录方式后配置状态保持"
+        },
+        {
+          "id": "S-03-8-验证三种登录方式互斥性",
+          "title": "验证三种登录方式互斥性"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 1
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 3
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsd51u9",
+    "at": "2026-09-08T07:43:41.457Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsckvk8",
+    "coverage": 0,
+    "heldOutCoverage": 0.25,
+    "cases": 14,
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsckvk8",
+      "stage": "g1",
+      "runtime": "penguin",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T07:28:00.199Z",
+      "finishedAt": "2026-09-08T07:43:15.224Z",
+      "spend": {
+        "calls": 4,
+        "tokens": 43776,
+        "ms": 915025
+      }
+    },
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "US-02-1-删除项目时弹出二次确认对话框",
+            "US-02-4-非本机域名下不可逆删除动作默认拦截"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "US-02-2-确认删除后级联清理用例-运行和基线",
+          "title": "确认删除后级联清理用例、运行和基线"
+        },
+        {
+          "id": "US-02-3-取消删除操作保留项目数据",
+          "title": "取消删除操作保留项目数据"
+        },
+        {
+          "id": "US-02-5-空项目删除时的级联逻辑验证",
+          "title": "空项目删除时的级联逻辑验证"
+        },
+        {
+          "id": "US-02-6-并发删除同一项目的冲突处理",
+          "title": "并发删除同一项目的冲突处理"
+        },
+        {
+          "id": "US-03-1-验证选择-ui-步骤登录方式",
+          "title": "验证选择 UI 步骤登录方式"
+        },
+        {
+          "id": "US-03-2-验证选择-api-登录方式",
+          "title": "验证选择 API 登录方式"
+        },
+        {
+          "id": "US-03-3-验证选择粘贴会话登录方式",
+          "title": "验证选择粘贴会话登录方式"
+        },
+        {
+          "id": "US-03-4-验证密钥引用格式正确性",
+          "title": "验证密钥引用格式正确性"
+        },
+        {
+          "id": "US-03-5-验证三种登录方式互斥性",
+          "title": "验证三种登录方式互斥性"
+        },
+        {
+          "id": "US-03-6-验证空配置时的默认状态",
+          "title": "验证空配置时的默认状态"
+        },
+        {
+          "id": "US-03-7-验证切换登录方式时数据清空",
+          "title": "验证切换登录方式时数据清空"
+        },
+        {
+          "id": "US-03-8-验证无效会话格式拒绝",
+          "title": "验证无效会话格式拒绝"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 1
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsd6m0p",
+    "at": "2026-09-08T07:44:54.265Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsbee76",
+    "coverage": 0.0833,
+    "heldOutCoverage": 0.25,
+    "cases": 21,
+    "vsPrev": {
+      "entryId": "1a70648d59bee21f",
+      "runId": "run-mtsc7noc",
+      "mcnemar": {
+        "aOnly": 0,
+        "bOnly": 1,
+        "bothPassed": 1,
+        "bothFailed": 14,
+        "p": 1,
+        "reading": "B looks better on 1 disagreeing items, but the difference could easily be chance (p = 1.000)"
+      },
+      "flips": 1,
+      "flipped": [
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "from": "b"
+        }
+      ]
+    },
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsbee76",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T06:54:58.144Z",
+      "finishedAt": "2026-09-08T06:57:24.609Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 45894,
+        "ms": 146465
+      }
+    },
+    "note": "the two runs differ on runtime",
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [
+            "S-03-6-验证无效会话格式的拒绝"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "S-02-1-删除项目时显示二次确认对话框"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "S-01-1-web端显示web3能力启用选项",
+          "title": "Web端显示web3能力启用选项"
+        },
+        {
+          "id": "S-01-2-ios端隐藏web3能力启用选项",
+          "title": "iOS端隐藏web3能力启用选项"
+        },
+        {
+          "id": "S-01-3-android端隐藏web3能力启用选项",
+          "title": "Android端隐藏web3能力启用选项"
+        },
+        {
+          "id": "S-01-4-切换目标端从web到ios时web3选项消失",
+          "title": "切换目标端从Web到iOS时web3选项消失"
+        },
+        {
+          "id": "S-01-5-切换目标端从ios到web时web3选项出现",
+          "title": "切换目标端从iOS到Web时web3选项出现"
+        },
+        {
+          "id": "S-02-2-确认删除后级联清理所有关联数据",
+          "title": "确认删除后级联清理所有关联数据"
+        },
+        {
+          "id": "S-02-3-取消删除操作不改变任何数据",
+          "title": "取消删除操作不改变任何数据"
+        },
+        {
+          "id": "S-02-4-非管理员角色无法执行删除操作",
+          "title": "非管理员角色无法执行删除操作"
+        },
+        {
+          "id": "S-02-5-删除不存在的项目返回明确错误",
+          "title": "删除不存在的项目返回明确错误"
+        },
+        {
+          "id": "S-02-6-删除有活跃运行的项目需额外警告",
+          "title": "删除有活跃运行的项目需额外警告"
+        },
+        {
+          "id": "S-02-7-快速连续点击删除只执行一次",
+          "title": "快速连续点击删除只执行一次"
+        },
+        {
+          "id": "S-02-8-删除后导航自动跳转至项目列表首页",
+          "title": "删除后导航自动跳转至项目列表首页"
+        },
+        {
+          "id": "S-03-1-验证-ui-步骤登录配置",
+          "title": "验证 UI 步骤登录配置"
+        },
+        {
+          "id": "S-03-2-验证-api-登录配置",
+          "title": "验证 API 登录配置"
+        },
+        {
+          "id": "S-03-3-验证粘贴会话-cookie-storagestate-登录配置",
+          "title": "验证粘贴会话 (Cookie/StorageState) 登录配置"
+        },
+        {
+          "id": "S-03-4-验证密钥引用格式及不回显明文",
+          "title": "验证密钥引用格式及不回显明文"
+        },
+        {
+          "id": "S-03-5-验证切换登录方式时旧配置清理",
+          "title": "验证切换登录方式时旧配置清理"
+        },
+        {
+          "id": "S-03-7-验证空登录配置的默认状态",
+          "title": "验证空登录配置的默认状态"
+        },
+        {
+          "id": "S-03-8-验证多方式共存时的优先级或互斥逻辑",
+          "title": "验证多方式共存时的优先级或互斥逻辑"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 2
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsd6mkk",
+    "at": "2026-09-08T07:44:54.980Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsbhvut",
+    "coverage": 0.1667,
+    "heldOutCoverage": 0.25,
+    "cases": 22,
+    "vsPrev": {
+      "entryId": "1a70648d59bee21f",
+      "runId": "run-mtscb35l",
+      "mcnemar": {
+        "aOnly": 3,
+        "bOnly": 2,
+        "bothPassed": 1,
+        "bothFailed": 10,
+        "p": 1,
+        "reading": "A looks better on 5 disagreeing items, but the difference could easily be chance (p = 1.000)"
+      },
+      "flips": 5,
+      "flipped": [
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "from": "a"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "from": "a"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "from": "a"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "from": "b"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "from": "b"
+        }
+      ]
+    },
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsbhvut",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T06:57:40.996Z",
+      "finishedAt": "2026-09-08T07:00:53.387Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 39043,
+        "ms": 192391
+      }
+    },
+    "note": "the two runs differ on runtime",
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [
+            "S-02-8-多语言环境下删除确认文案正确"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [
+            "S-01-1-新建项目选择-web-端时显示-web3-能力选项"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [
+            "S-02-1-删除项目时弹出二次确认对话框"
+          ],
+          "reach": "hit"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "S-01-2-新建项目选择-ios-端时隐藏-web3-能力选项",
+          "title": "新建项目选择 iOS 端时隐藏 Web3 能力选项"
+        },
+        {
+          "id": "S-01-3-新建项目选择-android-端时隐藏-web3-能力选项",
+          "title": "新建项目选择 Android 端时隐藏 Web3 能力选项"
+        },
+        {
+          "id": "S-01-4-从-web-切换到-ios-时动态隐藏-web3-选项",
+          "title": "从 Web 切换到 iOS 时动态隐藏 Web3 选项"
+        },
+        {
+          "id": "S-01-5-从-ios-切换回-web-时重新显示-web3-选项",
+          "title": "从 iOS 切换回 Web 时重新显示 Web3 选项"
+        },
+        {
+          "id": "S-01-6-web-端默认不启用-web3-能力",
+          "title": "Web 端默认不启用 Web3 能力"
+        },
+        {
+          "id": "S-02-2-取消二次确认后不执行删除",
+          "title": "取消二次确认后不执行删除"
+        },
+        {
+          "id": "S-02-3-确认删除后级联删除关联数据",
+          "title": "确认删除后级联删除关联数据"
+        },
+        {
+          "id": "S-02-4-无权限用户尝试删除项目被拒绝",
+          "title": "无权限用户尝试删除项目被拒绝"
+        },
+        {
+          "id": "S-02-5-删除包含大量数据的项目时进度可见",
+          "title": "删除包含大量数据的项目时进度可见"
+        },
+        {
+          "id": "S-02-6-网络中断时删除失败并给出明确原因",
+          "title": "网络中断时删除失败并给出明确原因"
+        },
+        {
+          "id": "S-02-7-删除最后一个项目后导航栏更新",
+          "title": "删除最后一个项目后导航栏更新"
+        },
+        {
+          "id": "S-03-1-验证环境配置中登录方式支持-ui-步骤",
+          "title": "验证环境配置中登录方式支持 UI 步骤"
+        },
+        {
+          "id": "S-03-2-验证环境配置中登录方式支持-api-登录",
+          "title": "验证环境配置中登录方式支持 API 登录"
+        },
+        {
+          "id": "S-03-3-验证环境配置中登录方式支持粘贴会话",
+          "title": "验证环境配置中登录方式支持粘贴会话"
+        },
+        {
+          "id": "S-03-4-验证选择粘贴会话时提供-cookie-storagestate-输入能力",
+          "title": "验证选择粘贴会话时提供 cookie/storageState 输入能力"
+        },
+        {
+          "id": "S-03-5-验证密钥在登录配置中仅以引用形式存在",
+          "title": "验证密钥在登录配置中仅以引用形式存在"
+        },
+        {
+          "id": "S-03-6-验证切换不同登录方式时表单内容动态更新",
+          "title": "验证切换不同登录方式时表单内容动态更新"
+        },
+        {
+          "id": "S-03-7-验证未选择登录方式时的默认状态或提示",
+          "title": "验证未选择登录方式时的默认状态或提示"
+        },
+        {
+          "id": "S-03-8-验证保存环境配置后登录方式持久化",
+          "title": "验证保存环境配置后登录方式持久化"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 1
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 1
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 1
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  },
+  {
+    "id": "sb-mtsd6n41",
+    "at": "2026-09-08T07:44:55.681Z",
+    "agentState": "1a70648d59bee21f",
+    "goldHash": "2405209c3fe70ac7",
+    "goldPath": "/Users/admin/Midscene/testpilot/benchmark/casegen/gold.json",
+    "runId": "run-mtsbmfal",
+    "coverage": 0,
+    "heldOutCoverage": 0,
+    "cases": 16,
+    "vsPrev": {
+      "entryId": "1a70648d59bee21f",
+      "runId": "run-mtsckvk8",
+      "mcnemar": {
+        "aOnly": 1,
+        "bOnly": 0,
+        "bothPassed": 0,
+        "bothFailed": 15,
+        "p": 1,
+        "reading": "A looks better on 1 disagreeing items, but the difference could easily be chance (p = 1.000)"
+      },
+      "flips": 1,
+      "flipped": [
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "from": "a"
+        }
+      ]
+    },
+    "frozen": false,
+    "binding": {
+      "runId": "run-mtsbmfal",
+      "stage": "g1",
+      "runtime": "claude-code",
+      "skillVersion": "2026-09-03.1",
+      "promptsDigest": {
+        "entries": {
+          "design.cases": "6282d2ce",
+          "plan.stories": "28d33286",
+          "spec.compose": "64d768c7"
+        },
+        "combined": "556e2d1d"
+      },
+      "params": {
+        "stage": "g1",
+        "lang": "zh",
+        "limit": 3,
+        "minNegativeRatio": 0.3,
+        "maxSteps": 8,
+        "stopAfter": null,
+        "from": null
+      },
+      "ablated": [],
+      "model": {
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-flash",
+        "thinking": false
+      },
+      "materialsHash": "25a3d392b572e2e2",
+      "startedAt": "2026-09-08T07:01:12.812Z",
+      "finishedAt": "2026-09-08T07:04:21.275Z",
+      "spend": {
+        "calls": 5,
+        "tokens": 53485,
+        "ms": 188463
+      }
+    },
+    "note": "the two runs differ on runtime",
+    "matrix": {
+      "gold": [
+        {
+          "id": "S-01",
+          "title": "进程页列出网关/agent/runner 并显示状态",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-02",
+          "title": "重启一个进程后 PID 变化且状态回到运行中",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-03",
+          "title": "未启动的能力显示为「未启动」而不是「已停止」",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-04",
+          "title": "画布渲染工作流的节点与连线",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-05",
+          "title": "点击节点后右侧显示该节点的产物",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-06",
+          "title": "「只跑此节点」不会重算上游",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-07",
+          "title": "保存节点参数后图版本号递增",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-08",
+          "title": "非法参数被拒绝并指出是哪个节点",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-09",
+          "title": "复核队列展示门禁①的逐条判据结果",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-10",
+          "title": "批准后用例出现在看板、并从队列消失",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-11",
+          "title": "未绑定项目的运行不能批准",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-12",
+          "title": "评测页展示两版的覆盖与显著性判读",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-13",
+          "title": "切换语言后界面无中文残留（英文模式）",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-14",
+          "title": "创建项目后出现在项目列表",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-15",
+          "title": "删除项目需要二次确认",
+          "heldOut": true,
+          "by": [],
+          "reach": "miss"
+        },
+        {
+          "id": "S-16",
+          "title": "趋势页展示通过率与抖动率",
+          "heldOut": false,
+          "by": [],
+          "reach": "miss"
+        }
+      ],
+      "extras": [
+        {
+          "id": "US-02-1-验证登录方式选项包含ui步骤",
+          "title": "验证登录方式选项包含UI步骤"
+        },
+        {
+          "id": "US-02-2-验证登录方式选项包含api登录",
+          "title": "验证登录方式选项包含API登录"
+        },
+        {
+          "id": "US-02-3-验证登录方式选项包含粘贴会话",
+          "title": "验证登录方式选项包含粘贴会话"
+        },
+        {
+          "id": "US-02-4-验证密钥引用格式为占位符而非明文",
+          "title": "验证密钥引用格式为占位符而非明文"
+        },
+        {
+          "id": "US-02-5-验证选择ui步骤后显示对应配置项",
+          "title": "验证选择UI步骤后显示对应配置项"
+        },
+        {
+          "id": "US-02-6-验证选择api登录后显示对应配置项",
+          "title": "验证选择API登录后显示对应配置项"
+        },
+        {
+          "id": "US-02-7-验证选择粘贴会话后显示对应配置项",
+          "title": "验证选择粘贴会话后显示对应配置项"
+        },
+        {
+          "id": "US-02-8-验证未选择登录方式时的默认状态或提示",
+          "title": "验证未选择登录方式时的默认状态或提示"
+        },
+        {
+          "id": "US-03-1-用例生成完成后展示故事树",
+          "title": "用例生成完成后展示故事树"
+        },
+        {
+          "id": "US-03-2-点击故事节点展开测试点",
+          "title": "点击故事节点展开测试点"
+        },
+        {
+          "id": "US-03-3-再次点击故事节点收起测试点",
+          "title": "再次点击故事节点收起测试点"
+        },
+        {
+          "id": "US-03-4-无测试点的故事节点不可展开或为空",
+          "title": "无测试点的故事节点不可展开或为空"
+        },
+        {
+          "id": "US-03-5-孤儿用例在故事树中被高亮标记",
+          "title": "孤儿用例在故事树中被高亮标记"
+        },
+        {
+          "id": "US-03-6-每条用例可追溯到唯一故事",
+          "title": "每条用例可追溯到唯一故事"
+        },
+        {
+          "id": "US-03-7-深层嵌套故事的展开性能",
+          "title": "深层嵌套故事的展开性能"
+        },
+        {
+          "id": "US-03-8-刷新页面后故事树状态重置",
+          "title": "刷新页面后故事树状态重置"
+        }
+      ]
+    },
+    "methodMix": {
+      "equivalence": {
+        "expected": 7,
+        "covered": 0
+      },
+      "state-transition": {
+        "expected": 5,
+        "covered": 0
+      },
+      "boundary": {
+        "expected": 1,
+        "covered": 0
+      },
+      "negative": {
+        "expected": 3,
+        "covered": 0
+      }
+    },
+    "misses": [
+      {
+        "id": "S-01",
+        "title": "进程页列出网关/agent/runner 并显示状态",
+        "heldOut": false
+      },
+      {
+        "id": "S-02",
+        "title": "重启一个进程后 PID 变化且状态回到运行中",
+        "heldOut": false
+      },
+      {
+        "id": "S-03",
+        "title": "未启动的能力显示为「未启动」而不是「已停止」",
+        "heldOut": true
+      },
+      {
+        "id": "S-04",
+        "title": "画布渲染工作流的节点与连线",
+        "heldOut": false
+      },
+      {
+        "id": "S-05",
+        "title": "点击节点后右侧显示该节点的产物",
+        "heldOut": false
+      },
+      {
+        "id": "S-06",
+        "title": "「只跑此节点」不会重算上游",
+        "heldOut": true
+      },
+      {
+        "id": "S-07",
+        "title": "保存节点参数后图版本号递增",
+        "heldOut": false
+      },
+      {
+        "id": "S-08",
+        "title": "非法参数被拒绝并指出是哪个节点",
+        "heldOut": false
+      },
+      {
+        "id": "S-09",
+        "title": "复核队列展示门禁①的逐条判据结果",
+        "heldOut": false
+      },
+      {
+        "id": "S-10",
+        "title": "批准后用例出现在看板、并从队列消失",
+        "heldOut": false
+      },
+      {
+        "id": "S-11",
+        "title": "未绑定项目的运行不能批准",
+        "heldOut": true
+      },
+      {
+        "id": "S-12",
+        "title": "评测页展示两版的覆盖与显著性判读",
+        "heldOut": false
+      },
+      {
+        "id": "S-13",
+        "title": "切换语言后界面无中文残留（英文模式）",
+        "heldOut": false
+      },
+      {
+        "id": "S-14",
+        "title": "创建项目后出现在项目列表",
+        "heldOut": false
+      },
+      {
+        "id": "S-15",
+        "title": "删除项目需要二次确认",
+        "heldOut": true
+      },
+      {
+        "id": "S-16",
+        "title": "趋势页展示通过率与抖动率",
+        "heldOut": false
+      }
+    ]
+  }
+]

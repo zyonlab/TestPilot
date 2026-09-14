@@ -1,0 +1,23 @@
+import {beforeAll,afterAll,it,expect,vi} from 'vitest';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+let dir:string,project:string,service:typeof import('../src/runService.js'),db:typeof import('../src/db.js'),control:typeof import('../src/workflowControls.js');
+beforeAll(async()=>{dir=mkdtempSync(join(tmpdir(),'tp-controls-'));vi.stubEnv('TP_DATA_DIR',dir);db=await import('../src/db.js');service=await import('../src/runService.js');control=await import('../src/workflowControls.js');project=db.createProject('Controls','https://example.test').id;const {captureWebModels}=await import('./helpers/model-snapshot.js');service.registerWebRun('control-run',project,captureWebModels().binding,{stageControlVersion:1});});
+afterAll(()=>{service.runLedger().close();db.db.close();vi.unstubAllEnvs();rmSync(dir,{recursive:true,force:true});});
+it('pauses before a new node, persists the stop and refuses writes until explicit resume',()=>{control.setControls('control-run',project,{breakpoints:['stories']});expect(control.beginStage('control-run',project,{node:'stories'}).status).toBe('paused');expect(service.runLedger().getRun('control-run',project).status).toBe('paused');expect(()=>control.requireStageStarted('control-run',project,'stories')).toThrow('run_requires_explicit_resume');expect(control.beginStage('control-run',project,{node:'cases'}).status).toBe('paused');expect(service.runLedger().nodeStates('control-run').some(n=>n.node==='cases')).toBe(false);expect(control.resumeControls('control-run',project)).toBe('stories');service.runLedger().db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run('control-run');expect(control.beginStage('control-run',project,{node:'stories'}).status).toBe('running');control.requireStageStarted('control-run',project,'stories');});
+it('rejects adding breakpoints to started or failed nodes, and enforces project ownership',()=>{expect(()=>control.setControls('control-run',project,{breakpoints:['stories']})).toThrow('breakpoint_requires_untouched_node');control.stageEvent('control-run',project,'cases','failed','validation');expect(()=>control.setControls('control-run',project,{breakpoints:['cases']})).toThrow('breakpoint_requires_untouched_node');expect(()=>control.controls('control-run','other-project')).toThrow('run_project_conflict');});
+it('keeps completed node revisions and does not restart them',()=>{control.stageEvent('control-run',project,'stories','done');expect(control.beginStage('control-run',project,{node:'stories'})).toMatchObject({status:'done'});expect(service.runLedger().nodeStates('control-run').find(n=>n.node==='stories')?.phase).toBe('done');});
+it('shows host planning as running when frozen input skips the source node',async()=>{
+ const {saveProjectModelProfile}=await import('../src/modelProfiles.js');
+ saveProjectModelProfile(project,'executor',{expectedVersion:0,provider:'fixture',model:'vision',endpoint:'https://executor.test/v1',apiKey:'test-only',thinking:false,capabilities:{vision:'unknown',toolUse:'unknown'}});
+ const registered=service.registerHostRun(project,{runtime:'codex',externalId:'native-state',idempotencyKey:'native-state',materials:[{name:'source.md',text:'Observed public navigation'}],parameters:{stageControlVersion:1}});
+ const id=registered.runId;
+ expect(service.runLedger().getRun(id,project).status).toBe('registered');
+ expect(control.beginStage(id,project,{node:'instructions'}).status).toBe('running');
+ expect(service.runLedger().getRun(id,project).status).toBe('running');
+ control.stageEvent(id,project,'instructions','done');
+ control.setControls(id,project,{breakpoints:['stories']});
+ expect(control.beginStage(id,project,{node:'stories'}).status).toBe('paused');
+ expect(service.runLedger().getRun(id,project).status).toBe('paused');
+});

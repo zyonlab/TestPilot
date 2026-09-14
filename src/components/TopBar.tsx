@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ServerCog } from "lucide-react";
+import { ServerCog, CircleHelp } from "lucide-react";
 import { useT } from "@/lib/prefs";
 import { API_BASE, IS_OVERRIDDEN, resetApiBase } from "@/lib/base";
 import { useInSection } from "@/components/SectionNav";
@@ -88,9 +88,7 @@ export function TopBar({
       {/* 同一组界面的其它镜头。只有一项时它自己不画——一个孤零零的 tab 只是噪声。 */}
       <SurfaceTabsRow />
       {hint && (
-        <span className="min-w-0 flex-1 truncate text-[0.75rem] text-muted-foreground" title={hint}>
-          {hint}
-        </span>
+        <details className="relative text-[0.75rem] text-muted-foreground"><summary className="cursor-pointer list-none rounded p-1" aria-label={t("bench.pageHelp")}><CircleHelp size={15}/></summary><div className="absolute left-0 top-full z-30 mt-2 w-80 max-w-[75vw] rounded-lg border border-border bg-card p-4 shadow-lg">{hint}</div></details>
       )}
       <div className="ml-auto flex flex-none items-center gap-2">
         {gateway}

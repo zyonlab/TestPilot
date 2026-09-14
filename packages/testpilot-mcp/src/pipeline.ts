@@ -19,13 +19,15 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import type { NodeContext, NodeDef } from "@testpilot/harness-core";
-import { digestTexts, modelFromEnv, parseAblation } from "@testpilot/harness-core";
+import { digestTexts, plannerModel, plannerConnectionFromEnv, parseAblation } from "@testpilot/harness-core";
+import { RunModelsSchema, ModelConfigError, type RoleModelConnection, type RunModels } from "@testpilot/harness-core/model-profiles";
 import {
   CASES_STABLE,
   CASES_STABLE_NO_CLEANUP,
   CASES_STABLE_NO_PRIORITY,
   CASES_STABLE_PLAIN,
   COMPOSE_STABLE,
+  DOMAIN_PERP,
   ORACLE_STRICT,
   STORIES_STABLE,
   composeSpecNode,
@@ -97,6 +99,11 @@ interface Step {
 export const DEFAULT_SKILL_VERSION = "2026-09-03.1";
 
 export interface RunPipelineOptions {
+  approvedRunId?: string;
+  approvedRevisionIds?: string[];
+  modelRoles?: RunModels;
+  /** Server-injected planner snapshot; MCP callers configure TP_PLANNER_* explicitly. */
+  planner?: RoleModelConnection;
   stage: "g1" | "g2";
   materialsDir: string;
   outDir: string;
@@ -177,6 +184,17 @@ export function collectMaterials(dir: string): string[] {
  * 而换掉之后仍然报同一个指纹，等于让配对评测在两份不同的指令上做减法却以为只差一个开关。
  * 那是 `digest.ts` 开头说的「唯一一种每个数都对、结论却是假的」情形。
  */
+/**
+ * 消融开关的兜底来源（07 T-12，2026-09-08）。
+ *
+ * 经运行时跑的消融臂，`ablate` 写在给 agent 的起跑话术里，而 skill 说「不要改参数」——两次真跑 agent 都把它丢了，
+ * 六次「消融臂」meta 里 `ablated: []`。一件确定的事不该交给一个不确定的东西：网关把它写进 MCP 子进程的 env
+ * （`TP_ABLATE=domain-perp,…`），调用方没给 `ablate` 时从这里取。给了就以调用方为准。
+ */
+export function ablateFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  return (env.TP_ABLATE ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export function promptsDigestFor(ablated: Set<string>, oracleGuidance: "default" | "strict" = "default") {
   const designStable = ablated.has(ABLATABLE.designMethods)
     ? CASES_STABLE_PLAIN
@@ -188,23 +206,18 @@ export function promptsDigestFor(ablated: Set<string>, oracleGuidance: "default"
   return digestTexts({
     "spec.compose": COMPOSE_STABLE,
     "plan.stories": STORIES_STABLE,
-    "design.cases": designStable + (oracleGuidance === "strict" ? ORACLE_STRICT : ""),
+    // 领域 REFERENCE 臂（07 T-10）也是提示词的一部分：装 / 卸它，指纹必须不同——
+    // 2026-09-08 两臂 `ablated` 一个有一个没有，`promptsDigest.combined` 却都是 556e2d1d。
+    "design.cases":
+      designStable + (oracleGuidance === "strict" ? ORACLE_STRICT : "") + (ablated.has(ABLATABLE.domainPerp) ? "" : DOMAIN_PERP),
   });
 }
 
-/**
- * 这次运行打给哪个模型。
- *
- * 从环境里再读一次，而不是问 `OpenAIModel` 要——它的 `opts` 是私有的，而给它加一个
- * getter 会改到 Phase 3 才该动的那一层。读的是与 `modelFromEnv` 完全相同的那几个键，
- * 默认值也照抄；两边漂了，印记就会说谎。
- */
+/** Legacy metadata shape, now sourced exclusively from the explicit planner role. */
 export function modelBindingFromEnv(env: NodeJS.ProcessEnv = process.env): RunMeta["model"] {
+  const c = plannerConnectionFromEnv(env);
   return {
-    baseUrl: env.OPENAI_BASE_URL ?? env.MIDSCENE_MODEL_BASE_URL ?? "http://127.0.0.1:8000/v1",
-    model: env.MIDSCENE_MODEL_NAME ?? "Qwen3.8-27B-4bit",
-    // `modelFromEnv` 里 `noThink` 只有 `TP_MODEL_THINK=0` 时为真，其余一律开着思考。
-    thinking: env.TP_MODEL_THINK !== "0",
+    baseUrl: c.endpoint, model: c.model, thinking: c.thinking,
   };
 }
 
@@ -229,15 +242,14 @@ export function wroteByNode(outDir: string): Map<string, string> {
 }
 
 export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipelineResult> {
-  if (opts.stage === "g2")
-    throw new Error('stage "g2" (regenerate from approved cases) is not implemented yet — phase 1A only ships g1');
+  if (opts.stage === "g2") return (await import("./g2.js")).runApprovedPipeline(opts);
   if (opts.stage !== "g1") throw new Error(`unknown stage: ${opts.stage}`);
 
   const outDir = resolve(opts.outDir);
   mkdirSync(join(outDir, "nodes"), { recursive: true });
 
   // 拼错的消融开关会产生一次什么都没改的运行，外加一份声称改了的报告。宁可当场停。
-  const { on: ablatedList, unknown } = parseAblation(opts.ablate);
+  const { on: ablatedList, unknown } = parseAblation(opts.ablate?.length ? opts.ablate : ablateFromEnv());
   if (unknown.length) throw new Error(`unknown ablation switch(es): ${unknown.join(", ")} — nothing reads them`);
   const ablated = new Set<string>(ablatedList);
 
@@ -250,7 +262,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   const paths = collectMaterials(opts.materialsDir);
   if (!paths.length) throw new Error(`no specification documents (*.md/*.txt) under ${opts.materialsDir}`);
 
-  const nodeOpts: CaseGenNodeOptions = { model: modelFromEnv(), baseDir: resolve(opts.materialsDir) };
+  const nodeOpts: CaseGenNodeOptions = { model: { chat: request => plannerModel(plannerConnection).chat(request) }, baseDir: resolve(opts.materialsDir) };
   const lang = opts.lang ?? "zh";
 
   /** 顺序写死。这一行就是 P1 本身。 */
@@ -289,8 +301,11 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   const priorMeta = existsSync(priorMetaPath)
     ? (JSON.parse(readFileSync(priorMetaPath, "utf8")) as Partial<RunMeta>)
     : undefined;
+  const managedRunId = process.env.TP_MODEL_RUN_ID;
+  if (managedRunId && (!/^[a-zA-Z0-9_-]{1,160}$/.test(managedRunId) || (opts.from && priorMeta?.runId && priorMeta.runId !== managedRunId)))
+    throw new ModelConfigError("invalid_binding");
   const runId =
-    opts.from && priorMeta?.runId ? priorMeta.runId : `run-${Date.now().toString(36)}`;
+    opts.from && priorMeta?.runId ? priorMeta.runId : managedRunId ?? `run-${Date.now().toString(36)}`;
 
   const eventsPath = join(outDir, "events.jsonl");
   const writeEvent = (e: NodeEvent) => {
@@ -330,6 +345,14 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   }
 
   const ran: string[] = [];
+  // Validate frozen inputs before allocating a model; do not mask an invalid experiment.
+  const plannerConnection = opts.planner ?? plannerConnectionFromEnv();
+  let modelRoles: RunModels | undefined;
+  try {
+    const raw = opts.modelRoles ?? (process.env.TP_RUN_MODELS_JSON ? JSON.parse(process.env.TP_RUN_MODELS_JSON) : undefined);
+    modelRoles = raw === undefined ? undefined : RunModelsSchema.parse(raw);
+    if (modelRoles && (modelRoles.mode !== "pipeline" || modelRoles.planner.source !== "configured" || modelRoles.planner.model !== plannerConnection.model)) throw new Error();
+  } catch { throw new ModelConfigError("invalid_binding", "planner"); }
   const nodeSummaries: NodeSummary[] = [];
   for (const step of steps.slice(startIndex, stopIndex + 1)) {
     if (signal.aborted) throw new Error(`run ${runId} aborted before ${step.id}`);
@@ -458,14 +481,18 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       )
     : undefined;
 
+  const runtime = process.env.TP_RUNTIME;
   const meta: RunMeta = {
     runId,
     stage: opts.stage,
+    // 由起跑的接缝通过 env 告诉 MCP 子进程；工具自己不猜。没告诉就不写（旧条目的样子）。
+    ...(runtime === "penguin" || runtime === "claude-code" || runtime === "codex" || runtime === "pipeline" ? { runtime } : {}),
     skillVersion: opts.skillVersion ?? DEFAULT_SKILL_VERSION,
     promptsDigest: promptsDigestFor(ablated),
     params,
     ablated: [...ablated].sort(),
-    model: modelBindingFromEnv(),
+    model: { baseUrl: modelRoles?.planner.source === "configured" ? modelRoles.planner.endpoint : plannerConnection.endpoint, model: plannerConnection.model, thinking: plannerConnection.thinking },
+    ...(modelRoles ? { modelRoles } : {}),
     materialsHash: hashMaterials(opts.materialsDir),
     // 冻结起跑时记下从哪读的与算出的指纹；否则两个键都不写（JSON 里不出现）。
     frozenInputsDir: opts.frozenInputsDir ? upstreamDir : undefined,

@@ -98,14 +98,16 @@ export async function loadRepo() {
   const { register } = await import(pathToFileURL(req.resolve("tsx/esm/api")).href);
   register();
   const url = (rel) => pathToFileURL(path.join(repoRoot, rel)).href;
-  const [types, gate, provenance, fence, memory] = await Promise.all([
+  const [types, gate, provenance, fence, memory, validate] = await Promise.all([
     import(url("packages/harness-testing/src/casegen/types.ts")),
     import(url("packages/harness-testing/src/casegen/gate.ts")),
     import(url("packages/harness-testing/src/casegen/provenance.ts")),
     import(url("packages/harness-testing/src/retrieve/fence.ts")),
     import(url("packages/testpilot-mcp/src/memory.ts")),
+    // 形状 + 出处的判决（07 T-09）：hook 与 MCP 的 write_cases 用同一份。
+    import(url("packages/harness-testing/src/casegen/validate.ts")),
   ]);
-  repo = { types, gate, provenance, fence, memory };
+  repo = { types, gate, provenance, fence, memory, validate };
   return repo;
 }
 

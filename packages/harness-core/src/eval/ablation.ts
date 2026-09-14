@@ -21,6 +21,8 @@ export const ABLATABLE = {
   casePriority: "case-priority",
   /** design.cases stops asking for cleanup steps; write cases leave their records behind. */
   caseCleanup: "case-cleanup",
+  /** design.cases stops carrying the perpetual-futures domain invariants (07 T-10): the "domain REFERENCE" arm. */
+  domainPerp: "domain-perp",
 } as const;
 
 export type Ablatable = (typeof ABLATABLE)[keyof typeof ABLATABLE];

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { useT } from "@/lib/prefs";
 import { API_BASE } from "@/lib/base";
 import { cn } from "@/lib/cn";
+import { useStore } from "@/lib/store";
 
 /**
  * 诊断：问一个关于**眼前这个东西**的问题。
@@ -38,6 +39,7 @@ export interface DiagnoseScope {
 
 export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClose: () => void }) {
   const t = useT();
+  const projectId = useStore(s => s.activeProjectId);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,6 +62,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           intent: "ask",
+          projectId: projectId ?? undefined,
           messages: next
             .filter((m) => m.role !== "sys")
             .map((m) => ({ role: m.role === "you" ? "user" : "assistant", text: m.text })),

@@ -46,3 +46,16 @@ describe("guard", () => {
     expect(v.why).toContain("shop.example.com");
   });
 });
+
+it("永续合约上的副作用动词也要拦：平仓、撤单、开仓、授权", () => {
+  const guard = { allowHosts: ["localhost"], blockIrreversible: true, allowlistOnly: false };
+  for (const step of ["全量平仓并等待成交", "撤掉其中一笔挂单", "以 Reduce Only 提交开仓方向的订单", "连接钱包并完成授权"]) {
+    const v = checkRun("https://app.hyperliquid.xyz/trade", [step], guard);
+    expect(v.allow).toBe(false);
+    expect(v.code).toBe("GUARD_IRREVERSIBLE");
+  }
+  expect(checkRun("https://app.hyperliquid.xyz/trade", ["点击下单按钮提交"], guard).allow).toBe(false);
+  // 只读步骤照过——「下单面板」「开仓价」是界面上的名字，不是要做的事。
+  for (const step of ["打开交易页并读取行情条", "查看下单面板", "打开交易页，确认下单面板停在 Market", "读取该行的开仓价与强平价", "展开下单面板的 Pro", "走到提交入口，确认其不处于可下单状态"])
+    expect(checkRun("https://app.hyperliquid.xyz/trade", [step], guard).allow).toBe(true);
+});

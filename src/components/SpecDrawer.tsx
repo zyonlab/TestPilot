@@ -45,6 +45,8 @@ export function SpecDrawer({ wfRunId, onClose }: { wfRunId: string; onClose: () 
         </span>
       }
       resizeKey="spec"
+      /* 物料正文抽屉：整屏打开，收合按钮可切回常规宽度。 */
+      fullscreen
       defaultWidth={900}
       tabs={docs.map((d, i) => ({
         id: d.name,

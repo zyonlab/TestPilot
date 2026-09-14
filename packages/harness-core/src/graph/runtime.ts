@@ -17,6 +17,8 @@ export interface OutputStore {
   get(wfRunId: string, nodeId: string): Promise<unknown | undefined>;
   set(wfRunId: string, nodeId: string, value: unknown): Promise<void>;
   all(wfRunId: string): Promise<Record<string, unknown>>;
+  /** 每次运行的用例/代码条数，在库里数出来（总览用，见 store.countsByRun）。 */
+  countsByRun?(): Promise<Record<string, { cases: number; code: number }>>;
 }
 
 export class MemoryOutputStore implements OutputStore {

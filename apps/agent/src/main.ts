@@ -4,7 +4,8 @@ import {
   NodeRegistry,
   SqliteOutputStore,
   gated,
-  modelFromEnv,
+  plannerModel,
+  plannerConnectionFromEnv,
   parseAblation,
   registerPack,
   runGraph,
@@ -20,6 +21,7 @@ import {
   type RunMode,
 } from "@testpilot/harness-core";
 import { testingPack, type CaseExecutor, type ProductObserver } from "@testpilot/harness-testing";
+import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
 
 /**
  * The agent process: owner of the graph runtime.
@@ -34,6 +36,7 @@ const REPO_ROOT = process.env.TP_REPO_ROOT ?? resolve(process.cwd(), "..", "..")
 const WF_DB = process.env.TP_WF_DB ?? resolve(REPO_ROOT, "server", ".data", "workflows.db");
 
 interface StartInput {
+  planner?: RoleModelConnection;
   def: GraphDef;
   wfRunId?: string;
   mode?: RunMode;
@@ -76,7 +79,7 @@ const child = startChild({
       if (unknown.length) throw new Error(`unknown ablation switch(es): ${unknown.join(", ")}`);
 
       const controller = new AbortController();
-      const registry = buildRegistry(input.target, wfRunId);
+      const registry = buildRegistry(input.target, wfRunId, input.planner);
       child.setTask(`run ${wfRunId}`);
 
       const promise = runGraph(input.def, {
@@ -122,6 +125,8 @@ const child = startChild({
     nodeOutput: async (wfRunId: string, nodeId: string): Promise<unknown> =>
       store.get(wfRunId, nodeId),
     allOutputs: async (wfRunId: string): Promise<Record<string, unknown>> => store.all(wfRunId),
+    /** 总览只要两个数字，别把产物整份搬过 RPC——见 store.countsByRun 的注释。 */
+    outputCounts: async (): Promise<Record<string, { cases: number; code: number }>> => store.countsByRun(),
   },
   onShutdown: () => {
     for (const run of running.values()) run.controller.abort();
@@ -164,13 +169,13 @@ setModelLease(async (fn) => {
  * 这条流水线上模型并发是 1–3，G1 那十几次串行调用最长的一段恰恰是排队——
  * 把等待藏起来的延迟数字，会让人去优化模型而不是去优化并发。
  */
-const model = traced(gated(modelFromEnv()));
 
 /**
  * Executing a case needs the database (environment, secrets) and a browser (the runner),
  * and this process has neither. So it asks the gateway, which owns both.
  */
-function buildRegistry(target: unknown, wfRunId: string): NodeRegistry {
+function buildRegistry(target: unknown, wfRunId: string, connection?: RoleModelConnection): NodeRegistry {
+  const model = traced(gated(plannerModel(connection ?? plannerConnectionFromEnv())));
   const executor: CaseExecutor = {
     // `wfRunId` travels with the request so the gateway can file the execution under the
     // run that caused it — otherwise a case exercised only by the repair loop leaves no

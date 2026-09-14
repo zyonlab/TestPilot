@@ -29,7 +29,7 @@ for (const cap of readdirSync(path.join(ROOT, "benchmark"))) {
   for (const run of readdirSync(replayDir)) {
     const dir = path.join(replayDir, run);
     if (!statSync(dir).isDirectory() || !existsSync(path.join(dir, "meta.json"))) continue;
-    const entry = await scoreRun({ runId: dir, goldPath: gold });
+    const entry = await scoreRun({ runId: dir, goldPath: gold, scoreboard: false }); // 夹具的分不进记分板
     const got = Object.fromEntries(KEYS.map((k) => [k, entry[k]]));
     const expectedPath = path.join(dir, "expected.json");
     if (WRITE) {

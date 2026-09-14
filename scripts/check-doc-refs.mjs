@@ -12,7 +12,7 @@
  * 不判「这一行是不是还在说手册说的那件事」——那需要读懂两边，机器给不出可信的答案，
  * 而一个会误报的检查最后会被人关掉。
  *
- *   node scripts/check-doc-refs.mjs [docs/refactor/*.md]
+ *   node scripts/check-doc-refs.mjs [docs/archive/refactor/*.md]
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, relative } from "node:path";
@@ -44,9 +44,9 @@ const candidates = (rel) => {
 const REF = /`([a-zA-Z0-9_./@-]+\.(?:ts|tsx|mjs|json|md)):(\d+)(?:[-–:](\d+))?`/g;
 const targets = process.argv.slice(2).length
   ? process.argv.slice(2)
-  : readdirSync(resolve(ROOT, "docs/refactor"))
+  : readdirSync(resolve(ROOT, "docs/archive/refactor"))
       .filter((f) => f.endsWith(".md"))
-      .map((f) => `docs/refactor/${f}`);
+      .map((f) => `docs/archive/refactor/${f}`);
 
 let total = 0;
 const bad = [];

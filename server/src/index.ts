@@ -1,4 +1,17 @@
+import { readActiveEvolution } from './evolution/bridge.js';
+import {storedScoreboard} from 'testpilot-mcp/score-store';
+import {reviewCorsOptions} from './corsOptions.js';
+import { intentPolicy, requestPrincipal } from "./intentPolicy.js";
+import { recoverWorkflowExecutions } from "./workflowExecution.js";
+import { flushDecisionDelivery, assertBoardApproval } from "./decisionDelivery.js";
+import { reviewerPrincipal } from "./reviewPrincipal.js";
 import express from "express";
+import { runRouter } from "./runRoutes.js";
+import { projectWorkflowEvent, recoverRunProjections } from "./runService.js";
+import { degradeDecision, recordDegrade } from "./degrade.js";
+import { projectCost } from "./cost.js";
+import { readGoldState, saveGold, freezeGold, type GoldFile } from "./gold.js";
+import { pairedEval } from "testpilot-mcp/score";
 import cors from "cors";
 import { INSTANCE } from "./datadir.js";
 import { attachWs } from "./ws.js";
@@ -10,6 +23,7 @@ import {
   readPngs,
   readShot,
   toDataUrls,
+  releaseSessionOnRunners,
 } from "./exec.js";
 import { checkRun, classifyFailure, MachineOracleSchema } from "@testpilot/harness-testing";
 import { ALL_ABLATABLE, validateGraph, describeDiff, trimMiddle } from "@testpilot/harness-core";
@@ -60,24 +74,13 @@ import {
   resumeRun,
   setRunBudget,
   model,
-  reconfigureModel,
   setRunBreakpoints,
 } from "./graphs.js";
 
-// The guard runs where the whole picture is known (url + login + steps + teardown), i.e.
-// here, before anything is dispatched. A refusal is loud and recorded: silently skipping
-// a step would surface as a passing run, which is worse than refusing.
-function guardRun(url: string, steps: string[]): void {
-  const v = checkRun(url, steps, config.guard);
-  if (!v.allow) {
-    const err = new Error(`blocked by the guard: ${v.why}`) as Error & { code?: string };
-    err.code = v.code;
-    throw err;
-  }
-}
+import { runEnvReset, guardRun } from "./executionPolicy.js";
 
 // Error responses carry the same code the run records store, so a caller can tell an
-// environment problem from a real failure without parsing prose (docs/spec/06 §2).
+// environment problem from a real failure without parsing prose (docs/archive/spec/06 §2).
 function failJson(res: express.Response, status: number, e: unknown) {
   const known = (e as { code?: string }).code;
   if (known?.startsWith("GUARD_"))
@@ -97,7 +100,8 @@ import {
   processStatuses,
   startProcesses,
   supervisor,
-  takenProcessIds, eventStore, setChildAsk } from "./procs.js";
+  takenProcessIds, eventStore, setChildAsk,
+  midsceneDirFor } from "./procs.js";
 import { applyGraphDraft, chat, checkPrompt, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
 import { changes, codeLine, codeProvenance } from "./codeline.js";
 import { traceability, traceabilityOfRun } from "./trace.js";
@@ -123,10 +127,12 @@ import {
   resolveChainConfig,
   setChainConfig,
   resolveModelRuntime,
-  applyModelEnv,
 } from "./config.js";
 import { probeModel, generateCode, refineCase } from "./model.js";
 import { describeModelConfig, saveModelConfig } from "./modelconfig.js";
+import { listRulePacks, readRulePack, saveRulePack, deleteRulePack } from "./rulePacks.js";
+import { modelProfilesRouter } from "./modelProfilesRoutes.js";
+import { projectPlannerModel } from "./modelProfiles.js";
 // The executor moved to the domain package (it runs in the runner process now). The
 // gateway still imports it directly for the paths that have not been migrated yet:
 // explore, live debug and the wallet/dapp checks.
@@ -218,7 +224,7 @@ import {
   workspaceOf as penguinWorkspaceOf,
   reconcilePenguinRuns,
 } from "./penguinRun.js";
-import { writeDecisions, type Decision } from "./penguin.js";
+import { writeDecisions, type Decision, REPO_ROOT } from "./penguin.js";
 import { NotFound, appendLabels, calibration, diff as auditDiff, scan as auditScan, holdsOf } from "./audit.js";
 
 /**
@@ -232,6 +238,9 @@ import { NotFound, appendLabels, calibration, diff as auditDiff, scan as auditSc
 const RUNTIME = process.env.TP_RUNTIME === "graph" ? "graph" : "penguin";
 import { seedIfEmpty } from "./seed.js";
 import { buildExportFiles } from "./export.js";
+import { exportLayerMemory, rememberExportLayers } from "./db.js";
+import { supersededBoardCases } from "./decisionDelivery.js";
+import { processVisual } from "./visualBaseline.js";
 import {
   mkdtempSync,
   writeFileSync,
@@ -241,56 +250,20 @@ import {
   copyFileSync,
   existsSync,
   readFileSync,
-  readdirSync,
-} from "node:fs";
+  readdirSync, appendFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const MIDSCENE_DIR = resolve(process.cwd(), "midscene_run");
-const VISUAL_THRESHOLD = 0.5; // % mismatch above which a step is flagged as a visual diff
-
-// Compare a run's step screenshots against per-step visual baselines; save current/diff
-// artifacts and return the diff results. First run for a case establishes the baselines.
-function processVisual(caseId: string, runId: string, pngBuffers: Buffer[]): VisualDiff[] {
-  const out: VisualDiff[] = [];
-  for (let i = 0; i < pngBuffers.length; i += 1) {
-    const cur = pngBuffers[i];
-    const currentRef = `current/${runId}-${i}.png`;
-    writeFileSync(resolve(ARTIFACT_DIR, currentRef), cur);
-    const baseline = getBaseline(caseId, i);
-    if (!baseline || !existsSync(baseline.imgPath)) {
-      const blPath = resolve(ARTIFACT_DIR, "baselines", `${caseId}-${i}.png`);
-      writeFileSync(blPath, cur);
-      upsertBaseline(caseId, i, blPath);
-      out.push({
-        stepIdx: i,
-        status: "new_baseline",
-        mismatchPct: 0,
-        baselineRef: `baselines/${caseId}-${i}.png`,
-        currentRef,
-      });
-      continue;
-    }
-    const d = diffPng(readFileSync(baseline.imgPath), cur);
-    const diffRef = `diff/${runId}-${i}.png`;
-    writeFileSync(resolve(ARTIFACT_DIR, diffRef), d.diffPng);
-    out.push({
-      stepIdx: i,
-      status: d.mismatchPct > VISUAL_THRESHOLD ? "diff" : "match",
-      mismatchPct: d.mismatchPct,
-      baselineRef: `baselines/${caseId}-${i}.png`,
-      currentRef,
-      diffRef,
-    });
-  }
-  return out;
-}
-
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+app.use(cors(reviewCorsOptions));
+app.use("/api/projects/:id/workflow-runs", express.json({ limit: "48mb" }));
+app.use(express.json({ limit: "16mb" }));
+app.use("/api", intentPolicy);
+app.use("/api/projects/:projectId/workflow-runs", runRouter());
+app.use("/api/projects/:projectId/model-profiles", modelProfilesRouter());
 // Serve baseline / current / diff images (referenced by VisualDiff.*Ref).
 app.use("/api/artifacts", express.static(ARTIFACT_DIR));
 
@@ -616,24 +589,16 @@ app.post("/api/model/config", (req, res) => {
     if (b.apiKey !== undefined) patch.apiKey = String(b.apiKey);
 
     saveModelConfig(patch);
-    applyModelEnv();
-    const r = resolveModelRuntime();
-    // 网关自己那份客户端是模块顶层常量，写 env 对它无效——显式让它跟上。
-    reconfigureModel({
-      baseUrl: r.baseUrl,
-      apiKey: r.apiKey,
-      model: r.modelName,
-      noThink: r.noThink,
-      ...(r.thinkBudget !== undefined ? { thinkBudget: r.thinkBudget } : {}),
-      ...(r.timeoutMs !== undefined ? { timeoutMs: r.timeoutMs } : {}),
-    });
     res.json({
       ok: true,
       /**
        * agent / runner 是在 spawn 那一刻拿到 env 快照的，所以它们要重启才生效。
        * **不自动重启**：重启 agent 会 abort 正在跑的图，那是一个人该做的决定。
        */
-      needsRestart: ["agent", "runner"],
+      legacy: true,
+      appliesTo: "legacy-probe-only",
+      modelProfilesPath: "/api/projects/:projectId/model-profiles",
+      needsRestart: [],
       activeRuns: activeRuns().length,
     });
   } catch (e) {
@@ -754,6 +719,30 @@ app.patch("/api/projects/:id", (req, res) => {
   });
   res.json({ project });
 });
+/**
+ * 项目级规则包（docs/v3/24 §19）。
+ *
+ * 以前它只能在新建运行的表单里贴一次、躺在那次运行里。规则包是这个产品最主要的领域资产，
+ * 却是唯一没有列表、没有版本、没有复用的那一个——同一个项目的两次运行可以用着不同的包
+ * 而没人拦得住。这四条路由把它变成项目的东西：列出来、看得见、传新版、删没用过的。
+ */
+app.get("/api/projects/:id/rule-packs", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  res.json({ packs: listRulePacks(req.params.id) });
+});
+app.get("/api/projects/:id/rule-packs/:hash", (req, res) => {
+  try { res.json({ pack: readRulePack(req.params.id, req.params.hash) }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
+app.post("/api/projects/:id/rule-packs", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  try { res.json(saveRulePack(req.params.id, req.body?.pack ?? req.body)); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message) }); }
+});
+app.delete("/api/projects/:id/rule-packs/:hash", (req, res) => {
+  try { deleteRulePack(req.params.id, req.params.hash); res.json({ ok: true }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
 app.delete("/api/projects/:id", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   deleteProject(req.params.id);
@@ -814,9 +803,25 @@ app.post("/api/cases", (req, res) => {
   res.json({ case: createCase(req.body) });
 });
 app.patch("/api/cases/:id", (req, res) => {
-  const c = updateCase(req.params.id, req.body ?? {});
+  const before = getCase(req.params.id);
+  if (!before) return res.status(404).json({ error: "case not found" });
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  /**
+   * 自愈退化（07 T-16）：一次「修复」把判据改弱、层级掉了、expected 变含糊，都要被叫出来。
+   * `__actor: "agent"`（MCP / 自愈路径）改弱一律拒，回到人；人改弱放行但记账并把用例标 `degraded`，
+   * 报表里看得见。规则在 `harness-testing/codegen/degrade.ts`，和代码用例那边的 `assertionWeakened` 同一个思路。
+   */
+  const { __actor: _ignoredActor, ...patch } = body;
+  const d = degradeDecision(before, patch, requestPrincipal(req).kind);
+  const findings = d.findings;
+  if (findings.length) {
+    recordDegrade({ caseId: before.id, projectId: before.projectId, actor: d.actor, blocked: d.block, findings: findings.map((f) => f.detail) });
+    if (d.block)
+      return res.status(409).json({ error: `自愈不允许改弱判据：${findings.map((f) => f.detail).join("；")}`, code: "DEGRADED", findings });
+  }
+  const c = updateCase(req.params.id, { ...patch, ...(findings.length ? { degraded: true } : {}) } as Parameters<typeof updateCase>[1]);
   if (!c) return res.status(404).json({ error: "case not found" });
-  res.json({ case: c });
+  res.json({ case: c, ...(findings.length ? { degraded: findings } : {}) });
 });
 app.delete("/api/cases/:id", (req, res) => {
   deleteCase(req.params.id);
@@ -884,14 +889,19 @@ app.get("/api/projects/:id/export-preflight", (req, res) => {
   const envs = listEnvironments(project.id);
   const env = envs.find((e) => e.isDefault) ?? envs[0];
 
+  const stale = supersededBoardCases(project.id);
   const quarantined = all.filter((c) => c.quarantined);
   const degraded = all.filter((c) => c.degraded);
-  const noCode = all.filter((c) => !c.code?.trim());
+  const superseded = all.filter((c) => stale.has(c.id));
+  const noCode = all.filter((c) => !stale.has(c.id) && !c.code?.trim());
 
   // 登录到底带没带走：看**生成出来的文件里**有没有那个 setup，而不是看环境上写着什么。
   const files = buildExportFiles(project, all, {
     environments: envs,
     secretKeys: listSecretMeta(project.id).map((s) => s.key),
+    // 抽取层只增不减：曾经命名过的步骤/前置一直保留名字，增量导出才不会搅动一批 spec。
+    sticky: exportLayerMemory(project.id),
+    onLayers: (seen) => rememberExportLayers(project.id, seen),
   });
   const authFile = Object.keys(files).find((f) => f.includes("auth.setup"));
   const configText = files["playwright.config.ts"] ?? "";
@@ -920,6 +930,14 @@ app.get("/api/projects/:id/export-preflight", (req, res) => {
         n: degraded.length,
         cases: degraded.map((c) => ({ id: c.id, title: c.title })),
         excludedByDefault: true,
+      },
+      {
+        id: "superseded",
+        ok: superseded.length === 0,
+        n: superseded.length,
+        cases: superseded.map((c) => ({ id: c.id, title: c.title })),
+        excludedByDefault: true,
+        detail: superseded.length ? `板上有 ${superseded.length} 条绑在已被取代的修订上——同一条用例改过之后的上一版。它们不会被导出。` : "板上没有过期的旧修订",
       },
       { id: "noCode", ok: noCode.length === 0, n: noCode.length, cases: noCode.map((c) => ({ id: c.id, title: c.title })) },
       {
@@ -955,12 +973,23 @@ app.get("/api/projects/:id/export", (req, res) => {
    * `?include=all` 可以要回来——那是一个明确的决定，不是默认。
    */
   const includeAll = req.query.include === "all";
-  const cases = includeAll
+  /*
+   * 绑在已被取代的修订上的板项一律排除，`include=all` 也不例外。
+   *
+   * 隔离与断言改松是「已知不可信，但你可以坚持要」，所以给了 `include=all` 这个出口；
+   * 旧修订不是这种东西——它是同一条用例的上一版，带出去就是**同一条用例两个 spec**，
+   * 其中一个跑的是已经被改掉的步骤。那不是一个可以由人选择要不要的东西，是错的。
+   */
+  const stale = supersededBoardCases(project.id);
+  const cases = (includeAll
     ? listCases(project.id)
-    : listCases(project.id).filter((c) => !c.quarantined && !c.degraded);
+    : listCases(project.id).filter((c) => !c.quarantined && !c.degraded)).filter((c) => !stale.has(c.id));
   const files = buildExportFiles(project, cases, {
     environments: listEnvironments(project.id),
     secretKeys: listSecretMeta(project.id).map((s) => s.key),
+    // 抽取层只增不减：曾经命名过的步骤/前置一直保留名字，增量导出才不会搅动一批 spec。
+    sticky: exportLayerMemory(project.id),
+    onLayers: (seen) => rememberExportLayers(project.id, seen),
   });
 
   if (req.query.format === "json") return res.json({ files });
@@ -990,7 +1019,7 @@ app.post("/api/cases/:id/generate-code", async (req, res) => {
   const c = getCase(req.params.id);
   if (!c) return res.status(404).json({ error: "case not found" });
   try {
-    const { code } = { code: await generateCode(c.title, c.steps.map((s) => s.text), c.priorityReason) };
+    const { code } = { code: await generateCode(c.title, c.steps.map((s) => s.text), c.priorityReason, c.projectId) };
     const updated = updateCase(c.id, { code, hasCode: true });
     res.json({ case: updated });
   } catch (e) {
@@ -1014,6 +1043,12 @@ async function runAndPersistCase(
   c: TestCase,
   body: Record<string, any>,
 ): Promise<RunRecord> {
+  // Validate a managed run's project binding before reset commands or browser actions.
+  if (body?.modelSnapshotRunId !== undefined) {
+    if (typeof body.modelSnapshotRunId !== "string" || !body.modelSnapshotRunId) throw new Error("invalid_model_snapshot_run_id");
+    const { snapshotExecutor } = await import("./modelSnapshots.js");
+    snapshotExecutor(body.modelSnapshotRunId, c.projectId);
+  }
   const project = getProject(c.projectId);
   const env = resolveEnvironment(c.projectId, body?.env || c.envRef);
   const ctx: ResolveContext = {
@@ -1045,8 +1080,18 @@ async function runAndPersistCase(
       : undefined;
 
   guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)]);
+  /**
+   * 环境级复位（07 T-28 验收 ②）：`vars.TP_RESET_CMD` 在每条用例跑之前执行一次，输出记进这次运行的日志。
+   * teardown 是模型做的、会失手；失手一次，后面每条的判据都被残留状态带偏（实测一次连带三条）。
+   * 复位不走模型：hyperliquid 基准用的是自签 L1 动作的 `cancel-all.mjs --flatten`。没配就什么都不做。
+   */
+  if (body?.expected !== undefined && body.expected !== c.expected) throw new Error("test_intent_frozen");
+  assertBoardApproval(c, body);
+  const resetLog = runEnvReset(env?.vars?.TP_RESET_CMD);
   const exec = await execOnRunner({
     execId: `${c.id}-${Date.now()}`,
+    scopeProjectId: c.projectId,
+    ...(typeof body?.modelSnapshotRunId === "string" ? { modelSnapshotRunId: body.modelSnapshotRunId } : {}),
     url,
     steps: c.steps.map((s) => s.text),
     expected: body?.expected || c.expected || "",
@@ -1059,6 +1104,8 @@ async function runAndPersistCase(
       rpcUrl: body?.rpcUrl,
       chainId: body?.chainId,
       cacheId: c.id + (body?.__cacheSuffix ?? ""), // per-row cache so data-driven rows don't collide
+      // 批次给的 key：同一批的用例共用一个浏览器，登录态只跑一次（07 T-28）。单跑没有。
+      ...(typeof body?.__sessionKey === "string" ? { sessionKey: body.__sessionKey } : {}),
       login,
       web3,
       postSteps: c.postSteps.map((s) => s.text),
@@ -1069,6 +1116,12 @@ async function runAndPersistCase(
       query: resolveMap(env?.query ?? {}, ctx),
       storageState: useSession ? session : null,
       oracle: c.oracle,
+      /*
+       * 视口跟着环境走——探索那条路早就这么做了（`observeLaunch`），跑用例这条路一直没传，
+       * 于是同一个被测对象探索时是 1440 宽、真跑时退回 1024：交易页的下单面板在窄视口下
+       * 整块不渲染，用例会在「找不到 Size 输入框」上失败，而那不是产品的错。
+       */
+      ...(env?.viewport?.width || env?.viewport?.height ? { viewport: env.viewport } : {}),
     },
   });
   // Pixels come back as files; the gateway is the only side that knows the baselines.
@@ -1088,6 +1141,7 @@ async function runAndPersistCase(
   if (perf.status === "new_baseline" && Object.keys(result.perfMetrics).length > 0) {
     upsertPerfBaseline(c.id, result.perfMetrics);
   }
+  if (resetLog) result.logs.unshift(...resetLog);
   const run = createRun({
     caseId: c.id,
     caseTitle: c.title,
@@ -1107,15 +1161,26 @@ async function runAndPersistCase(
     failCode: result.failure?.code,
     failKind: result.failure?.attribution,
   });
+  // 账从跑这条的 runner 自己的目录读：一个 runner 一次只跑一条，它的日志就是这条的账（07 T-04）。
+  // 目录还没建出来（老的 runner、没跑过）就退回共享目录 + 时间窗，并把 attribution 标成 window。
+  const runnerDir = midsceneDirFor(result.runnerId);
+  const perRunner = existsSync(resolve(runnerDir, "log"));
   const report = captureMidsceneReport({
-    midsceneDir: MIDSCENE_DIR,
+    midsceneDir: perRunner ? runnerDir : MIDSCENE_DIR,
     sinceMs: result.sinceMs,
+    // 窗口收口在这次运行结束的时刻：单并发时和不给一样；并发 > 1 时至少不把后面的运行算进来。
+    untilMs: result.sinceMs + result.durationMs + 1000,
     destPath: resolve(ARTIFACT_DIR, "reports", `${run.id}.html`),
   });
   const visual = processVisual(c.id, run.id, result.pngBuffers);
-  updateRunResults(run.id, { reportPath: report.reportPath, tokens: report.tokens, visual, perf, oracle: result.oracle });
+  // 分段墙钟由 runner 量（它知道每段从哪到哪），账由日志读（它知道模型花了什么）；这里合成一份。
+  const spend = report.spend
+    ? { ...report.spend, attribution: perRunner ? ("runner" as const) : ("window" as const), ...(result.phases ? { phases: result.phases } : {}) }
+    : undefined;
+  updateRunResults(run.id, { reportPath: report.reportPath, tokens: report.tokens, spend, visual, perf, oracle: result.oracle });
   run.reportPath = report.reportPath;
   run.tokens = report.tokens;
+  run.spend = report.spend;
   run.visual = visual;
   return run;
 }
@@ -1219,7 +1284,7 @@ app.post("/api/cases/:id/refine", async (req, res) => {
       instruction,
       stepIdx: typeof req.body?.stepIdx === "number" ? req.body.stepIdx : undefined,
       lang: typeof req.body?.lang === "string" ? req.body.lang : undefined,
-    });
+    }, c.projectId);
     // "data" edits the step list too, so it diffs against steps like the "steps" target.
     const editsSteps = target === "steps" || target === "data";
     const current = editsSteps
@@ -1286,7 +1351,7 @@ app.get("/api/cases/:id/debug", async (req, res) => {
     ...c.steps.map((s) => ({ text: s.text, kind: "step" as const })),
   ];
 
-  const live = interactiveSession(`dbg-${c.id}`);
+  const live = interactiveSession(`dbg-${c.id}`, c.projectId);
   const off = live.onFrame(send);
   let closed = false;
   req.on("close", () => {
@@ -1460,8 +1525,8 @@ function observeLaunch(projectId: string, envRef?: string): {
  * 用 Midscene 自己的 `ai*` 问，成本和效果都量不出来。
  */
 setChildAsk(async (input) => {
-  const req = (input ?? {}) as { prompt?: string; imageDataUrl?: string; schema?: unknown; maxTokens?: number };
-  const r = await model.chat({
+  const req = (input ?? {}) as { prompt?: string; imageDataUrl?: string; schema?: unknown; maxTokens?: number; projectId?: string };
+  const r = await projectPlannerModel(req.projectId, "explore.scenario").chat({
     stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。",
     variable: String(req.prompt ?? ""),
     ...(req.imageDataUrl ? { images: [req.imageDataUrl] } : {}),
@@ -1483,7 +1548,7 @@ setUnfinishedRuns(() => unfinishedRunIds());
 setAgentObserver(async (input) => {
   const {
     url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId, envRef,
-    scenarioFirst, inPageFirst, groupCap,
+    scenarioFirst, inPageFirst, groupCap, charter, wallet,
   } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
@@ -1496,6 +1561,16 @@ setAgentObserver(async (input) => {
     scenarioFirst?: boolean;
     inPageFirst?: "auto" | "on" | "off";
     groupCap?: number;
+    /**
+     * 带钱包探索：注入一个虚拟 EIP-1193 provider（`exec/injectedWallet.ts`），
+     * 地址与链取自本机钱包与 `chainConfig()`——和执行用例那条路用的是同一个账户。
+     *
+     * 为什么必须是显式参数：未登录与已登录看到的是**两个产品**（docs/v3/24 §13）。
+     * 不给这个开关，探索永远只看得到未登录那一半，而那一半里下单区全是 N/A。
+     */
+    wallet?: boolean;
+    /** 领域探索 charter；纯数据，过得了 RPC 边界。见 workflowOps.sourceKnowledge。 */
+    charter?: import("@testpilot/harness-testing/domain").ExplorationCharter;
   };
   const project = projectId ? getProject(projectId) : undefined;
   // 地址的来源按「越具体越优先」：节点参数 → 运行声明的环境 → 项目的目标端。
@@ -1504,7 +1579,7 @@ setAgentObserver(async (input) => {
   const target = url || env?.baseUrl || project?.targetUrl;
   if (!target) throw new Error("source.explore has no address to open: give it a url, or bind the run to a project");
 
-  const live = interactiveSession(`observe-${projectId ?? "adhoc"}`);
+  const live = interactiveSession(`observe-${projectId ?? "adhoc"}`, projectId);
   // 走 observe 而不是 explore：explore 的契约是"返回解析出来的 flows"，把散文喂进它
   // 只会被 `asArray()` 压成 []。观察要的是屏幕上原样的东西，采集是确定性的。
   const result = await live.observe(
@@ -1525,6 +1600,7 @@ setAgentObserver(async (input) => {
       scenarioFirst,
       inPageFirst,
       groupCap,
+      ...(charter ? { charter } : {}),
       // ask 不在这里传——**函数过不了 RPC 边界**（探索跑在 runner 进程里）。
       // 它由 runner 侧用 `child.parent.askModel` 组装，见 setChildAsk。
       /**
@@ -1537,6 +1613,8 @@ setAgentObserver(async (input) => {
       launch: {
         cacheId: `observe-${projectId ?? "adhoc"}`,
         ...(projectId ? observeLaunch(projectId, envRef) : {}),
+        // 注入钱包与执行用例那条路同源：同一把种子、同一条链，探索因此看得到登录态的产品。
+        ...(wallet ? { injected: true, ...resolveChainConfig() } : {}),
       },
     },
     ARTIFACT_DIR,
@@ -1566,7 +1644,9 @@ setAgentObserver(async (input) => {
     url: result.url,
     screens: result.screens,
     stoppedBecause: result.stoppedBecause,
+    stopped: result.stopped,
     graph: result.graph,
+    ...(result.report ? { report: result.report } : {}),
   };
 });
 
@@ -1649,16 +1729,32 @@ app.get("/api/projects/:id/environments", (req, res) => {
   res.json({ environments: listEnvironments(req.params.id).map(sanitizeEnv) });
 });
 app.post("/api/projects/:id/environments", (req, res) => {
-  const { name, baseUrl, vars, headers, query, login, isDefault } = req.body ?? {};
+  const { name, baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct } = req.body ?? {};
   if (!name) return res.status(400).json({ error: "name is required" });
+  /*
+   * 视口一直被这里丢掉：界面（SutPanel）发了 `viewport`，`upsertEnvironment` 也收，
+   * 但路由的解构没有它——于是「配过了」的视口从没进过库，探索和真跑都用默认的 1024×720。
+   * 只收合法的数：一个 `{}` 或字符串会让 `viewportJson` 看起来像配过了，而它什么都没说。
+   */
+  const vp =
+    viewport && typeof viewport === "object"
+      ? {
+          ...(Number(viewport.width) > 0 ? { width: Math.round(Number(viewport.width)) } : {}),
+          ...(Number(viewport.height) > 0 ? { height: Math.round(Number(viewport.height)) } : {}),
+        }
+      : undefined;
+  // 视觉阈值：只收 0–100 的数，`0` 有意义（逐像素必须相同），所以不能用真值判断。
+  const vt = Number(visualThresholdPct);
   const environment = upsertEnvironment({
     projectId: req.params.id,
+    ...(Number.isFinite(vt) && vt >= 0 && vt <= 100 ? { visualThresholdPct: vt } : {}),
     id: req.body?.id,
     name,
     baseUrl: baseUrl ?? "",
     vars: vars ?? {},
     headers: headers ?? {},
     query: query ?? {},
+    ...(vp && (vp.width || vp.height) ? { viewport: vp } : {}),
     // No `session` key here → upsert preserves any captured session.
     login: login ?? {},
     isDefault: !!isDefault,
@@ -1927,7 +2023,7 @@ app.post("/api/projects/:id/suite", async (req, res) => {
         // 停下的判断放在**取活的那一刻**，不是入队时——入队时还没人按停止。
         if (cancelledBatches.has(batch.id)) return;
         try {
-          const { run, attempts, healed } = await runCaseDataDriven(c, req.body ?? {}, retries);
+          const { run, attempts, healed } = await runCaseDataDriven(c, { ...(req.body ?? {}), __sessionKey: batch.id }, retries);
           const quarantined = !!getCase(c.id)?.quarantined;
           const outcome = run.infraError ? "error" : run.status === "passed" ? "passed" : "failed";
           addBatchRun({
@@ -1952,6 +2048,9 @@ app.post("/api/projects/:id/suite", async (req, res) => {
       }, `${filter}:${c.title.slice(0, 28)}`),
     ),
   );
+
+  // 批次跑完（或被停）：关掉复用的浏览器。放在聚合之前——账要在浏览器关掉之后才算齐。
+  await releaseSessionOnRunners(batch.id);
 
   // Aggregate + CI gate. A real failure fails the gate; an infra/model error means
   // "no verdict" so it also blocks a green gate (can't confirm pass) but is reported
@@ -2783,6 +2882,75 @@ app.post("/api/evals/paired", (req, res) => {
 
 app.get("/api/evals", (_req, res) => res.json({ evals: listEvals() }));
 
+/* ─────────────── 07 P5：成本 / 记分板 / gold ─────────────── */
+
+/** 成本账（T-21）：和 `scripts/cost-report.mjs --json` 同一份聚合。 */
+app.get("/api/projects/:id/cost", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  const last = Math.max(1, Math.min(200, Number(req.query.last ?? 10) || 10));
+  res.json(projectCost(req.params.id, last));
+});
+
+/** 记分板（T-18）：只读 `benchmark/*\/scoreboard.yaml`（JSON 兼容的 YAML，`score_run` 这么写）。不提供编辑——记分板由工具追加。 */
+app.get("/api/scoreboard", (req, res) => {
+  const want = typeof req.query.capability === "string" ? req.query.capability : undefined;
+  const root = resolve(REPO_ROOT, "benchmark");
+  const caps = existsSync(root) ? readdirSync(root).filter((d) => statSync(resolve(root, d)).isDirectory() && (!want || d === want)) : [];
+  const entries: Array<Record<string, unknown>> = [];
+  for (const cap of caps) {
+    const p = resolve(root, cap, "scoreboard.yaml");
+    if (!existsSync(p)) continue;
+    try {
+      for (const e of storedScoreboard(p)) entries.push({ capability: cap, ...e });
+    } catch (e) {
+      entries.push({ capability: cap, error: `scoreboard.yaml 读不出：${(e as Error).message}` });
+    }
+  }
+  res.json({ capabilities: caps, entries, penguinUrl: process.env.TP_PENGUIN_EVALUATION_URL || "http://127.0.0.1:7365", activeVersion: readActiveEvolution() });
+});
+
+/**
+ * 两行做 paired（T-18 验收 ②）：跨 goldHash 的两行**服务端拒**——界面禁用只是礼貌，拒绝才是规则。
+ * 真正的比较由 MCP 的 `paired_eval` 做（它读两次运行的目录与 gold）；这里只把门守住并转交。
+ */
+app.post("/api/scoreboard/paired", async (req, res) => {
+  const { a, b, goldPath, runsDir } = (req.body ?? {}) as { a?: Record<string, unknown>; b?: Record<string, unknown>; goldPath?: string; runsDir?: string };
+  if (!a || !b) return res.status(400).json({ error: "a 与 b 两条记分板条目都要给" });
+  const ga = String(a.goldHash ?? (a.binding as Record<string, unknown> | undefined)?.goldHash ?? "");
+  const gb = String(b.goldHash ?? (b.binding as Record<string, unknown> | undefined)?.goldHash ?? "");
+  if (!ga || !gb || ga !== gb)
+    return res.status(409).json({ error: `跨谱系不可比：goldHash ${ga || "?"} vs ${gb || "?"}。同一份 gold 上的两条才能做 paired。`, code: "LINEAGE" });
+  const runA = String(a.runId ?? ""), runB = String(b.runId ?? "");
+  if (!runA || !runB || !goldPath) return res.status(400).json({ error: "两条条目都要带 runId，且要给 goldPath" });
+  try {
+    const entry = await pairedEval({ a: runA, b: runB, goldPath, ...(runsDir ? { runsDir } : {}) } as Parameters<typeof pairedEval>[0]);
+    res.json({ entry });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/** gold 生命周期（T-19）。每次写都是人从界面来的；agent 没有这条路。 */
+app.get("/api/gold/:capability", (req, res) => {
+  try {
+    res.json(readGoldState(req.params.capability));
+  } catch (e) {
+    res.status(404).json({ error: (e as Error).message });
+  }
+});
+app.post("/api/gold/:capability", (req, res) => {
+  const body = (req.body ?? {}) as { action?: "save" | "freeze"; file?: GoldFile; newLineage?: boolean; reviewedItemIds?: string[] };
+  try {
+    if (body.action === "freeze") return res.json({ frozen: freezeGold(req.params.capability), state: readGoldState(req.params.capability) });
+    if (!body.file) return res.status(400).json({ error: "action=save 要给 file（gold.json 的内容）" });
+    const saved = saveGold(req.params.capability, body.file, { newLineage: !!body.newLineage, actor: reviewerPrincipal(req), reviewedItemIds: body.reviewedItemIds });
+    res.json({ saved, state: readGoldState(req.params.capability) });
+  } catch (e) {
+    const msg = (e as Error).message;
+    res.status(/已冻结/.test(msg) ? 409 : 400).json({ error: msg, ...(/已冻结/.test(msg) ? { code: "FROZEN" } : {}) });
+  }
+});
+
 /**
  * 仓库里定义好的评测集。
  *
@@ -3109,6 +3277,7 @@ app.post("/api/chat", async (req, res) => {
       graphId?: string;
       promptKey?: string;
       context?: ChatContext;
+      projectId?: string;
     };
     if (!body.messages?.length) return res.status(400).json({ error: "messages is required" });
     res.json(
@@ -3117,6 +3286,7 @@ app.post("/api/chat", async (req, res) => {
         intent: body.intent ?? "ask",
         graphId: body.graphId,
         promptKey: body.promptKey,
+        projectId: body.projectId,
         // What the person has selected on the canvas. Read server-side into the prompt, so a
         // question about "this step" is answered against that step's real parameters and output.
         context: body.context,
@@ -3190,6 +3360,12 @@ setCaseExecutor((target, kase, fragments) => executeCaseDirect(target, kase, fra
 for (const [id, d] of Object.entries(DEFECTS)) DEFECT_TITLES[id] = d.title;
 
 seedIfEmpty();
+bus.subscribe(event => { void projectWorkflowEvent(event).catch(error => log(`run projection failed: ${(error as Error).message}`)); });
+await recoverRunProjections();
+recoverWorkflowExecutions();
+await flushDecisionDelivery();
+const decisionDeliveryTimer = setInterval(() => { void flushDecisionDelivery().catch(() => log("decision delivery pending")); }, 5000);
+decisionDeliveryTimer.unref();
 const httpServer = app.listen(PORT, () => log(`server listening on http://localhost:${PORT}`));
 attachWs(httpServer, bus, log);
 // Called from here, not from procs.ts: the process module must not depend on the workflow

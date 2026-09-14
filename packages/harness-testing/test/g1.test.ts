@@ -454,11 +454,15 @@ describe("context budget", () => {
 
     const call = model.calls.find((c) => c.label?.startsWith("design.cases"))!;
     expect(call.variable.length).toBeLessThan(huge.length);
-    expect(call.variable).toContain("trimmed to fit the context budget");
+    // 「说所以然」现在长这样：规格按故事检索装入，装不下的段有名字有数目，
+    // 提示词里是一句 `[retrieval] … did not fit` 而不是从前的 "trimmed to fit the context budget"。
+    expect(call.variable).toContain("[retrieval]");
+    expect(call.variable).toMatch(/did not fit|none fit/);
     // The story itself is never trimmed — that is the part the call is about.
     expect(call.variable).toContain("US-01");
+    // 日志里同样报的是「未载入几段」，而不是「trimmed」。
     expect(
-      events.some((e) => String((e.payload as { text?: string }).text ?? "").includes("trimmed")),
+      events.some((e) => /未载入 [1-9]\d* 段/.test(String((e.payload as { text?: string }).text ?? ""))),
     ).toBe(true);
   });
 });
@@ -597,5 +601,39 @@ describe("gate ① on what a case claims to cover", () => {
   it("规格里一条流程都没有时不误判——那时无从校验", () => {
     const noFlows = { origin: "x", stories: [{ id: "US-01", title: "s", acceptance: [] }] as never, flows: [] as never, cases: [mk(["/->/x"])] as never };
     expect(runGate(noFlows).findings.some((f) => f.rule === "covers-unknown")).toBe(false);
+  });
+});
+
+/**
+ * `flows` 为空时，`covers` 不能免检（2026-09-11，docs/v3/22 §6）。
+ *
+ * 原来是 `if (known.size)` 才检查——一份没有流程的产物，任何 covers 值都放行。
+ * 实测一条真实臂的 27 条用例把状态转移图**人类可读摘要里的一行**当成转移 id 填了进去，
+ * 一条都没被点到，门禁还给了满分。
+ */
+describe("covers 无从核实时要说出来", () => {
+  const bundle = (covers: string[], flows: unknown[] = []) => ({
+    origin: "t", stories: [{ id: "s1", title: "t", acceptance: [] }], flows,
+    cases: [{ id: "c1", storyId: "s1", title: "t", designMethod: "state-transition" as const, tier: 3 as const,
+      key: "k", steps: ["点一下"], expected: "页面显示「X」", precondition: [], postSteps: [], sourceRefs: [], covers }],
+  });
+  it("没有流程可对照 + 填了 covers → covers-unverifiable，且计入分数", () => {
+    const r = runGate(bundle(["/a --[点「X」]--> /b"]) as never);
+    const f = r.findings.find((x) => x.rule === "covers-unverifiable");
+    expect(f).toMatchObject({ severity: "warn", caseId: "c1" });
+    expect(r.score).toBe(0);
+  });
+  it("没有流程且 covers 为空 → 不报这条（只报 no-transition 的 info）", () => {
+    const r = runGate(bundle([]) as never);
+    expect(r.findings.some((x) => x.rule === "covers-unverifiable")).toBe(false);
+    expect(r.score).toBe(1);
+  });
+  it("有流程时走原来的 covers-unknown，不重复报", () => {
+    const flows = [{ id: "f1", name: "f", purpose: "", steps: [], transitions: ["/a->/b"], endsAt: "/b" }];
+    const ok = runGate(bundle(["/a->/b"], flows as never) as never);
+    expect(ok.findings.some((x) => x.rule.startsWith("covers-"))).toBe(false);
+    const bad = runGate(bundle(["/a->/zzz"], flows as never) as never);
+    expect(bad.findings.find((x) => x.rule === "covers-unknown")).toBeTruthy();
+    expect(bad.findings.some((x) => x.rule === "covers-unverifiable")).toBe(false);
   });
 });

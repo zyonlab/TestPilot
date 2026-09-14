@@ -34,6 +34,8 @@ export interface EvalArmSpec {
   params?: Record<string, Record<string, unknown>>;
   /** 或者按原样跑图的某个历史版本。 */
   graphVersion?: number;
+  /** 07 T-22：两臂只差运行时（penguin / claude-code / codex）。同一份 skill + gold + MCP，换的是执行它们的 harness。 */
+  runtime?: string;
 }
 
 export interface EvalSpec {
@@ -98,6 +100,7 @@ function arm(raw: unknown, which: "a" | "b"): EvalArmSpec {
   return {
     label,
     ablate: ablate as string[],
+    ...(typeof o.runtime === "string" ? { runtime: o.runtime } : {}),
     params: o.params as Record<string, Record<string, unknown>> | undefined,
     graphVersion: o.graphVersion as number | undefined,
   };

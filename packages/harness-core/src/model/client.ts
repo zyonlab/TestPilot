@@ -131,6 +131,7 @@ export function modelFingerprint(cfg: {
   model?: string;
   baseUrl?: string;
   noThink?: boolean;
+  providerThinkingDefault?: boolean;
   thinkBudget?: number;
 }): string {
   return createHash("sha256")
@@ -139,6 +140,7 @@ export function modelFingerprint(cfg: {
         model: cfg.model ?? "",
         baseUrl: cfg.baseUrl ?? "",
         noThink: !!cfg.noThink,
+        ...(cfg.providerThinkingDefault ? { providerThinkingDefault: true } : {}),
         thinkBudget: cfg.thinkBudget ?? null,
       }),
     )

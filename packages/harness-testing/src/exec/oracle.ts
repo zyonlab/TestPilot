@@ -1,3 +1,4 @@
+import { compareDecimal, compareDecimalChange } from './decimal.js';
 import { z } from "zod";
 
 /**
@@ -22,6 +23,18 @@ import { z } from "zod";
  */
 
 export const MachineOracleSchema = z.discriminatedUnion("kind", [
+  /**
+   * `none`：tier 3 用的那一个——**判决要模型看一眼屏幕**，没有程序能核对的形式。
+   *
+   * 2026-09-13 之前这个 union 里没有它，而 skill 明写着「tier 3 写 `{"kind":"none"}`」、
+   * 受限解码的枚举里也有 `none`。三处清单互相打架：模型照 skill 与解码枚举发出 `none`，
+   * 校验一律 `Invalid discriminator value` 拒收；反过来红线禁止的 `api` 校验反而放行。
+   * 实测 Claude 臂提交 75 条用例，4 条 tier 3 全被这一条挡住。
+   *
+   * 它不是「一种机器判据」——`tierOf` 照旧把它算作 3，`exec` 走判屏那条路。
+   * 有它只是为了让「这条用例明说自己没有机器判据」这句话写得出来。
+   */
+  z.object({ kind: z.literal("none") }),
   z.object({ kind: z.literal("text"), value: z.string().min(1) }),
   z.object({ kind: z.literal("noText"), value: z.string().min(1) }),
   z.object({ kind: z.literal("url"), value: z.string().min(1) }),
@@ -39,6 +52,32 @@ export const MachineOracleSchema = z.discriminatedUnion("kind", [
     /** Optional exact size of the change. */
     by: z.number().optional(),
   }),
+  /**
+   * api：问一个 JSON 接口，而不是看屏幕。见 `apiOracle.ts`。
+   *
+   * 交易页的真值（持仓、挂单、余额）在接口里是精确的数，在屏幕上是会随行情变的字。
+   * `eq/neq/gte/lte/exists/absent` 是 tier 1；`increased/decreased/unchanged` 比较步骤前后
+   * 两次读数，是 tier 2。
+   */
+  z.object({
+    kind: z.literal("api"),
+    /** 接口地址，可含 ${env.*} / ${secret.*}。 */
+    url: z.string().min(1),
+    method: z.enum(["GET", "POST"]).default("GET"),
+    /** POST 的 JSON 正文（字符串），可含占位符。 */
+    body: z.string().optional(),
+    headers: z.record(z.string()).optional(),
+    /** 响应 JSON 里的点分路径，数组下标用数字：`assetPositions.0.position.szi`。 */
+    path: z.string().min(1),
+    op: z.enum(["eq", "neq", "gte", "lte", "exists", "absent", "increased", "decreased", "unchanged"]),
+    value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    /** Decimal strings preserve small increments and large account quantities. */
+    by: z.union([z.number().nonnegative(), z.string().regex(/^\d+(?:\.\d+)?$/)]).optional(),
+    unit: z.object({ path: z.string().min(1), value: z.string().min(1) }).optional(),
+    freshness: z.object({ timestampPath: z.string().min(1), maxAgeMs: z.number().int().positive() }).optional(),
+    /** 取值前等多久（毫秒）。交易所接口在下单后有传播延迟。 */
+    settleMs: z.number().int().min(0).optional(),
+  }),
 ]);
 export type MachineOracle = z.infer<typeof MachineOracleSchema>;
 
@@ -46,6 +85,8 @@ export type MachineOracle = z.infer<typeof MachineOracleSchema>;
 export interface PageSnapshot {
   text: string;
   url: string;
+  /** 只有 api 判据会填：对接口的一次观察。见 `apiOracle.ts`。 */
+  api?: { value?: unknown; error?: string };
 }
 
 /**
@@ -55,11 +96,16 @@ export interface PageSnapshot {
  * the claim being taken at face value.
  */
 export function tierOf(oracle: MachineOracle): 1 | 2 {
-  return oracle.kind === "delta" ? 2 : 1;
+  if (oracle.kind === "delta") return 2;
+  if (oracle.kind === "api") return oracle.op === "increased" || oracle.op === "decreased" || oracle.op === "unchanged" ? 2 : 1;
+  return 1;
 }
 
 export function describeOracle(oracle: MachineOracle): string {
   switch (oracle.kind) {
+    // 明说自己没有机器判据的那一种：执行时由模型看屏幕表态（tier 3）。
+    case "none":
+      return "由模型看屏幕判定（没有机器判据）";
     case "text":
       return `页面显示「${oracle.value}」`;
     case "noText":
@@ -74,6 +120,29 @@ export function describeOracle(oracle: MachineOracle): string {
       const dir =
         oracle.direction === "increased" ? "增加" : oracle.direction === "decreased" ? "减少" : "不变";
       return `${oracle.value} 的数值${dir}${oracle.by !== undefined ? ` ${oracle.by}` : ""}`;
+    }
+    case "api": {
+      const what = `接口 ${oracle.path}`;
+      switch (oracle.op) {
+        case "eq":
+          return `${what} 等于 ${String(oracle.value)}`;
+        case "neq":
+          return `${what} 不等于 ${String(oracle.value)}`;
+        case "gte":
+          return `${what} 不少于 ${String(oracle.value)}`;
+        case "lte":
+          return `${what} 不多于 ${String(oracle.value)}`;
+        case "exists":
+          return `${what} 存在`;
+        case "absent":
+          return `${what} 不存在`;
+        case "increased":
+          return `${what} 增加${oracle.by !== undefined ? ` ${oracle.by}` : ""}`;
+        case "decreased":
+          return `${what} 减少${oracle.by !== undefined ? ` ${oracle.by}` : ""}`;
+        case "unchanged":
+          return `${what} 不变`;
+      }
     }
   }
 }
@@ -135,6 +204,12 @@ export function evaluateOracle(
   before?: PageSnapshot,
 ): OracleVerdict {
   switch (oracle.kind) {
+    /**
+     * `none` 不是一个能跑的判据：它宣称的正是「这里没有机器判据」。
+     * 交给判屏那条路，而不是在这里假装判过——`skipped` 和 `pass` 不是一回事。
+     */
+    case "none":
+      return { status: "unobservable", detail: "tier 3：没有机器判据，交由判屏" };
     case "text": {
       const hit = after.text.includes(oracle.value);
       return {
@@ -185,6 +260,50 @@ export function evaluateOracle(
               : diff < 0
             : diff === 0;
       return { status: ok ? "pass" : "fail", detail: `${oracle.value}: ${a} → ${b}（Δ ${diff}）` };
+    }
+    case "api": {
+      const obs = after.api;
+      // 没去问、或问了没读到：是 harness 没量到，不是产品错了。
+      if (!obs) return { status: "unobservable", detail: `没有对接口 ${oracle.path} 的观察` };
+      const relational = oracle.op === "increased" || oracle.op === "decreased" || oracle.op === "unchanged";
+      if (oracle.op === "absent") {
+        // 「不存在」是唯一一个把「读不到」当成结果的判据：路径落空正是它要的。
+        // JSON 接口说「没有」有两种写法：键不在（路径落空）与 `null`（demo 的 mock、不少 REST 接口）。两种都是没有。
+        const gone = (obs.value === undefined && (obs.error ?? "").startsWith("响应里没有")) || obs.value === null;
+        if (gone) return { status: "pass", detail: `接口里没有 ${oracle.path}` };
+        if (obs.error) return { status: "unobservable", detail: obs.error };
+        return { status: "fail", detail: `接口里仍有 ${oracle.path} = ${JSON.stringify(obs.value)}` };
+      }
+      if (obs.error || obs.value === undefined) return { status: "unobservable", detail: obs.error ?? `读不到 ${oracle.path}` };
+      if (oracle.op === "exists")
+        return obs.value === null
+          ? { status: "fail", detail: `${oracle.path} 是 null——接口说它不存在` }
+          : { status: "pass", detail: `${oracle.path} = ${JSON.stringify(obs.value)}` };
+      if (!relational) {
+        const v = obs.value;
+        const want = oracle.value;
+        if (want === undefined) return { status: "unobservable", detail: "API 判据缺少预期 value" };
+        const comparison = compareDecimal(v, want);
+        if ((typeof v === "number" || typeof want === "number") && comparison === undefined && (typeof v === "number" && Math.abs(v) > Number.MAX_SAFE_INTEGER || typeof want === "number" && Math.abs(want) > Number.MAX_SAFE_INTEGER)) return { status: "unobservable", detail: "API 数值超过安全精度；请使用十进制字符串" };
+        const equal = comparison === 0 || (comparison === undefined && typeof v === typeof want && v === want);
+        let ok: boolean;
+        if (oracle.op === "eq") ok = equal;
+        else if (oracle.op === "neq") ok = !equal;
+        else if (comparison === undefined)
+          return { status: "unobservable", detail: `${oracle.path} = ${JSON.stringify(v)}，不是数，无法比大小` };
+        else ok = oracle.op === "gte" ? comparison! >= 0 : comparison! <= 0;
+        return { status: ok ? "pass" : "fail", detail: `${oracle.path} = ${JSON.stringify(v)}（要求 ${oracle.op} ${String(want)}）` };
+      }
+      if (!before?.api) return { status: "unobservable", detail: `没有取到步骤执行前的接口读数，${oracle.path} 的变化无法判定` };
+      if (before.api.error || before.api.value === undefined)
+        return { status: "unobservable", detail: `步骤前读不到 ${oracle.path}：${before.api.error ?? "空"}` };
+      const relation = compareDecimal(obs.value, before.api.value);
+      if (relation === undefined) return { status: "unobservable", detail: `${oracle.path} 无法精确比较；数值须为有效十进制或安全数字` };
+      const change = oracle.by === undefined ? undefined : String(oracle.by);
+      const ok = oracle.op === "unchanged" ? relation === 0
+        : oracle.op === "increased" ? change === undefined ? relation > 0 : compareDecimalChange(before.api.value, obs.value, change) === 0
+        : change === undefined ? relation < 0 : compareDecimalChange(before.api.value, obs.value, `-${change}`) === 0;
+      return { status: ok ? "pass" : "fail", detail: `${oracle.path}: ${before.api.value} → ${obs.value}（精确十进制比较）` };
     }
   }
 }

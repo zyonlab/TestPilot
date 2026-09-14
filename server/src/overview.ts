@@ -1,5 +1,5 @@
 import { listCases, listProjects, type Priority } from "./db.js";
-import { allOutputs, outputStore } from "./graphs.js";
+import { outputCounts, outputStore } from "./graphs.js";
 
 /**
  * 一个项目此刻有什么。
@@ -70,13 +70,23 @@ function countsOf(outputs: Record<string, unknown>): RunCounts {
   return { cases, code };
 }
 
+/**
+ * 每次运行的用例/代码计数缓存。
+ *
+ * 2026-09-12 实测：`/api/projects` 要 **27 秒**，前端直接超时，界面上写着「项目列表加载失败」。
+ * 原因是这一条请求会把**每个项目的每一次运行的全部产物**读出来重数一遍——
+ * 一天跑了 30 多次之后，就是几十兆 JSON 解析。而跑完的运行产物不会再变。
+ * 键里带上状态与结束时间：还在跑的那次照旧重算，跑完的只算一次。
+ */
+const countsCache = new Map<string, { key: string; counts: RunCounts }>();
+
 const projectOf = (run: { detail?: unknown; projectId?: string }): string | undefined => {
   if (run.projectId) return run.projectId;
   const target = (run.detail as { target?: { projectId?: string } } | undefined)?.target;
   return target?.projectId;
 };
 
-export async function projectOverview(projectId: string): Promise<ProjectOverview> {
+export async function projectOverview(projectId: string, counted?: Record<string, RunCounts>): Promise<ProjectOverview> {
   const cases = listCases(projectId);
   const byPriority: Record<Priority, number> = { P0: 0, P1: 0, P2: 0 };
   for (const c of cases) byPriority[c.priority] = (byPriority[c.priority] ?? 0) + 1;
@@ -88,10 +98,23 @@ export async function projectOverview(projectId: string): Promise<ProjectOvervie
   let runsWithCases = 0;
   let latest: { id: string; at: string; counts: RunCounts } | undefined;
 
+  // 一次把所有运行的条数在库里数出来；上面那份缓存只兜底老适配器（没有这个 RPC 的）。
+  // 多个项目一起看时由调用方数一次传进来——按项目各数一遍就是按项目各扫一遍全表。
+  const counts = counted ?? (await outputCounts().catch(() => ({}) as Record<string, RunCounts>));
   for (const r of runs) {
-    const run = r as { id: string; startedAt?: string };
-    const outputs = await allOutputs(run.id).catch(() => ({}) as Record<string, unknown>);
-    const n = countsOf(outputs);
+    const run = r as { id: string; startedAt?: string; status?: string; finishedAt?: string };
+    /**
+     * **只认在库里数出来的那份**，再不逐个运行去读产物。
+     *
+     * 回落到 `allOutputs` 看着稳妥，实际是把慢路又走了一遍：数不出来通常是因为
+     * agent 子进程还没起来，而逐个读产物走的是同一个 agent——于是「兜底」比不兜底更慢
+     * （2026-09-12 实测：加了这条兜底之后首屏 19 秒）。
+     * 数不到就用上一轮记住的；一轮都没有就是 0，下一次轮询自然会补上。
+     */
+    const key = `${run.status ?? ""}|${run.finishedAt ?? ""}`;
+    const fresh = counts[run.id];
+    if (fresh) countsCache.set(run.id, { key, counts: fresh });
+    const n: RunCounts = fresh ?? countsCache.get(run.id)?.counts ?? { cases: 0, code: 0 };
     if (!n.cases && !n.code) continue;
     if (n.cases) runsWithCases += 1;
     const at = run.startedAt ?? "";
@@ -126,6 +149,9 @@ export async function projectOverview(projectId: string): Promise<ProjectOvervie
  */
 export async function allProjectOverviews(): Promise<Record<string, ProjectOverview>> {
   const out: Record<string, ProjectOverview> = {};
-  for (const p of listProjects()) out[p.id] = await projectOverview(p.id);
+  // 条数只数一次：这一条 RPC 要扫整张产物表，按项目各来一次就是把它乘以项目数
+  // （2026-09-12 实测：5 个项目 → `/api/projects` 从 1.3 秒变 6.8 秒）。
+  const counted = await outputCounts().catch(() => ({}) as Record<string, RunCounts>);
+  for (const p of listProjects()) out[p.id] = await projectOverview(p.id, counted);
   return out;
 }

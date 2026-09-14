@@ -1,0 +1,10 @@
+import { config } from "dotenv";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+config({ path: join(resolve(import.meta.dirname, "../.."), "server/.env"), quiet: true } as never);
+const { runLedger } = await import("../src/runService.js");
+const [projectId, revId, out] = process.argv.slice(2);
+const c = runLedger().readRevision(revId!, projectId!).content;
+mkdirSync(dirname(resolve(out!)), { recursive: true });
+writeFileSync(resolve(out!), typeof c === "string" ? c : JSON.stringify(c, null, 2));
+console.log("wrote", out);

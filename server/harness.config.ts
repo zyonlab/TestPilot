@@ -28,7 +28,13 @@ export default defineHarnessConfig({
      * 2026-08-27 撤下它之后这条豁免也就没有理由了：**一条没有理由的白名单条目，
      * 下一次有人对着生产环境跑套件时会替他放行。**
      */
-    allowHosts: ["localhost", "127.0.0.1", "::1"],
+    /**
+     * `app.hyperliquid-testnet.xyz`（2026-09-07）：执行层降本那一档的被测对象（`docs/v3/06`）。
+     * 它是 testnet，钱是 mock USDC；而它的 P0 全是「Enable Trading / Place Order / Close /
+     * Cancel」这种在白名单外必拦的词——第一次真跑就被 `GUARD_IRREVERSIBLE` 拦在第 1 条。
+     * 理由到此为止：主网 `app.hyperliquid.xyz` **不在**这里，也不该在。
+     */
+    allowHosts: ["localhost", "127.0.0.1", "::1", "app.hyperliquid-testnet.xyz"],
     // Irreversible-looking steps (delete / pay / transfer …) are refused outside the
     // allowlist. This is the "someone ran the whole suite against production" guard,
     // not a security boundary.

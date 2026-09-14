@@ -1,0 +1,22 @@
+.surface-page { padding-top:20px; }
+.surface-page > .withnav { margin-top:0; }
+.surface-content { min-width:0; }
+.surface-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.surface-heading h2 { margin:0; font-size:20px; }
+.surface-help { color:var(--muted); font-size:11px; }
+.surface-heading > .row, .material-actions, .evaluation-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.material-actions, .evaluation-toolbar { margin-bottom:14px; }
+.material-actions .text-button { font-size:12px; }
+.material-actions .text-button:first-of-type { margin-left:auto; }
+.story-materials > .disclosure { margin:0 0 14px; }
+.inline-help { margin:10px 0; color:var(--muted); font-size:11px; }
+.inline-help > summary { cursor:pointer; }
+.inline-help .note { margin-top:6px; }
+.baseline-card { margin-top:16px; }
+.baseline-card > .row { margin-top:12px; }
+.baseline-image-missing { min-height:110px; display:grid; place-items:center; font-size:11px; color:var(--faint); background:var(--ground); }
+.evaluation-toolbar select, .evaluation-toolbar input { border:1px solid var(--hair); border-radius:5px; background:var(--surface); color:var(--ink); padding:7px 10px; font-size:12px; }
+.evaluation-results { margin-bottom:12px; }
+.evaluation-page > .disclosure { margin-top:24px; }
+.evaluation-page .review-table td { vertical-align:middle; }
+@media(max-width:700px){.surface-heading{align-items:flex-start;flex-wrap:wrap}.material-actions .text-button:first-of-type{margin-left:0}.evaluation-toolbar input{min-width:0;width:100%}}

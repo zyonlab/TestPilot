@@ -10,7 +10,7 @@
  * Chosen once, at module load: a base URL that changed under a running page would leave
  * half its state belonging to one server and half to another.
  */
-const DEFAULT_BASE = "http://localhost:5301";
+const DEFAULT_BASE = typeof window === "undefined" ? "http://localhost:5301" : `${window.location.protocol}//${window.location.hostname}:5301`;
 const KEY = "tp.apiBase";
 
 function resolveBase(): string {

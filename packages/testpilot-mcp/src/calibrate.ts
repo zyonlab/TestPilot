@@ -18,7 +18,7 @@ import {
   adjudicateMisses,
   cohensKappa,
   gated,
-  judgeModelFromEnv,
+  evaluationPlannerModel,
   type CandidateCase,
   type CoverageResult,
   type GoldChecklist,
@@ -80,7 +80,7 @@ export async function calibrateJudge(opts: CalibrateOptions): Promise<Calibratio
   const labels = loadLabels(opts.labelsPath);
   const { gold } = loadGold(opts.goldPath);
   const byGoldId = new Map(gold.items.map((i) => [i.id, i]));
-  const model = gated(judgeModelFromEnv()); // 判官≠生成器（P2）
+  const model = gated(evaluationPlannerModel()); // Independent judge identity requires explicit TP_JUDGE_MODEL.
 
   // 一次运行的用例读一遍就够：标注常常集中在同一次运行上。
   const caseCache = new Map<string, CandidateCase[]>();

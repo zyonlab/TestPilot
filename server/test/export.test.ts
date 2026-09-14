@@ -37,7 +37,7 @@ describe("what the exported suite uses as its verdict", () => {
     const files = buildExportFiles(project, [
       kase({ title: "密码错误被拒绝", expected: "显示 Epic sadface", tier: 1, oracle: { kind: "text", value: "Epic sadface" } }),
     ]);
-    const spec = files["tests/_/p0-密码错误被拒绝.spec.ts"];
+    const spec = files["tests/_/密码错误被拒绝.spec.ts"];
     expect(spec).toContain('checkOracle(page, {"kind":"text","value":"Epic sadface"})');
     // 判据是程序判的，就不该再让模型看一眼屏幕——那正是 tier 一路被打回原形的方式。
     expect(spec).not.toContain("aiAssert");
@@ -50,7 +50,7 @@ describe("what the exported suite uses as its verdict", () => {
     const files = buildExportFiles(project, [
       kase({ title: "角标减少", tier: 2, oracle: { kind: "delta", value: "购物车", direction: "decreased", by: 1 } }),
     ]);
-    const spec = files["tests/_/p0-角标减少.spec.ts"];
+    const spec = files["tests/_/角标减少.spec.ts"];
     // 前置快照必须在动作之前读，否则量到的是同一个状态。
     expect(spec.indexOf("const before = await bodyText(page)")).toBeLessThan(spec.indexOf("await aiAction("));
     expect(spec).toContain(", before)");
@@ -58,7 +58,7 @@ describe("what the exported suite uses as its verdict", () => {
 
   it("still falls back to the judge when nothing else can decide it", () => {
     const files = buildExportFiles(project, [kase({ title: "只有模型能判", expected: "页面观感正常", tier: 3 })]);
-    const spec = files["tests/_/p0-只有模型能判.spec.ts"];
+    const spec = files["tests/_/只有模型能判.spec.ts"];
     expect(spec).toContain('aiAssert("页面观感正常")');
     expect(spec).not.toContain("checkOracle");
   });
@@ -73,7 +73,7 @@ describe("one file per case", () => {
       kase({ id: "c2", title: "用户名为空" }),
       kase({ id: "c3", title: "被锁定的账号" }),
     ]);
-    expect(Object.keys(files).filter((f) => f.startsWith("tests/_/p0-"))).toHaveLength(3);
+    expect(Object.keys(files).filter((f) => f.startsWith("tests/_/"))).toHaveLength(3);
   });
 
   it("disambiguates with the case id when two titles still collide", () => {
@@ -81,7 +81,7 @@ describe("one file per case", () => {
       kase({ id: "c1", title: "登录" }),
       kase({ id: "c2", title: "登录！" }),
     ]);
-    const specs = Object.keys(files).filter((f) => f.startsWith("tests/_/p0-"));
+    const specs = Object.keys(files).filter((f) => f.startsWith("tests/_/"));
     expect(specs).toHaveLength(2);
     expect(specs.some((f) => f.includes("c2"))).toBe(true);
   });
@@ -101,16 +101,16 @@ describe("导出的目录按模块分", () => {
       kase({ id: "c3", title: "说不出属于哪儿" }),
     ]);
     const specs = Object.keys(files).filter((f) => f.endsWith(".spec.ts"));
-    expect(specs).toContain("tests/账号与登录/p0-登录成功.spec.ts");
-    expect(specs).toContain("tests/查找宠物主人/p0-查主人.spec.ts");
-    expect(specs).toContain("tests/_/p0-说不出属于哪儿.spec.ts");
+    expect(specs).toContain("tests/账号与登录/登录成功.spec.ts");
+    expect(specs).toContain("tests/查找宠物主人/查主人.spec.ts");
+    expect(specs).toContain("tests/_/说不出属于哪儿.spec.ts");
   });
 
   it("多一层目录，导入路径要跟着走——否则导出的工程一条都跑不起来", () => {
     const files = buildExportFiles(project, [
       kase({ title: "登录成功", activity: "账号与登录", tier: 1, oracle: { kind: "text", value: "ok" } }),
     ]);
-    const spec = files["tests/账号与登录/p0-登录成功.spec.ts"]!;
+    const spec = files["tests/账号与登录/登录成功.spec.ts"]!;
     expect(spec).toContain('from "../ai"');
     expect(spec).toContain('from "../oracle"');
   });
@@ -149,7 +149,7 @@ describe("绑了数据集的用例导出成什么", () => {
   it("占位符要变成真的取值，不能原样留在字符串里", () => {
     saveDataset({ projectId: "p1", name: ds.name, rows: ds.rows, uniqueCols: ds.uniqueCols });
     const files = buildExportFiles(project, [dd]);
-    const spec = files["tests/_/p0-新增主人成功后出现在列表里.spec.ts"]!;
+    const spec = files["tests/_/新增主人成功后出现在列表里.spec.ts"]!;
     expect(spec).toContain('aiAction("在 firstName 填入 " + r["firstName"])');
     expect(spec).toContain('aiAssert("主人列表里出现 " + r["firstName"])');
     // 反过来：整个文件里不许再出现「占位符被当成字面量」的形态。
@@ -160,7 +160,7 @@ describe("绑了数据集的用例导出成什么", () => {
 
   it("一行一个 test，且标了唯一的列才加后缀", () => {
     saveDataset({ projectId: "p1", name: ds.name, rows: ds.rows, uniqueCols: ds.uniqueCols });
-    const spec = buildExportFiles(project, [dd])["tests/_/p0-新增主人成功后出现在列表里.spec.ts"]!;
+    const spec = buildExportFiles(project, [dd])["tests/_/新增主人成功后出现在列表里.spec.ts"]!;
     // 失败时报告要能直接说是第几行。
     expect(spec).toContain("第 ${i + 1} 行");
     expect(spec).toContain('"telephone": uniq(row["telephone"] ?? "")');
@@ -170,8 +170,98 @@ describe("绑了数据集的用例导出成什么", () => {
 
   it("没绑数据集时占位符原样保留：那是 checkBinding 该报的 bug，不是导出该偷偷修的", () => {
     const spec = buildExportFiles(project, [kase({ ...dd, id: "c2", dataKey: undefined } as Partial<TestCase>)])[
-      "tests/_/p0-新增主人成功后出现在列表里.spec.ts"
+      "tests/_/新增主人成功后出现在列表里.spec.ts"
     ]!;
     expect(spec).toContain('aiAction("在 firstName 填入 ${row.firstName}")');
+  });
+});
+
+/**
+ * 2026-09-14 用户的要求：「要兼顾测试工程里的可变不可变……每个用例生成项目中可变的部分」。
+ * 这一组钉住那条分界线，以及它在路径与文件头上的落点。
+ */
+describe("可变与不可变", () => {
+  it("路径只由不会变的东西组成：优先级改了，文件不该改名", () => {
+    const p0 = buildExportFiles(project, [kase({ title: "看订单簿", storyId: "S-MB-01", priority: "P0" })]);
+    const p1 = buildExportFiles(project, [kase({ title: "看订单簿", storyId: "S-MB-01", priority: "P1" })]);
+    const specOf = (f: Record<string, string>) => Object.keys(f).filter((k) => k.endsWith(".spec.ts"));
+    expect(specOf(p0)).toEqual(["tests/s-mb-01/看订单簿.spec.ts"]);
+    // 同一条用例、同一个路径；变的只是文件里的 tag。
+    expect(specOf(p1)).toEqual(specOf(p0));
+    expect(p0[specOf(p0)[0]!]).toContain("@P0");
+    expect(p1[specOf(p1)[0]!]).toContain("@P1");
+  });
+
+  it("没有 activity 就按用户故事分目录——242 条全塌在 tests/_ 的原因就是只看 activity", () => {
+    const files = buildExportFiles(project, [
+      kase({ id: "a", title: "甲", storyId: "S-01" }),
+      kase({ id: "b", title: "乙", storyId: "S-02" }),
+      kase({ id: "c", title: "丙" }),
+    ]);
+    const specs = Object.keys(files).filter((k) => k.endsWith(".spec.ts"));
+    expect(specs.sort()).toEqual(["tests/_/丙.spec.ts", "tests/s-01/甲.spec.ts", "tests/s-02/乙.spec.ts"]);
+  });
+
+  it("每个文件都说清自己归谁：生成物会被覆盖，脚手架不会", () => {
+    const files = buildExportFiles(project, [kase({ title: "看订单簿", storyId: "S-MB-01" })]);
+    expect(files["tests/s-mb-01/看订单簿.spec.ts"]).toMatch(/^\/\/ 由 TestPilot 生成/);
+    expect(files["playwright.config.ts"]).toMatch(/^\/\/ TestPilot 脚手架/);
+    expect(files["tests/ai.ts"]).toMatch(/^\/\/ TestPilot 脚手架/);
+    // 机器可读的那份划分，将来「导出到已有目录」要用它，不该再靠路径猜。
+    const manifest = JSON.parse(files["testpilot-manifest.json"]!) as { ownership: Record<string, string[]> };
+    expect(manifest.ownership.generated).toContain("tests/s-mb-01/看订单簿.spec.ts");
+    expect(manifest.ownership.scaffold).toContain("playwright.config.ts");
+    expect(manifest.ownership.generated).not.toContain("playwright.config.ts");
+  });
+
+  it("追溯线进 tag，人和 --grep 都用得上", () => {
+    const files = buildExportFiles(project, [kase({ title: "看订单簿", storyId: "S-MB-01", tier: 1, requirementId: "REQ-9" })]);
+    expect(files["tests/s-mb-01/看订单簿.spec.ts"]).toContain("[@P0 @negative @story:S-MB-01 @tier1 @req:REQ-9]");
+  });
+
+  /**
+   * `@story:` 只到故事一层，而一条故事有两三条准则——红了还是得回平台猜是哪一条。
+   * 2026-09-14 起 `acRefs` 是稳定编号，一路带到导出为止。
+   */
+  it("兑现了哪几条验收准则，也要能 --grep 到", () => {
+    const files = buildExportFiles(project, [
+      kase({ title: "看订单簿", storyId: "S-MB-01", acRefs: ["S-MB-01/AC-1", "S-MB-01/AC-2"] }),
+    ]);
+    const spec = files["tests/s-mb-01/看订单簿.spec.ts"]!;
+    expect(spec).toContain("@ac:S-MB-01/AC-1 @ac:S-MB-01/AC-2");
+  });
+
+  it("没有 acRefs 的老用例安全降级——不写空标签", () => {
+    const spec = buildExportFiles(project, [kase({ title: "看订单簿", storyId: "S-MB-01" })])["tests/s-mb-01/看订单簿.spec.ts"]!;
+    expect(spec).not.toContain("@ac:");
+  });
+});
+
+describe("入口导航不交给视觉模型", () => {
+  const nav = (text: string, ...rest: string[]) =>
+    kase({ title: "甲", storyId: "S-01", steps: [text, ...rest].map((t, i) => ({ order: i + 1, text: t })) });
+
+  it("首步的裸导航提成 page.goto，并从步骤里去掉", () => {
+    const files = buildExportFiles(project, [nav("打开 https://www.saucedemo.com/inventory.html", "点击 Add to cart")]);
+    const spec = files["tests/s-01/甲.spec.ts"]!;
+    expect(spec).toContain('page.goto(process.env.BASE_URL || "https://www.saucedemo.com/inventory.html")');
+    expect(spec).not.toContain('aiAction("打开 https');
+    expect(spec).toContain('aiAction("点击 Add to cart")');
+  });
+
+  it("「并等待页面加载完成」是泛化等待，丢掉——page.goto 本来就等", () => {
+    const spec = buildExportFiles(project, [nav("打开 https://www.saucedemo.com/ 并等待页面加载完成", "点击 Login")])["tests/s-01/甲.spec.ts"]!;
+    expect(spec).not.toContain("等待");
+  });
+
+  it("「并等待订单簿视图加载」是真条件，留成一步，语义一个字不变", () => {
+    const spec = buildExportFiles(project, [nav("打开 https://www.saucedemo.com/ 并等待订单簿视图加载", "点击 Login")])["tests/s-01/甲.spec.ts"]!;
+    expect(spec).toContain('aiAction("等待订单簿视图加载")');
+    expect(spec).not.toContain('aiAction("打开');
+  });
+
+  it("「打开设置面板」不是导航，不动它", () => {
+    const spec = buildExportFiles(project, [nav("打开设置面板", "点击 Login")])["tests/s-01/甲.spec.ts"]!;
+    expect(spec).toContain('aiAction("打开设置面板")');
   });
 });

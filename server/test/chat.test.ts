@@ -32,7 +32,7 @@ vi.mock("../src/settings.js", () => ({
 vi.mock("@testpilot/harness-core", async (actual) => {
   const core = (await actual()) as Record<string, unknown>;
   const { FakeModel } = core as { FakeModel: new (r: () => string) => unknown };
-  return { ...core, modelFromEnv: () => new FakeModel(() => replies.shift() ?? "{}") };
+  return { ...core, plannerConnectionFromEnv: () => ({ role: "planner" }), plannerModel: () => new FakeModel(() => replies.shift() ?? "{}") };
 });
 
 const { chat, checkGraph, checkPrompt, checkRecipe } = await import("../src/chat.js");

@@ -32,6 +32,19 @@ export interface OracleCheck {
    * report that hides the difference cannot be used to argue about tier distribution.
    */
   decidedBy?: "machine" | "judge";
+  /**
+   * 这条判据在**步骤跑之前**是不是就已经成立了。
+   *
+   * 「通过」也有两种：一种是这些步骤把产品带到了判据要求的状态，另一种是判据在
+   * 什么都没做的时候就已经成立——后者的绿是免费的，它证明不了这条用例的标题。
+   * 2026-09-13 实测 `trade-panel.order-entry` 10 条，**6 条属于后者**：
+   * TC-011「切换到 Sell / Short」的判据是 `text:"Sell / Short"`，而同模块的 TC-013
+   * 的全部内容就是证明「两个方向按钮始终都在」。
+   *
+   * 不改判决——判据成立就是成立。记下来，让报告能把这两种绿分开。
+   * 只对一份快照就能判的那几种（text/noText/count）有意义；关系型判据天然要比前后。
+   */
+  heldBefore?: boolean;
 }
 
 export type VisualStatus = "new_baseline" | "match" | "diff";

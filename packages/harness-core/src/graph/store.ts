@@ -15,9 +15,9 @@ import type { GraphDef } from "./graph.js";
 export class SqliteOutputStore implements OutputStore {
   private db: Database.Database;
 
-  constructor(path: string) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new Database(path);
+  constructor(path: string | Database.Database) {
+    if (typeof path === "string" && path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+    this.db = typeof path === "string" ? new Database(path) : path;
     this.db.pragma("journal_mode = WAL");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS wf_node_outputs (
@@ -53,6 +53,7 @@ export class SqliteOutputStore implements OutputStore {
          ON CONFLICT(wfRunId, nodeId) DO UPDATE SET json=excluded.json, updatedAt=excluded.updatedAt`,
       )
       .run(wfRunId, nodeId, JSON.stringify(value ?? null), new Date().toISOString());
+    this.countsMemo = undefined;
   }
 
   async all(wfRunId: string): Promise<Record<string, unknown>> {
@@ -61,6 +62,28 @@ export class SqliteOutputStore implements OutputStore {
       .all(wfRunId) as Array<{ nodeId: string; json: string }>;
     return Object.fromEntries(rows.map((r) => [r.nodeId, JSON.parse(r.json) as unknown]));
   }
+
+  /**
+   * 每次运行有多少用例 / 多少段代码——**在库里数，不把产物读出来**。
+   *
+   * 2026-09-12 实测：项目总览为了这两个数字，把每个项目每一次运行的全部产物都读出来解析一遍。
+   * 一天跑了 30 多次之后 `/api/projects` 要 27 秒，前端直接超时，界面上写「项目列表加载失败」。
+   * 同一批用例会出现在好几个节点的产物里（gate 拿到的就是 design 那一批），所以取最大值不是求和。
+   */
+  async countsByRun(): Promise<Record<string, { cases: number; code: number }>> {
+    // 写产物时失效（见 set）。扫的是整张表，而表里装的是整份 gate bundle——
+    // 不记住的话每次总览都要把它们重新 json_extract 一遍（实测 2.9 秒）。
+    if (this.countsMemo) return this.countsMemo;
+    const rows = this.db.prepare(
+      `SELECT wfRunId,
+              MAX(COALESCE(json_array_length(json_extract(json, '$.cases')), 0)) AS cases,
+              MAX(COALESCE(json_array_length(json_extract(json, '$.code')), 0))  AS code
+         FROM wf_node_outputs GROUP BY wfRunId`,
+    ).all() as Array<{ wfRunId: string; cases: number; code: number }>;
+    this.countsMemo = Object.fromEntries(rows.map((r) => [r.wfRunId, { cases: r.cases, code: r.code }]));
+    return this.countsMemo;
+  }
+  private countsMemo?: Record<string, { cases: number; code: number }>;
 
   /** Run-level bookkeeping, so the UI can list past runs without replaying lineage. */
   saveRun(run: {

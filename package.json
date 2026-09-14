@@ -14,7 +14,12 @@
     "server:dev": "pnpm --filter testpilot-server dev",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:hooks": "node --test \"plugins/testpilot/hooks/test/*.test.mjs\"",
-    "check:drift": "node scripts/check-drift.mjs"
+    "check:drift": "node scripts/check-drift.mjs && node scripts/build-claude-plugin.mjs --check && node scripts/build-codex-plugin.mjs --check",
+    "build:claude-plugin": "node scripts/build-claude-plugin.mjs",
+    "cost:report": "node scripts/cost-report.mjs",
+    "doctor": "node scripts/testpilot-setup.mjs doctor",
+    "setup": "node scripts/testpilot-setup.mjs install",
+    "build:codex-plugin": "node scripts/build-codex-plugin.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",

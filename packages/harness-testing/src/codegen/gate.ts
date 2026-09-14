@@ -131,7 +131,7 @@ export function runCodeGate(
      * 结果是 40 条用例里 **38 条被 block**，一条都执行不了。
      *
      * **一条规则的正确性建立在另一处的行为上，而那处行为被改了。**这在这个项目里
-     * 是反复出现的形状（见 `docs/spec/13-重新规划.md` 里 dimeshift 那一节）。
+     * 是反复出现的形状（见 `docs/archive/spec/13-重新规划.md` 里 dimeshift 那一节）。
      */
     const hasMachineOracle = !!oracleOf?.(c.caseId);
     if (!all.some((a) => a.kind === "assert") && !hasMachineOracle) {

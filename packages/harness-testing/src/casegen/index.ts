@@ -7,3 +7,5 @@ export * from "./nodes.js";
 export * from "./graph.js";
 export * from "./revise.js";
 export * from "./fillgap.js";
+export * from "./validate.js";
+export * from "./designEvidence.js";

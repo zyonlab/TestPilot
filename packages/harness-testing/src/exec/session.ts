@@ -1,3 +1,5 @@
+import { cacheDigest, scopedCacheId } from './cache.js';
+import { visibleContextTree } from './visibleContext.js';
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +16,9 @@ import {
 import { resolveChainConfig, resolveViewport } from "../env.js";
 import { setupInjectedWallet } from "./injectedWallet.js";
 import type { StorageState, Viewport } from "../types.js";
+import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
+import { executorConnectionFromEnv, openRoleProxy, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
+import { midsceneModelConfig } from "./model.js";
 
 // Apply the fixed query params to EVERY navigation (not just the entry URL) via request
 // interception: each document/navigation request's URL is rewritten to carry the params, so
@@ -158,14 +163,21 @@ export interface Session {
   injectedAddress?: string; // address of the injected virtual wallet (injected mode)
   sentTxs?: string[]; // tx hashes the injected wallet sent this session (live-updated)
   cleanup: () => Promise<void>;
+  /** Private local adapter connection, retained only for this browser's lifetime. */
+  executorModel?: RoleModelConnection;
+  modelRequests?: RoleRequestRecord[];
 }
 
 export interface LaunchOpts {
+  signal?: AbortSignal;
+  modelBudget?: RoleProxyBudget;
+  executorModel?: RoleModelConnection;
   wallet?: boolean; // load the MetaMask extension
   unlock?: boolean; // unlock the onboarded wallet (default true when onboarded)
   injected?: boolean; // inject a virtual wallet (no extension) pointed at a configurable RPC
   rpcUrl?: string; // override the injected wallet's chain RPC
   chainId?: number; // override the injected wallet's chainId
+  cacheContext?: unknown;
   cacheId?: string; // Midscene cache key (with MIDSCENE_CACHE=1, re-runs replay from cache)
   headless?: boolean;
   extraHeaders?: Record<string, string>; // fixed request headers (resolved, secrets injected)
@@ -198,10 +210,65 @@ export interface LaunchOpts {
 // Launch Chrome for Testing (Puppeteer's default build) and wrap the page in a Midscene agent.
 // Extensions require the NEW headless mode (headless:true in Puppeteer v23) + full Chrome —
 // NOT chrome-headless-shell. We also use a persistent userDataDir, required for extensions.
+/**
+ * 在一个已经开着的页面上换一个 agent：复用会话时每条用例要有自己的 `cacheId`（缓存按用例存），
+ * 但浏览器与页面是同一个——登录态就在这个页面里。
+ */
+export function newAgent(page: Page, cacheId?: string, executorModel?: RoleModelConnection): PuppeteerAgent {
+  const agent = new PuppeteerAgent(page, { ...(cacheId ? { cacheId } : {}),
+    modelConfig: midsceneModelConfig(executorModel ?? executorConnectionFromEnv()) });
+  const readContext=agent.getUIContext.bind(agent);
+  agent.getUIContext=async action=>{
+    const context=await readContext(action);
+    // Assertions and waits also use the visible scene. Full DOM evidence is collected separately.
+    return {...context,tree:visibleContextTree(context.tree)};
+  };
+  return agent;
+}
+
+async function contextualAgent(page:Page,opts:LaunchOpts,connection?:RoleModelConnection) {
+ const cacheId=opts.cacheId ? scopedCacheId(opts.cacheId,opts.cacheContext,{url:page.url(),dom:await page.content(),scene:cacheDigest(Buffer.from(await page.screenshot({type:'png'})).toString('base64'))}) : undefined;
+ return newAgent(page,cacheId,connection??opts.executorModel);
+}
+
+/**
+ * 复用会话：同一个页面上 `goto` 回起点，换这条用例自己的 agent（cacheId 按用例）。
+ *
+ * **不能换新标签页**（07 T-28 试过）：Hyperliquid 把 Enable Trading 的 agent 密钥放在 sessionStorage，
+ * 那是按标签页的——新页面一开就回到「Enable Trading」，登录态白做。同页 goto 保得住。
+ * 等到网络安静再交给用例：新浏览器有起浏览器 + 登录态几十秒的缓冲，复用没有；WebSocket 不算在飞的请求，能收口。
+ */
+export async function reopenPage(session: Session, url: string, opts: LaunchOpts): Promise<Session> {
+  opts = {...opts, cacheContext:{model:cacheDigest(opts.executorModel??executorConnectionFromEnv()),context:opts.cacheContext??null}};
+  const navUrl = appendQuery(url, opts.query);
+  session.sentTxs?.splice(0);
+  await session.page.goto(navUrl, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session.page.goto(navUrl, { waitUntil: "domcontentloaded", timeout: 45000 }));
+  return { ...session, agent: await contextualAgent(session.page, opts, session.executorModel ?? opts.executorModel) };
+}
+
 export async function launchSession(
   url: string,
   opts: LaunchOpts = {},
 ): Promise<Session> {
+  const originalModel = opts.executorModel ?? executorConnectionFromEnv();
+  opts = {...opts, cacheContext:{model:cacheDigest(originalModel),context:opts.cacheContext??null}};
+  const proxy = await openRoleProxy(originalModel, undefined, opts.modelBudget);
+  let browser: Browser | undefined;
+  const cancel = () => { void browser?.close().catch(() => {}); void proxy.close(); };
+  opts.signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED");
+    const session = await launchBrowserSession(url, { ...opts, executorModel: proxy.connection }, launched => { browser = launched; if (opts.signal?.aborted) { cancel(); throw new Error("EXEC_CANCELLED"); } });
+    return { ...session, executorModel: proxy.connection, modelRequests: proxy.records, cleanup: async () => {
+      try { await session.cleanup(); } finally { opts.signal?.removeEventListener("abort", cancel); await proxy.close(); }
+    } };
+  } catch (error) {
+    try { await browser?.close(); } finally { opts.signal?.removeEventListener("abort", cancel); await proxy.close(); }
+    throw error;
+  }
+}
+
+async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (browser: Browser) => void): Promise<Session> {
   // Injected virtual wallet mode: no extension, headless, provider proxies to a config RPC.
   if (opts.injected) {
     const cfg = resolveChainConfig({ rpcUrl: opts.rpcUrl, chainId: opts.chainId });
@@ -210,6 +277,7 @@ export async function launchSession(
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
+    onLaunch(browser);
     const page = await browser.newPage();
     await page.setViewport(resolveViewport(opts.viewport));
     await installQueryInterception(page, opts.query);
@@ -223,7 +291,7 @@ export async function launchSession(
     await page.goto(navUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
     if (await applyPostNav(page, opts.storageState))
       await page.goto(navUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-    const agent = new PuppeteerAgent(page, opts.cacheId ? { cacheId: opts.cacheId } : undefined);
+    const agent = await contextualAgent(page, opts);
     const cleanup = async () => {
       try {
         await browser.close();
@@ -285,6 +353,7 @@ export async function launchSession(
         ? ["--enable-automation"]
         : undefined,
   });
+  onLaunch(browser);
 
   let walletId: string | undefined;
   let walletUnlocked: boolean | undefined;
@@ -321,7 +390,7 @@ export async function launchSession(
   if (await applyPostNav(page, opts.storageState))
     await page.goto(navUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
 
-  const agent = new PuppeteerAgent(page, opts.cacheId ? { cacheId: opts.cacheId } : undefined);
+  const agent = await contextualAgent(page, opts);
   const cleanup = async () => {
     try {
       await browser.close();

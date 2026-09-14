@@ -1,0 +1,4 @@
+import {expect,it} from 'vitest';
+import {caseEntryUrl} from '../src/caseEntry.js';
+it('applies an explicit page precondition before every independent case',()=>{expect(caseEntryUrl(['The page is /portfolio','The visitor is not connected'],'https://example.test/trade')).toBe('https://example.test/portfolio');expect(caseEntryUrl(['The page is /trade/HYPE/USDC'],'https://example.test/trade')).toBe('https://example.test/trade/HYPE/USDC');});
+it('does not guess pages from business prose and rejects ambiguity and cross-origin paths',()=>{expect(caseEntryUrl(['View the portfolio'],'https://example.test/trade')).toBe('https://example.test/trade');expect(()=>caseEntryUrl(['The page is //other.test/'],'https://example.test/trade')).toThrow('page_precondition_origin_conflict');expect(()=>caseEntryUrl(['The page is /a','The page is /b'],'https://example.test/trade')).toThrow('conflicting_page_preconditions');});

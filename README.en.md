@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>AI-driven end-to-end testing for web apps and Web3 dapps.</b><br>
-  Point it at a URL — the AI explores the flows, drives the real UI, and returns a deterministic verdict.
+  Point it at a URL — the AI explores the flows, drives the real UI, and returns reviewable results with explicit oracle evidence.
 </p>
 
 <p align="center">
@@ -21,6 +21,53 @@
   <img alt="engine" src="https://img.shields.io/badge/engine-Midscene_+_Puppeteer-8B5CF6">
   <img alt="model" src="https://img.shields.io/badge/model-Qwen--VL_self--hosted-FF6A00">
 </p>
+
+---
+
+## Current delivery · 2026-09-09
+
+TestPilot turns domain rules, test design, deterministic oracles and human review into a reusable testing capability for Web users and host agents. The Web UI owns projects, workflows, models, materials and reviews. Claude Code, Codex and PenguinHarness inherit their host planner; Midscene uses a separate low-cost execution role. The initial Web planner uses the same provider/model as execution and can later change through `TP_PLANNER_*`.
+
+Start with the [current HTML report](docs/reports/testpilot-delivery-2026-09-09.html), [installation guide](docs/v3/10-安装与诊断.md) or [handoff](docs/v3/09-执行目标与接手指南.md). Domain assets are version `2026-09-09.3`. Real integrations cover all three hosts, Web-to-Codex application repair, role-separated usage, cache/export parity and a rejected candidate in the Penguin evaluation companion.
+
+Human gold review, formal domain evaluation, actual promotion, four further stability nights and remote release remain pending. The experiments do not establish a reliable benefit from domain references or memory. The report distinguishes real runs, synthetic gate checks and unresolved evidence.
+
+## v3 · Tier 4 (numbers from 2026-09-07, not an architecture diagram)
+
+> This is a historical 2026-09-07 snapshot; current product responsibilities are described above. Its core assets include: skills (generator prompts), hooks (gates), MCP tools (scoring / execution / retrieval) and benchmarks (gold). Every number below has a source; the roadmap with per-task acceptance is [`docs/v3/07`](docs/v3/07-第四档路线-任务与进度.md), four build logs are in [`docs/build-log/`](docs/build-log/) (zh + en).
+
+**Cost of execution** (`app.hyperliquid-testnet.xyz`, 7 P0 cases, all API oracles, `Qwen3.8-27B-FP8`@inferx, Midscene 0.30.10; source `docs/v3/06 §6`):
+
+| | cold first pass | second pass (cache replay) | third pass |
+|---|---|---|---|
+| wall clock, 7 cases | 583s | 591s | **310s (53% of first)** |
+| model calls / tokens | 50 / 177k | 22 / 77k | **5 / 15k** |
+| cache hit / miss / stale | 0 / 64 / 0 | 39 / 26 / 1 | **56 / 4 / 0 (93%)** |
+| verdicts decided by machine oracle | 100% | 100% | 100% |
+
+On the first pass the machine oracle caught a real failure: "market buy 0.001" filled 0.17365 BTC, invisible on screen, obvious to `szi eq 0.001`. The target "second pass ≤ 1/3 of first" was not reached (53%): the remaining floor is Midscene taking a screenshot and DOM snapshot per replayed action, not the model.
+
+**Three runtimes, one set of assets** (source `docs/v3/07` T-05…T-09, `docs/build-log/03`):
+
+| runtime | hooks execute | one g1 run | status |
+|---|---|---|---|
+| PenguinHarness 0.2.9 | no (`pre_tool_use` / `stop` absent from the published package) | 2 stories / 12 cases, 0 hook events in trace | gates reduced to a sentence in SKILL.md |
+| Claude Code | yes (PreToolUse blocked a provenance-less Write, recorded in `holds.jsonl`) | 2 stories / 16 cases in 1:48 | usable |
+
+On 2026-09-08, same skill + gold (casegen, 16 items) + MCP + materials + model (`qwen3.8-flash`), n=3 per runtime (`evals/runtime-compare.json`):
+
+| runtime | gate (3 runs) | coverage (3 runs) | tokens (inside MCP) | wall clock | paired vs the other arm |
+|---|---|---|---|---|---|
+| PenguinHarness 0.2.9 | 1.00 / 0.94 / 0.86 | 0 / 0.17 / 0 | 44–48k | 161s / 456s / **927s** | three McNemar pairs, p = 1.0 |
+| Claude Code | 1.00 / 1.00 / 0.94 | 0.08 / 0.17 / 0 | 39–53k | 162s / 207s / 207s | 1 / 5 / 1 flips, i.e. noise |
+| Codex | — | — | — | — | not run |
+
+Switching runtimes produces no measurable difference. The "no hooks" gap on the Penguin arm never gets a chance to show: g1 writes its files in one `run_pipeline` call, and no hook fires on that path. The slow part is Penguin's own agent turns, not the model.
+| Codex | no hooks; gate moved into the `write_stories` / `write_cases` tools | not run | this machine's account has no usable model |
+
+**In the development loop**: `fixtures/tier4-demo/` is an order panel edited by a coding agent; a Stop hook runs P0 whenever the agent tries to end its turn. A real session on 2026-09-08 (`docs/v3/evidence/t15-stop-hook-session.jsonl`): the agent changed only a placeholder, Stop was blocked (`position.szi = 0.002, expected 0.001`), the agent read `holds.jsonl`, fixed `normalizeSize`, and the four P0 cases replayed with zero model calls before the turn was released.
+
+**Not done yet** (kept on the first screen so it is not only the good numbers): the paired eval with / without the domain REFERENCE has not run (it needs a human-reviewed, frozen gold); the runtime table lacks the Codex column; n=3 per arm is only enough to say "no measurable difference".
 
 ---
 

@@ -14,7 +14,8 @@ import {
 import { getGraphVersion, nodeOutput, outputStore } from "./graphs.js";
 import { computeGaps, shortTarget, stoppedBecause, type Gap } from "./gaps.js";
 import { readMutationReport } from "./mutation.js";
-import { ABLATABLE, gated, modelFromEnv, traced } from "@testpilot/harness-core";
+import { ABLATABLE } from "@testpilot/harness-core";
+import { projectPlannerModel } from "./modelProfiles.js";
 import {
   fillGap,
   reviseCase,
@@ -769,7 +770,9 @@ export async function regenerate(
   const gatedOut = ((await nodeOutput(wfRunId, "gate").catch(() => undefined)) ??
     (await nodeOutput(wfRunId, "codegen").catch(() => undefined))) as GatedBundleShape | undefined;
   const spec = (await nodeOutput(wfRunId, "spec").catch(() => undefined)) as { text?: string } | undefined;
-  const model = traced(gated(modelFromEnv()), { name: "review.revise" });
+  const run = outputStore.getRun(wfRunId);
+  const projectId = (run?.detail as { target?: { projectId?: string } } | undefined)?.target?.projectId;
+  const model = projectPlannerModel(projectId, "review.revise");
 
   const revised: string[] = [];
   const failed: Array<{ caseId: string; message: string }> = [];
@@ -800,6 +803,10 @@ export async function regenerate(
           postSteps: product?.postSteps ?? [],
           // 出处同理：重写不该让一条有出处的用例变成无出处的。
           sourceRefs: product?.sourceRefs ?? [],
+          // 功能 / 规则引用同理（2026-09-11 单元循环）：重写不该把这条用例和产品模型、
+          // 规则包的连线抹掉——抹掉之后它就不再受规则风险下限约束了。
+          featureRefs: (product as { featureRefs?: string[] } | undefined)?.featureRefs ?? [],
+          ruleRefs: (product as { ruleRefs?: string[] } | undefined)?.ruleRefs ?? [],
           precondition: item.precondition,
           steps: item.steps,
           expected: item.expected,
@@ -882,7 +889,7 @@ export async function caseFromGap(
     .map((s) => `- ${s.id}${s.route ? ` (${s.route})` : ""}${s.title ? ` "${s.title}"` : ""}: ${(s.controls ?? []).slice(0, 12).join(" / ")}`);
 
   const story = gatedOut?.stories?.find((st) => (st as { activity?: string }).activity === gap.activity);
-  const model = traced(gated(modelFromEnv()), { name: "review.fillgap" });
+  const model = projectPlannerModel(projectId, "review.fillgap");
   const out = await fillGap(model, {
     gap,
     ...(story?.id ? { storyId: story.id } : {}),
@@ -929,7 +936,7 @@ export async function pendingRuns(
     startedAt?: string;
   }> = [];
   for (const row of outputStore.listRuns(limit)) {
-    if (row.status !== "done") continue;
+    if (row.status !== "done" && row.status !== "waiting_review") continue;
     try {
       const batch = await reviewBatch(String(row.id));
       if (batch.items.length)

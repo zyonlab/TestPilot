@@ -2,13 +2,11 @@ import {
   CapabilityRecipeSchema,
   describeDiff,
   diffGraphs,
-  gated,
-  modelFromEnv,
   validateGraph,
   type CapabilityRecipe,
   type GraphDef,
-  traced,
 } from "@testpilot/harness-core";
+import { projectPlannerModel } from "./modelProfiles.js";
 import { getGraph, listGraphs, nodeOutput, outputStore, registry, saveGraph } from "./graphs.js";
 import { ABLATABLE } from "@testpilot/harness-core";
 
@@ -341,6 +339,7 @@ export interface ChatContext {
 }
 
 export interface ChatInput {
+  projectId?: string;
   messages: ChatTurn[];
   intent: ChatIntent;
   /** For a graph draft: which graph is being changed. */
@@ -503,7 +502,9 @@ async function contextLines(ctx: ChatContext | undefined): Promise<string[]> {
 }
 
 export async function chat(input: ChatInput): Promise<ChatResult> {
-  const model = traced(gated(modelFromEnv()), { name: "chat.draft" });
+  const run = input.context?.wfRunId ? outputStore.getRun(input.context.wfRunId) : undefined;
+  const runProject = (run?.detail as { target?: { projectId?: string } } | undefined)?.target?.projectId;
+  const model = projectPlannerModel(runProject ?? input.projectId, "chat.draft");
   const intent = input.intent;
 
   const context: string[] = await contextLines(input.context);

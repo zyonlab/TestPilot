@@ -1724,6 +1724,9 @@ export function LegacyCanvasPage() {
             onClose={() => void selectNode("")}
             resizeKey="node"
             defaultWidth={520}
+            /* 节点抽屉装的是物料正文——规格、故事、用例表、执行报告。整屏打开；
+               标题栏的收合按钮仍能切回常规宽度，拖动也仍然有效。 */
+            fullscreen
             title={
               <span className="flex items-baseline gap-2">
                 <span>{nodeTypes.find((nt) => nt.type === node?.type)?.title || selectedNode}</span>

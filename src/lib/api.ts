@@ -1,3 +1,4 @@
+import type { CostReport, ScoreboardRow, GoldState, GoldFile } from "@/lib/types";
 import type {
   ApiLoginConfig,
   ModelConfig,
@@ -24,13 +25,13 @@ const BASE = API_BASE;
 const uiLang = () => usePrefs.getState().lang;
 
 async function get<T>(path: string, timeoutMs = 5000): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
+  const res = await fetch(`${BASE}${path}`, { credentials: "include", signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as T;
 }
 
 async function patch<T>(path: string, body: unknown, timeoutMs = 8000): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${BASE}${path}`, { credentials: "include",
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -41,7 +42,7 @@ async function patch<T>(path: string, body: unknown, timeoutMs = 8000): Promise<
 }
 
 async function del<T>(path: string, timeoutMs = 8000): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${BASE}${path}`, { credentials: "include",
     method: "DELETE",
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -53,7 +54,7 @@ async function post<T>(path: string, body: unknown, timeoutMs = 120000): Promise
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await fetch(`${BASE}${path}`, { credentials: "include",
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -175,6 +176,17 @@ export const api = {
     post<{ code: string }>("/api/generate-code", payload, 30000),
 
   // ---- persistence (backend is the source of truth) ----
+  /* ---- 07 P5：成本 / 记分板 / gold ---- */
+  getCost: (projectId: string, last = 10) => get<CostReport>(`/api/projects/${projectId}/cost?last=${last}`, 15000),
+  getScoreboard: (capability?: string) =>
+    get<{ capabilities: string[]; entries: ScoreboardRow[]; penguinUrl?: string; activeVersion?: { version: string; generation: number; policy: { memory: string } } }>(`/api/scoreboard${capability ? `?capability=${encodeURIComponent(capability)}` : ""}`),
+  pairedScoreboard: (a: ScoreboardRow, b: ScoreboardRow, goldPath: string) =>
+    post<{ entry: Record<string, unknown> }>("/api/scoreboard/paired", { a, b, goldPath }, 120000),
+  getGold: (capability: string) => get<GoldState>(`/api/gold/${encodeURIComponent(capability)}`),
+  saveGold: (capability: string, file: GoldFile, newLineage = false, reviewedItemIds: string[] = []) =>
+    post<{ saved: { path: string; hash: string; heldOut: number }; state: GoldState }>(`/api/gold/${encodeURIComponent(capability)}`, { action: "save", file, newLineage, reviewedItemIds }, 15000),
+  freezeGold: (capability: string) =>
+    post<{ frozen: { hash: string; readme: string }; state: GoldState }>(`/api/gold/${encodeURIComponent(capability)}`, { action: "freeze" }, 15000),
   getProjects: () =>
     get<{ projects: Project[]; overviews?: Record<string, ProjectOverview> }>("/api/projects"),
   createProject: (
@@ -226,6 +238,7 @@ export const api = {
       query: Record<string, string>;
       login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null };
       isDefault: boolean;
+      viewport?: {width?:number;height?:number};
     },
   ) => post<{ environment: Environment }>(`/api/projects/${projectId}/environments`, env, 8000),
   deleteEnvironment: (envId: string) => del<{ ok: true }>(`/api/environments/${envId}`),

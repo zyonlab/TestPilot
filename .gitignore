@@ -36,6 +36,11 @@ server/.env.*
 *.log
 npm-debug.log*
 
+# Sanitized implementation evidence, intended for the next maintainer to reproduce.
+!docs/v3/evidence/n-0[123456789]/*.log
+!docs/v3/evidence/n-10/*.log
+!docs/v3/evidence/n-11/*.log
+
 # OS
 .DS_Store
 
@@ -47,3 +52,20 @@ server/.data-test/
 
 # replay 重打分的副产物（score_run 每次都把条目写回运行目录）
 benchmark/*/replay/*/score.json
+
+# Claude Code plugin 的本机配置与 hook 状态（生成物，含绝对路径）
+plugins/testpilot-claude/tp-config.json
+plugins/testpilot/hooks/.state/
+
+# Sanitized remaining roadmap evidence
+!docs/v3/evidence/n-1[2-9]/*.log
+!docs/v3/evidence/n-2[0-7]/*.log
+# Authoritative local evaluation store; export YAML/JSON evidence for review.
+benchmark/**/*.sqlite
+benchmark/**/*.sqlite-wal
+benchmark/**/*.sqlite-shm
+
+# 跑动证据留在本地。105MB、1100 多个文件，其中 6 个录屏就占 73MB——
+# 进了 git 历史就只能靠 filter-repo + force push 才拿得掉。
+# 结论、数字和引用写进 docs/v3/*.md，证据本体按需再单独归档。
+docs/v3/evidence/

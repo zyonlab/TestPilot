@@ -21,6 +21,10 @@ interface StoreState {
   overviews: Record<string, ProjectOverview>;
   activeProjectId: string;
   backendUp: boolean;
+  projectsLoading: boolean;
+  projectsError: boolean;
+  projectDataLoading: boolean;
+  projectDataError: boolean;
   model: ModelConfig;
   connection: ConnectionState;
   connectionDetail: string;
@@ -30,6 +34,7 @@ interface StoreState {
 
   loadData: () => Promise<void>;
   loadFlakiness: () => Promise<void>;
+
   setQuarantine: (id: string, quarantined: boolean) => Promise<void>;
   selectProject: (id: string) => Promise<void>;
   exitProject: () => void;
@@ -55,6 +60,9 @@ interface StoreState {
   testConnection: () => Promise<void>;
 }
 
+let projectSelection = 0;
+let projectListLoad: Promise<void> | undefined;
+
 export const useStore = create<StoreState>((set, get) => ({
   cases: [],
   selectedId: "",
@@ -63,6 +71,10 @@ export const useStore = create<StoreState>((set, get) => ({
   overviews: {},
   activeProjectId: "",
   backendUp: false,
+  projectsLoading: false,
+  projectsError: false,
+  projectDataLoading: false,
+  projectDataError: false,
   model: {
     // The model endpoint itself. The no-think proxy (:8010) is a capability you can start
     // from the Processes page when you want prompts/responses captured for tuning; it is
@@ -78,45 +90,41 @@ export const useStore = create<StoreState>((set, get) => ({
   exploreLastCount: 0,
   flakiness: [],
 
-  // Load projects/cases/runs from the backend (source of truth). Falls back to the
-  // built-in mock data if the backend is offline, so the UI still works standalone.
-  loadData: async () => {
+  // Refresh the project list without clearing a valid current selection.
+  loadData: () => {
+    if (projectListLoad) return projectListLoad;
+    set({ projectsLoading: true, projectsError: false });
+    projectListLoad = (async () => {
     try {
       const { projects, overviews } = await api.getProjects();
-      if (!projects.length) {
-        // Backend is up but has no projects → a genuinely empty state. Clear the
-        // built-in mock data (which is only a fallback for when the backend is OFFLINE),
-        // otherwise the UI shows a phantom"shop.acme.com" project + mock cases.
-        set({
-          backendUp: true,
-          projects: [],
-          overviews: {},
-          activeProjectId: "",
-          cases: [],
-          runs: [],
-          flakiness: [],
-          selectedId: "",
-          exploreLastCount: 0,
-          exploreScreenshot: "",
-        });
-        return;
-      }
-      // Backend is up and has projects. Do NOT auto-select — Level 0 (the portfolio)
-      // is the default landing. Cases/runs load lazily on enter (selectProject).
-      set({ projects, overviews: overviews ?? {}, activeProjectId: "", backendUp: true });
-    } catch {
-      set({ backendUp: false }); // keep mock data
+      if (!Array.isArray(projects)) throw new Error("Invalid project list response");
+      const keepSelection = projects.some((p) => p.id === get().activeProjectId);
+      set({
+        projects, overviews: overviews ?? {}, backendUp: true,
+        ...(!keepSelection ? {
+          activeProjectId: "", cases: [], runs: [], flakiness: [], selectedId: "",
+          exploreLastCount: 0, exploreScreenshot: "", projectDataLoading: false, projectDataError: false,
+        } : {}),
+      });
+    } catch (error) {
+      console.warn("[TestPilot] Project loading failed", error);
+      set({ backendUp: false, projectsError: true });
+    } finally {
+      set({ projectsLoading: false });
+      projectListLoad = undefined;
     }
+    })();
+    return projectListLoad;
   },
 
   loadFlakiness: async () => {
-    const pid = get().activeProjectId;
+    const pid = get().activeProjectId, selection = projectSelection;
     if (!pid) return;
     try {
       const { flakiness } = await api.getFlakiness(pid);
-      set({ flakiness });
+      if (get().activeProjectId === pid && selection === projectSelection) set({ flakiness });
     } catch {
-      set({ flakiness: [] }); // backend offline / no data
+      if (get().activeProjectId === pid && selection === projectSelection) set({ flakiness: [] });
     }
   },
 
@@ -136,33 +144,38 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  // Switch the active project → load its cases from the backend.
+  // Select immediately: history loading must not disable workflows or project settings.
   selectProject: async (id) => {
-    const proj = get().projects.find((p) => p.id === id);
-    if (!proj) return;
-    try {
-      const [{ cases }, { runs }] = await Promise.all([api.getCases(id), api.getRuns({ projectId: id })]);
-      set({
-        activeProjectId: id,
-        cases,
-        runs, // project-scoped: Runs page now follows the active project
-        selectedId: cases[0]?.id ?? "",
-      });
-      void get().loadFlakiness();
-    } catch {
-      /* backend offline */
-    }
+    if (!get().projects.some((p) => p.id === id)) return;
+    const selection = ++projectSelection;
+    set({ activeProjectId: id, cases: [], runs: [], flakiness: [], selectedId: "",
+      projectDataLoading: true, projectDataError: false });
+    const [cases, runs] = await Promise.allSettled([api.getCases(id), api.getRuns({ projectId: id })]);
+    // A late response must not replace another project's data (including A → B → A).
+    if (selection !== projectSelection || get().activeProjectId !== id) return;
+    set({
+      cases: cases.status === "fulfilled" ? cases.value.cases : [],
+      runs: runs.status === "fulfilled" ? runs.value.runs : [],
+      selectedId: cases.status === "fulfilled" ? cases.value.cases[0]?.id ?? "" : "",
+      projectDataLoading: false,
+      projectDataError: cases.status === "rejected" || runs.status === "rejected",
+    });
+    void get().loadFlakiness();
   },
 
   // Leave the project → return to the portfolio (Level 0). Clears project-scoped data.
-  exitProject: () =>
+  exitProject: () => {
+    ++projectSelection;
     set({
       activeProjectId: "",
       cases: [],
       runs: [],
       flakiness: [],
       selectedId: "",
-    }),
+      projectDataLoading: false,
+      projectDataError: false,
+    });
+  },
 
   createProject: async (name, targetUrl, targetPlatform = "web", materials = []) => {
     try {

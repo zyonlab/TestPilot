@@ -7,7 +7,9 @@ import {
   SqliteGraphStore,
   diffGraphs,
   gated,
-  modelFromEnv,
+  plannerModel,
+  plannerConnectionFromEnv,
+  type ModelClient,
   registerPack,
   type GraphDef,
   type RunMode,
@@ -24,6 +26,8 @@ import {
 import { getSettings } from "./settings.js";
 import { bus, setAgentExecutor, supervisor } from "./procs.js";
 import { execOnRunner } from "./exec.js";
+import { captureWebModels } from "./modelSnapshots.js";
+import { registerWebRun, freezeGraphSources, runLedger } from "./runService.js";
 import {
   ARTIFACT_DIR,
   createRun,
@@ -201,6 +205,8 @@ function makeExecutor(
     try {
       const t = resolveTarget(target);
       const exec = await execOnRunner({
+        scopeProjectId: target.projectId,
+        modelSnapshotRunId: wfRunId,
         execId: `wf-${caseId}-${Date.now()}`,
         url: t.url,
         steps,
@@ -290,7 +296,7 @@ setAgentExecutor(async (input) => {
  * 网关这一份走的是真端点，而且经过 `traced()`，这次调用会出现在 Langfuse 上——
  * Midscene 自己的 `ai*` 不在 trace 上，用它问就等于这次改造的成本和效果都量不出来。
  */
-const rawModel = modelFromEnv();
+const rawModel: ModelClient = { chat: (request) => plannerModel(plannerConnectionFromEnv()).chat(request) };
 export const model = traced(gated(rawModel), { name: "gateway.model" });
 
 /**
@@ -299,9 +305,6 @@ export const model = traced(gated(rawModel), { name: "gateway.model" });
  * 它是模块顶层的 const，捕获的是 import 那一刻的 env——往 `process.env` 写新值对它无效。
  * 不做这件事，「界面上改了端点」在网关这条路上要等到重启才生效，而人不会知道。
  */
-export function reconfigureModel(patch: { baseUrl?: string; apiKey?: string; model?: string; noThink?: boolean; thinkBudget?: number; timeoutMs?: number }): void {
-  (rawModel as unknown as { reconfigure?: (p: unknown) => void }).reconfigure?.(patch);
-}
 
 /**
  * A registry built here serves the palette and graph validation only — runs are executed
@@ -339,7 +342,7 @@ function selfTestGraph(g1: GraphDef): GraphDef {
         ? {
             ...n,
             params: {
-              paths: ["docs/spec/02-业务规格与用户故事.md", "docs/spec/03-UI交互规格.md"],
+              paths: ["docs/archive/spec/02-业务规格与用户故事.md", "docs/archive/spec/03-UI交互规格.md"],
             },
           }
         : n,
@@ -678,6 +681,15 @@ export async function startRun(input: {
   // Breakpoints belong to the run, not to the request that happens to start it: re-running
   // one node of a paused run must not silently clear where the run stops.
   const breakpoints = input.breakpoints ?? previous.breakpoints;
+  // Validate and capture before writing "running" or starting a child process.
+  if (outputStore.getRun(wfRunId) && !previous.modelRoles)
+    throw new Error("legacy_run_model_snapshot_missing：旧运行未记录模型快照，请发起新运行");
+  const models = captureWebModels(wfRunId, target.projectId, "pipeline");
+  const planner = models.planner;
+  if (target.projectId) {
+    registerWebRun(wfRunId, target.projectId, models.binding, params as Record<string, unknown> | undefined);
+    freezeGraphSources(wfRunId, target.projectId, def.nodes, REPO_ROOT);
+  }
 
   outputStore.saveRun({
     id: wfRunId,
@@ -690,6 +702,8 @@ export async function startRun(input: {
       mode: input.mode ?? { kind: "full" },
       target,
       breakpoints,
+      modelRoles: models.binding,
+      ...(target.projectId ? { binding: runLedger().registration(wfRunId, target.projectId)?.binding } : {}),
       // Which components were switched off is part of what a result means: scoring the
       // batch again later with the gate at full strength would compare two different gates.
       ablate: input.ablate ?? previous.ablate,
@@ -729,6 +743,7 @@ export async function startRun(input: {
 
   const rpc = await agent();
   await rpc.startRun({
+    planner,
     def,
     wfRunId,
     mode: input.mode,
@@ -818,6 +833,7 @@ export function runPromptDigest(): TextDigest {
 
 /** What a run record carries besides its status. Written by `startRun`, read on resume. */
 export interface RunDetail {
+  modelRoles?: import("@testpilot/harness-core/model-profiles").RunModels;
   mode?: RunMode;
   target?: RunTarget;
   breakpoints?: string[];
@@ -1156,3 +1172,21 @@ export async function allOutputs(wfRunId: string): Promise<Record<string, unknow
   return rpc.allOutputs(wfRunId);
 }
 
+/**
+ * 每次运行的用例/代码条数（在库里数）。总览用它，别为了两个数字把产物全搬过来。
+ *
+ * **等不到就先不等**：agent 子进程冷启动要二十多秒，而这条请求是项目列表的首屏。
+ * 等下去的结果是界面上写着「项目列表加载失败」（2026-09-12 实测）。
+ * 数不出来就先给空的——总览上那两个数字晚一轮出现，比整页打不开好。
+ */
+export async function outputCounts(): Promise<Record<string, { cases: number; code: number }>> {
+  const rpc = (await Promise.race([
+    agent(),
+    new Promise((r) => setTimeout(() => r(undefined), 2000)),
+  ])) as unknown as { outputCounts?: () => Promise<Record<string, { cases: number; code: number }>> } | undefined;
+  if (!rpc?.outputCounts) return {};
+  return (await Promise.race([
+    rpc.outputCounts(),
+    new Promise<Record<string, { cases: number; code: number }>>((r) => setTimeout(() => r({}), 2000)),
+  ])) ?? {};
+}

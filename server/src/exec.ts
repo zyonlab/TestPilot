@@ -4,6 +4,9 @@
 // screenshots, read the performance timings); the gateway owns everything that needs the
 // database (baselines, verdicts, run records). Pixels cross as file paths, never as bytes.
 import { readFileSync, rmSync } from "node:fs";
+import { projectModelConnection } from "./modelProfiles.js";
+import { snapshotExecutor } from "./modelSnapshots.js";
+import { executorConnectionFromEnv } from "@testpilot/harness-core";
 import type {
   DebugSpec,
   ExecResult,
@@ -27,6 +30,7 @@ interface RunnerApi {
   observe(spec: ObserveSpec): Promise<ObserveResult>;
   debug(spec: DebugSpec): Promise<void>;
   cancel(execId: string): Promise<boolean>;
+  releaseSession(key: string): Promise<boolean>;
   capabilities(): Promise<{ web: boolean; android: boolean; ios: boolean }>;
 }
 
@@ -59,11 +63,44 @@ async function pickRunner(): Promise<string> {
   return target;
 }
 
-export async function execOnRunner(spec: ExecSpec): Promise<ExecResult> {
+/**
+ * 批次结束：让每个活着的 runner 关掉这个 key 下复用的浏览器。池是每个 runner 进程各一份，
+ * 所以要都问一遍；没有的返回 false，不算错。
+ */
+export async function releaseSessionOnRunners(key: string): Promise<number> {
+  let released = 0;
+  for (const s of supervisor.status().filter((x) => isRunner(x.id) && x.state === "alive")) {
+    const rpc = supervisor.rpc<RunnerApi>(s.id);
+    if (!rpc) continue;
+    try {
+      if (await rpc.releaseSession(key)) released += 1;
+    } catch {
+      /* runner 正在死或没这个方法：下一次 spawn 就没有池了 */
+    }
+  }
+  return released;
+}
+
+/** 谁跑的就写谁：账要去它自己的 Midscene 目录里读（07 T-04）。 */
+export type ExecResultWithRunner = ExecResult & { runnerId: string };
+
+export async function execOnRunner(spec: ExecSpec, control?: { signal?: AbortSignal }): Promise<ExecResultWithRunner> {
+  spec = { ...spec, opts: { ...spec.opts, executorModel: spec.modelSnapshotRunId
+    ? snapshotExecutor(spec.modelSnapshotRunId, spec.scopeProjectId) : spec.scopeProjectId
+    ? projectModelConnection(spec.scopeProjectId, "executor")
+    : executorConnectionFromEnv() } };
+  if (control?.signal?.aborted) throw control.signal.reason ?? new Error("EXEC_CANCELLED");
   const id = await pickRunner();
+  if (control?.signal?.aborted) throw control.signal.reason ?? new Error("EXEC_CANCELLED");
   const rpc = supervisor.rpc<RunnerApi>(id);
   if (!rpc) throw new Error(`runner ${id} has no RPC channel`);
-  return rpc.exec(spec);
+  let abort!: () => void;
+  const stopped = new Promise<never>((_, reject) => { abort = () => { void rpc.cancel(spec.execId).catch(() => {}); reject(control?.signal?.reason ?? new Error("EXEC_CANCELLED")); }; });
+  control?.signal?.addEventListener("abort", abort, { once: true });
+  try {
+    const result = await Promise.race([rpc.exec(spec), stopped]);
+    return { ...result, runnerId: id };
+  } finally { control?.signal?.removeEventListener("abort", abort); }
 }
 
 /**
@@ -108,7 +145,8 @@ export interface Interactive {
  * data URL the existing SSE clients expect — the UI contract does not change just because
  * the browser moved to another process.
  */
-export function interactiveSession(prefix: string): Interactive {
+export function interactiveSession(prefix: string, projectId?: string): Interactive {
+  const executorModel = projectId ? projectModelConnection(projectId, "executor") : executorConnectionFromEnv();
   const execId = `${prefix}-${Date.now().toString(36)}`;
   let runnerId: string | undefined;
   let watcher: ((evt: Record<string, unknown>) => void) | undefined;
@@ -140,11 +178,11 @@ export function interactiveSession(prefix: string): Interactive {
     execId,
     onFrame,
     explore: (spec, artifactDir) =>
-      call((rpc) => rpc.explore({ ...spec, execId, artifactDir })).finally(() => sub.close()),
+      call((rpc) => rpc.explore({ ...spec, execId, artifactDir, launch: { ...spec.launch, executorModel } })).finally(() => sub.close()),
     observe: (spec, artifactDir) =>
-      call((rpc) => rpc.observe({ ...spec, execId, artifactDir })).finally(() => sub.close()),
+      call((rpc) => rpc.observe({ ...spec, execId, artifactDir, projectId, launch: { ...spec.launch, executorModel } })).finally(() => sub.close()),
     debug: (spec, artifactDir) =>
-      call((rpc) => rpc.debug({ ...spec, execId, artifactDir })).finally(() => sub.close()),
+      call((rpc) => rpc.debug({ ...spec, execId, artifactDir, launch: { ...spec.launch, executorModel } })).finally(() => sub.close()),
     cancel: async () => {
       sub.close();
       if (!runnerId) return;
@@ -185,6 +223,12 @@ export async function cancelRunnerWork(id: string): Promise<{ stopped: number; b
   const rpc = supervisor.rpc<RunnerApi>(id);
   if (!rpc) throw new Error(`runner ${id} is not running`);
   return rpc.cancelAll();
+}
+export async function cancelExecution(execId: string): Promise<boolean> {
+  const results = await Promise.all(supervisor.status().filter(s => isRunner(s.id) && s.state === "alive").map(async s => {
+    try { return await supervisor.rpc<RunnerApi>(s.id)?.cancel(execId) ?? false; } catch { return false; }
+  }));
+  return results.some(Boolean);
 }
 
 /** Web3 diagnostics run on a runner too: one process owns the browsers. */

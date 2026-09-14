@@ -1,8 +1,8 @@
+import { navigateProject } from '@/lib/projectContext';
 import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/overlay";
 import { Button } from "@/components/ui";
-import { MaterialPicker } from "@/components/MaterialPicker";
 import { useStore } from "@/lib/store";
 import { useT } from "@/lib/prefs";
 import type { TargetPlatform } from "@/lib/types";
@@ -34,16 +34,6 @@ export function NewProjectDialog({
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://");
   const [platform, setPlatform] = useState<TargetPlatform>("web");
-  /**
-   * 这个项目的规格来自哪几份文档。
-   *
-   * 建项目时问一次，是因为这是唯一一个还来得及问的时刻——之后没有人会回头补。
-   * 不填不拦：一个只能从观察里得到规格的项目是完全正常的（很多产品就是没有文档），
-   * 但那意味着它的整套用例只可能发现「产品变了」，永远不可能发现「产品错了」
-   * ——观察不可能反驳被观察者。这句话要在这里说，不是在二十分钟之后由一批
-   * 答非所问的用例说。
-   */
-  const [materials, setMaterials] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -54,7 +44,6 @@ export function NewProjectDialog({
     setName("");
     setUrl("https://");
     setPlatform("web");
-    setMaterials([]);
     setBusy(false);
     setFailed(false);
   }, [open]);
@@ -65,7 +54,7 @@ export function NewProjectDialog({
     if (!valid || busy) return;
     setBusy(true);
     setFailed(false);
-    const project = await createProject(name.trim(), url.trim(), platform, materials);
+    const project = await createProject(name.trim(), url.trim(), platform, []);
     setBusy(false);
     // 没建成就**不关**。关掉再什么都不说，等于告诉人「成了」——
     // 而他要到下次翻项目列表时才发现没有。
@@ -73,6 +62,7 @@ export function NewProjectDialog({
       setFailed(true);
       return;
     }
+    navigateProject("canvas",{projectId:project.id});
     onClose();
     onCreated?.(project.id);
   };
@@ -122,16 +112,6 @@ export function NewProjectDialog({
             {platform === "web" ? t("projects.platformWebHint") : t("projects.platformNativeHint")}
           </p>
         </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="mb-1 text-xs text-muted-foreground">{t("projects.materials")}</div>
-        <MaterialPicker selected={materials} onChange={setMaterials} />
-        <p className="mt-1 text-[0.6875rem] text-muted-foreground">
-          {materials.length
-            ? t("projects.materialsPicked", { n: materials.length })
-            : t("projects.materialsNone")}
-        </p>
       </div>
 
       {failed && (

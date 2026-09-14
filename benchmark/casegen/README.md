@@ -16,7 +16,7 @@ gold.json  sha256 前 16 位：2405209c3fe70ac7
 
 **这份 `gold.json` 是从 `fixtures/self-test/gold-checklist.json` 逐字节拷来的，一个字没改。**
 16 条，其中 4 条 `heldOut`。它的价值全部来自「它是人手工从
-`docs/spec/03-UI交互规格.md` 的断言点里抽出来的，没让模型生成」——
+`docs/archive/spec/03-UI交互规格.md` 的断言点里抽出来的，没让模型生成」——
 改动它就是新谱系（P2），所以这个哈希要和每条 scoreboard entry 对上。
 
 `gold.json` 自己的 note 里还写着一句要紧的话：**「需要你复核后才算数，尤其是 heldOut 的四条。」**
@@ -29,7 +29,7 @@ gold.json  sha256 前 16 位：2405209c3fe70ac7
 
 | | gold | 材料 |
 |---|---|---|
-| `fixtures/self-test/gold-checklist.json` | TestPilot 自己的界面（进程页、复核队列、审计台…），16 条 | `docs/spec/02-业务规格与用户故事.md` + `docs/spec/03-UI交互规格.md` |
+| `fixtures/self-test/gold-checklist.json` | TestPilot 自己的界面（进程页、复核队列、审计台…），16 条 | `docs/archive/spec/02-业务规格与用户故事.md` + `docs/archive/spec/03-UI交互规格.md` |
 | `fixtures/mock-spec/gold-checklist.json` | 一个购物门户（登录、购物车、结账），12 条 | `fixtures/mock-spec/acme-portal.md` |
 
 拿 acme 的材料去跑 self-test 的 gold，**覆盖率恒为 0**——
@@ -38,7 +38,7 @@ gold.json  sha256 前 16 位：2405209c3fe70ac7
 
 所以：
 
-- `statement/` 指向 **`docs/spec/02 + 03`**，也就是这份 gold 真正抽自的地方。
+- `statement/` 指向 **`docs/archive/spec/02 + 03`**，也就是这份 gold 真正抽自的地方。
 - `fixtures/mock-spec/` 那一对（`acme-portal.md` + 同目录的 `gold-checklist.json`）
   **自成一对**，是冒烟材料。**Phase 1B 验证 C 臂那次跑用的就是它**——
   材料小、跑得快，适合验证管道通不通，不适合当基准。
