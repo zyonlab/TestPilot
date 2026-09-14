@@ -5,8 +5,8 @@ export {settleOn} from './pageReady.js';
 // Unlike a case run, these are *streamed* — the UI watches the page while the model
 // thinks. They emit frames instead of returning one result, and screenshots leave as file
 // refs: the frames also land in lineage, and lineage must not fill up with base64 JPEGs.
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { resolveText, redact, withModel, type ResolveContext } from "@testpilot/harness-core";
 import { launchSession, type LaunchOpts, type Session } from "./session.js";
 import { isInfraError } from "../failure.js";
@@ -377,6 +377,18 @@ export interface DebugSpec {
   hint?: string;
   resolve: ResolveContext;
   launch: LaunchOpts;
+}
+
+/**
+ * 探索半成品的落点。**两侧共用这一个函数**：探索器往这里写，服务端从这里捡
+ * （`workflowOps.readPartialObservation`）。
+ *
+ * 抽出来是因为这是个典型的会悄悄错开的接缝：两处各写一遍模板字符串，
+ * 哪天改了目录名，写的一侧和读的一侧不会有任何一层报错——只是永远捡不到东西，
+ * 而「捡不到」和「本来就没有」长得一模一样。
+ */
+export function partialObservationPath(artifactDir: string, execId: string): string {
+  return resolve(artifactDir, "observe", `${execId}.partial.json`);
 }
 
 function shooter(spec: { execId: string; artifactDir: string }) {
@@ -1228,6 +1240,38 @@ export async function runObserve(
     }
 
     const screens: string[] = [first.text];
+    /**
+     * **每采到一屏就把已有的材料落一次盘。**
+     *
+     * 2026-09-14 调研出来的：探索是九个节点里唯一一个「中途挂 = 全丢」的，而它同时是最长的
+     * 一个——这次的材料 187,669 字，跑满 20 屏要几十分钟加一次钱包会话。整份结果只在函数
+     * 返回时才组装、才交给服务端落账本，所以第 18 屏上崩掉，前 17 屏花掉的十几次模型调用
+     * 全部作废，resume 从第 1 屏重来。（2026-09-12 还因为收尾时 runner 被心跳看门狗 SIGKILL，
+     * 一晚上丢过四次完整探索。）
+     *
+     * 只落**材料**，不落状态图：`graph` 要到循环跑完才建得出来，而材料就是钱花在的地方。
+     * 写法是「先写临时文件再 rename」——崩在写一半上会留下半个 JSON，那比没有更糟。
+     *
+     * 这不是断点续跑：探索不会从第 18 屏接着走（那要动状态机，是另一件事）。
+     * 它只保证**已经花掉的钱不白花**，以及下游拿到的材料上写着它只到第几屏。
+     */
+    const partialPath = partialObservationPath(spec.artifactDir, spec.execId);
+    const snapshotPartial = (): void => {
+      try {
+        mkdirSync(dirname(partialPath), { recursive: true });
+        const body = JSON.stringify({
+          partial: true,
+          at: new Date().toISOString(),
+          url: spec.url,
+          screens: screens.length,
+          notes: budgeted(screens, "", `===== 这次探索停在第 ${screens.length} 屏 =====`),
+        });
+        writeFileSync(`${partialPath}.tmp`, body);
+        renameSync(`${partialPath}.tmp`, partialPath);
+      } catch { /* 落盘失败不能带垮探索本身——它是附加物，不是判决 */ }
+    };
+    snapshotPartial();
+
     const seen = new Set([signatureOf(first)]);
     const visited: string[] = [first.url];
     const missed: string[] = [];
@@ -2329,6 +2373,7 @@ export async function runObserve(
            */
           if (next.kind === "probe") {
             screens.push(`（实验：${PROBE_WORDS[next.variant]} ${next.label}）\n${after.text}`);
+            snapshotPartial();
             note(`实验结果记入材料（状态未变，但页面文字变了）`);
           }
           /**
@@ -2341,6 +2386,7 @@ export async function runObserve(
            */
           if (next.kind === "click" && next.group && effect.changed) {
             screens.push(describeEffect(next.label, next.group, effect));
+            snapshotPartial();
             note(`页内切换有效果，记入材料（签名未变）`);
           }
           // 代表没走出去 → 它的结构同类一并跳过。这一条直接把「12 张商品卡片吃掉
@@ -2367,6 +2413,7 @@ export async function runObserve(
         triedGoto.add(pathOf(after.url));
         visited.push(after.url);
         screens.push(after.text);
+        snapshotPartial();
         dry = 0;
         consecutiveFailures = 0;
         note(`第 ${screens.length} 屏：${after.url}，${after.controls.length} 个控件`);
@@ -2521,6 +2568,9 @@ export async function runObserve(
     const t2 = Date.now();
     const shotRef = await shot(session);
     note(`收尾用时：回执摘要 ${t1 - t0}ms / 材料 ${t2 - t1}ms / 截图 ${Date.now() - t2}ms`);
+
+    // 跑完了就把半成品删掉：留着它，下一次失败会捡到上一次的材料，而那比没有更糟。
+    try { rmSync(partialPath, { force: true }); } catch { /* 删不掉就算了，里面带着时间戳 */ }
 
     return {
       // 图的摘要跟着材料一起走：下游整理规格时**先看结构再看正文**——
