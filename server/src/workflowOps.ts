@@ -1,8 +1,10 @@
 import { captureWebModels } from './modelSnapshots.js';
 import { observeProduct } from './procs.js';
+import { partialObservationPath } from "@testpilot/harness-testing/exec";
+import { ARTIFACT_DIR } from "./db.js";
 import { controls, beginStage, stageEvent, resumeControls } from './workflowControls.js';
 import { cancelRun as cancelCodex } from "./codex.js";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -116,6 +118,26 @@ export function sourceKnowledge(runId:string,projectId:string,entryUrl:string,ma
     truncation:{omittedOptionalRefs:packs.slice(1).map(p=>p.revision),missingRequiredRefs:[]},isolationEvidence:'service-scoped'});
   return {charter,pack,packRevision:first?.revision,manifest};
 }
+/**
+ * 捡起探索器落下的半成品（`exec/interactive.ts` 的 `snapshotPartial`）。
+ *
+ * 路径按约定拼：观察的 execId 是 `observe-<projectId>`（见 index.ts 的 setAgentObserver），
+ * 一个项目同时只探索一份，所以这个名字够用。读不到、读坏了都当作没有——
+ * 捡不回来是可以接受的，捡回来一份半个 JSON 不行。
+ */
+export function readPartialObservation(projectId:string):{notes:string;url:string;screens:number;graph:unknown;stoppedBecause:unknown}|undefined{
+  try{
+    // 落点由探索器那一侧的函数算，两处共用——见 `partialObservationPath` 的注释。
+    const path=partialObservationPath(ARTIFACT_DIR,`observe-${projectId}`);
+    const raw=JSON.parse(readFileSync(path,'utf8')) as {notes?:string;url?:string;screens?:number;graph?:unknown};
+    if(!raw?.notes?.trim())return undefined;
+    // 半成品里没有状态图（`graph` 要循环跑完才建得出来）。给 undefined 而不是编一个空图：
+    // 下游读到「没有图」是真的没有，读到一个空图会以为这个产品只有一屏。
+    return {notes:raw.notes,url:raw.url??'',screens:raw.screens??0,graph:undefined,
+      stoppedBecause:`探索中途失败，这份材料只到第 ${raw.screens ?? 0} 屏`};
+  }catch{return undefined;}
+}
+
 async function launchSource(runId:string,projectId:string,directory:string,params:{sourceKind:string;sourceUrl?:string;limit:number;stageControlVersion:number;outputLanguage?:string;maxScreens?:number;envRef?:string;exploreActions?:string;exploreWallet?:boolean},envRef?:string){
   const ledger=runLedger();
   try {
@@ -124,7 +146,29 @@ async function launchSource(runId:string,projectId:string,directory:string,param
       const interact=params.exploreActions==='interact';
       const bound=sourceKnowledge(runId,projectId,params.sourceUrl!,params.maxScreens??8,envRef??params.envRef,interact);
       const manifestRevision=ledger.putRevision({runId,projectId,name:'context/source',kind:'report',content:bound.manifest,sourceRefs:bound.manifest.knowledge.map(k=>k.revision)},{kind:'system',id:'stage-validator'});
-      const result=await observeProduct({url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as {notes:string;url:string;screens:unknown;stoppedBecause:unknown;graph:unknown;report?:unknown};
+      /**
+       * **探索崩了，也要把已经采到的屏捡回来。**
+       *
+       * 2026-09-14 调研（docs/v3 的三项顾虑）：九个节点里只有探索是「中途挂 = 全丢」。
+       * 它同时是最长的一个——这次的材料是 187,669 字，跑满 20 屏要几十分钟加一次钱包会话。
+       * 探索器现在每采到一屏就落一次半成品（`exec/interactive.ts` 的 `snapshotPartial`），
+       * 这里在失败路径上把它捡起来：有材料就带着已采到的屏继续走，没有才如实抛。
+       *
+       * 这**不是**断点续跑：不会从第 18 屏接着探。它保证的是已经花掉的钱不白白作废，
+       * 而且这件事要在材料里写明白——下游读到的是一份 18 屏的材料，不是 20 屏的。
+       */
+      let result:{notes:string;url:string;screens:unknown;stoppedBecause:unknown;graph:unknown;report?:unknown;partial?:boolean};
+      let partialReason:string|undefined;
+      try {
+        result=await observeProduct({url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as typeof result;
+      } catch(error) {
+        const salvaged=readPartialObservation(projectId);
+        if(!salvaged?.notes?.trim())throw error;
+        partialReason=String((error as Error).message??error).slice(0,300);
+        result={...salvaged,partial:true};
+        ledger.putRevision({runId,projectId,name:'report/exploration-partial',kind:'report',
+          content:{screens:salvaged.screens,reason:partialReason,at:new Date().toISOString()},sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+      }
       if(ledger.getRun(runId,projectId).status==='cancelled')return;
       if(!result.notes?.trim())throw new Error('exploration_returned_no_observations');
       const observation=ledger.putRevision({runId,projectId,name:'exploration/observations',kind:'report',content:result,sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
@@ -159,8 +203,26 @@ export function workflowCheckpoint(runId: string, projectId: string) {
   const verified = registeredStageProducts(runId);
   const finalized = verified.protected && verified.finalized;
   const states = ledger.nodeStates(runId);
-  const stages = ["instructions", "stories", "cases", "gate", "finalize"];
-  const next = finalized ? "review" : stages.find(stage => !states.some(s => s.node === stage && s.phase === "done")) ?? "finalize";
+  /**
+   * **`source` 与 `modules` 也要在这张清单里。**
+   *
+   * 2026-09-14 调研发现它们不在：一次在 `modules` 上失败的运行，`next` 会指向
+   * `stories`——resume 于是把模块节点整个跳过去，而下游所有单元都按模块树切。
+   * 清单要和 `workflowControls` 的 `nodes` 对齐（少了 g2/execution：那两个不由
+   * resume 驱动，各自有自己的入口和幂等键）。
+   *
+   * 但这两个是**有条件的**：宿主注册的运行（`registerHostRun`）材料在注册时就交了，
+   * 根本没有 `source` 节点，也不走模块规划。所以判据不能是「没 done 就回到它」——
+   * 那会让每一个宿主运行 resume 到一个它从来没有过的节点上（测试当场红了，对的）。
+   * 规则是：**走过、而且没走完**，才回到它；从没走过就不属于这条路径。
+   * `instructions` 往后是必经的，仍然按「没 done 就回到它」。
+   */
+  const conditional = new Set(["source", "modules"]);
+  const stages = ["source", "modules", "instructions", "stories", "cases", "gate", "finalize"];
+  const done = (stage: string) => states.some(s => s.node === stage && s.phase === "done");
+  const touched = (stage: string) => states.some(s => s.node === stage);
+  const next = finalized ? "review"
+    : stages.find(stage => (conditional.has(stage) ? touched(stage) && !done(stage) : !done(stage))) ?? "finalize";
   return { runId, inputHash: run.binding.inputHash, next, finalized, stages: states, materialRevisions: run.binding.materialRevisions,
     source: run.binding.models.entry, runtime: run.binding.models.runtime };
 }
