@@ -29,7 +29,7 @@ const VERB = "get|post|put|patch|delete";
 export function routeInventory() {
   const out = [];
   const app = readFileSync(path.join(ROOT, "server/src/index.ts"), "utf8");
-  for (const m of app.matchAll(new RegExp(`app\\.(${VERB})\\(\\s*"(\\/api\\/[^"]+)"`, "g")))
+  for (const m of app.matchAll(new RegExp(`app\\.(${VERB})\\(\\s*['"\`](\\/api\\/[^'"\`]+)['"\`]`, "g")))
     out.push({ source: "index.ts", method: m[1].toUpperCase(), path: m[2] });
   const mounted = [
     ["server/src/runRoutes.ts", "/api/projects/:projectId/workflow-runs"],
@@ -37,7 +37,7 @@ export function routeInventory() {
   ];
   for (const [file, prefix] of mounted) {
     const text = readFileSync(path.join(ROOT, file), "utf8");
-    for (const m of text.matchAll(new RegExp(`router\\.(${VERB})(?:<[^>]*>)?\\(\\s*[\`"]([^\`"]+)[\`"]`, "g")))
+    for (const m of text.matchAll(new RegExp(`router\\.(${VERB})(?:<[^>]*>)?\\(\\s*['"\`]([^'"\`]+)['"\`]`, "g")))
       out.push({ source: path.basename(file), method: m[1].toUpperCase(), path: prefix + (m[2] === "/" ? "" : m[2]) });
   }
   /**

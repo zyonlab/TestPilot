@@ -395,7 +395,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/materials",
-   "status": "todo"
+   "host": "tp_project.materials"
   },
   {
    "source": "index.ts",
@@ -479,7 +479,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/datasets",
-   "status": "todo"
+   "host": "tp_project.datasets"
   },
   {
    "source": "index.ts",
@@ -491,13 +491,13 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/environments",
-   "status": "todo"
+   "host": "tp_project.environments"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/projects/:id/environments",
-   "status": "todo"
+   "host": "tp_project.add_environment"
   },
   {
    "source": "index.ts",
@@ -521,7 +521,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/overview",
-   "status": "todo"
+   "host": "tp_project.overview"
   },
   {
    "source": "index.ts",
@@ -539,25 +539,25 @@
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/projects/:id/rule-packs/:hash",
-   "status": "todo"
+   "host": "tp_project.remove_rule_pack"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/rule-packs/:hash",
-   "status": "todo"
+   "host": "tp_project.rule_pack"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/rule-packs",
-   "status": "todo"
+   "host": "tp_project.rule_packs"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/projects/:id/rule-packs",
-   "status": "todo"
+   "host": "tp_project.add_rule_pack"
   },
   {
    "source": "index.ts",
@@ -569,7 +569,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/secrets",
-   "status": "todo"
+   "host": "tp_project.secrets"
   },
   {
    "source": "index.ts",
@@ -599,13 +599,13 @@
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/projects/:id",
-   "status": "todo"
+   "host": "tp_project.remove"
   },
   {
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/projects/:id",
-   "status": "todo"
+   "host": "tp_project.update"
   },
   {
    "source": "modelProfilesRoutes.ts",
@@ -629,253 +629,271 @@
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/diff",
-   "status": "todo"
+   "host": "tp_artifact.diff"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/export",
-   "status": "todo"
+   "host": "tp_artifact.export"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/lineage",
-   "status": "todo"
+   "host": "tp_artifact.lineage"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId",
-   "host": "run.read_artifact"
+   "host": "tp_artifact.read"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts",
-   "host": "run.import_artifact"
+   "host": "tp_artifact.import"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/begin-stage",
+   "host": "tp_stage.begin"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/cancel",
-   "status": "todo"
+   "host": "tp_run.cancel"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/checkpoint",
+   "host": "tp_run.checkpoint"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/controls",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/controls",
    "status": "todo"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/events",
-   "status": "todo"
+   "host": "tp_run.events"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
-   "status": "todo"
+   "host": "tp_execution.baseline"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
-   "status": "todo"
+   "host": "tp_execution.set_baseline"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/executions/compare",
-   "status": "todo"
+   "host": "tp_execution.compare"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/executions",
-   "status": "todo"
+   "host": "tp_execution.list"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/modules/freeze",
-   "status": "todo"
+   "host": "tp_stage.freeze_modules"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/resume",
-   "status": "todo"
+   "host": "tp_run.resume"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/review-history",
-   "status": "todo"
+   "host": "tp_review.history"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/review",
-   "status": "todo"
+   "host": "tp_review.list"
   },
   {
    "source": "runRoutes.ts",
    "method": "PATCH",
    "path": "/api/projects/:projectId/workflow-runs/:runId/review",
-   "status": "todo"
+   "host": "tp_review.amend"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/review",
-   "status": "todo"
+   "host": "tp_review.decide"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/spend",
-   "status": "todo"
+   "host": "tp_run.spend"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/cases",
-   "host": "stage.write_cases"
+   "host": "tp_stage.cases"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/decisions",
-   "status": "todo"
+   "host": "tp_stage.decisions"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/execute",
-   "host": "stage.execute_approved"
+   "host": "tp_stage.execute"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/finalize",
-   "host": "stage.finalize_run"
+   "host": "tp_stage.finalize"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/g2",
-   "host": "stage.generate_execution"
+   "host": "tp_stage.g2"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/gate",
-   "host": "stage.gate_run"
+   "host": "tp_stage.gate"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/instructions",
-   "host": "stage.load_run_instructions"
+   "host": "tp_stage.instructions"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/modules/state",
-   "host": "stage.module_plan_state"
+   "host": "tp_stage.modules_state"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/modules",
-   "host": "stage.plan_modules"
+   "host": "tp_stage.modules"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/retrieve",
-   "host": "stage.retrieve_spec"
+   "host": "tp_stage.retrieve"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/status",
-   "status": "todo"
+   "host": "tp_stage.status"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/stories",
-   "host": "stage.write_stories"
+   "host": "tp_stage.stories"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/claim",
-   "host": "stage.claim_unit"
+   "host": "tp_unit.claim"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/merge",
-   "host": "stage.merge_units"
+   "host": "tp_unit.merge"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/status",
-   "host": "stage.unit_status"
+   "host": "tp_unit.status"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/write",
-   "host": "stage.write_unit"
+   "host": "tp_unit.write"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId",
-   "host": "run.get"
+   "host": "tp_run.get"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/artifacts",
-   "status": "todo"
+   "host": "tp_artifact.list"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/register",
-   "host": "run.register"
+   "host": "tp_run.register"
   },
   {
    "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs",
-   "status": "todo"
+   "host": "tp_run.list"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs",
-   "status": "todo"
+   "host": "tp_run.start"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects",
-   "status": "todo"
+   "host": "tp_project.list"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/projects",
-   "status": "todo"
+   "host": "tp_project.create"
   },
   {
    "source": "index.ts",
@@ -1007,13 +1025,13 @@
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/wf/runs/:id/breakpoints",
-   "status": "todo"
+   "host": "tp_run.breakpoints"
   },
   {
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/wf/runs/:id/budget",
-   "status": "todo"
+   "host": "tp_run.budget"
   },
   {
    "source": "index.ts",
@@ -1037,19 +1055,19 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/wf/runs/:id/nodes/:nodeId/run",
-   "status": "todo"
+   "host": "tp_run.run_node"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/wf/runs/:id/nodes/:nodeId",
-   "status": "todo"
+   "host": "tp_run.node"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/wf/runs/:id/resume-point",
-   "status": "todo"
+   "host": "tp_run.resume_point"
   },
   {
    "source": "index.ts",
@@ -1061,7 +1079,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/wf/runs/:id/traceability",
-   "status": "todo"
+   "host": "tp_run.traceability"
   },
   {
    "source": "index.ts",
@@ -1083,8 +1101,8 @@
   }
  ],
  "baseline": {
-  "covered": 18,
-  "reachable": 180,
-  "rate": 0.1
+  "covered": 61,
+  "reachable": 183,
+  "rate": 0.3333
  }
 }

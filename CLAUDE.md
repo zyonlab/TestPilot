@@ -47,7 +47,7 @@
 ```bash
 pnpm typecheck && pnpm test          # 各包 tsc + vitest + hook 子进程测试
 pnpm check:drift                     # 两臂提示词逐条认领
-node scripts/check-host-parity.mjs   # 宿主入口对 UI 操作的覆盖；加了 UI 路由必须同步分类
+pnpm check:host-parity               # 宿主入口对 UI 操作的覆盖；加了 UI 路由必须同步分类
 node scripts/replay.mjs              # 冻结运行确定性重打分
 node scripts/cost-report.mjs         # 每条用例的账（跑过用例之后）
 ```

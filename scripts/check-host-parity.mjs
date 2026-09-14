@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { routeInventory, routeKey } from "./host-parity.mjs";
+import { actionIndex } from "../packages/testpilot-mcp/src/host/registry.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FILE = path.join(ROOT, "server/host-parity.json");
@@ -37,6 +38,24 @@ function main() {
         `做了就写 host:"<tool>.<action>"，还没做写 status:"todo"，故意不给写 uiOnly:"<理由>"。跑 --write 先并进来。`);
     for (const k of stale) problems.push(`${k} 在清单里但源码里已经没有了——跑 --write 清掉。`);
   }
+
+  /**
+   * **registry 里每一行都必须对应一条真实路由。**
+   *
+   * 2026-09-14 第一版我照着记忆写了十条路径，真实存在的只有两条——参数叫 `:id` 不是
+   * `:projectId`，材料是全局 `/api/materials` 不是项目下的。路径写错不会有任何一层报错，
+   * 只会在 agent 真调的时候 404，而那时候人已经在等结果了。
+   *
+   * 反过来也查：`host:` 指向一个 registry 里不存在的动作，同样是红。
+   */
+  const known = new Set(actual.map(routeKey));
+  for (const [name, { spec }] of actionIndex())
+    if (!known.has(`${spec.method} ${spec.path}`))
+      problems.push(`registry 的 ${name} 指向 ${spec.method} ${spec.path}，而服务端没有这条路由。`);
+  const actions = new Set(actionIndex().keys());
+  for (const r of [...declared.values()])
+    if (r.host && !actions.has(r.host))
+      problems.push(`${routeKey(r)} 标了 host:"${r.host}"，而 registry 里没有这个动作。`);
 
   const rows = [...declared.values()];
   for (const r of rows) {
