@@ -3,6 +3,8 @@
 # 三件事：
 #   1. typecheck + 各包单测（含 hook 子进程测试）——门禁类行为不过模型，脚本化输入就能钉住；
 #   2. check-drift——两臂提示词的规则逐条认领，漂移即红；
+#   2b. check-host-parity——宿主入口要能覆盖 Web UI 的每一个操作。每条路由必须被分类，
+#      覆盖率只能涨不能跌。加了 UI 路由却忘了同步宿主，在这里当场红。
 #   3. replay——对仓库里冻结的运行重打分，coverage 必须和 expected.json 逐位相同。
 #      这是「CI 只跑 replay、不打 API」：score_run 是确定性的，录制的运行在 benchmark/*/replay/ 里。
 name: ci
@@ -34,5 +36,7 @@ jobs:
         run: pnpm test:hooks
       - name: prompt drift (两臂提示词逐条认领)
         run: pnpm check:drift
+      - name: host parity (宿主入口对 UI 操作的覆盖，只能涨不能跌)
+        run: pnpm check:host-parity
       - name: replay frozen runs (确定性重打分，不打 API)
         run: node scripts/replay.mjs

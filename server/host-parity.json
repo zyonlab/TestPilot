@@ -1,0 +1,1090 @@
+{
+ "note": "宿主入口对 Web UI 操作的覆盖清单。每条路由必须被分类；见 scripts/host-parity.mjs 的注释。",
+ "routes": [
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/ablatable",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/calibration",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/diff",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/holds",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/audit/:runId/labels",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/scan",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/batches/:id/cancel",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/batches/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/capabilities/:id/cwd",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/capabilities",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/capabilities",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/baseline-verdict",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/baselines/approve",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases/:id/code",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/cases/:id/code",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases/:id/data-binding",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases/:id/debug",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/generate-code",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/perf-baseline/approve",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/quarantine",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/recompute-flakiness",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/refine",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/run",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/cases/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/cases/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/chat/apply-graph",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/chat/apply-prompt",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/chat",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/config",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/config",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/critic",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/critic",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/dapp/verify",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/datasets/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/datasets/preview",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/defects",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/environments/:id/api-login",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/environments/:id/capture-session",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/environments/:id/session",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/environments/:id/set-session",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/environments/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/detection",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/paired",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/score",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/specs/:id/run",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/specs/from-critique",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals/specs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals/subject/:graphId",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/events",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/examples/uniswap",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/generate-code",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/gold/:capability",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/gold/:capability",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id/diff",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id/versions/:version",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id/versions",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/graphs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/health",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/llm-debug",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/materials",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/model/config",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/model/config",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/model/test",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/mutation/:wfRunId",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/mutation/:wfRunId",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/node-types",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/processes/:id/:action",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/processes/:id/cancel-work",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/processes",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/batches",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/changes",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/code-line",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/cost",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/datasets",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/datasets",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/environments",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/environments",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/export-preflight",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/export",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/flakiness",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/overview",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/pending-baselines",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/quarantine-log",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id/rule-packs/:hash",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/rule-packs/:hash",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/rule-packs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/rule-packs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id/secrets/:key",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/secrets",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/secrets",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/suite",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/traceability",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/trends",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/projects/:id",
+   "status": "todo"
+  },
+  {
+   "source": "modelProfilesRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/model-profiles/:role/probe",
+   "status": "todo"
+  },
+  {
+   "source": "modelProfilesRoutes.ts",
+   "method": "PUT",
+   "path": "/api/projects/:projectId/model-profiles/:role",
+   "status": "todo"
+  },
+  {
+   "source": "modelProfilesRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/model-profiles",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/diff",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/export",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/lineage",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId",
+   "host": "run.read_artifact"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts",
+   "host": "run.import_artifact"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/cancel",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/checkpoint",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/events",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/compare",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/modules/freeze",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/resume",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review-history",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "PATCH",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/spend",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/cases",
+   "host": "stage.write_cases"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/decisions",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/execute",
+   "host": "stage.execute_approved"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/finalize",
+   "host": "stage.finalize_run"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/g2",
+   "host": "stage.generate_execution"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/gate",
+   "host": "stage.gate_run"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/instructions",
+   "host": "stage.load_run_instructions"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/modules/state",
+   "host": "stage.module_plan_state"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/modules",
+   "host": "stage.plan_modules"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/retrieve",
+   "host": "stage.retrieve_spec"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/status",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/stories",
+   "host": "stage.write_stories"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/claim",
+   "host": "stage.claim_unit"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/merge",
+   "host": "stage.merge_units"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/status",
+   "host": "stage.unit_status"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/write",
+   "host": "stage.write_unit"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId",
+   "host": "run.get"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/artifacts",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/register",
+   "host": "run.register"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/queue",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/readiness",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/approve",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/batch",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/review/:wfRunId/cases/:caseId",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/gap-case",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/regenerate",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/reject",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/review/:wfRunId",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/review",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/run",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/runs/:id/report",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/runs/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/runs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/scoreboard/paired",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/scoreboard",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/settings/reset-prompts",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/settings",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/settings",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wallet/check",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wallet/dapp-test",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/wf/runs/:id/breakpoints",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/wf/runs/:id/budget",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/cancel",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/continuations",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/continue",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/nodes/:nodeId/run",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/nodes/:nodeId",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/resume-point",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/resume",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/traceability",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs",
+   "status": "todo"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs",
+   "status": "todo"
+  }
+ ],
+ "baseline": {
+  "covered": 18,
+  "reachable": 180,
+  "rate": 0.1
+ }
+}

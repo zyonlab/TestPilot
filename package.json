@@ -15,6 +15,7 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:hooks": "node --test \"plugins/testpilot/hooks/test/*.test.mjs\"",
     "check:drift": "node scripts/check-drift.mjs",
+    "check:host-parity": "node scripts/check-host-parity.mjs",
     "build:claude-plugin": "node scripts/build-claude-plugin.mjs",
     "cost:report": "node scripts/cost-report.mjs",
     "doctor": "node scripts/testpilot-setup.mjs doctor",
