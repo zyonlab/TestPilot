@@ -41,13 +41,13 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/batches/:id/cancel",
-   "status": "todo"
+   "host": "tp_report.cancel_batch"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/batches/:id",
-   "status": "todo"
+   "host": "tp_report.batch"
   },
   {
    "source": "index.ts",
@@ -59,7 +59,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/capabilities",
-   "status": "todo"
+   "host": "tp_settings.capabilities"
   },
   {
    "source": "index.ts",
@@ -71,97 +71,97 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/baseline-verdict",
-   "status": "todo"
+   "host": "tp_case.baseline_verdict"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/baselines/approve",
-   "status": "todo"
+   "host": "tp_case.approve_visual_baseline"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/cases/:id/code",
-   "status": "todo"
+   "host": "tp_case.code"
   },
   {
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/cases/:id/code",
-   "status": "todo"
+   "host": "tp_case.set_code"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/cases/:id/data-binding",
-   "status": "todo"
+   "host": "tp_case.data_binding"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/cases/:id/debug",
-   "status": "todo"
+   "host": "tp_case.debug"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/generate-code",
-   "status": "todo"
+   "host": "tp_case.generate_code"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/perf-baseline/approve",
-   "status": "todo"
+   "host": "tp_case.approve_perf_baseline"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/quarantine",
-   "status": "todo"
+   "host": "tp_case.quarantine"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/recompute-flakiness",
-   "status": "todo"
+   "host": "tp_case.recompute_flakiness"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/refine",
-   "status": "todo"
+   "host": "tp_case.refine"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/run",
-   "status": "todo"
+   "host": "tp_case.run"
   },
   {
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/cases/:id",
-   "status": "todo"
+   "host": "tp_case.remove"
   },
   {
    "source": "index.ts",
    "method": "PATCH",
    "path": "/api/cases/:id",
-   "status": "todo"
+   "host": "tp_case.update"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/cases",
-   "status": "todo"
+   "host": "tp_case.list"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases",
-   "status": "todo"
+   "host": "tp_case.create"
   },
   {
    "source": "index.ts",
@@ -227,61 +227,61 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/defects",
-   "status": "todo"
+   "host": "tp_report.defects"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/environments/:id/api-login",
-   "status": "todo"
+   "host": "tp_settings.api_login"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/environments/:id/capture-session",
-   "status": "todo"
+   "host": "tp_settings.capture_session"
   },
   {
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/environments/:id/session",
-   "status": "todo"
+   "host": "tp_settings.clear_session"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/environments/:id/set-session",
-   "status": "todo"
+   "host": "tp_settings.set_session"
   },
   {
    "source": "index.ts",
    "method": "DELETE",
    "path": "/api/environments/:id",
-   "status": "todo"
+   "host": "tp_settings.remove_environment"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/evals/:id",
-   "status": "todo"
+   "host": "tp_eval.eval"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/evals/detection",
-   "status": "todo"
+   "host": "tp_eval.detection"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/evals/paired",
-   "status": "todo"
+   "host": "tp_eval.paired"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/evals/score",
-   "status": "todo"
+   "host": "tp_eval.score"
   },
   {
    "source": "index.ts",
@@ -311,7 +311,7 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/evals",
-   "status": "todo"
+   "host": "tp_eval.evals"
   },
   {
    "source": "index.ts",
@@ -335,13 +335,13 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/gold/:capability",
-   "status": "todo"
+   "host": "tp_eval.gold"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/gold/:capability",
-   "status": "todo"
+   "host": "tp_eval.set_gold"
   },
   {
    "source": "index.ts",
@@ -401,19 +401,19 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/model/config",
-   "status": "todo"
+   "host": "tp_settings.model_config"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/model/config",
-   "status": "todo"
+   "host": "tp_settings.set_model_config"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/model/test",
-   "status": "todo"
+   "host": "tp_settings.test_model"
   },
   {
    "source": "index.ts",
@@ -455,25 +455,25 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/batches",
-   "status": "todo"
+   "host": "tp_report.batches"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/changes",
-   "status": "todo"
+   "host": "tp_report.changes"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/code-line",
-   "status": "todo"
+   "host": "tp_report.code_line"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/cost",
-   "status": "todo"
+   "host": "tp_report.cost"
   },
   {
    "source": "index.ts",
@@ -503,19 +503,19 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/export-preflight",
-   "status": "todo"
+   "host": "tp_export.preflight"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/export",
-   "status": "todo"
+   "host": "tp_export.export"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/flakiness",
-   "status": "todo"
+   "host": "tp_report.flakiness"
   },
   {
    "source": "index.ts",
@@ -527,13 +527,13 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/pending-baselines",
-   "status": "todo"
+   "host": "tp_report.pending_baselines"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/quarantine-log",
-   "status": "todo"
+   "host": "tp_report.quarantine_log"
   },
   {
    "source": "index.ts",
@@ -581,19 +581,19 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/projects/:id/suite",
-   "status": "todo"
+   "host": "tp_export.suite"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/traceability",
-   "status": "todo"
+   "host": "tp_report.traceability"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/trends",
-   "status": "todo"
+   "host": "tp_report.trends"
   },
   {
    "source": "index.ts",
@@ -611,19 +611,19 @@
    "source": "modelProfilesRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/model-profiles/:role/probe",
-   "status": "todo"
+   "host": "tp_settings.probe_profile"
   },
   {
    "source": "modelProfilesRoutes.ts",
    "method": "PUT",
    "path": "/api/projects/:projectId/model-profiles/:role",
-   "status": "todo"
+   "host": "tp_settings.set_profile"
   },
   {
    "source": "modelProfilesRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/model-profiles",
-   "status": "todo"
+   "host": "tp_settings.profiles"
   },
   {
    "source": "runRoutes.ts",
@@ -899,13 +899,13 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/queue",
-   "status": "todo"
+   "host": "tp_report.queue"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/readiness",
-   "status": "todo"
+   "host": "tp_report.readiness"
   },
   {
    "source": "index.ts",
@@ -965,49 +965,49 @@
    "source": "index.ts",
    "method": "GET",
    "path": "/api/runs/:id/report",
-   "status": "todo"
+   "host": "tp_report.report"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/runs/:id",
-   "status": "todo"
+   "host": "tp_report.run"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/runs",
-   "status": "todo"
+   "host": "tp_report.runs"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/scoreboard/paired",
-   "status": "todo"
+   "host": "tp_eval.paired_scoreboard"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/scoreboard",
-   "status": "todo"
+   "host": "tp_eval.scoreboard"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/settings/reset-prompts",
-   "status": "todo"
+   "host": "tp_settings.reset_prompts"
   },
   {
    "source": "index.ts",
    "method": "GET",
    "path": "/api/settings",
-   "status": "todo"
+   "host": "tp_settings.get"
   },
   {
    "source": "index.ts",
    "method": "POST",
    "path": "/api/settings",
-   "status": "todo"
+   "host": "tp_settings.set"
   },
   {
    "source": "index.ts",
@@ -1101,8 +1101,8 @@
   }
  ],
  "baseline": {
-  "covered": 61,
+  "covered": 121,
   "reachable": 183,
-  "rate": 0.3333
+  "rate": 0.6612
  }
 }

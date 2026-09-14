@@ -184,7 +184,118 @@ const execution: DomainSpec = {
   },
 };
 
-export const DOMAINS: readonly DomainSpec[] = [project, run, stage, unit, artifact, review, execution];
+
+/** 用例：看板上的那一份。改、跑、生成代码、隔离、基线。 */
+const kase: DomainSpec = {
+  tool: "tp_case",
+  title: "用例",
+  description:
+    "看板上的用例：读、改、单条跑、生成代码、隔离不稳定的、立视觉与性能基线。" +
+    "「跑一条」由服务端开浏览器执行——宿主没有浏览器。",
+  actions: {
+    list: { summary: "列出用例（可按项目筛）", method: "GET", path: "/api/cases" },
+    create: { summary: "新建一条用例", method: "POST", path: "/api/cases", mutates: true, body: json },
+    update: { summary: "改一条用例", method: "PATCH", path: "/api/cases/:id", params: ["id"], mutates: true, body: json },
+    remove: { summary: "删一条用例", method: "DELETE", path: "/api/cases/:id", params: ["id"], mutates: true },
+    code: { summary: "读一条用例编译出来的代码", method: "GET", path: "/api/cases/:id/code", params: ["id"] },
+    set_code: { summary: "改一条用例的代码", method: "PATCH", path: "/api/cases/:id/code", params: ["id"], mutates: true, body: json },
+    generate_code: { summary: "为一条用例生成代码", method: "POST", path: "/api/cases/:id/generate-code", params: ["id"], mutates: true, body: json },
+    run: { summary: "跑一条用例（服务端开浏览器；执行层带缓存，同一条重跑省 token）", method: "POST", path: "/api/cases/:id/run", params: ["id"], mutates: true, body: json },
+    debug: { summary: "读一条用例的调试信息：每一步看到了什么、判据怎么判的", method: "GET", path: "/api/cases/:id/debug", params: ["id"] },
+    refine: { summary: "让模型改写一条用例（自愈不许动 oracle）", method: "POST", path: "/api/cases/:id/refine", params: ["id"], mutates: true, body: json },
+    quarantine: { summary: "把不稳定的用例隔离：照跑但不进门禁", method: "POST", path: "/api/cases/:id/quarantine", params: ["id"], mutates: true, body: json },
+    recompute_flakiness: { summary: "重算这条用例的不稳定度", method: "POST", path: "/api/cases/:id/recompute-flakiness", params: ["id"], mutates: true, body: json },
+    approve_visual_baseline: { summary: "批准视觉基线。**这是人的决定**", method: "POST", path: "/api/cases/:id/baselines/approve", params: ["id"], mutates: true, body: json },
+    approve_perf_baseline: { summary: "批准性能基线。**这是人的决定**", method: "POST", path: "/api/cases/:id/perf-baseline/approve", params: ["id"], mutates: true, body: json },
+    baseline_verdict: { summary: "对判决集基线表态", method: "POST", path: "/api/cases/:id/baseline-verdict", params: ["id"], mutates: true, body: json },
+    // 绑定没有独立的写入路由：改绑定走 `update`（PATCH /api/cases/:id）的 dataKey 字段。
+    data_binding: { summary: "读用例绑定的数据集与列", method: "GET", path: "/api/cases/:id/data-binding", params: ["id"] },
+  },
+};
+
+/** 报告：跑完之后的那些数——单次运行、批次、趋势、成本、不稳定度。 */
+const report: DomainSpec = {
+  tool: "tp_report",
+  title: "运行报告与趋势",
+  description: "读执行结果：单次运行的报告、批次、待批基线、趋势、成本、不稳定度、追溯线。",
+  actions: {
+    runs: { summary: "列出最近的执行", method: "GET", path: "/api/runs" },
+    run: { summary: "读一次执行", method: "GET", path: "/api/runs/:id", params: ["id"] },
+    report: { summary: "读一次执行的完整报告：每一步、截图、判据、失败归因", method: "GET", path: "/api/runs/:id/report", params: ["id"] },
+    batches: { summary: "列出项目的批次", method: "GET", path: "/api/projects/:id/batches", params: ["id"] },
+    batch: { summary: "读一个批次", method: "GET", path: "/api/batches/:id", params: ["id"] },
+    cancel_batch: { summary: "取消一个批次", method: "POST", path: "/api/batches/:id/cancel", params: ["id"], mutates: true },
+    pending_baselines: { summary: "列出等人批的基线", method: "GET", path: "/api/projects/:id/pending-baselines", params: ["id"] },
+    trends: { summary: "读项目趋势：通过率、覆盖、成本随时间怎么走", method: "GET", path: "/api/projects/:id/trends", params: ["id"] },
+    cost: { summary: "读项目花了多少", method: "GET", path: "/api/projects/:id/cost", params: ["id"] },
+    flakiness: { summary: "读项目的不稳定度", method: "GET", path: "/api/projects/:id/flakiness", params: ["id"] },
+    traceability: { summary: "读项目的追溯线：需求 → 用例 → 执行", method: "GET", path: "/api/projects/:id/traceability", params: ["id"] },
+    quarantine_log: { summary: "读隔离记录", method: "GET", path: "/api/projects/:id/quarantine-log", params: ["id"] },
+    changes: { summary: "读项目的变更记录", method: "GET", path: "/api/projects/:id/changes", params: ["id"] },
+    code_line: { summary: "读代码线：哪条用例的代码来自哪次运行", method: "GET", path: "/api/projects/:id/code-line", params: ["id"] },
+    queue: { summary: "读执行队列：现在有什么在排队跑", method: "GET", path: "/api/queue" },
+    readiness: { summary: "读就绪度：这个项目现在能不能交付一套能跑的测试", method: "GET", path: "/api/readiness" },
+    defects: { summary: "读缺陷清单：执行找出来的产品问题", method: "GET", path: "/api/defects" },
+  },
+};
+
+/** 导出：把批准的用例变成一个能自己跑的 Playwright 工程。 */
+const exportProject: DomainSpec = {
+  tool: "tp_export",
+  title: "生成用例代码工程",
+  description:
+    "把项目里批准的用例导成一个能离开平台自己跑的 Playwright + Midscene 工程。" +
+    "工程里分两种文件：生成物（每次覆盖）与脚手架（只在缺失时创建），见导出 README。",
+  actions: {
+    preflight: { summary: "导出前检查：哪些用例没代码、哪些被隔离、登录带没带走", method: "GET", path: "/api/projects/:id/export-preflight", params: ["id"] },
+    export: { summary: "导出工程（format=json 拿文件表，否则是 zip）", method: "GET", path: "/api/projects/:id/export", params: ["id"] },
+    suite: { summary: "跑整套：批量执行项目里的用例", method: "POST", path: "/api/projects/:id/suite", params: ["id"], mutates: true, body: json },
+  },
+};
+
+/** 设置：模型、环境会话、全局配置。 */
+const settings: DomainSpec = {
+  tool: "tp_settings",
+  title: "设置",
+  description: "模型配置与探针、每个角色的模型档案、环境会话、全局设置。密钥的值永远不经过这里。",
+  actions: {
+    get: { summary: "读全局设置", method: "GET", path: "/api/settings" },
+    set: { summary: "改全局设置", method: "POST", path: "/api/settings", mutates: true, body: json },
+    reset_prompts: { summary: "把提示词恢复成出厂", method: "POST", path: "/api/settings/reset-prompts", mutates: true, body: json },
+    model_config: { summary: "读模型配置", method: "GET", path: "/api/model/config" },
+    set_model_config: { summary: "改模型配置", method: "POST", path: "/api/model/config", mutates: true, body: json },
+    test_model: { summary: "探一次模型端点：活着吗、能不能看图", method: "POST", path: "/api/model/test", mutates: true, body: json },
+    profiles: { summary: "读各角色的模型档案", method: "GET", path: "/api/projects/:projectId/model-profiles", params: ["projectId"] },
+    set_profile: { summary: "设某个角色的模型档案", method: "PUT", path: "/api/projects/:projectId/model-profiles/:role", params: ["projectId", "role"], mutates: true, body: json },
+    probe_profile: { summary: "探一个角色的模型档案", method: "POST", path: "/api/projects/:projectId/model-profiles/:role/probe", params: ["projectId", "role"], mutates: true, body: json },
+    capture_session: { summary: "抓一次登录会话存进环境", method: "POST", path: "/api/environments/:id/capture-session", params: ["id"], mutates: true, body: json },
+    set_session: { summary: "直接写入一份会话", method: "POST", path: "/api/environments/:id/set-session", params: ["id"], mutates: true, body: json },
+    clear_session: { summary: "清掉环境里的会话", method: "DELETE", path: "/api/environments/:id/session", params: ["id"], mutates: true },
+    api_login: { summary: "配置接口登录", method: "POST", path: "/api/environments/:id/api-login", params: ["id"], mutates: true, body: json },
+    remove_environment: { summary: "删一个环境", method: "DELETE", path: "/api/environments/:id", params: ["id"], mutates: true },
+    capabilities: { summary: "读可用的外部能力（本地链、基准站点等）", method: "GET", path: "/api/capabilities" },
+  },
+};
+
+/** 评测：记分板、gold、配对评测、变异检测。 */
+const evaluation: DomainSpec = {
+  tool: "tp_eval",
+  title: "评测与记分板",
+  description: "读记分板与 gold、跑配对评测与变异检测。gold 与人工标注是冻结的，只读不改。",
+  actions: {
+    scoreboard: { summary: "读记分板：各能力的当前得分与翻转次数", method: "GET", path: "/api/scoreboard" },
+    paired_scoreboard: { summary: "读配对评测的记分板", method: "POST", path: "/api/scoreboard/paired", mutates: true, body: json },
+    gold: { summary: "读某个能力的 gold（冻结，只读）", method: "GET", path: "/api/gold/:capability", params: ["capability"] },
+    set_gold: { summary: "写 gold。**冻结集，动它要非常确定**", method: "POST", path: "/api/gold/:capability", params: ["capability"], mutates: true, body: json },
+    evals: { summary: "列出评测定义（两臂只差一件事的那些对照）", method: "GET", path: "/api/evals" },
+    eval: { summary: "读一个评测", method: "GET", path: "/api/evals/:id", params: ["id"] },
+    score: { summary: "给一次运行打分", method: "POST", path: "/api/evals/score", mutates: true, body: json },
+    paired: { summary: "跑一次配对评测（两臂只差一件事）", method: "POST", path: "/api/evals/paired", mutates: true, body: json },
+    detection: { summary: "跑变异检测：人造缺陷，看用例叫不叫", method: "POST", path: "/api/evals/detection", mutates: true, body: json },
+  },
+};
+
+export const DOMAINS: readonly DomainSpec[] = [project, run, stage, unit, artifact, review, execution, kase, report, exportProject, settings, evaluation];
 
 /** `<domain>.<action>` → 规格。`check-host-parity` 与工具注册都从这里取。 */
 export function actionIndex(): Map<string, { domain: DomainSpec; action: string; spec: ActionSpec }> {

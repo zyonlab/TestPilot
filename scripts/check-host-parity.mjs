@@ -32,6 +32,22 @@ function main() {
   if (WRITE) {
     for (const r of missing) declared.set(routeKey(r), { ...r, status: "todo" });
     for (const k of stale) declared.delete(k);
+    /**
+     * **归属由 registry 算，不靠人手工维护。**
+     *
+     * 第一版 `--write` 只刷新基线，于是新加了五个域、`check` 仍然报 33.3%——
+     * 因为 `host:` 字段还得有人一条条去填。一张需要手工同步的表，
+     * 和它要防的那种漂移是同一件事。现在：registry 里有这条路由就是 host，
+     * 没有就退回 todo（除非人显式标了 uiOnly）。
+     */
+    const byRoute = new Map();
+    for (const [name, { spec }] of actionIndex()) byRoute.set(`${spec.method} ${spec.path}`, name);
+    for (const [key, row] of declared) {
+      if (row.uiOnly) continue;
+      const host = byRoute.get(key);
+      if (host) { row.host = host; delete row.status; }
+      else { delete row.host; row.status = "todo"; }
+    }
   } else {
     for (const r of missing)
       problems.push(`${routeKey(r)}（${r.source}）是新路由，清单里没有它。宿主能不能做这件事？` +
