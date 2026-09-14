@@ -1,4 +1,4 @@
-import { cacheDigest, scopedCacheId } from './cache.js';
+import { STRUCTURE_PROBE, cacheDigest, scopedCacheId, structureOf } from './cache.js';
 import { visibleContextTree } from './visibleContext.js';
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -227,7 +227,11 @@ export function newAgent(page: Page, cacheId?: string, executorModel?: RoleModel
 }
 
 async function contextualAgent(page:Page,opts:LaunchOpts,connection?:RoleModelConnection) {
- const cacheId=opts.cacheId ? scopedCacheId(opts.cacheId,opts.cacheContext,{url:page.url(),dom:await page.content(),scene:cacheDigest(Buffer.from(await page.screenshot({type:'png'})).toString('base64'))}) : undefined;
+ // 结构指纹而不是 DOM+截图：见 cache.ts 的注释。实时行情页上后者几乎必然每次不同。
+ const cacheId=opts.cacheId ? scopedCacheId(opts.cacheId,opts.cacheContext,{
+   url:page.url(),
+   structure:structureOf(await page.evaluate(STRUCTURE_PROBE) as Array<{tag:string;role?:string|null;label?:string|null}>),
+ }) : undefined;
  return newAgent(page,cacheId,connection??opts.executorModel);
 }
 
