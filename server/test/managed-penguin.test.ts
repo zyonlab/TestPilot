@@ -19,7 +19,21 @@ afterAll(async () => {
   dirs.forEach(d => rmSync(d, { recursive: true, force: true }));
 });
 
-const installed = existsSync(node24Path()) && existsSync(penguinBin());
+/**
+ * **「装没装」这个探测自己不能炸。**
+ *
+ * 下面四条都是 `it.runIf(installed)`——没装 Penguin SDK 就跳过，机制是齐的。
+ * 但 `node24Path()` 在找不到 Node 24 时**抛异常**（`penguin_node_24_required`），
+ * 而它在模块顶层被调用：于是在一台没有 Node 24 的机器上，整个文件加载失败，
+ * 四条测试连「跳过」都到不了，整个 server 包的测试红。
+ *
+ * 2026-09-14：CI 用的是 Node 22，从来没绿过——三条 PR 分支各红了一次，
+ * 红的都是这一条，和各自改的东西毫无关系。探测的答案本来就该是「没有」，
+ * 不是「出错」。
+ */
+const installed = (() => {
+  try { return existsSync(node24Path()) && existsSync(penguinBin()); } catch { return false; }
+})();
 function allText(dir: string): string {
   return readdirSync(dir, { withFileTypes: true }).map(e => e.isDirectory() ? allText(join(dir, e.name)) : readFileSync(join(dir, e.name)).toString()).join("\n");
 }
