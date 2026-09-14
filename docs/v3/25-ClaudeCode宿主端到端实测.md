@@ -114,11 +114,34 @@ C-12 的判据是 `Account value must be <$2500万 to use portfolio margin in be
 `No open positions yet`、`Trailing Stop`、`The maximum leverage is 10x.` 都是逐字英文。
 拿它当 `text` 判据必然永远不匹配。**`outputLanguage: 'zh'` 的运行都可能中招。**
 
+### 执行：10 条真跑到测试网，9 过 1 败，零基础设施错误
+
+```
+✓ C-03 C-05 C-07 C-08   machine:pass(挣来的)
+⚠ C-01 C-02 C-06 C-09 C-11   machine:pass(免费)
+✗ C-10 failed
+通过 9 条里：挣来的 4 条 · 判据在初始页面就成立的 5 条
+```
+
+**唯一一条失败是定位失败，不是产品缺陷。** C-10 第 2 步
+「点击页面下半部分账户面板标签行里的「Positions」」：
+
+```
+AI model failed to locate: The 'Positions' tab in the account panel tab row
+at the bottom of the page was not found in the provided element list or screenshot.
+```
+
+页面就绪读数是 `30 controls, 1849 text characters`——页面是画完的。未连接钱包时
+账户面板那一行标签本来就可能不在，或者不叫这个名字。归 `locate` 而不是 `assert`，
+分档是对的：这条要改用例措辞，不该走「产品是坏的」那个出口。
+
 ### 两条批了但要标出来的弱判据
 
 C-01「输入数量后可用余额仍为 0.00 USDC」、C-11「切到 Sell / Short 后仓位仍是 0.00 HYPE」
 ——判据在**动作之前就已经成立**。作为不变性检查勉强成立，但它分不清「没变」和「本来就是」。
-执行结果里的 `heldBefore` 会把这种绿标出来。
+执行结果证实了：C-01、C-11 都是 `machine:pass(免费)`，另外 C-02、C-06、C-09 也是——
+**9 条通过里只有 4 条是挣来的**。判据是真的机器判据，通过也是真的通过，
+但其中 5 条的判据在动作之前就已经成立，这次通过没有证明那几步做成了什么。
 
 ## 还没验到的
 
