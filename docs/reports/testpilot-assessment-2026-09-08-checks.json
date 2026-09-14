@@ -1,0 +1,29 @@
+{
+  "synthetic": true,
+  "networkCalls": 0,
+  "writesToProduct": 0,
+  "g2": "stage \"g2\" (regenerate from approved cases) is not implemented yet — phase 1A only ships g1",
+  "agentSpecified": {
+    "findings": [
+      {
+        "kind": "oracle-weakened",
+        "detail": "用例 synthetic-report-only：api 判据从 eq 放宽成 exists"
+      }
+    ],
+    "block": true,
+    "mark": false,
+    "actor": "agent"
+  },
+  "actorOmitted": {
+    "findings": [
+      {
+        "kind": "oracle-weakened",
+        "detail": "用例 synthetic-report-only：api 判据从 eq 放宽成 exists"
+      }
+    ],
+    "block": false,
+    "mark": true,
+    "actor": "human"
+  },
+  "sameTierValueChanged": []
+}

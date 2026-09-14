@@ -1,0 +1,1661 @@
+{
+  "schemaVersion": "product-rule-pack.v1",
+  "id": "hyperliquid-perp-rules",
+  "version": "2026-09-13.4",
+  "domain": "perpetual-futures-trading",
+  "product": "Hyperliquid app",
+  "network": "mainnet",
+  "accountMode": "unified-account-wallet-identity",
+  "appliesTo": {
+    "urlPatterns": [
+      "^https://app\\.hyperliquid\\.xyz/trade"
+    ],
+    "note": "只覆盖 /trade 单页的下单面板与其账户面板。文档为 Hyperliquid 官方；页面版本随时可变，规则的验证状态由每次探索回执决定，不由文档决定。"
+  },
+  "sources": [
+    {
+      "id": "SRC-ORDER-TYPES",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/order-types",
+      "fetchedAt": "2026-09-10",
+      "note": "Market / Limit / Stop Market / Stop Limit / Scale / TWAP、Reduce Only、TP-SL 的定义"
+    },
+    {
+      "id": "SRC-TIF",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/order-types",
+      "fragment": "Time in force",
+      "fetchedAt": "2026-09-10",
+      "note": "GTC / IOC / ALO 三种有效期语义"
+    },
+    {
+      "id": "SRC-MARGINING",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margining",
+      "fetchedAt": "2026-09-10",
+      "note": "Cross 与 Isolated 保证金模式"
+    },
+    {
+      "id": "SRC-LIQUIDATIONS",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations",
+      "fetchedAt": "2026-09-10",
+      "note": "维持保证金与强平价"
+    },
+    {
+      "id": "SRC-FUNDING",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/funding",
+      "fetchedAt": "2026-09-10",
+      "note": "资金费率与结算周期"
+    },
+    {
+      "id": "SRC-TICK-LOT",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/tick-and-lot-size",
+      "fetchedAt": "2026-09-10",
+      "note": "价格有效位数与数量小数位的限制。它约束的是接口接受什么，不证明前端如何改写用户输入。"
+    },
+    {
+      "id": "SRC-INFO-API",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint",
+      "fetchedAt": "2026-09-10",
+      "note": "clearinghouseState / openOrders / frontendOpenOrders，独立判据的来源"
+    },
+    {
+      "id": "SRC-OBSERVED-2026-09-11",
+      "kind": "observation",
+      "locator": "docs/v3/evidence/hl-mainnet-2026-09-11/controls-observed.md",
+      "observedAt": "2026-09-11T16:08:00Z",
+      "note": "只读 DOM 采集，未点击。记录控件的实现形态（多数为无 role 的 div）与文案。"
+    },
+    {
+      "id": "SRC-DOMAIN-REF",
+      "kind": "domain-reference",
+      "locator": "plugins/testpilot/skills/testpilot-design/REFERENCE-domain-perp.md",
+      "note": "通用永续参考，只能支撑假设。"
+    }
+  ],
+  "modules": [
+    {
+      "id": "market",
+      "name": "市场与合约",
+      "parentId": null
+    },
+    {
+      "id": "market.book",
+      "name": "订单簿与成交",
+      "parentId": "market"
+    },
+    {
+      "id": "market.pricing",
+      "name": "标记价 / 预言机价 / 资金费率",
+      "parentId": "market"
+    },
+    {
+      "id": "trade-panel",
+      "name": "交易面板",
+      "parentId": null
+    },
+    {
+      "id": "trade-panel.order-entry",
+      "name": "订单录入",
+      "parentId": "trade-panel"
+    },
+    {
+      "id": "trade-panel.risk",
+      "name": "杠杆与保证金",
+      "parentId": "trade-panel"
+    },
+    {
+      "id": "trade-panel.advanced",
+      "name": "高级选项",
+      "parentId": "trade-panel"
+    },
+    {
+      "id": "order-lifecycle",
+      "name": "订单生命周期",
+      "parentId": null
+    },
+    {
+      "id": "position-risk",
+      "name": "持仓与风控",
+      "parentId": null
+    },
+    {
+      "id": "account",
+      "name": "账户与资金",
+      "parentId": null
+    }
+  ],
+  "features": [
+    {
+      "id": "market.orderbook",
+      "moduleId": "market.book",
+      "name": "订单簿与最近成交切换",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "market.pricing.readouts",
+      "moduleId": "market.pricing",
+      "name": "标记价 / 预言机价 / 资金费率与倒计时展示",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-FUNDING",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.type",
+      "moduleId": "trade-panel.order-entry",
+      "name": "订单类型（Market / Limit / Pro 下的 Scale、TWAP、Stop）",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.side",
+      "moduleId": "trade-panel.order-entry",
+      "name": "方向（Buy / Long 与 Sell / Short）",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.price",
+      "moduleId": "trade-panel.order-entry",
+      "name": "限价价格输入与 Mid 快捷填入",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-TICK-LOT",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.size",
+      "moduleId": "trade-panel.order-entry",
+      "name": "数量输入、计价单位切换与百分比滑块",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-TICK-LOT",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.tif",
+      "moduleId": "trade-panel.advanced",
+      "name": "有效期 GTC / IOC / ALO",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-TIF",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.reduce-only",
+      "moduleId": "trade-panel.advanced",
+      "name": "Reduce Only",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.tpsl",
+      "moduleId": "trade-panel.advanced",
+      "name": "止盈止损（Take Profit / Stop Loss）",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.margin-mode",
+      "moduleId": "trade-panel.risk",
+      "name": "保证金模式 Cross / Isolated",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-MARGINING",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "order.leverage",
+      "moduleId": "trade-panel.risk",
+      "name": "杠杆设置",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-MARGINING",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "account.mode",
+      "moduleId": "trade-panel.risk",
+      "name": "账户模式（Unified）",
+      "description": "",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": []
+    },
+    {
+      "id": "order.submit",
+      "moduleId": "order-lifecycle",
+      "name": "提交订单",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "orders.open",
+      "moduleId": "order-lifecycle",
+      "name": "挂单列表与撤单",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "orders.history",
+      "moduleId": "order-lifecycle",
+      "name": "成交 / 订单 / 资金历史",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "position.list",
+      "moduleId": "position-risk",
+      "name": "持仓列表（数量、开仓价、盈亏、强平价、保证金）",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LIQUIDATIONS",
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "position.close",
+      "moduleId": "position-risk",
+      "name": "平仓（含 Close All）",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "position.liquidation",
+      "moduleId": "position-risk",
+      "name": "强平价与维持保证金",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LIQUIDATIONS"
+      ]
+    },
+    {
+      "id": "account.funds",
+      "moduleId": "account",
+      "name": "充值 / 提现 / 划转",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "account.balances",
+      "moduleId": "account",
+      "name": "余额与账户摘要",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "account.connect",
+      "moduleId": "account",
+      "name": "钱包连接与 Enable Trading",
+      "description": "",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "R-ORDER-TYPE-LIMIT",
+      "featureIds": [
+        "order.type",
+        "order.price"
+      ],
+      "claimType": "normative",
+      "statement": "选择 Limit 后，面板要求一个限价价格；该价格是订单进入订单簿的挂单价。",
+      "appliesWhen": "Hyperliquid /trade 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [
+            "Price"
+          ],
+          "stateChanged": [
+            "Limit"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-ORDER-TYPE-MARKET",
+      "featureIds": [
+        "order.type"
+      ],
+      "claimType": "normative",
+      "statement": "Market 单立即以当前可成交价撮合，不接受挂单价。",
+      "appliesWhen": "Hyperliquid /trade 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [
+            "Market"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-ORDER-TYPE-PRO",
+      "featureIds": [
+        "order.type"
+      ],
+      "claimType": "normative",
+      "statement": "Pro 下拉提供 Scale、TWAP、Stop Limit、Stop Market 等高级订单类型；Stop 类需要触发价。",
+      "appliesWhen": "Hyperliquid /trade 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "TWAP|Scale|Stop"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-SIDE",
+      "featureIds": [
+        "order.side"
+      ],
+      "claimType": "normative",
+      "statement": "方向只有做多与做空两种，切换后提交按钮与订单参数按该方向解释。",
+      "appliesWhen": "Hyperliquid /trade 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [
+            "Sell|Short"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-TIF",
+      "featureIds": [
+        "order.tif"
+      ],
+      "claimType": "normative",
+      "statement": "限价单的有效期为 GTC（挂到成交或撤销）、IOC（立即成交剩余取消）或 ALO（只做挂单，会跨价的直接拒绝）。",
+      "appliesWhen": "Hyperliquid /trade 永续限价单",
+      "sourceRefs": [
+        "SRC-TIF"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "GTC|IOC|ALO"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-REDUCE-ONLY-UI",
+      "featureIds": [
+        "order.reduce-only"
+      ],
+      "claimType": "normative",
+      "statement": "Reduce Only 是下单面板上的一个开关，勾选后该订单只用于减少既有仓位。",
+      "appliesWhen": "Hyperliquid /trade 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [
+            "Reduce Only"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-REDUCE-ONLY-EXEC",
+      "featureIds": [
+        "order.reduce-only",
+        "position.close"
+      ],
+      "claimType": "normative",
+      "statement": "Reduce Only 订单不得开新仓，也不得把仓位反向；成交后敞口按成交数量减少。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "需要可控持仓 fixture；用 clearinghouseState 的 assetPositions[position.coin=BTC].position.szi 做十进制精确比较，前后同账户同币种"
+      }
+    },
+    {
+      "id": "R-REDUCE-ONLY-OVERSIZE",
+      "featureIds": [
+        "order.reduce-only"
+      ],
+      "claimType": "hypothesis",
+      "statement": "下单数量超过持仓时，Reduce Only 订单可能被拒绝，也可能被裁剪到持仓数量。",
+      "appliesWhen": "行为未在文档中明确",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "open-question",
+        "question": "超量 Reduce Only 是拒绝还是裁剪？需要产品规格或受控实测确认，不得臆定拒绝文案。"
+      }
+    },
+    {
+      "id": "R-TPSL",
+      "featureIds": [
+        "order.tpsl"
+      ],
+      "claimType": "normative",
+      "statement": "勾选 Take Profit / Stop Loss 后，面板出现止盈价与止损价输入；它们生成随主订单一起提交的触发单。",
+      "appliesWhen": "Hyperliquid /trade 永续",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [
+            "TP|Take Profit|Gain"
+          ],
+          "stateChanged": [
+            "Take Profit|Stop Loss"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-MARGIN-MODE",
+      "featureIds": [
+        "order.margin-mode"
+      ],
+      "claimType": "normative",
+      "statement": "保证金模式分为全仓与逐仓；逐仓把该仓位的保证金与账户其余部分隔离。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-MARGINING"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "Cross|Isolated|全仓|逐仓"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-MARGIN-MODE-EXEC",
+      "featureIds": [
+        "order.margin-mode"
+      ],
+      "claimType": "normative",
+      "statement": "账户实际生效的保证金模式以清算接口为准，不以页面按钮文字为准。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-INFO-API",
+        "SRC-MARGINING"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "clearinghouseState 的 assetPositions[position.coin=BTC].position.leverage.type"
+      }
+    },
+    {
+      "id": "R-LEVERAGE",
+      "featureIds": [
+        "order.leverage"
+      ],
+      "claimType": "normative",
+      "statement": "杠杆按标的分档设上限，账户最终杠杆以清算接口为准；页面上的 40x 是本标的的上限展示。",
+      "appliesWhen": "BTC-USDC 永续，观察于 2026-09-11",
+      "sourceRefs": [
+        "SRC-MARGINING",
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "riskFloor": "P0",
+      "constants": {
+        "observedMax": "40"
+      },
+      "verification": {
+        "kind": "api",
+        "note": "clearinghouseState 的 position.leverage.value；上限值须按当时的标的元数据核对，不得把 40 当常量写死"
+      }
+    },
+    {
+      "id": "R-PRICE-PRECISION",
+      "featureIds": [
+        "order.price"
+      ],
+      "claimType": "normative",
+      "statement": "价格受有效位数与小数位限制；不满足的价格不被接受。具体位数来自标的元数据。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-TICK-LOT"
+      ],
+      "riskFloor": "P1",
+      "unit": "USDC",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "先读该标的的 szDecimals 与价格规则，再构造边界值；不得从接口限制推断前端一定截断"
+      }
+    },
+    {
+      "id": "R-SIZE-PRECISION",
+      "featureIds": [
+        "order.size"
+      ],
+      "claimType": "normative",
+      "statement": "数量的小数位由标的的 szDecimals 决定；超出的输入不被接受。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-TICK-LOT"
+      ],
+      "riskFloor": "P0",
+      "unit": "BTC",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "以标的元数据为准构造边界；成交数量用 clearinghouseState 精确比较"
+      }
+    },
+    {
+      "id": "R-SIZE-UNIT",
+      "featureIds": [
+        "order.size"
+      ],
+      "claimType": "observed",
+      "statement": "观察到数量输入旁有标的单位与计价货币的切换；两种计量对应同一笔下单数量这一点尚未由产品文档确认。",
+      "appliesWhen": "2026-09-11 观察；产品规则待确认",
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "USDC|BTC"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-ORDERBOOK",
+      "featureIds": [
+        "market.orderbook"
+      ],
+      "claimType": "observed",
+      "statement": "订单簿与最近成交是同一区域的两个视图，可切换。",
+      "appliesWhen": "2026-09-11 观察",
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [
+            "Trades|Order Book"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-VOLATILE-READOUTS",
+      "featureIds": [
+        "market.pricing.readouts"
+      ],
+      "claimType": "normative",
+      "statement": "标记价、预言机价、资金费率、倒计时与 24h 数据是持续变化的读数，只能断言字段存在或关系，不能钉住具体数值。",
+      "appliesWhen": "任何实时行情页",
+      "sourceRefs": [
+        "SRC-FUNDING",
+        "SRC-INFO-API"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "只允许 exists 或两次读数之间的关系断言"
+      }
+    },
+    {
+      "id": "R-FUNDING-SETTLE",
+      "featureIds": [
+        "market.pricing.readouts"
+      ],
+      "claimType": "normative",
+      "statement": "资金费按周期在多空之间结算，费率由标记价与预言机价的偏离决定。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-FUNDING"
+      ],
+      "riskFloor": "P1",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "资金历史面板与接口对账；需要持仓与跨结算点的时间窗口"
+      }
+    },
+    {
+      "id": "R-LIQUIDATION",
+      "featureIds": [
+        "position.liquidation"
+      ],
+      "claimType": "normative",
+      "statement": "维持保证金不足时仓位被强平；强平价随保证金模式、杠杆与仓位变化。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-LIQUIDATIONS"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "强平价的计算输入（标记价 / 预言机价语义）必须先确定；不能拿页面现价代替"
+      }
+    },
+    {
+      "id": "R-POSITION-PANEL",
+      "featureIds": [
+        "position.list",
+        "orders.open",
+        "orders.history"
+      ],
+      "claimType": "observed",
+      "statement": "账户面板分为余额、持仓、挂单、TWAP、Chase、成交历史、资金历史与订单历史，各自展示对应记录。",
+      "appliesWhen": "2026-09-11 观察；面板构成随版本变化",
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [
+            "Positions|Open Orders|Trade History|Funding History|Order History|Balances"
+          ],
+          "textPresent": []
+        }
+      }
+    },
+    {
+      "id": "R-PANEL-CONSISTENCY",
+      "featureIds": [
+        "orders.open",
+        "position.list"
+      ],
+      "claimType": "normative",
+      "statement": "同一笔持仓/挂单在界面上出现于多处时必须一致：持仓面板的数量与下单面板的 Current Position 相同，挂单面板的条数与 Open Orders 标签上的计数相同；两处对不上即为缺陷。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-INFO-API"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "探索只看得到单屏，判不了「两处相等」。留给执行阶段的一条用例：读下单面板的 Current Position 与持仓面板该行的数量，比较两次读数（tier 2 delta）——判据仍在屏幕上，不去问被测站接口。"
+      }
+    },
+    {
+      "id": "R-SUBMIT-SIDE-EFFECT",
+      "featureIds": [
+        "order.submit",
+        "position.close",
+        "account.funds",
+        "account.connect"
+      ],
+      "claimType": "normative",
+      "statement": "下单、平仓、撤单、充值、提现与钱包授权会创建或改变订单、仓位与资金状态；因此探索阶段一律不得触发它们。",
+      "appliesWhen": "主网",
+      "sourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-INFO-API",
+        "SRC-OBSERVED-2026-09-11"
+      ],
+      "riskFloor": "P0",
+      "constants": {},
+      "verification": {
+        "kind": "api",
+        "note": "只在受控测试网或隔离 fixture 上、经审批的用例里执行"
+      }
+    },
+    {
+      "id": "R-ACCOUNT-MODE",
+      "featureIds": [
+        "account.mode"
+      ],
+      "claimType": "hypothesis",
+      "statement": "Unified 账户把现货与永续的保证金合并计算。",
+      "appliesWhen": "适用范围与对测试的影响未确认",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "open-question",
+        "question": "Unified 模式对可用保证金与强平的具体影响是什么？测试网上曾观察到它会让清算接口读数为空（见 fixtures/hyperliquid-testnet/README.md），主网行为未确认。"
+      }
+    },
+    {
+      "id": "R-PRICE-BAND",
+      "featureIds": [
+        "order.price",
+        "order.submit"
+      ],
+      "claimType": "hypothesis",
+      "statement": "限价价格离参考价超过交易所带宽时，前端在提交阶段就拒绝，并在界面上给出拒绝文案；带宽数值随交易所与版本而定，不能凭记忆填。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "Order price cannot be more than",
+            "away from the reference price"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-MARGIN-INSUFFICIENT",
+      "featureIds": [
+        "order.submit",
+        "account.balances"
+      ],
+      "claimType": "hypothesis",
+      "statement": "下单所需保证金超过可用余额时被拒，界面给出拒绝文案，且拒绝之后名义仓位与可用余额都不变。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "Insufficient margin",
+            "Order must have minimum value"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-CLOSE-REMOVES-POSITION",
+      "featureIds": [
+        "position.close",
+        "position.list"
+      ],
+      "claimType": "hypothesis",
+      "statement": "一键平仓成交后，该标的从持仓表里消失，持仓标签的计数相应减少。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "No open positions",
+            "Positions"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-CANCEL-REMOVES-ORDER",
+      "featureIds": [
+        "orders.open"
+      ],
+      "claimType": "hypothesis",
+      "statement": "撤单成功后，该单从当前挂单表里消失，挂单标签的计数相应减少。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "No open orders",
+            "Open Orders"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-RECONNECT-CONSISTENT",
+      "featureIds": [
+        "orders.open",
+        "position.list"
+      ],
+      "claimType": "hypothesis",
+      "statement": "断线重连或刷新页面之后，挂单表与持仓表显示的内容与断开前一致——重连不该凭空多出或少掉一条。",
+      "appliesWhen": "Hyperliquid 永续",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "constants": {},
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [],
+          "stateChanged": [],
+          "textPresent": [
+            "Open Orders",
+            "Positions"
+          ]
+        }
+      }
+    }
+  ],
+  "targets": [
+    {
+      "id": "T-MARKET-ETH",
+      "featureId": "order.type",
+      "ruleRefs": [],
+      "match": {
+        "label": [
+          "^ETH-USDC$"
+        ],
+        "roles": [],
+        "within": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": [
+        "market-eth"
+      ]
+    },
+    {
+      "id": "T-ORDER-TYPE-LIMIT",
+      "featureId": "order.type",
+      "ruleRefs": [
+        "R-ORDER-TYPE-LIMIT"
+      ],
+      "match": {
+        "label": [
+          "^Limit$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": [
+        "order-type-limit"
+      ]
+    },
+    {
+      "id": "T-ORDER-TYPE-MARKET",
+      "featureId": "order.type",
+      "ruleRefs": [
+        "R-ORDER-TYPE-MARKET"
+      ],
+      "match": {
+        "label": [
+          "^Market$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-ORDER-TYPE-PRO",
+      "featureId": "order.type",
+      "ruleRefs": [
+        "R-ORDER-TYPE-PRO"
+      ],
+      "match": {
+        "label": [
+          "^Pro$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-SIDE-SELL",
+      "featureId": "order.side",
+      "ruleRefs": [
+        "R-SIDE"
+      ],
+      "match": {
+        "label": [
+          "^Sell ?/ ?Short$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-SIDE-BUY",
+      "featureId": "order.side",
+      "ruleRefs": [
+        "R-SIDE"
+      ],
+      "match": {
+        "label": [
+          "^Buy ?/ ?Long$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-MARGIN-MODE",
+      "featureId": "order.margin-mode",
+      "ruleRefs": [
+        "R-MARGIN-MODE"
+      ],
+      "match": {
+        "label": [
+          "^(Cross|Isolated)$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-LEVERAGE",
+      "featureId": "order.leverage",
+      "ruleRefs": [
+        "R-LEVERAGE"
+      ],
+      "match": {
+        "label": [
+          "^\\d+x$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-ACCOUNT-MODE",
+      "featureId": "account.mode",
+      "ruleRefs": [
+        "R-ACCOUNT-MODE"
+      ],
+      "match": {
+        "label": [
+          "^Unified$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-REDUCE-ONLY",
+      "featureId": "order.reduce-only",
+      "ruleRefs": [
+        "R-REDUCE-ONLY-UI"
+      ],
+      "match": {
+        "label": [
+          "Reduce Only"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-TPSL",
+      "featureId": "order.tpsl",
+      "ruleRefs": [
+        "R-TPSL"
+      ],
+      "match": {
+        "label": [
+          "Take Profit ?/ ?Stop Loss"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-TIF",
+      "featureId": "order.tif",
+      "ruleRefs": [
+        "R-TIF"
+      ],
+      "match": {
+        "label": [
+          "^(IOC|GTC|ALO)$",
+          "^TIF$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-SIZE-UNIT",
+      "featureId": "order.size",
+      "ruleRefs": [
+        "R-SIZE-UNIT"
+      ],
+      "match": {
+        "label": [
+          "^USDC$"
+        ],
+        "roles": []
+      },
+      "action": "observe-only",
+      "sideEffect": "none",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-SIZE-INPUT",
+      "featureId": "order.size",
+      "ruleRefs": [
+        "R-SIZE-PRECISION"
+      ],
+      "match": {
+        "label": [
+          "^Size$",
+          "数量"
+        ],
+        "roles": [
+          "input"
+        ]
+      },
+      "action": "fill",
+      "value": "0.01",
+      "sideEffect": "none",
+      "requires": [
+        "order-type-limit",
+        "market-eth"
+      ],
+      "provides": [
+        "order-size"
+      ]
+    },
+    {
+      "id": "T-PRICE-INPUT",
+      "featureId": "order.price",
+      "ruleRefs": [
+        "R-PRICE-PRECISION"
+      ],
+      "match": {
+        "label": [
+          "^Price",
+          "价格"
+        ],
+        "roles": [
+          "input"
+        ]
+      },
+      "action": "observe-only",
+      "sideEffect": "none",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-PRICE-MID",
+      "featureId": "order.price",
+      "ruleRefs": [
+        "R-ORDER-TYPE-LIMIT"
+      ],
+      "match": {
+        "label": [
+          "^Mid$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [
+        "order-type-limit"
+      ],
+      "provides": [
+        "order-price"
+      ]
+    },
+    {
+      "id": "T-BOOK",
+      "featureId": "market.orderbook",
+      "ruleRefs": [
+        "R-ORDERBOOK"
+      ],
+      "match": {
+        "label": [
+          "^(Order Book|Trades)$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-PRICING",
+      "featureId": "market.pricing.readouts",
+      "ruleRefs": [
+        "R-VOLATILE-READOUTS",
+        "R-FUNDING-SETTLE"
+      ],
+      "match": {
+        "label": [
+          "Funding|Mark|Oracle"
+        ],
+        "roles": []
+      },
+      "action": "observe-only",
+      "sideEffect": "none",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-PANEL-POSITIONS",
+      "featureId": "position.list",
+      "ruleRefs": [
+        "R-POSITION-PANEL"
+      ],
+      "match": {
+        "label": [
+          "^Positions( \\(\\d+\\))?$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-PANEL-OPEN-ORDERS",
+      "featureId": "orders.open",
+      "ruleRefs": [
+        "R-POSITION-PANEL",
+        "R-PANEL-CONSISTENCY"
+      ],
+      "match": {
+        "label": [
+          "^Open Orders( \\(\\d+\\))?$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-PANEL-HISTORY",
+      "featureId": "orders.history",
+      "ruleRefs": [
+        "R-POSITION-PANEL"
+      ],
+      "match": {
+        "label": [
+          "^(Trade History|Order History|Funding History)$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-PANEL-BALANCES",
+      "featureId": "account.balances",
+      "ruleRefs": [
+        "R-POSITION-PANEL"
+      ],
+      "match": {
+        "label": [
+          "^Balances"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "ui-only",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-LIQUIDATION",
+      "featureId": "position.liquidation",
+      "ruleRefs": [
+        "R-LIQUIDATION"
+      ],
+      "match": {
+        "label": [
+          "Liquidation Price|Liq\\. Price"
+        ],
+        "roles": []
+      },
+      "action": "observe-only",
+      "sideEffect": "none",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-SUBMIT",
+      "featureId": "order.submit",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "^Place Order$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "state-change",
+      "requires": [
+        "order-size",
+        "order-price",
+        "wallet-session"
+      ],
+      "provides": []
+    },
+    {
+      "id": "T-CONFIRM-ACT",
+      "featureId": "order.submit",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "^买入 / 做多$",
+          "^卖出 / 做空$",
+          "^Buy / Long$",
+          "^Sell / Short$"
+        ],
+        "roles": [],
+        "within": [
+          "确认订单",
+          "Confirm Order"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "state-change",
+      "requires": [
+        "order-size",
+        "order-price",
+        "wallet-session"
+      ],
+      "provides": [
+        "order-placed"
+      ],
+      "expectOnScreen": [
+        "Positions? ?\\(\\d+\\)",
+        "仓位 ?\\(\\d+\\)",
+        "Filled",
+        "已成交",
+        "Order placed",
+        "Long\\b.*\\bETH"
+      ]
+    },
+    {
+      "id": "T-CLOSE",
+      "featureId": "position.close",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "^市价平仓$",
+          "^Market Close$",
+          "^Close All$",
+          "^Close$"
+        ],
+        "roles": [
+          "button"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "state-change",
+      "requires": [
+        "order-placed"
+      ],
+      "provides": [],
+      "expectOnScreen": [
+        "尚无开放仓位",
+        "No open positions",
+        "Closed",
+        "已平仓"
+      ]
+    },
+    {
+      "id": "T-FUNDS",
+      "featureId": "account.funds",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "^(Deposit|Withdraw|Transfer)$"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "state-change",
+      "requires": [],
+      "provides": []
+    },
+    {
+      "id": "T-CONNECT",
+      "featureId": "account.connect",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "Connect|Enable Trading"
+        ],
+        "roles": []
+      },
+      "action": "activate",
+      "sideEffect": "state-change",
+      "requires": [],
+      "provides": [
+        "wallet-session"
+      ]
+    }
+  ],
+  "externalCapabilities": [],
+  "forbidLabels": [
+    "deposit",
+    "withdraw",
+    "transfer",
+    "close position",
+    "close all",
+    "cancel all",
+    "下单",
+    "平仓",
+    "撤单",
+    "充值",
+    "提现",
+    "\\bplace\\b",
+    "approve",
+    "\\bsign\\b",
+    "connect"
+  ],
+  "gateLabels": [
+    "Confirm Order",
+    "Confirm in wallet",
+    "Enable Trading",
+    "Establish Connection",
+    "Stay Connected",
+    "以市价关闭",
+    "保持连接",
+    "启用交易",
+    "在钱包中确认",
+    "建立连接",
+    "确认下单",
+    "确认订单"
+  ],
+  "roles": [
+    {
+      "id": "trader.new",
+      "name": "第一次上手的交易者",
+      "goal": "把一次完整的交易走通：连上钱包、看懂价格、下出第一单、看到它成交",
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "trader.active",
+      "name": "日常交易者",
+      "goal": "快速改单撤单、盯住持仓与盈亏，不被界面拖慢",
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "trader.risk",
+      "name": "看风险的交易者",
+      "goal": "在下单前后都能算清最坏情况：杠杆、保证金模式、强平价、资金费",
+      "sourceRefs": [
+        "SRC-MARGINING",
+        "SRC-LIQUIDATIONS",
+        "SRC-FUNDING"
+      ]
+    }
+  ],
+  "lifecycle": [
+    {
+      "id": "lc.enter",
+      "name": "进场：连接钱包并启用交易",
+      "order": 0,
+      "featureIds": [
+        "account.connect",
+        "account.funds",
+        "account.balances"
+      ],
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    },
+    {
+      "id": "lc.read",
+      "name": "看行情：价格、订单簿与资金费",
+      "order": 1,
+      "featureIds": [
+        "market.orderbook",
+        "market.pricing.readouts"
+      ],
+      "sourceRefs": [
+        "SRC-FUNDING"
+      ]
+    },
+    {
+      "id": "lc.compose",
+      "name": "配单：类型、方向、价格、数量与风控参数",
+      "order": 2,
+      "featureIds": [
+        "order.type",
+        "order.side",
+        "order.price",
+        "order.size",
+        "order.tif",
+        "order.reduce-only",
+        "order.tpsl",
+        "order.margin-mode",
+        "order.leverage"
+      ],
+      "sourceRefs": [
+        "SRC-ORDER-TYPES",
+        "SRC-TIF",
+        "SRC-TICK-LOT"
+      ]
+    },
+    {
+      "id": "lc.submit",
+      "name": "下单：提交并确认结果",
+      "order": 3,
+      "featureIds": [
+        "order.submit",
+        "orders.open"
+      ],
+      "sourceRefs": [
+        "SRC-ORDER-TYPES"
+      ]
+    },
+    {
+      "id": "lc.hold",
+      "name": "持仓：盯住仓位与强平风险",
+      "order": 4,
+      "featureIds": [
+        "position.list",
+        "position.liquidation"
+      ],
+      "sourceRefs": [
+        "SRC-LIQUIDATIONS",
+        "SRC-MARGINING"
+      ]
+    },
+    {
+      "id": "lc.exit",
+      "name": "离场：平仓与回看历史",
+      "order": 5,
+      "featureIds": [
+        "position.close",
+        "orders.history"
+      ],
+      "sourceRefs": [
+        "SRC-OBSERVED-2026-09-11"
+      ]
+    }
+  ]
+}

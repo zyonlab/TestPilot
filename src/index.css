@@ -1,52 +1,228 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+/* IBM Plex 是原型 v3 的字体，两个字重档就够：正文 400/500，标题与强调 600。
+   等宽体在这个产品里不是装饰——id、耗时、token 数、覆盖率都要对齐着扫，
+   所以它和正文一样是一等公民。
+
+   **字体自托管，不走公网 CDN。** 这里以前是一行
+   `@import url("https://fonts.googleapis.com/css2?family=IBM+Plex…")`，
+   而 `02 §1` 写明这个产品「运行在私有环境，模型是本地自托管 VL」。
+   一台连不出去的机器上那次请求会静默失败，回落到 PingFang / system-ui——
+   而整套字号与控件高度都是照 IBM Plex 的度量调的。一个自称能在内网跑的产品，
+   不该有一条只在能上网时才成立的样式。
+
+   只引真正用到的三个字重（400 / 500 / 600），不引整个家族。 */
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /*
+   * 色板来自原型 v3，一比一搬过来（hex 换算成 Tailwind 要的 `H S% L%`）。
+   *
+   * 它和之前那套 shadcn 默认值的差别不只是好看：**语义色是成对的**。
+   * 每个状态给两个值——一个前景 `--ok`，一个垫底 `--ok-soft`，
+   * 用法固定是 `bg-ok-soft text-ok`。之前没有这一层，于是同一个「高危」
+   * 在不同页面被写成 rose-600 / red-700 / rose-500 三种红，
+   * 而且每处都要手写一份 `dark:` 孪生类。令牌自己会翻面，那些孪生类就都不用了。
+   */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* 底面。ground 是页面底色，card 是浮在上面的面，muted/accent 是两层灰阶。 */
+    --background: 60 9.1% 97.8%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 221 83% 53%;
+    --card-foreground: 24 9.8% 10%;
+    --muted: 60 4.8% 95.9%;
+    --accent: 40 7% 91.6%;
+    --accent-foreground: 24 9.8% 10%;
+
+    /* 字。foreground 是标题与正文，ink2 是次级正文，muted-foreground 是元信息，
+       faint 是只在需要时才读的东西（id 前缀、时间戳）。
+
+       四档**全部过 WCAG AA（4.5:1）**，包括最弱的 faint。
+       此前 muted-foreground 是 44.7%，落在 background 上量出来 **4.4:1——差 0.1 不达标**，
+       而它是全站用得最多的一个前景色：检测器在三个路由上报了 15 次 low-contrast，
+       不是因为写错了 15 遍，是因为**一个令牌错了 0.1**。faint 更远，只有 2.5:1。
+
+       现在：faint 4.75:1、muted-foreground 6.4:1、ink2 与 foreground 更高。
+       层级没有被压平——四档之间仍然一眼分得出，只是最弱的那档也读得动了。 */
+    --foreground: 24 9.8% 10%;
+    --ink2: 30 6.3% 25.1%;
+    --muted-foreground: 25 5.3% 35%;
+    --faint: 24 5.4% 43%;
+
+    /* 线。border 是常规分隔线，input 是需要被看见的边（输入框、按钮）。 */
+    --border: 20 5.9% 90%;
+    --input: 24 5.7% 82.9%;
+
+    /* 主色 = 原型里的 pipe，深青。它标的是「这条流水线」，不是「可点」。 */
+    --primary: 170 74.1% 21.2%;
     --primary-foreground: 0 0% 100%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --primary-soft: 165 27.3% 91.4%;
+    --ring: 170 74.1% 21.2%;
+
+    /* 语义四对。chat 是模型说的话，和流水线区分开。 */
+    --ok: 155 58.5% 26.5%;
+    --ok-soft: 146 31.8% 91.4%;
+    --warn: 37 79.2% 30.2%;
+    --warn-soft: 41 66.7% 91.8%;
+    --bad: 6 57.2% 39.4%;
+    --bad-soft: 12 58.8% 93.3%;
+    --chat: 262 33.9% 46.3%;
+    --chat-soft: 263 41.9% 93.9%;
+
+    --shadow-panel: 0 1px 2px rgb(28 25 23 / 0.06), 0 8px 24px -18px rgb(28 25 23 / 0.4);
   }
 
+  /* 暗色是**带青调的**，不是中性灰蓝——底色 #0C1211 和主色同一个色相家族，
+     这是原型 v3 看起来是一个东西而不是一堆组件的原因之一。 */
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 96%;
-    --card: 222 44% 10%;
-    --card-foreground: 210 40% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 224 76% 60%;
+    --background: 170 20% 5.9%;
+    --card: 171 15.6% 8.8%;
+    --card-foreground: 160 14.3% 91.8%;
+    --muted: 167 14.8% 12%;
+    --accent: 171 16.3% 16.9%;
+    --accent-foreground: 160 14.3% 91.8%;
+
+    --foreground: 160 14.3% 91.8%;
+    --ink2: 165 10.9% 78.4%;
+    --muted-foreground: 163 6.5% 57.6%;
+    /* 暗色里 faint 原本是 44.5%，落在 #0C1211 上只有 3.9:1。提到 50% 后 4.7:1。 */
+    --faint: 162 5.7% 50%;
+
+    --border: 170 15% 15.7%;
+    --input: 167 13% 21.2%;
+
+    --primary: 166 53.8% 59.2%;
+    --primary-foreground: 170 20% 5.9%;
+    --primary-soft: 167 41.2% 13.3%;
+    --ring: 166 53.8% 59.2%;
+
+    --ok: 152 46.1% 52.7%;
+    --ok-soft: 151 39% 11.6%;
+    --warn: 40 63.2% 53.1%;
+    --warn-soft: 44 37.7% 12%;
+    --bad: 8 67.2% 61.8%;
+    --bad-soft: 10 34.3% 13.1%;
+    --chat: 262 52.7% 74.3%;
+    --chat-soft: 261 29.1% 15.5%;
+
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.5), 0 8px 24px -18px rgb(0 0 0 / 0.9);
   }
 
   * {
     border-color: hsl(var(--border));
   }
 
+  /*
+   * **根字号不再钉死。** 这里以前是 `html { font-size: 16px }`。
+   *
+   * 钉它的理由当时成立：那 697 处写死 px 的字号（`text-[12px]`、`text-[11px]`……）
+   * 不响应浏览器的字号偏好，而 Tailwind 自带的 `text-sm`、`px-2.5` 是 rem，会响应。
+   * 两套单位在一台默认 24px 的机器上按比例劈叉——共享 `Button` 长到 50px 高，
+   * 紧挨着它的视图切换按钮还是 25px。钉死根字号是让它们别打架的最省事的办法。
+   *
+   * 但它的代价是**整个 app 不再跟随浏览器的字号偏好**，而 `03 §9.6` 把可访问性
+   * 列为全局约定：把系统字号调到 200%，这个界面一个像素都不动，是 WCAG 1.4.4 的
+   * 直接违反。同一份文档里的两条，一条被执行到了 CSS 的最底层，另一条连焦点环都没统一。
+   *
+   * 所以做的是那件「另一件事」：707 处字号、12 处控件高度、57 处内外边距**全部换成
+   * rem**，剩下的写死 px 只有布局导轨（列宽、圆角、1px 分隔线），它们本就不该跟着字长。
+   * 现在两套单位是同一套，钉死根字号的理由随之消失。
+   */
+
+  /*
+   * 0.875rem（默认 16px 下 = 14px）/ 1.6 是原型 v3 的正文档位，比 Tailwind 默认紧一档。
+   * 这一页平均要同时显示上百条待复核物料，密度不是审美偏好，是能不能一屏看完的问题。
+   * 用 rem 写：默认下密度一模一样，而调大字号时它跟着长。
+   */
   body {
     background: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    font-family:
+      "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
 
-  h1,
-  h2,
-  h3 {
-    font-family: "Space Grotesk", ui-sans-serif, sans-serif;
+  /*
+   * 输入框、下拉、文本域的**统一底座**：和 `Button` 的 md 档同一组数（25px / 12.5px）。
+   *
+   * 之前每一页各写各的（`py-1` / `py-1.5` / `text-sm` / `text-[11px]`……），
+   * 于是同一条工具栏里按钮 25px、下拉 27px、输入框 29px、另一页的下拉 35px。
+   * 这里只定**下限和默认字号**：页面仍然可以用 `text-[11px]` 把字调小，
+   * 但盒子不会再比旁边的按钮矮或高一截。
+   *
+   * 勾选框与滑块排除在外——给一个复选框 25px 的下限只会让它变成一个方块。
+   */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    min-height: 1.5625rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  /* Allow each toolbar's padding and font size to determine its readable height. */
+  select:not([multiple]):not([size]) {
+    height: auto;
+  }
+
+  /*
+   * 按钮的行高也一起钉住。
+   *
+   * 这是同一行里 25px 和 28px 并存的真正原因：`Button` 自己写了 `leading-[1.35]`，
+   * 而页面里手写的那些按钮什么都没写，于是继承正文的 1.6——同样的字号、同样的内边距，
+   * 高出将近 3px。这个差值肉眼看不出是行高，只看得出「这排按钮长得不一样」。
+   *
+   * 会换行的按钮（比如用例卡整块可点的标题）需要更松的行距，它们各自写 `leading-*` 覆盖。
+   */
+  button {
+    line-height: 1.35;
+  }
+
+  textarea {
+    min-height: 0;
+  }
+
+  /* 数字要对齐才扫得动——耗时、token、百分比全靠这一行。 */
+  .mono,
+  code,
+  kbd,
+  pre {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* 分组小标题：导航分组、队列表头、统计格的标签都是这一种。 */
+  .eyebrow {
+    @apply font-mono text-[0.6875rem] uppercase tracking-[0.11em] text-faint;
+  }
+
+  /* 顶栏里横向滚的那一条（批次切换）。默认滚动条有 15px 高，
+     顶栏会因此长高一截，而下面三栏的高度就跟着跳——人正在里面用 J/K 走位。 */
+  .hscroll {
+    scrollbar-width: thin;
+  }
+  .hscroll::-webkit-scrollbar {
+    height: 3px;
+  }
+  .hscroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--input));
+    border-radius: 3px;
+  }
+  .hscroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* 键帽。原型里靠它教人用键盘，底边加粗一像素才像个键。 */
+  .kbd {
+    @apply rounded-[3px] border border-input border-b-2 bg-accent px-1.5 font-mono text-[0.6875rem] text-ink2;
   }
 }

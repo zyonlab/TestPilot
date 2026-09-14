@@ -8,6 +8,13 @@ server/dist/
 # runtime data — DB, encrypted secrets vault, settings, LLM-debug captures (SENSITIVE)
 .data/
 server/.data/
+# 清库时旧数据是**移走**而不是删掉的（lineage 补不回来），备份目录同样带着密钥与整个库。
+# 两种前缀都要挡：实测出现过 `.data.snapshot-*`，而当时的规则只写了 `.bak-`——
+# 一个只挡住其中一种命名的规则，等于没挡：另一种照样会被 `git add -A` 收进去。
+.data.bak-*/
+server/.data.bak-*/
+.data.snapshot-*/
+server/.data.snapshot-*/
 
 # Midscene run artifacts / caches / screenshots
 midscene_run/
@@ -20,12 +27,45 @@ server/.wallets/
 # env files (may contain model keys / RPC secrets)
 .env
 .env.*
+!.env.example
 server/.env
 server/.env.*
+!server/.env.example
 
 # logs
 *.log
 npm-debug.log*
 
+# Sanitized implementation evidence, intended for the next maintainer to reproduce.
+!docs/v3/evidence/n-0[123456789]/*.log
+!docs/v3/evidence/n-10/*.log
+!docs/v3/evidence/n-11/*.log
+
 # OS
 .DS_Store
+
+# A self-test runs a second instance of the product; its state is not this repo's.
+.data-selftest/
+
+# 测试自己的数据目录：不隔离的话，每次 pnpm test 都会往真实运行列表里塞十几条假运行
+server/.data-test/
+
+# replay 重打分的副产物（score_run 每次都把条目写回运行目录）
+benchmark/*/replay/*/score.json
+
+# Claude Code plugin 的本机配置与 hook 状态（生成物，含绝对路径）
+plugins/testpilot-claude/tp-config.json
+plugins/testpilot/hooks/.state/
+
+# Sanitized remaining roadmap evidence
+!docs/v3/evidence/n-1[2-9]/*.log
+!docs/v3/evidence/n-2[0-7]/*.log
+# Authoritative local evaluation store; export YAML/JSON evidence for review.
+benchmark/**/*.sqlite
+benchmark/**/*.sqlite-wal
+benchmark/**/*.sqlite-shm
+
+# 跑动证据留在本地。105MB、1100 多个文件，其中 6 个录屏就占 73MB——
+# 进了 git 历史就只能靠 filter-repo + force push 才拿得掉。
+# 结论、数字和引用写进 docs/v3/*.md，证据本体按需再单独归档。
+docs/v3/evidence/

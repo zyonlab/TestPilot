@@ -1,0 +1,758 @@
+{
+  "schemaVersion": "product-rule-pack.v1",
+  "id": "perp-lab-rules",
+  "version": "2026-09-10.2",
+  "domain": "perpetual-futures-trading",
+  "product": "perp-lab (local fixture)",
+  "network": "local",
+  "accountMode": "single-account-no-login",
+  "appliesTo": {
+    "urlPatterns": [
+      "^https?://127\\.0\\.0\\.1:\\d+/$",
+      "^https?://localhost:\\d+/$"
+    ],
+    "note": "Only the local perp-lab fixture v2. Hyperliquid documents are cited as domain references and stay hypotheses here."
+  },
+  "sources": [
+    {
+      "id": "SRC-LAB-SERVER",
+      "kind": "fixture-contract",
+      "locator": "fixtures/perp-lab/server.mjs",
+      "fragment": "createPerpLab: /api/contract, /api/margin, /api/leverage, /api/order",
+      "version": "perp-lab-v2"
+    },
+    {
+      "id": "SRC-LAB-UI",
+      "kind": "fixture-contract",
+      "locator": "fixtures/perp-lab/public/index.html",
+      "fragment": "#tabs, #modes, #ro, #tpsl, #tpsl-panel",
+      "version": "perp-lab-v2"
+    },
+    {
+      "id": "SRC-HL-ORDER-TYPES",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/order-types",
+      "fetchedAt": "2026-09-10",
+      "note": "Reduce Only, TP/SL and order type semantics for Hyperliquid; applicability to the fixture is a hypothesis."
+    },
+    {
+      "id": "SRC-HL-MARGINING",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margining",
+      "fetchedAt": "2026-09-10",
+      "note": "Cross vs isolated margin on Hyperliquid."
+    },
+    {
+      "id": "SRC-HL-TICK-LOT",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/tick-and-lot-size",
+      "fetchedAt": "2026-09-10",
+      "note": "Precision limits; does not prove the UI truncates or rounds."
+    },
+    {
+      "id": "SRC-DOMAIN-REF",
+      "kind": "domain-reference",
+      "locator": "plugins/testpilot/skills/testpilot-design/REFERENCE-domain-perp.md",
+      "note": "Built-in generic reference; cannot promote a rule to normative by itself."
+    }
+  ],
+  "modules": [
+    {
+      "id": "trade-panel",
+      "name": "交易面板",
+      "parentId": null
+    },
+    {
+      "id": "trade-panel.order-entry",
+      "name": "下单入口",
+      "parentId": "trade-panel"
+    },
+    {
+      "id": "trade-panel.risk",
+      "name": "杠杆与保证金",
+      "parentId": "trade-panel"
+    },
+    {
+      "id": "order-lifecycle",
+      "name": "订单生命周期",
+      "parentId": null
+    },
+    {
+      "id": "position-risk",
+      "name": "持仓与风控",
+      "parentId": null
+    }
+  ],
+  "features": [
+    {
+      "id": "order.type",
+      "moduleId": "trade-panel.order-entry",
+      "name": "订单类型（Market / Limit / Stop Limit）",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER",
+        "SRC-LAB-UI"
+      ]
+    },
+    {
+      "id": "order.price",
+      "moduleId": "trade-panel.order-entry",
+      "name": "限价价格与 tick 对齐",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER"
+      ]
+    },
+    {
+      "id": "order.size",
+      "moduleId": "trade-panel.order-entry",
+      "name": "数量与步长",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER"
+      ]
+    },
+    {
+      "id": "order.reduce-only",
+      "moduleId": "trade-panel.order-entry",
+      "name": "Reduce Only",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER",
+        "SRC-LAB-UI"
+      ]
+    },
+    {
+      "id": "order.tpsl",
+      "moduleId": "trade-panel.order-entry",
+      "name": "止盈止损（TP/SL）",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-UI"
+      ]
+    },
+    {
+      "id": "order.margin-mode",
+      "moduleId": "trade-panel.risk",
+      "name": "保证金模式（Cross / Isolated）",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER",
+        "SRC-LAB-UI"
+      ]
+    },
+    {
+      "id": "order.leverage",
+      "moduleId": "trade-panel.risk",
+      "name": "杠杆设置",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER"
+      ]
+    },
+    {
+      "id": "order.submit",
+      "moduleId": "order-lifecycle",
+      "name": "提交订单",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER"
+      ]
+    },
+    {
+      "id": "orders.cancel",
+      "moduleId": "order-lifecycle",
+      "name": "撤销全部挂单",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER"
+      ]
+    },
+    {
+      "id": "position.close",
+      "moduleId": "position-risk",
+      "name": "平仓",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "SRC-LAB-SERVER"
+      ]
+    },
+    {
+      "id": "account.funding",
+      "moduleId": "position-risk",
+      "name": "资金费率结算",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": []
+    }
+  ],
+  "rules": [
+    {
+      "id": "R-ORDER-TYPE-LIMIT",
+      "featureIds": [
+        "order.type"
+      ],
+      "claimType": "normative",
+      "statement": "Switching to Limit marks the Limit tab active; limit orders need a price aligned to tick 0.5.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-UI",
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P1",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "stateChanged": [
+            "Limit.*→.*cls:on"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-ORDER-TYPE-STOP",
+      "featureIds": [
+        "order.type"
+      ],
+      "claimType": "normative",
+      "statement": "Switching to Stop Limit reveals a Trigger Price input; the trigger must align to tick 0.5.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-UI",
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P1",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "controlsPresent": [
+            "Trigger price"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-MARGIN-MODE",
+      "featureIds": [
+        "order.margin-mode"
+      ],
+      "claimType": "normative",
+      "statement": "Margin mode is cross or isolated; selecting Isolated presses that control and the clearinghouse reports marginMode=isolated.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-SERVER",
+        "SRC-LAB-UI"
+      ],
+      "riskFloor": "P0",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "stateChanged": [
+            "Isolated.*→.*pressed=true"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-MARGIN-MODE-RECALC",
+      "featureIds": [
+        "order.margin-mode"
+      ],
+      "claimType": "hypothesis",
+      "statement": "Switching margin mode recalculates available balance and liquidation price.",
+      "appliesWhen": "Hyperliquid; the fixture has no such recalculation",
+      "sourceRefs": [
+        "SRC-HL-MARGINING"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "Does the product under test recompute balances on mode switch, and with which price semantics?"
+      }
+    },
+    {
+      "id": "R-LEVERAGE-RANGE",
+      "featureIds": [
+        "order.leverage"
+      ],
+      "claimType": "normative",
+      "statement": "Leverage must be an integer from 1 to 40; the clearinghouse leverage is the authority.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P0",
+      "constants": {
+        "min": "1",
+        "max": "40"
+      },
+      "verification": {
+        "kind": "api",
+        "note": "POST /api/leverage then GET /api/clearinghouse.leverage"
+      }
+    },
+    {
+      "id": "R-REDUCE-ONLY-UI",
+      "featureIds": [
+        "order.reduce-only"
+      ],
+      "claimType": "normative",
+      "statement": "Reduce Only is a checkbox on the order panel; checking it flips its checked state.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-UI"
+      ],
+      "riskFloor": "P0",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "stateChanged": [
+            "Reduce Only.*→.*checked=true"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-REDUCE-ONLY-EXEC",
+      "featureIds": [
+        "order.reduce-only",
+        "position.close"
+      ],
+      "claimType": "normative",
+      "statement": "A reduce-only order requires an open position, may not exceed it, and never opens or flips a position.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P0",
+      "verification": {
+        "kind": "api",
+        "note": "Requires a position fixture; assert clearinghouse.position.szi before/after with decimal-eq"
+      }
+    },
+    {
+      "id": "R-REDUCE-ONLY-DOMAIN",
+      "featureIds": [
+        "order.reduce-only"
+      ],
+      "claimType": "hypothesis",
+      "statement": "On Hyperliquid, Reduce Only orders only reduce the existing position and oversize handling is product-defined.",
+      "appliesWhen": "Hyperliquid testnet",
+      "sourceRefs": [
+        "SRC-HL-ORDER-TYPES"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "Oversize reduce-only: reject or clip? Not asserted for the fixture."
+      }
+    },
+    {
+      "id": "R-TPSL-PANEL",
+      "featureIds": [
+        "order.tpsl"
+      ],
+      "claimType": "normative",
+      "statement": "Toggling TP/SL reveals Take Profit and Stop Loss price inputs.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-UI"
+      ],
+      "riskFloor": "P1",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "stateChanged": [
+            "TP/SL.*→.*pressed=true"
+          ],
+          "controlsPresent": [
+            "Take profit",
+            "Stop loss"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R-SIZE-STEP",
+      "featureIds": [
+        "order.size"
+      ],
+      "claimType": "normative",
+      "statement": "Size is in BTC with step 0.001; below one step is rejected.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P0",
+      "unit": "BTC",
+      "constants": {
+        "step": "0.001"
+      },
+      "verification": {
+        "kind": "api",
+        "note": "POST /api/order size=0.0001 → 400; position unchanged"
+      }
+    },
+    {
+      "id": "R-PRICE-TICK-BAND",
+      "featureIds": [
+        "order.price"
+      ],
+      "claimType": "normative",
+      "statement": "Limit price aligns to tick 0.5 and stays within 80% of reference price 80000.",
+      "appliesWhen": "perp-lab v2 only; 80% is a fixture constant",
+      "sourceRefs": [
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P1",
+      "unit": "USDC",
+      "constants": {
+        "tick": "0.5",
+        "referencePrice": "80000",
+        "band": "0.8"
+      },
+      "verification": {
+        "kind": "api",
+        "note": "POST /api/order type=limit price=144000.5 → 400"
+      }
+    },
+    {
+      "id": "R-SUBMIT-SIDE-EFFECT",
+      "featureIds": [
+        "order.submit",
+        "orders.cancel",
+        "position.close"
+      ],
+      "claimType": "normative",
+      "statement": "Place Order, Cancel All and Close Position change account state and are never triggered during exploration.",
+      "appliesWhen": "perp-lab v2",
+      "sourceRefs": [
+        "SRC-LAB-SERVER"
+      ],
+      "riskFloor": "P0",
+      "verification": {
+        "kind": "api",
+        "note": "Execution stage only, under an approved case with a reset fixture"
+      }
+    },
+    {
+      "id": "R-FUNDING",
+      "featureIds": [
+        "account.funding"
+      ],
+      "claimType": "hypothesis",
+      "statement": "Funding is settled periodically at a rate derived from mark and oracle price.",
+      "appliesWhen": "Hyperliquid; the fixture has no funding",
+      "sourceRefs": [
+        "SRC-DOMAIN-REF"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "Not applicable to the fixture until it models funding."
+      }
+    }
+  ],
+  "targets": [
+    {
+      "id": "T-ORDER-TYPE-LIMIT",
+      "featureId": "order.type",
+      "ruleRefs": [
+        "R-ORDER-TYPE-LIMIT"
+      ],
+      "match": {
+        "label": [
+          "^Limit$"
+        ],
+        "roles": [
+          "button",
+          "tab"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-ORDER-TYPE-STOP",
+      "featureId": "order.type",
+      "ruleRefs": [
+        "R-ORDER-TYPE-STOP"
+      ],
+      "match": {
+        "label": [
+          "^Stop( Limit)?$"
+        ],
+        "roles": [
+          "button",
+          "tab"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-ORDER-TYPE-MARKET",
+      "featureId": "order.type",
+      "ruleRefs": [
+        "R-ORDER-TYPE-LIMIT"
+      ],
+      "match": {
+        "label": [
+          "^Market$"
+        ],
+        "roles": [
+          "button",
+          "tab"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-MARGIN-ISOLATED",
+      "featureId": "order.margin-mode",
+      "ruleRefs": [
+        "R-MARGIN-MODE"
+      ],
+      "match": {
+        "label": [
+          "^Isolated$"
+        ],
+        "roles": [
+          "button",
+          "radio",
+          "tab"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-MARGIN-CROSS",
+      "featureId": "order.margin-mode",
+      "ruleRefs": [
+        "R-MARGIN-MODE"
+      ],
+      "match": {
+        "label": [
+          "^Cross$"
+        ],
+        "roles": [
+          "button",
+          "radio",
+          "tab"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-REDUCE-ONLY",
+      "featureId": "order.reduce-only",
+      "ruleRefs": [
+        "R-REDUCE-ONLY-UI"
+      ],
+      "match": {
+        "label": [
+          "Reduce[ -]?Only"
+        ],
+        "roles": [
+          "checkbox",
+          "switch",
+          "input"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-TPSL",
+      "featureId": "order.tpsl",
+      "ruleRefs": [
+        "R-TPSL-PANEL"
+      ],
+      "match": {
+        "label": [
+          "^TP ?/ ?SL$",
+          "Take Profit"
+        ],
+        "roles": [
+          "button",
+          "checkbox",
+          "switch"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-LEVERAGE-INPUT",
+      "featureId": "order.leverage",
+      "ruleRefs": [
+        "R-LEVERAGE-RANGE"
+      ],
+      "match": {
+        "label": [
+          "Leverage",
+          "^\\d+x$"
+        ],
+        "roles": [
+          "input"
+        ]
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-SET-LEVERAGE",
+      "featureId": "order.leverage",
+      "ruleRefs": [
+        "R-LEVERAGE-RANGE"
+      ],
+      "match": {
+        "label": [
+          "^Set Leverage$"
+        ],
+        "roles": [
+          "button"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "state-change"
+    },
+    {
+      "id": "T-SIZE-INPUT",
+      "featureId": "order.size",
+      "ruleRefs": [
+        "R-SIZE-STEP"
+      ],
+      "match": {
+        "label": [
+          "Size",
+          "数量"
+        ],
+        "roles": [
+          "input"
+        ]
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-PRICE-INPUT",
+      "featureId": "order.price",
+      "ruleRefs": [
+        "R-PRICE-TICK-BAND"
+      ],
+      "match": {
+        "label": [
+          "^Price",
+          "价格"
+        ],
+        "roles": [
+          "input"
+        ]
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-PLACE-ORDER",
+      "featureId": "order.submit",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "Place Order",
+          "^(Buy|Sell|Long|Short)\\b"
+        ],
+        "roles": [
+          "button"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "state-change"
+    },
+    {
+      "id": "T-CANCEL-ALL",
+      "featureId": "orders.cancel",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "Cancel All"
+        ],
+        "roles": [
+          "button"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "state-change"
+    },
+    {
+      "id": "T-CLOSE-POSITION",
+      "featureId": "position.close",
+      "ruleRefs": [
+        "R-SUBMIT-SIDE-EFFECT"
+      ],
+      "match": {
+        "label": [
+          "Close Position"
+        ],
+        "roles": [
+          "button"
+        ]
+      },
+      "action": "activate",
+      "sideEffect": "state-change",
+      "requires": [
+        "position-fixture"
+      ]
+    },
+    {
+      "id": "T-FUNDING",
+      "featureId": "account.funding",
+      "ruleRefs": [
+        "R-FUNDING"
+      ],
+      "match": {
+        "label": [
+          "Funding"
+        ],
+        "roles": []
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    }
+  ],
+  "externalCapabilities": [
+    "position-fixture"
+  ],
+  "forbidLabels": [
+    "deposit",
+    "withdraw",
+    "transfer",
+    "close position",
+    "close all",
+    "cancel all",
+    "下单",
+    "平仓",
+    "撤单",
+    "充值",
+    "提现",
+    "\\bplace\\b",
+    "approve",
+    "\\bsign\\b",
+    "connect"
+  ],
+  "gateLabels": [
+    "建立连接",
+    "Establish Connection",
+    "在钱包中确认",
+    "Confirm in wallet",
+    "确认下单",
+    "Confirm Order",
+    "Stay Connected",
+    "保持连接",
+    "Enable Trading",
+    "启用交易"
+  ]
+}

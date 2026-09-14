@@ -1,0 +1,33 @@
+{
+  "name": "testpilot-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "testpilot-mcp": "./bin/testpilot-mcp.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts.ts",
+    "./score": "./src/score.ts",
+    "./score-store": "./src/score-store.ts",
+    "./run-gateway": "./src/run-gateway.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/server.ts",
+    "test": "vitest run && node --test test/model-env.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@testpilot/harness-core": "workspace:*",
+    "@testpilot/harness-testing": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "title": "TestPilot v3 · 项目与研究评估",
+  "missingAnchors": [],
+  "desktopNoOverflow": true,
+  "executionTab": true,
+  "generationTabHidden": true,
+  "layerChanged": true,
+  "entityChanged": true,
+  "verifiedFindings": 3,
+  "searchFindings": 1,
+  "dialogOpen": true,
+  "dialogHasCode": true,
+  "dialogClosed": true,
+  "printAllFlows": true,
+  "mobileNoOverflow": true,
+  "consoleErrors": [],
+  "sourceButtons": 121
+}

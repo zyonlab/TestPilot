@@ -1,0 +1,177 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * 变异测试的三条纪律，都有前车之鉴，所以都钉在这里。
+ *
+ * ① 先跑一遍干净的——没有基线就分不清「被变异体搞挂的」和「它本来就挂」。
+ * ② 「没生效」和「活下来」必须分开，且不进分母。混为一谈会把工具自己的失败
+ *    伪装成用例集的盲区，而虚低的那部分看起来像真发现。
+ * ③ 变异体从**产品模型与规格**生成，用例集不参与——从用例生成变异体，
+ *    量的就是「用例能不能抓到它自己」，一个必然为真的循环。
+ */
+
+const outputs: Record<string, unknown> = {};
+const saved: Array<Record<string, unknown>> = [];
+/** 每次执行记一笔：跑的是哪条用例、带没带变异体。用来验「先跑干净的」。 */
+const calls: Array<{ caseId: string; mutantId?: string }> = [];
+/** 测试指定哪些变异体「注得进去」。其余的 applied=0。 */
+let appliesFor = new Set<string>();
+/** 测试指定哪条用例在带某个变异体时会挂。 */
+let failsWhen: (caseId: string, mutantId?: string) => boolean = () => false;
+/** 哪些用例第一次跑会以 infra 失败（第二次就好）。用来验基线重试。 */
+let infraOnce = new Set<string>();
+const infraSeen = new Set<string>();
+
+vi.mock("../src/graphs.js", () => ({
+  nodeOutput: async (wfRunId: string, nodeId: string) => outputs[`${wfRunId}:${nodeId}`],
+  outputStore: { getRun: () => ({ detail: { target: { url: "http://sut.invalid" } } }) },
+  executeCaseDirect: async (
+    _t: unknown,
+    k: { caseId: string },
+    _f: unknown,
+    mutation?: { id: string },
+  ) => {
+    calls.push({ caseId: k.caseId, mutantId: mutation?.id });
+    if (!mutation && infraOnce.has(k.caseId) && !infraSeen.has(k.caseId)) {
+      infraSeen.add(k.caseId);
+      return { status: "failed", failKind: "infra" };
+    }
+    return {
+      status: failsWhen(k.caseId, mutation?.id) ? "failed" : "passed",
+      mutationApplied: mutation ? (appliesFor.has(mutation.id) ? 3 : 0) : undefined,
+    };
+  },
+}));
+vi.mock("../src/mutation.js", () => ({
+  saveMutationReport: (r: Record<string, unknown>) => saved.push(r),
+}));
+vi.mock("../src/procs.js", () => ({ bus: { publish: () => {} } }));
+
+const { runMutation } = await import("../src/mutationRun.js");
+
+beforeEach(() => {
+  calls.length = 0;
+  saved.length = 0;
+  appliesFor = new Set();
+  failsWhen = () => false;
+  infraOnce = new Set();
+  infraSeen.clear();
+  for (const k of Object.keys(outputs)) delete outputs[k];
+  outputs["wf-1:repair"] = {
+    code: [
+      { caseId: "c1", title: "c1", actions: [{ kind: "action", text: "点" }], uses: [] },
+      { caseId: "c2", title: "c2", actions: [{ kind: "action", text: "点" }], uses: [] },
+    ],
+    fragments: [],
+  };
+  // 规则正文里带引号的界面文案 → text 算子的来源。用例集不参与。
+  outputs["wf-1:spec"] = {
+    rules: [
+      { id: "R-1", text: '登录失败时显示「Invalid username or password」' },
+      { id: "R-2", text: '面板顶部显示「Welcome」' },
+    ],
+  };
+});
+
+describe("变异测试的入口", () => {
+  it("先跑一遍干净的，再跑每个变异体", async () => {
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    // 头两次执行不带变异体：那是基线。
+    expect(calls.slice(0, 2).every((c) => c.mutantId === undefined)).toBe(true);
+    expect(calls.slice(0, 2).map((c) => c.caseId)).toEqual(["c1", "c2"]);
+    // 之后每一轮都带同一个变异体 id。
+    expect(calls.slice(2).every((c) => c.mutantId !== undefined)).toBe(true);
+  });
+
+  it("注不进去的记 notApplied，**不算活下来**，也不进分母", async () => {
+    // 一个都不生效
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.notApplied).toBeGreaterThan(0);
+    expect(r.survived).toBe(0);
+    // 分母为零时分数是 0，但 notApplied 说明了它是什么意思——不是「一个都没抓到」。
+    expect(r.killed).toBe(0);
+  });
+
+  it("生效了、没人叫，才算活下来（盲区）", async () => {
+    const ids = ["M-1", "M-2", "M-3", "M-4"];
+    appliesFor = new Set(ids);
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.notApplied).toBe(0);
+    expect(r.survived).toBeGreaterThan(0);
+    expect(r.score).toBe(0);
+  });
+
+  it("生效了、有用例新挂了，算杀掉", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (_c, m) => !!m; // 带变异体就挂
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.killed).toBeGreaterThan(0);
+    expect(r.survived).toBe(0);
+    expect(r.score).toBe(1);
+  });
+
+  it("本来就挂着的用例不算「抓住了」——没有干净跑就分不清这两件事", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (c) => c === "c1"; // c1 干净跑也挂
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    // c1 在两边都挂，不是新失败，所以它不构成 kill。
+    expect(r.killed).toBe(0);
+    expect(r.survived).toBeGreaterThan(0);
+  });
+
+  /**
+   * 「score 0」有两种完全不同的意思，报告必须分得开：
+   *   用例上了场、什么都没叫  → 真盲区
+   *   用例根本没上场           → 这次实验是坏的
+   * 实测撞到过：8 条干净跑挂了 4 条，报告只写了 score 0 和七条「盲区」。
+   */
+  it("干净跑挂了几条要写进报告——那是读懂 0 分的第一个数字", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (c, m) => !m && c === "c1"; // c1 干净跑就挂
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.baselineFailed).toBe(1);
+    expect(r.usableCases).toBe(1); // 两条用例，剩一条有机会叫
+  });
+
+  it("干净跑全挂时直接报错——那时每条「盲区」都是假的", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (_c, m) => !m; // 干净跑全挂
+    await expect(runMutation({ wfRunId: "wf-1", limit: 1 })).rejects.toThrow(/没有一条用例有机会叫/);
+    expect(saved).toHaveLength(0);
+  });
+
+  /**
+   * 基线里一次 infra 抖动的代价不是「这次不算」，是「这条用例整场都不上场」——
+   * 它进了 baselineFailures，之后每个变异体那一轮都不再算它。实测 8 条基线挂 4 条、
+   * 其中 2 条是 infra，等于一次抖动移走了 25% 的用例集。
+   */
+  it("基线里的 infra 失败重试一次；重试成功的照常上场", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    infraOnce = new Set(["c1"]); // c1 第一次 infra，第二次好
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.baselineRetried).toBe(1);
+    expect(r.baselineFailed).toBe(0); // 重试成功，不该留在基线失败集里
+    expect(r.usableCases).toBe(2);
+  });
+
+  it("重试之后仍然挂的，照旧算基线失败——只重试一次，不掩盖问题", async () => {
+    appliesFor = new Set(["M-1", "M-2", "M-3", "M-4"]);
+    failsWhen = (c, m) => !m && c === "c1"; // c1 干净跑一直挂（非 infra）
+    await runMutation({ wfRunId: "wf-1", limit: 1 });
+    const r = saved[0]!;
+    expect(r.baselineRetried).toBe(0); // 不是 infra，不重试
+    expect(r.baselineFailed).toBe(1);
+  });
+
+  it("生成不出变异体时如实报错，而不是给一份 0 分的报告", async () => {
+    outputs["wf-1:spec"] = { rules: [] };
+    await expect(runMutation({ wfRunId: "wf-1", limit: 1 })).rejects.toThrow(/生成不出变异体/);
+    expect(saved).toHaveLength(0);
+  });
+});

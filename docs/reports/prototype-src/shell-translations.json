@@ -1,0 +1,1090 @@
+{
+  "工作台": {
+    "en": "Workbench",
+    "ja": "ワークベンチ"
+  },
+  "工作流执行记录": {
+    "en": "Workflow runs",
+    "ja": "ワークフロー実行履歴"
+  },
+  "产物审阅": {
+    "en": "Review artifacts",
+    "ja": "成果物レビュー"
+  },
+  "复核": {
+    "en": "Review",
+    "ja": "レビュー"
+  },
+  "物料": {
+    "en": "Artifacts",
+    "ja": "成果物"
+  },
+  "运行报告": {
+    "en": "Test reports",
+    "ja": "テストレポート"
+  },
+  "基线": {
+    "en": "Baselines",
+    "ja": "ベースライン"
+  },
+  "记分板": {
+    "en": "Scoreboard",
+    "ja": "スコアボード"
+  },
+  "评测": {
+    "en": "Evaluation",
+    "ja": "評価"
+  },
+  "项目": {
+    "en": "Project",
+    "ja": "プロジェクト"
+  },
+  "设置": {
+    "en": "Settings",
+    "ja": "設定"
+  },
+  "工作流": {
+    "en": "Workflow",
+    "ja": "ワークフロー"
+  },
+  "收起侧栏": {
+    "en": "Collapse sidebar",
+    "ja": "サイドバーを折りたたむ"
+  },
+  "展开侧栏": {
+    "en": "Expand sidebar",
+    "ja": "サイドバーを展開"
+  },
+  "切换语言": {
+    "en": "Change language",
+    "ja": "言語を切り替え"
+  },
+  "切换项目": {
+    "en": "Switch project",
+    "ja": "プロジェクトを切り替え"
+  },
+  "当前项目": {
+    "en": "Current project",
+    "ja": "現在のプロジェクト"
+  },
+  "添加新项目": {
+    "en": "Add project",
+    "ja": "プロジェクトを追加"
+  },
+  "项目管理": {
+    "en": "Project management",
+    "ja": "プロジェクト管理"
+  },
+  "评审文档": {
+    "en": "Design report",
+    "ja": "設計レポート"
+  },
+  "深色": {
+    "en": "Dark theme",
+    "ja": "ダークテーマ"
+  },
+  "浅色": {
+    "en": "Light theme",
+    "ja": "ライトテーマ"
+  },
+  "项目名称": {
+    "en": "Project name",
+    "ja": "プロジェクト名"
+  },
+  "入口地址": {
+    "en": "Target URL",
+    "ja": "対象 URL"
+  },
+  "规格材料（可选）": {
+    "en": "Requirements (optional)",
+    "ja": "仕様資料（任意）"
+  },
+  "文件路径或文档名称，每行一项": {
+    "en": "File path or document name, one per line",
+    "ja": "ファイルパスまたは資料名を 1 行に 1 件"
+  },
+  "例如：客户服务平台": {
+    "en": "For example: Customer portal",
+    "ja": "例：カスタマーポータル"
+  },
+  "创建项目": {
+    "en": "Create project",
+    "ja": "プロジェクトを作成"
+  },
+  "取消": {
+    "en": "Cancel",
+    "ja": "キャンセル"
+  },
+  "目标端": {
+    "en": "Platform",
+    "ja": "対象プラットフォーム"
+  },
+  "请填写项目名称": {
+    "en": "Enter a project name",
+    "ja": "プロジェクト名を入力してください"
+  },
+  "项目名称已存在": {
+    "en": "A project with this name already exists",
+    "ja": "このプロジェクト名は既に存在します"
+  },
+  "请填写有效的 HTTP 或 HTTPS 入口地址": {
+    "en": "Enter a valid HTTP or HTTPS URL",
+    "ja": "有効な HTTP または HTTPS URL を入力してください"
+  },
+  "填写项目入口，创建后可继续配置环境与导入材料。": {
+    "en": "Set the target, then configure the environment and add requirements.",
+    "ja": "対象を設定してから、環境設定と資料の追加に進めます。"
+  },
+  "项目保存在此浏览器原型中。": {
+    "en": "Projects are saved in this browser prototype.",
+    "ja": "プロジェクトはこのブラウザーのプロトタイプに保存されます。"
+  },
+  "项目已创建并保存到本地原型": {
+    "en": "Project created and saved locally",
+    "ja": "プロジェクトを作成しローカルに保存しました"
+  },
+  "项目已创建；当前环境仅保留本次会话": {
+    "en": "Project created for this session; local storage is unavailable",
+    "ja": "プロジェクトを作成しました。この環境ではセッション中のみ保持されます"
+  },
+  "项目设置已保存": {
+    "en": "Project settings saved",
+    "ja": "プロジェクト設定を保存しました"
+  },
+  "保存项目设置": {
+    "en": "Save project settings",
+    "ja": "プロジェクト設定を保存"
+  },
+  "配置项目": {
+    "en": "Configure project",
+    "ja": "プロジェクトを設定"
+  },
+  "项目工作台": {
+    "en": "Project workspace",
+    "ja": "プロジェクトワークスペース"
+  },
+  "尚未导入材料": {
+    "en": "No requirements imported yet",
+    "ja": "資料はまだ読み込まれていません"
+  },
+  "已登记的规格材料": {
+    "en": "Registered requirements",
+    "ja": "登録済みの仕様資料"
+  },
+  "材料清单已保存，尚未读取或生成用例。": {
+    "en": "The list is saved. Reading and test generation have not started.",
+    "ja": "資料一覧を保存しました。読み込みとテスト生成はまだ開始していません。"
+  },
+  "界面语言": {
+    "en": "Interface language",
+    "ja": "表示言語"
+  },
+  "产出材料语言": {
+    "en": "Output language",
+    "ja": "出力言語"
+  },
+  "界面语言与左下角同步；文档和样例保留原语言。": {
+    "en": "Interface language matches the sidebar. Documents and samples keep their original language.",
+    "ja": "表示言語はサイドバーと同期します。資料とサンプルは元の言語を維持します。"
+  },
+  "产品结构": {
+    "en": "Product structure",
+    "ja": "製品構造"
+  },
+  "执行记录": {
+    "en": "Execution history",
+    "ja": "実行履歴"
+  },
+  "调试节点": {
+    "en": "Debug nodes",
+    "ja": "ノードをデバッグ"
+  },
+  "范围产物": {
+    "en": "Artifacts in scope",
+    "ja": "対象範囲の成果物"
+  },
+  "工作副本": {
+    "en": "Working copy",
+    "ja": "作業コピー"
+  },
+  "执行版本": {
+    "en": "Run version",
+    "ja": "実行バージョン"
+  },
+  "读取材料": {
+    "en": "Read requirements",
+    "ja": "資料を読み込む"
+  },
+  "探索界面": {
+    "en": "Explore UI",
+    "ja": "画面を探索"
+  },
+  "整理故事": {
+    "en": "Organize stories",
+    "ja": "ストーリーを整理"
+  },
+  "设计用例": {
+    "en": "Design tests",
+    "ja": "テストを設計"
+  },
+  "检查用例": {
+    "en": "Check tests",
+    "ja": "テストを確認"
+  },
+  "生成代码": {
+    "en": "Generate code",
+    "ja": "コードを生成"
+  },
+  "检查代码": {
+    "en": "Check code",
+    "ja": "コードを確認"
+  },
+  "修复与验证": {
+    "en": "Repair and verify",
+    "ja": "修正と検証"
+  },
+  "流程层": {
+    "en": "Workflow",
+    "ja": "ワークフロー"
+  },
+  "产物层": {
+    "en": "Artifacts",
+    "ja": "成果物"
+  },
+  "规格文档": {
+    "en": "Requirements",
+    "ja": "仕様書"
+  },
+  "输入源": {
+    "en": "Input source",
+    "ja": "入力ソース"
+  },
+  "规格材料": {
+    "en": "Requirements",
+    "ja": "仕様資料"
+  },
+  "用户故事": {
+    "en": "User stories",
+    "ja": "ユーザーストーリー"
+  },
+  "文本用例": {
+    "en": "Test cases",
+    "ja": "テストケース"
+  },
+  "用例代码": {
+    "en": "Test code",
+    "ja": "テストコード"
+  },
+  "执行": {
+    "en": "Execution",
+    "ja": "実行"
+  },
+  "修复循环": {
+    "en": "Repair loop",
+    "ja": "修正ループ"
+  },
+  "编辑流程": {
+    "en": "Edit workflow",
+    "ja": "ワークフローを編集"
+  },
+  "图版本": {
+    "en": "Graph versions",
+    "ja": "グラフバージョン"
+  },
+  "最近一次": {
+    "en": "Latest run",
+    "ja": "最新の実行"
+  },
+  "归档完成": {
+    "en": "Archived",
+    "ja": "アーカイブ済み"
+  },
+  "模拟完成": {
+    "en": "Simulated",
+    "ja": "シミュレーション済み"
+  },
+  "全流程": {
+    "en": "Full workflow",
+    "ja": "全ワークフロー"
+  },
+  "单节点": {
+    "en": "Single node",
+    "ja": "単一ノード"
+  },
+  "多节点": {
+    "en": "Selected nodes",
+    "ja": "選択ノード"
+  },
+  "从节点续跑": {
+    "en": "Continue from node",
+    "ja": "ノードから続行"
+  },
+  "全部执行记录": {
+    "en": "All workflow runs",
+    "ja": "すべての実行履歴"
+  },
+  "AI 助手": {
+    "en": "AI assistant",
+    "ja": "AI アシスタント"
+  },
+  "交互原型": {
+    "en": "Interactive prototype",
+    "ja": "操作プロトタイプ"
+  },
+  "历史样例 · 所有操作仅本地演示": {
+    "en": "Archived samples · Local prototype actions",
+    "ja": "過去のサンプル · ローカル操作デモ"
+  },
+  "工作流运行详情": {
+    "en": "Workflow run details",
+    "ja": "ワークフロー実行詳細"
+  },
+  "节点记录": {
+    "en": "Nodes",
+    "ja": "ノード"
+  },
+  "产出物料": {
+    "en": "Outputs",
+    "ja": "出力成果物"
+  },
+  "冻结配置": {
+    "en": "Frozen configuration",
+    "ja": "固定された設定"
+  },
+  "日志与事件": {
+    "en": "Logs and events",
+    "ja": "ログとイベント"
+  },
+  "返回记录列表": {
+    "en": "Back to runs",
+    "ja": "実行一覧に戻る"
+  },
+  "返回 Flow 工作台": {
+    "en": "Back to Flow",
+    "ja": "Flow に戻る"
+  },
+  "新建模拟运行": {
+    "en": "New simulated run",
+    "ja": "新規シミュレーション"
+  },
+  "全部记录": {
+    "en": "All records",
+    "ja": "すべての記録"
+  },
+  "本次模拟": {
+    "en": "This session",
+    "ja": "現在のセッション"
+  },
+  "归档样例": {
+    "en": "Archived samples",
+    "ja": "アーカイブサンプル"
+  },
+  "搜索运行 ID、节点或入口": {
+    "en": "Search run ID, node, or entry point",
+    "ja": "実行 ID、ノード、入口を検索"
+  },
+  "运行 / 时间": {
+    "en": "Run / Time",
+    "ja": "実行 / 時刻"
+  },
+  "执行范围": {
+    "en": "Run scope",
+    "ja": "実行範囲"
+  },
+  "工作流版本": {
+    "en": "Workflow version",
+    "ja": "ワークフローバージョン"
+  },
+  "入口": {
+    "en": "Entry point",
+    "ja": "入口"
+  },
+  "节点累计耗时": {
+    "en": "Total node duration",
+    "ja": "ノードの累計所要時間"
+  },
+  "用例复核": {
+    "en": "Case review",
+    "ja": "テストケースレビュー"
+  },
+  "批量处理": {
+    "en": "Bulk actions",
+    "ja": "一括操作"
+  },
+  "导出审阅文档": {
+    "en": "Export review",
+    "ja": "レビューを出力"
+  },
+  "全部模块": {
+    "en": "All modules",
+    "ja": "すべてのモジュール"
+  },
+  "全部故事": {
+    "en": "All stories",
+    "ja": "すべてのストーリー"
+  },
+  "搜索用例": {
+    "en": "Search test cases",
+    "ja": "テストケースを検索"
+  },
+  "全部状态": {
+    "en": "All states",
+    "ja": "すべての状態"
+  },
+  "用例队列": {
+    "en": "Test queue",
+    "ja": "テストキュー"
+  },
+  "详情与来源": {
+    "en": "Details and sources",
+    "ja": "詳細と出典"
+  },
+  "修订与对比": {
+    "en": "Edit and compare",
+    "ja": "編集と比較"
+  },
+  "代码与证据": {
+    "en": "Code and evidence",
+    "ja": "コードと証拠"
+  },
+  "高级配置": {
+    "en": "Advanced settings",
+    "ja": "詳細設定"
+  },
+  "相关产物与操作": {
+    "en": "Related artifacts and actions",
+    "ja": "関連する成果物と操作"
+  },
+  "只跑此节点": {
+    "en": "Run this node",
+    "ja": "このノードのみ実行"
+  },
+  "从此节点续跑": {
+    "en": "Continue from this node",
+    "ja": "このノードから続行"
+  },
+  "选择多个节点": {
+    "en": "Select nodes",
+    "ja": "複数ノードを選択"
+  },
+  "创建模拟运行": {
+    "en": "Create simulated run",
+    "ja": "シミュレーションを作成"
+  },
+  "保存为新版本": {
+    "en": "Save new version",
+    "ja": "新しいバージョンを保存"
+  },
+  "查看整个项目": {
+    "en": "Show entire project",
+    "ja": "プロジェクト全体を表示"
+  },
+  "流程": {
+    "en": "Flow",
+    "ja": "フロー"
+  },
+  "更多": {
+    "en": "More",
+    "ja": "その他"
+  },
+  "输入材料": {
+    "en": "Inputs",
+    "ja": "入力資料"
+  },
+  "开始执行": {
+    "en": "Start run",
+    "ja": "実行する"
+  },
+  "执行预览": {
+    "en": "Run preview",
+    "ja": "実行プレビュー"
+  },
+  "流程设置": {
+    "en": "Flow settings",
+    "ja": "フロー設定"
+  },
+  "流程模板": {
+    "en": "Flow template",
+    "ja": "フローテンプレート"
+  },
+  "实验流程": {
+    "en": "Experimental flow",
+    "ja": "実験フロー"
+  },
+  "标准测试流程": {
+    "en": "Standard test flow",
+    "ja": "標準テストフロー"
+  },
+  "内置模板": {
+    "en": "Built-in template",
+    "ja": "組み込みテンプレート"
+  },
+  "实验候选 · 未晋升": {
+    "en": "Experiment candidate · Not promoted",
+    "ja": "実験候補 · 未昇格"
+  },
+  "高级：实验流程定制": {
+    "en": "Advanced: customize experiment flow",
+    "ja": "詳細：実験フローのカスタマイズ"
+  },
+  "定制实验流程": {
+    "en": "Customize experiment flow",
+    "ja": "実験フローをカスタマイズ"
+  },
+  "版本与差异": {
+    "en": "Versions and differences",
+    "ja": "バージョンと差分"
+  },
+  "节点调试": {
+    "en": "Node debugging",
+    "ja": "ノードのデバッグ"
+  },
+  "查看规格材料": {
+    "en": "View specifications",
+    "ja": "仕様資料を表示"
+  },
+  "当前材料": {
+    "en": "Current inputs",
+    "ja": "現在の資料"
+  },
+  "探索目标": {
+    "en": "Exploration target",
+    "ja": "探索対象"
+  },
+  "目标与登录": {
+    "en": "Target and login",
+    "ja": "対象とログイン"
+  },
+  "产品模块关系图": {
+    "en": "Product module map",
+    "ja": "製品モジュール図"
+  },
+  "产品模块图": {
+    "en": "Product modules",
+    "ja": "製品モジュール"
+  },
+  "点击模块，下方查看用户故事与用例。": {
+    "en": "Select a module to see its stories and cases below.",
+    "ja": "モジュールを選ぶと、下にストーリーとケースを表示します。"
+  },
+  "点击模块，跳转到对应的用户故事与用例。": {
+    "en": "Select a module to jump to its stories and cases.",
+    "ja": "モジュールを選ぶと、対応するストーリーとケースに移動します。"
+  },
+  "全部用户故事": {
+    "en": "All user stories",
+    "ja": "すべてのユーザーストーリー"
+  },
+  "模块下的用户故事与用例": {
+    "en": "Module stories and cases",
+    "ja": "モジュールのストーリーとケース"
+  },
+  "复核模块用例": {
+    "en": "Review module cases",
+    "ja": "モジュールのケースをレビュー"
+  },
+  "样例用例": {
+    "en": "Sample cases",
+    "ja": "サンプルケース"
+  },
+  "材料状态": {
+    "en": "Material status",
+    "ja": "資料の状態"
+  },
+  "查看该故事的用例；也可从模块图切换其他范围。": {
+    "en": "Review this story’s cases, or select another module in the map.",
+    "ja": "このストーリーのケースを確認するか、図で別のモジュールを選択します。"
+  },
+  "已选中模块；下方列出该模块的用户故事。": {
+    "en": "This module’s user stories are listed below.",
+    "ja": "選択したモジュールのユーザーストーリーを下に表示しています。"
+  },
+  "从模块图选择范围，再下钻故事、用例与证据。": {
+    "en": "Choose a module, then explore its stories, cases, and evidence.",
+    "ja": "モジュールを選び、ストーリー、ケース、証拠を確認します。"
+  },
+  "选择运行记录": {
+    "en": "Select a run",
+    "ja": "実行記録を選択"
+  },
+  "待启动的新 run": {
+    "en": "New run draft",
+    "ja": "新規 run の準備"
+  },
+  "当前运行记录": {
+    "en": "Selected run",
+    "ja": "選択中の run"
+  },
+  "新建 run": {
+    "en": "New run",
+    "ja": "新規 run"
+  },
+  "新 run": {
+    "en": "New run",
+    "ja": "新規 run"
+  },
+  "继续此 run": {
+    "en": "Resume run",
+    "ja": "run を再開"
+  },
+  "启动此 run": {
+    "en": "Start run",
+    "ja": "run を開始"
+  },
+  "运行详情": {
+    "en": "Run details",
+    "ja": "実行の詳細"
+  },
+  "待启动": {
+    "en": "Ready",
+    "ja": "開始待ち"
+  },
+  "模拟执行中": {
+    "en": "Simulating",
+    "ja": "シミュレーション中"
+  },
+  "模拟已暂停": {
+    "en": "Simulation paused",
+    "ja": "シミュレーション一時停止"
+  },
+  "模拟失败": {
+    "en": "Simulation failed",
+    "ja": "シミュレーション失敗"
+  },
+  "未执行": {
+    "en": "Not run",
+    "ja": "未実行"
+  },
+  "执行中": {
+    "en": "Running",
+    "ja": "実行中"
+  },
+  "已完成": {
+    "en": "Completed",
+    "ja": "完了"
+  },
+  "已暂停": {
+    "en": "Paused",
+    "ja": "一時停止"
+  },
+  "失败": {
+    "en": "Failed",
+    "ja": "失敗"
+  },
+  "不在本次范围": {
+    "en": "Outside run scope",
+    "ja": "今回の範囲外"
+  },
+  "暂停 / 失败": {
+    "en": "Paused / Failed",
+    "ja": "一時停止 / 失敗"
+  },
+  "断点在节点执行前暂停": {
+    "en": "Breakpoints stop before a node starts",
+    "ja": "ブレークポイントはノード実行前に停止"
+  },
+  "本次节点物料": {
+    "en": "Artifacts from this node",
+    "ja": "このノードの成果物"
+  },
+  "冻结参数与运行信息": {
+    "en": "Frozen configuration and run information",
+    "ja": "固定設定と実行情報"
+  },
+  "运行记录不可用": {
+    "en": "Run unavailable",
+    "ja": "実行記録を利用できません"
+  },
+  "只读归档物料": {
+    "en": "Read-only archived artifact",
+    "ja": "読み取り専用の成果物"
+  },
+  "模拟物料 · 非真实产出": {
+    "en": "Simulation placeholder · Not real output",
+    "ja": "シミュレーション用 · 実際の出力ではありません"
+  },
+  "模拟占位 · 查看内容": {
+    "en": "Placeholder · View content",
+    "ja": "仮データ · 内容を見る"
+  },
+  "本次归档 · 查看内容": {
+    "en": "Run archive · View content",
+    "ja": "実行アーカイブ · 内容を見る"
+  },
+  "尚无匹配的运行记录": {
+    "en": "No matching runs",
+    "ja": "該当する実行記録がありません"
+  },
+  "查看内容": {
+    "en": "View content",
+    "ja": "内容を見る"
+  },
+  "新 run · 工作副本": {
+    "en": "New run · Working copy",
+    "ja": "新規 run · 作業コピー"
+  },
+  "Spec · 规格材料": {
+    "en": "Spec · Requirements",
+    "ja": "Spec · 仕様資料"
+  },
+  "Explore · 探索产品": {
+    "en": "Explore · Product",
+    "ja": "Explore · 製品探索"
+  },
+  "Code · 实际代码": {
+    "en": "Code · Source code",
+    "ja": "Code · ソースコード"
+  },
+  "暂不支持": {
+    "en": "Not supported yet",
+    "ja": "未対応"
+  },
+  "使用内置规格样例": {
+    "en": "Use built-in sample specs",
+    "ja": "内蔵の仕様サンプルを使用"
+  },
+  "上传规格材料": {
+    "en": "Upload specifications",
+    "ja": "仕様資料をアップロード"
+  },
+  "探索地址": {
+    "en": "Target URL",
+    "ja": "探索 URL"
+  },
+  "探索范围与限制": {
+    "en": "Exploration scope and limits",
+    "ja": "探索範囲と制限"
+  },
+  "前置知识与 Skill": {
+    "en": "Knowledge and Skills",
+    "ja": "事前知識と Skill"
+  },
+  "添加知识 / Skill": {
+    "en": "Add knowledge / Skill",
+    "ja": "知識 / Skill を追加"
+  },
+  "保存前置知识": {
+    "en": "Save knowledge binding",
+    "ja": "事前知識を保存"
+  },
+  "知识名称": {
+    "en": "Knowledge name",
+    "ja": "知識の名前"
+  },
+  "产品结构 + 用户故事": {
+    "en": "Product structure + user stories",
+    "ja": "製品構造 + ユーザーストーリー"
+  },
+  "查看产品结构 + 用户故事": {
+    "en": "View product structure + stories",
+    "ja": "製品構造とストーリーを表示"
+  },
+  "查看产品文档": {
+    "en": "View product document",
+    "ja": "製品文書を表示"
+  },
+  "融合审阅": {
+    "en": "Review merge",
+    "ja": "統合レビュー"
+  },
+  "保存融合版本": {
+    "en": "Save merged revision",
+    "ja": "統合バージョンを保存"
+  },
+  "导出产品功能文档": {
+    "en": "Export product document",
+    "ja": "製品機能文書を出力"
+  },
+  "导出产品文档": {
+    "en": "Export product document",
+    "ja": "製品文書を出力"
+  },
+  "按产品结构筛选": {
+    "en": "Filter by product structure",
+    "ja": "製品構造で絞り込み"
+  },
+  "清除结构筛选": {
+    "en": "Clear structure filter",
+    "ja": "構造の絞り込みを解除"
+  },
+  "主模块": {
+    "en": "Main modules",
+    "ja": "主モジュール"
+  },
+  "子模块": {
+    "en": "Submodules",
+    "ja": "サブモジュール"
+  },
+  "功能": {
+    "en": "Features",
+    "ja": "機能"
+  },
+  "全部子模块": {
+    "en": "All submodules",
+    "ja": "全サブモジュール"
+  },
+  "跨模块": {
+    "en": "Cross-module",
+    "ja": "モジュール横断"
+  },
+  "本次全部物料": {
+    "en": "All artifacts for this run",
+    "ja": "この実行の全成果物"
+  },
+  "运行物料": {
+    "en": "Run artifacts",
+    "ja": "実行の成果物"
+  },
+  "查看物料": {
+    "en": "View artifact",
+    "ja": "成果物を表示"
+  },
+  "展开归档详情": {
+    "en": "View archive details",
+    "ja": "アーカイブ詳細"
+  },
+  "数据与来源": {
+    "en": "Data and provenance",
+    "ja": "データと出典"
+  },
+  "执行节点与依赖": {
+    "en": "Execution nodes and dependencies",
+    "ja": "実行ノードと依存関係"
+  },
+  "页面说明": {
+    "en": "Page help",
+    "ja": "ページの説明"
+  },
+  "说明": {
+    "en": "Details",
+    "ja": "説明"
+  },
+  "待审批": {
+    "en": "Pending review",
+    "ja": "承認待ち"
+  },
+  "当前基线": {
+    "en": "Current baselines",
+    "ja": "現在のベースライン"
+  },
+  "审批记录": {
+    "en": "Review history",
+    "ja": "承認履歴"
+  },
+  "Gold 基准": {
+    "en": "Gold benchmark",
+    "ja": "Gold ベンチマーク"
+  },
+  "如何使用": {
+    "en": "How to use",
+    "ja": "使い方"
+  },
+  "评测能力": {
+    "en": "Evaluation capability",
+    "ja": "評価対象"
+  },
+  "全部能力": {
+    "en": "All capabilities",
+    "ja": "すべての能力"
+  },
+  "领域规则": {
+    "en": "Domain rules",
+    "ja": "ドメインルール"
+  },
+  "运行记忆": {
+    "en": "Run memory",
+    "ja": "実行メモリ"
+  },
+  "受控进化": {
+    "en": "Controlled evolution",
+    "ja": "管理された進化"
+  },
+  "归档摘要": {
+    "en": "Archived summaries",
+    "ja": "アーカイブ概要"
+  },
+  "未连接服务": {
+    "en": "Service disconnected",
+    "ja": "サービス未接続"
+  },
+  "未证明质量提升": {
+    "en": "Quality gain not established",
+    "ja": "品質向上は未実証"
+  },
+  "正式版本比较": {
+    "en": "Compare evaluated versions",
+    "ja": "評価済みバージョンの比較"
+  },
+  "正式比较需完整评测绑定": {
+    "en": "Complete evaluation bindings required",
+    "ja": "評価条件の完全な記録が必要"
+  },
+  "研究与历史材料": {
+    "en": "Research and archives",
+    "ja": "研究とアーカイブ"
+  },
+  "研究方案": {
+    "en": "Research design",
+    "ja": "研究計画"
+  },
+  "论文设计与任务": {
+    "en": "Paper design and tasks",
+    "ja": "論文設計とタスク"
+  },
+  "← 返回记分板": {
+    "en": "← Back to scoreboard",
+    "ja": "← スコアボードに戻る"
+  },
+  "实验": {
+    "en": "Experiment",
+    "ja": "実験"
+  },
+  "配置变化": {
+    "en": "Configuration change",
+    "ja": "設定の変更"
+  },
+  "基准": {
+    "en": "Baseline",
+    "ja": "基準"
+  },
+  "候选": {
+    "en": "Candidate",
+    "ja": "候補"
+  },
+  "样本": {
+    "en": "Sample",
+    "ja": "サンプル"
+  },
+  "结论": {
+    "en": "Conclusion",
+    "ja": "結論"
+  },
+  "搜索 Gold 条目": {
+    "en": "Search Gold items",
+    "ja": "Gold 項目を検索"
+  },
+  "搜索条目": {
+    "en": "Search items",
+    "ja": "項目を検索"
+  },
+  "Gold 数据划分": {
+    "en": "Gold data split",
+    "ja": "Gold データ分割"
+  },
+  "全部条目": {
+    "en": "All items",
+    "ja": "すべての項目"
+  },
+  "开发条目": {
+    "en": "Development items",
+    "ja": "開発用項目"
+  },
+  "留出条目": {
+    "en": "Held-out items",
+    "ja": "ホールドアウト項目"
+  },
+  "条目": {
+    "en": "Item",
+    "ja": "項目"
+  },
+  "内容": {
+    "en": "Content",
+    "ja": "内容"
+  },
+  "划分": {
+    "en": "Split",
+    "ja": "分割"
+  },
+  "历史匹配": {
+    "en": "Historical match",
+    "ja": "過去の照合"
+  },
+  "开发": {
+    "en": "Development",
+    "ja": "開発"
+  },
+  "留出": {
+    "en": "Held out",
+    "ja": "ホールドアウト"
+  },
+  "已匹配": {
+    "en": "Matched",
+    "ja": "一致"
+  },
+  "未匹配": {
+    "en": "Unmatched",
+    "ja": "未一致"
+  },
+  "版本与维护": {
+    "en": "Version and maintenance",
+    "ja": "バージョンと管理"
+  },
+  "冻结指纹未嵌入": {
+    "en": "Frozen hash not embedded",
+    "ja": "凍結ハッシュ未収録"
+  },
+  "归档只读": {
+    "en": "Read-only archive",
+    "ja": "読み取り専用アーカイブ"
+  },
+  "模拟批准并更新": {
+    "en": "Simulate approval and update",
+    "ja": "承認と更新をシミュレート"
+  },
+  "保留原基线": {
+    "en": "Keep original baseline",
+    "ja": "元のベースラインを維持"
+  },
+  "原基线": {
+    "en": "Original baseline",
+    "ja": "元のベースライン"
+  },
+  "本次": {
+    "en": "Current",
+    "ja": "今回"
+  },
+  "变化": {
+    "en": "Change",
+    "ja": "変化"
+  },
+  "视觉基线": {
+    "en": "Visual baseline",
+    "ja": "ビジュアル基準"
+  },
+  "性能基线": {
+    "en": "Performance baseline",
+    "ja": "性能基準"
+  },
+  "图像未嵌入": {
+    "en": "Image not embedded",
+    "ja": "画像未収録"
+  },
+  "没有待审批项": {
+    "en": "No pending reviews",
+    "ja": "承認待ちはありません"
+  },
+  "评测与自进化": {
+    "en": "Evaluation and evolution",
+    "ja": "評価と進化"
+  },
+  "配套评估界面": {
+    "en": "Companion evaluation UI",
+    "ja": "評価用コンパニオン UI"
+  },
+  "原型未连接服务": {
+    "en": "Prototype service disconnected",
+    "ja": "プロトタイプはサービス未接続"
+  },
+  "查看评测流程": {
+    "en": "View evaluation workflow",
+    "ja": "評価フローを見る"
+  },
+  "接入配置": {
+    "en": "Connection setup",
+    "ja": "接続設定"
+  },
+  "规格重建参考": {
+    "en": "Reference reconstructed from spec",
+    "ja": "仕様から再構成した参照"
+  }
+}

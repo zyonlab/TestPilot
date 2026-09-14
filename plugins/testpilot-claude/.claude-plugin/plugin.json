@@ -1,0 +1,8 @@
+{
+  "name": "testpilot",
+  "description": "TestPilot's test-case generation as an evolvable Agent State: the generator prompts live in skills, the schema checks and the design gate live in hooks, and scoring stays outside in deterministic MCP tools so the model never writes its own score.",
+  "version": "2026-09-10.1",
+  "author": {
+    "name": "TestPilot"
+  }
+}

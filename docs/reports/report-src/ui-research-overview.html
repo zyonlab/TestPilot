@@ -1,0 +1,55 @@
+<section id="overview">
+  <div class="eyebrow">Local implementation plan · 2026.09.10</div>
+  <h1>把当前工作台，<br>落到真实运行与证据。</h1>
+  <p class="intro">面向垂直领域的测试生成 Harness Agent。以当前原型为交互基线，在现有 React、运行服务与宿主协议上增量实施；产品闭环与论文证据分别验收。</p>
+  <div class="row"><span class="label">当前 UI 已对齐</span><span class="label">主链路已落地</span><span class="label">研究结论待验证</span></div>
+  <div class="facts">
+    <div class="fact"><strong>Flow 是首页</strong><p>选择 run 看节点与物料；产品结构从整理故事的产物进入，支持逐层审阅。</p></div>
+    <div class="fact"><strong>{{task_count}} 项实施任务</strong><p>{{doing_count}} 项实施中，{{todo_count}} 项待实施，{{blocked_count}} 项待外部条件。任务含已有基础、代码落点、依赖与验收，不代表项目从零开始。</p></div>
+    <div class="fact"><strong>领域与独立评测</strong><p>多入口、角色知识和受控改进都有对照要求。当前小样本未证明自进化收益。</p></div>
+  </div>
+  <div class="row"><a class="button" href="#tasks">查看实施顺序与任务</a><a class="button secondary" href="testpilot-review-prototype.html#view=ws&project=selftest&work=workflow">打开当前原型 ↗</a><a class="button secondary" href="#install">Claude / Codex 接手</a></div>
+  <div class="callout"><strong>已用 Hyperliquid Testnet 跑通生产主链路</strong><p>真实 Explore 最多 8 屏，产出 6 模块、6 故事、22 用例；16 条批准、6 条拒绝。最终执行 15 通过、1 条待审差异、0 环境错误。保留暂停续跑、自动化复核、新修订、失败与重跑证据；已修复页面就绪、模型上下文、范围切换和多处 UI 问题。</p><p><a href="#implementation">查看当前实施、运行结果和剩余任务</a> · <a href="http://localhost:5300/#/?open=canvas&amp;project=prj-mtveukwc-1001&amp;run=run-38041ca0-630b-44d5-bca4-9f47623400a4">打开本地工作台</a></p><p class="small">本次测试审批不计入真人 Gold；没有连接钱包或交易。产品路径验收不等于全部 P 项或论文结论完成。</p></div>
+  <div class="callout"><strong>新增 Codex 宿主实测：10 / 10 通过</strong><p>原生 Codex 复用同一冻结探索材料，产出 8 模块、6 故事、10 条公开页面冒烟用例；审核后由 Codex 通过 MCP 提交执行。内部生成 pipeline 调用 0 次。缺少负例的门禁警告仍保留。</p><p><a href="#codex-acceptance">查看原生调用、执行结果与边界</a></p></div>
+  <div class="screens">
+    <figure><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-flow.png"><img loading="lazy" src="../v3/evidence/hyperliquid-refactor-2026-09-10/final-flow.png" alt="实际七节点 Flow 工作台"></a><figcaption>生产工作台：同 run 的节点状态与最新产物。</figcaption></figure>
+    <figure><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-module-graph.png"><img loading="lazy" src="../v3/evidence/hyperliquid-refactor-2026-09-10/final-module-graph.png" alt="实际产品模块图与故事下钻"></a><figcaption>Explore 产出的模块图，点击联动故事列表。</figcaption></figure>
+    <figure><a href="../v3/evidence/hyperliquid-refactor-2026-09-10/final-execution-report.png"><img loading="lazy" src="../v3/evidence/hyperliquid-refactor-2026-09-10/final-execution-report.png" alt="实际执行失败证据与复核入口"></a><figcaption>15/16 通过；失败字段、截图和用例复核相连。</figcaption></figure>
+  </div>
+</section>
+<section class="chapter" id="walkthrough">
+  <div class="eyebrow">Current UI / entry points</div><h2>以 Flow 为中心，沿产物下钻</h2>
+  <div class="flow">
+    <a href="testpilot-review-prototype.html#view=ws&project=selftest&work=workflow">01 工作台<small>创建 / 选择 run，节点与断点</small></a>
+    <a href="testpilot-review-prototype.html#view=as&project=selftest&section=stories">02 整理故事产物<small>产品结构 + 用户故事</small></a>
+    <a href="testpilot-review-prototype.html#view=as&project=selftest&section=structure&module=project">03 模块与功能<small>主模块 → 子模块 → 功能</small></a>
+    <a href="testpilot-review-prototype.html#view=as&project=selftest&section=cases&scope=US-01">04 用例复核<small>队列 / 修订 / 判据与证据</small></a>
+    <a href="testpilot-review-prototype.html#view=hi&project=selftest&section=runs">05 执行结果<small>报告与基线各自管理</small></a>
+  </div>
+  <p class="caption">链接打开离线原型中的自举参考数据。这些链接保留目标设计；生产落地与未完成部分以本次验收章为准。结构由运行产出。</p>
+  <div class="tablewrap"><table><thead><tr><th>入口</th><th>当前决定</th><th>本地代码任务</th></tr></thead><tbody>
+    <tr><td>工作台与设置</td><td>Flow 首页，侧栏可收起，底部语言 / theme；项目下拉新增项目。运行记录融入 run 选择器。</td><td><a href="#P-06">P-06</a> · <a href="#P-10">P-10</a></td></tr>
+    <tr><td>创建与输入</td><td>Spec 上传 / 引用、Explore 目标与范围；Code 暂不支持。宿主身份与来源类型分开。</td><td><a href="#P-25">P-25</a></td></tr>
+    <tr><td>产品结构与物料</td><td>故事节点联合产出结构与故事；图下联动列表，跨模块唯一故事，多入口审阅后融合。</td><td><a href="#P-02">P-02</a> · <a href="#P-03">P-03</a> · <a href="#P-26">P-26</a></td></tr>
+    <tr><td>专业节点</td><td>Role、Skill、领域知识与模型角色分开；每节点有冻结上下文、工具权限与加载证据。</td><td><a href="#P-07">P-07</a> · <a href="#P-27">P-27</a></td></tr>
+    <tr><td>报告与基线</td><td>报告：执行记录 / 批次 / 趋势；基线：待审批 / 当前参照 / 审批记录。去掉重复解释。</td><td><a href="#P-28">P-28</a></td></tr>
+    <tr><td>评测与进化</td><td>Gold 冻结评分依据，记分板看结果，Penguin 配套扩展组织候选实验与人工发布。</td><td><a href="#P-17">P-17</a> · <a href="#P-18">P-18</a> · <a href="#P-19">P-19</a></td></tr>
+  </tbody></table></div>
+  <details class="archive"><summary>查看 2026-09-09 旧页面问题证据</summary><p class="caption">以下是此前真实页面截图，用于追溯问题，不代表当前原型或本轮生产验收。</p><div class="screens">
+    <figure><a href="../v3/evidence/ui-review-2026-09-09/artifacts-context.jpg"><img loading="lazy" src="../v3/evidence/ui-review-2026-09-09/artifacts-context.jpg" alt="历史物料页的运行上下文混杂"></a><figcaption>旧物料上下文 → P-01 统一身份与真实读取。</figcaption></figure>
+    <figure><a href="../v3/evidence/ui-review-2026-09-09/stories-dead-end.jpg"><img loading="lazy" src="../v3/evidence/ui-review-2026-09-09/stories-dead-end.jpg" alt="历史读故事入口的迁移提示"></a><figcaption>旧故事入口中断 → P-01 / P-02 产物契约。</figcaption></figure>
+    <figure><a href="../v3/evidence/ui-review-2026-09-09/settings-models.jpg"><img loading="lazy" src="../v3/evidence/ui-review-2026-09-09/settings-models.jpg" alt="历史模型设置页"></a><figcaption>旧设置导航与长表单 → P-06 设置收简。</figcaption></figure>
+  </div></details>
+</section>
+<section class="chapter" id="architecture">
+  <div class="eyebrow">Implementation boundaries</div><h2>复用六层能力，补齐共同契约</h2>
+  <div class="layers">
+    <div><strong>页面与状态</strong><span>现有 React / AppNav / Workspace / Review / artifact viewers；Flow 与列表共用运行身份</span></div>
+    <div><strong>应用与编排 ↓</strong><span>runService / runStages / workflowOps / workflowExecution；节点尝试、检查点、融合与审批</span></div>
+    <div><strong>领域契约 ↓</strong><span>ProductBundle v2 · SourceRevision · KnowledgePack · SkillBinding · ContextManifest</span></div>
+    <div><strong>宿主与执行 ↓</strong><span>Web 或宿主规划模型 · 低成本 Midscene · 独立程序判据；通过相同命令服务</span></div>
+    <div><strong>持久化与证据</strong><span>复用 ledger / revisions / blobs / events / costs；版本和审批不可被页面状态覆盖</span></div>
+    <div><strong>独立研究与发布</strong><span>人工 Gold · 公平 manifest · 外部评分 · Penguin 扩展 · 留出与人工晋升</span></div>
+  </div>
+  <p class="caption">当前扩展仅支持 memory scoped/off。通用 Skill 自动改写列入 P-18，不能按已有功能宣传。</p>
+</section>

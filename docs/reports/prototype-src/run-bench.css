@@ -1,0 +1,30 @@
+.bench-run-selector { max-width:300px; min-width:170px; padding:6px 8px; border:1px solid var(--hair); border-radius:5px; background:var(--surface); color:var(--ink); font-size:12px; }
+.bench-view { display:flex; flex:1; min-height:0; flex-direction:column; }
+.bench-legend { display:flex; flex-wrap:wrap; align-items:center; gap:14px; flex:none; padding:9px 16px; border-bottom:1px solid var(--hair); background:var(--ground); font-size:10px; color:var(--muted); }
+.bench-legend-item { display:flex; gap:5px; align-items:center; }
+.bench-legend-item i { width:7px; height:7px; border-radius:50%; background:var(--faint); }
+.bench-legend-item i.done { background:var(--machine); }
+.bench-legend-item i.paused { background:var(--fail); }
+.bench-identity { margin-left:auto; }
+.bench-bp-note { color:var(--faint); }
+.bench-canvas { flex:1; min-height:250px; overflow:auto; overscroll-behavior:contain; }
+.bench-stage { position:relative; top:0; left:0; transform:none; }
+.bench-canvas .grid-bg { min-width:100%; min-height:100%; }
+.bench-node { min-height:92px; border-left:3px solid var(--hair); }
+.bench-node.pending, .bench-node.skipped { border-left-color:var(--hair); }
+.bench-node.done { border-left-color:var(--machine); background:color-mix(in srgb,var(--machine) 5%,var(--surface)); }
+.bench-node.done .node-m { color:var(--machine); }
+.bench-node.paused, .bench-node.failed { border-color:var(--fail); border-left-color:var(--fail); background:color-mix(in srgb,var(--fail) 5%,var(--surface)); }
+.bench-node.paused .node-m, .bench-node.failed .node-m { color:var(--fail); }
+.bench-node.skipped { opacity:.55; }
+.bench-node .node-h { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.bench-node .node-t { font-size:13px; }
+.bench-node .bp:disabled { opacity:.25; cursor:not-allowed; }
+.bench-node .bp.on { background:var(--fail); border-color:var(--fail); }
+.bench-artifact { display:block; width:168px; min-height:86px; text-align:left; padding:12px; font:inherit; color:var(--ink); background:var(--surface); }
+.bench-artifact .card-t { font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bench-artifact .card-n { font-size:18px; margin:5px 0; }
+.bench-artifact .card-s { font-size:10px; }
+.bench-run-status { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:9px 16px; background:var(--surface); border-top:1px solid var(--hair); font-size:11px; color:var(--muted); }
+.bench-run-status strong { color:var(--fail); font-weight:500; }
+@media(max-width:1000px) { .bench-run-selector { max-width:240px; } .bench-identity { margin-left:0; } .bench-bp-note { display:none; } }

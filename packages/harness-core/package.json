@@ -1,0 +1,33 @@
+{
+  "name": "@testpilot/harness-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./obs": "./src/obs/index.ts",
+    "./harness": "./src/harness/index.ts",
+    "./model-profiles": "./src/model/profiles.ts",
+    "./run-contracts": "./src/run-contracts.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langfuse/otel": "5.11.0",
+    "@langfuse/tracing": "5.11.0",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.221.0",
+    "better-sqlite3": "^12.11.1",
+    "birpc": "^2.5.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

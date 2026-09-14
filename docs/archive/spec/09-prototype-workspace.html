@@ -1,0 +1,3098 @@
+<title>TestPilot 工作台</title>
+<style>
+  :root {
+    --ground: #EEF2F1;
+    --surface: #FFFFFF;
+    --sunk: #E4EAE8;
+    --ink: #141A1C;
+    --muted: #5C6870;
+    --faint: #8A959B;
+    --hair: #D2DAD8;
+    --accent: #0B5A54;
+    --accent-soft: #DBEBE7;
+    --machine: #1C7A5B;
+    --judge: #A9711A;
+    --fail: #B03A3A;
+    --running: #B4761A;
+    --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0D1214; --surface: #151C1F; --sunk: #1A2326; --ink: #E3EAE8;
+      --muted: #93A2A6; --faint: #6F7D82; --hair: #293437; --accent: #57C3B4;
+      --accent-soft: #14312E; --machine: #52BE8C; --judge: #D3A25C; --fail: #D97C7C; --running: #D3A25C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0D1214; --surface: #151C1F; --sunk: #1A2326; --ink: #E3EAE8;
+    --muted: #93A2A6; --faint: #6F7D82; --hair: #293437; --accent: #57C3B4;
+    --accent-soft: #14312E; --machine: #52BE8C; --judge: #D3A25C; --fail: #D97C7C; --running: #D3A25C;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; overflow: hidden;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- shell ---------- */
+  .app { height: 100vh; display: grid; grid-template-rows: 48px minmax(0, 1fr); }
+  .top {
+    display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: var(--surface); border-bottom: 1px solid var(--hair);
+  }
+  .brand { font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 7px; }
+  .brand i { width: 9px; height: 9px; background: var(--accent); display: block; }
+  .nav { display: flex; gap: 2px; margin-left: 10px; }
+  .nav button {
+    background: none; border: 0; padding: 5px 11px; border-radius: 5px;
+    color: var(--muted); font-size: 13px;
+  }
+  .nav button[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .nav button:hover:not([aria-current="true"]) { background: var(--sunk); }
+  .top-right { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+  .pin { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  select.proj {
+    background: var(--surface); border: 1px solid var(--hair); border-radius: 5px;
+    padding: 4px 8px; font-size: 13px;
+  }
+
+  /* ---------- workspace ---------- */
+  .ws { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100%; min-height: 0; }
+  @media (max-width: 860px) { .ws { grid-template-columns: 1fr; } .chat { display: none; } }
+
+  /* ---------- chat ---------- */
+  .chat { border-right: 1px solid var(--hair); background: var(--surface); display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
+  .chat-h {
+    padding: 9px 13px; border-bottom: 1px solid var(--hair);
+    display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted);
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--machine); }
+  .dot.busy { background: var(--running); animation: pulse 1.1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .dot.busy { animation: none; } }
+  .stream { overflow-y: auto; min-height: 0; padding: 12px; display: flex; flex-direction: column; gap: 9px; }
+  .msg { font-size: 13px; line-height: 1.65; padding: 8px 10px; border-radius: 7px; background: var(--sunk); }
+  .msg.you { background: var(--accent-soft); }
+  .msg.sys { background: none; padding: 2px 2px; color: var(--faint); font-family: var(--mono); font-size: 11.5px; }
+  .msg b { font-weight: 650; }
+  .msg .ref {
+    display: block; margin-bottom: 5px; padding-left: 7px; border-left: 2px solid var(--accent);
+    font-size: 11.5px; color: var(--muted); font-family: var(--mono);
+  }
+  .chat-f { border-top: 1px solid var(--hair); padding: 9px; display: flex; flex-direction: column; gap: 7px; }
+  .ctx {
+    display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--accent);
+    background: var(--accent-soft); padding: 4px 8px; border-radius: 5px;
+  }
+  .ctx button { background: none; border: 0; color: var(--accent); opacity: 0.6; padding: 0 2px; }
+  .ctx button:hover { opacity: 1; }
+  .composer { display: flex; gap: 7px; align-items: flex-end; }
+  .composer textarea {
+    flex: 1; min-height: 54px; resize: none; border: 1px solid var(--hair); border-radius: 6px;
+    background: var(--ground); color: inherit; padding: 7px 9px; font: inherit; font-size: 13px;
+  }
+  .composer textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .send { border: 0; background: var(--accent); color: #fff; border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+  .send:disabled { background: var(--sunk); color: var(--faint); cursor: not-allowed; }
+  .hints { display: flex; flex-wrap: wrap; gap: 5px; }
+  .hint {
+    border: 1px solid var(--hair); background: none; border-radius: 999px;
+    padding: 3px 9px; font-size: 11.5px; color: var(--muted);
+  }
+  .hint:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---------- canvas ---------- */
+  .canvas-wrap { position: relative; overflow: hidden; background: var(--ground); }
+  .grid-bg {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, var(--hair) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+  .canvas-wrap.grabbing { cursor: grabbing; }
+  .canvas-wrap { cursor: grab; }
+
+  .layer-tag {
+    position: absolute; font-family: var(--mono); font-size: 10px; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--faint); white-space: nowrap;
+  }
+
+  .node {
+    position: absolute; width: 168px; background: var(--surface);
+    border: 1px solid var(--hair); border-radius: 8px; padding: 9px 10px;
+    display: flex; flex-direction: column; gap: 4px; cursor: pointer;
+  }
+  .node:hover { border-color: var(--accent); }
+  .node.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .node.done { border-left: 3px solid var(--machine); }
+  .node.running { border-left: 3px solid var(--running); }
+  .node.failed { border-left: 3px solid var(--fail); }
+  .node.paused { border-left: 3px solid var(--accent); }
+  .node-h { display: flex; align-items: center; gap: 6px; }
+  .node-t { font-size: 13px; font-weight: 650; }
+  .node-y { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .node-m { font-family: var(--mono); font-size: 10.5px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+  .bp {
+    margin-left: auto; width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--hair);
+    background: none; padding: 0; flex: none;
+  }
+  .bp.on { background: var(--fail); border-color: var(--fail); }
+  .bp:hover { border-color: var(--fail); }
+
+  .card {
+    position: absolute; width: 168px; background: var(--surface); border: 1px solid var(--hair);
+    border-radius: 8px; padding: 9px 10px; display: flex; flex-direction: column; gap: 5px; cursor: pointer;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .card-t { font-size: 12px; color: var(--muted); }
+  .card-n { font-family: var(--mono); font-size: 21px; line-height: 1.05; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .card-s { font-family: var(--mono); font-size: 10.5px; color: var(--faint); line-height: 1.5; }
+  .card-a { font-size: 11.5px; color: var(--accent); background: none; border: 0; padding: 0; text-align: left; }
+  .card-a:hover { text-decoration: underline; }
+  .samples { display: flex; flex-direction: column; gap: 3px; }
+  .sample {
+    font-size: 11px; color: var(--muted); background: var(--sunk); border-radius: 4px; padding: 3px 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  svg.wires { position: absolute; overflow: visible; pointer-events: none; }
+  svg.wires path { fill: none; stroke: var(--hair); stroke-width: 1.5; }
+  svg.wires path.hot { stroke: var(--accent); }
+
+  .zoom {
+    position: absolute; left: 12px; bottom: 12px; display: flex; gap: 4px;
+    background: var(--surface); border: 1px solid var(--hair); border-radius: 7px; padding: 4px;
+  }
+  .zoom button { border: 0; background: none; width: 26px; height: 24px; border-radius: 4px; color: var(--muted); }
+  .zoom button:hover { background: var(--sunk); color: var(--ink); }
+  .runbar {
+    position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; align-items: center;
+    background: var(--surface); border: 1px solid var(--hair); border-radius: 7px; padding: 5px 7px;
+  }
+  .runbar button { border: 1px solid var(--hair); background: var(--surface); border-radius: 5px; padding: 4px 10px; font-size: 12.5px; }
+  .runbar button.go { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .runbar button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .runbar .status { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 4px; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono);
+    font-size: 10px; padding: 1px 6px; border-radius: 3px; white-space: nowrap;
+  }
+  .chip.machine { background: color-mix(in srgb, var(--machine) 16%, transparent); color: var(--machine); }
+  .chip.judge { background: color-mix(in srgb, var(--judge) 18%, transparent); color: var(--judge); }
+  .chip.fail { background: color-mix(in srgb, var(--fail) 16%, transparent); color: var(--fail); }
+  .chip.warn { background: color-mix(in srgb, var(--judge) 14%, transparent); color: var(--judge); }
+
+  /* ---------- overlays ---------- */
+  .sheet {
+    position: fixed; inset: 0; background: color-mix(in srgb, var(--ink) 32%, transparent);
+    display: flex; justify-content: flex-end; z-index: 20;
+  }
+  .sheet[hidden] { display: none; }
+  .panel {
+    background: var(--surface); width: min(880px, 92vw); height: 100%;
+    display: grid; grid-template-rows: auto 1fr; border-left: 1px solid var(--hair);
+  }
+  .panel-h {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--hair);
+  }
+  .panel-h h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  .panel-h .x { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 18px; padding: 0 4px; }
+  .panel-b { overflow: auto; padding: 14px 16px 40px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin-bottom: 12px; }
+  .filters select, .filters label {
+    border: 1px solid var(--hair); background: var(--surface); border-radius: 5px;
+    padding: 4px 7px; font-size: 12.5px; color: var(--ink);
+  }
+  .filters label { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); font-weight: 500; }
+  tr.pick:hover td { background: var(--sunk); cursor: pointer; }
+  td.small { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; font-size: 13px; margin-bottom: 14px; }
+  .kv dt { color: var(--muted); font-size: 12px; }
+  .kv dd { margin: 0; }
+  .sec { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 16px 0 7px; }
+  .finding { font-size: 12.5px; color: var(--judge); background: color-mix(in srgb, var(--judge) 10%, transparent); padding: 6px 9px; border-radius: 5px; margin-bottom: 5px; }
+  ol.steps { margin: 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
+  .note { font-size: 12.5px; color: var(--muted); background: var(--sunk); padding: 9px 11px; border-radius: 6px; }
+  .act { display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap; }
+  .act button { border: 1px solid var(--hair); background: var(--surface); border-radius: 5px; padding: 5px 11px; font-size: 12.5px; }
+  .act button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .placeholder { padding: 40px; color: var(--muted); font-size: 14px; max-width: 60ch; }
+  .placeholder h2 { font-size: 17px; margin: 0 0 8px; color: var(--ink); }
+</style>
+<style>
+  /* --- additions for the complete version: five destinations --- */
+  .page-pad { padding: 18px 22px 60px; overflow: auto; height: 100%; }
+  .page-pad h2 { font-size: 17px; margin: 0 0 4px; font-weight: 650; }
+  .page-pad .sub { color: var(--muted); font-size: 13px; max-width: 68ch; margin: 0 0 18px; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
+  .box { border: 1px solid var(--hair); background: var(--surface); border-radius: 9px; padding: 14px 15px; }
+  .box h3 { margin: 0 0 3px; font-size: 14px; font-weight: 650; }
+  .box .lede { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .kpi { border: 1px solid var(--hair); border-radius: 8px; padding: 9px 11px; background: var(--surface); }
+  .kpi .l { font-size: 11.5px; color: var(--muted); }
+  .kpi .v { font-family: var(--mono); font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .kpi .v.good { color: var(--machine); } .kpi .v.warn { color: var(--judge); } .kpi .v.bad { color: var(--fail); }
+  .row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 11px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .field input, .field select, .field textarea {
+    border: 1px solid var(--hair); background: var(--ground); color: inherit; border-radius: 6px;
+    padding: 6px 8px; font: inherit; font-size: 13px;
+  }
+  .field textarea { min-height: 68px; resize: vertical; font-family: var(--mono); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--hair); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; background: var(--surface); padding: 5px 13px; font-size: 13px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .matrix { display: grid; gap: 3px; grid-template-columns: 150px repeat(auto-fit, minmax(18px, 1fr)); align-items: center; }
+  .cell { height: 18px; border-radius: 3px; }
+  .cell.hit { background: var(--machine); } .cell.miss { background: var(--fail); } .cell.extra { background: var(--hair); }
+  .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); margin-top: 9px; align-items: center; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+  .bar { height: 7px; background: var(--sunk); border-radius: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .shot { border: 1px solid var(--hair); border-radius: 6px; overflow: hidden; }
+  .shot .cap { font-family: var(--mono); font-size: 10px; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--hair); }
+  .shot .ph { height: 82px; background: repeating-linear-gradient(45deg, var(--sunk), var(--sunk) 6px, var(--ground) 6px, var(--ground) 12px); }
+  .shot.diff .ph { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--fail) 24%, transparent), color-mix(in srgb, var(--fail) 24%, transparent) 6px, var(--ground) 6px, var(--ground) 12px); }
+  .port {
+    position: absolute; right: -7px; top: 22px; width: 14px; height: 14px; border-radius: 50%;
+    border: 1.5px solid var(--accent); background: var(--surface); padding: 0; font-size: 9px;
+    color: var(--accent); line-height: 1; display: none;
+  }
+  .node.editable .port { display: block; }
+  .node.editable { cursor: move; }
+  .node.linking { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .node.target-ok { border-color: var(--machine); }
+  .node.target-bad { border-color: var(--fail); }
+  .editbar {
+    position: absolute; left: 12px; top: 12px; display: flex; gap: 6px; align-items: center;
+    background: var(--surface); border: 1px solid var(--accent); border-radius: 7px; padding: 5px 7px;
+  }
+  .editbar select, .editbar button {
+    border: 1px solid var(--hair); background: var(--surface); border-radius: 5px; padding: 4px 9px; font-size: 12.5px;
+  }
+  .editbar button.save { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .editbar .warn { color: var(--judge); font-size: 11.5px; max-width: 320px; }
+  .vers { position: absolute; right: 12px; bottom: 12px; background: var(--surface); border: 1px solid var(--hair);
+          border-radius: 7px; padding: 7px 9px; display: flex; flex-direction: column; gap: 6px; max-width: 340px; }
+  .vers .row2 { display: flex; gap: 5px; align-items: center; }
+  .vers select { border: 1px solid var(--hair); background: var(--surface); border-radius: 4px; padding: 2px 5px; font-family: var(--mono); font-size: 11px; }
+  .vers pre { margin: 0; font-family: var(--mono); font-size: 10.5px; line-height: 1.6; max-height: 96px; overflow: auto;
+              background: var(--sunk); padding: 6px 8px; border-radius: 5px; white-space: pre-wrap; }
+  .story-tree { font-size: 13px; }
+  .story-tree li { list-style: none; }
+  .story-tree > li { border-bottom: 1px solid var(--hair); padding: 6px 0; }
+  .story-tree .sn { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .story-tree .sn .id { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+  .story-tree ul { margin: 6px 0 2px 18px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .story-tree ul li { font-size: 12.5px; color: var(--muted); }
+  .warnline { font-size: 12.5px; color: var(--judge); background: color-mix(in srgb, var(--judge) 12%, transparent); padding: 7px 10px; border-radius: 6px; margin-top: 10px; }
+  .okline { font-size: 12.5px; color: var(--machine); background: color-mix(in srgb, var(--machine) 12%, transparent); padding: 7px 10px; border-radius: 6px; margin-top: 10px; }
+  .storymap { display: grid; grid-template-columns: 64px 1fr; gap: 4px 12px; font-size: 12.5px; align-items: baseline; }
+  .storymap dt { font-family: var(--mono); color: var(--accent); font-size: 11.5px; }
+  .storymap dd { margin: 0; color: var(--muted); }
+
+  /* the harness layer: what it did, in order — not a scoreboard */
+  .trace { border-top: 1px solid var(--hair); background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+  .trace-h { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--hair); flex: none; }
+  .trace-h .t { font-size: 12px; font-weight: 650; }
+  .trace-h .f { display: flex; gap: 2px; margin-left: 6px; }
+  .trace-h .f button { border: 0; background: none; font-size: 11.5px; color: var(--muted); padding: 3px 8px; border-radius: 5px; }
+  .trace-h .f button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+  .trace-h .sum { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); display: flex; gap: 12px; }
+  .trace-b { overflow: auto; min-height: 0; }
+  .tl { display: grid; grid-template-columns: 62px 74px 128px 1fr auto; gap: 10px; align-items: baseline;
+        padding: 4px 12px; font-size: 12px; border-bottom: 1px solid color-mix(in srgb, var(--hair) 45%, transparent); }
+  .tl:hover { background: var(--sunk); cursor: pointer; }
+  .tl .ts { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .tl .kd { font-family: var(--mono); font-size: 10px; }
+  .tl .nd { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+  .tl .tx { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl .rt { font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+  .tl.k-model .kd { color: var(--judge); } .tl.k-node .kd { color: var(--accent); }
+  .tl.k-gate .kd { color: var(--machine); } .tl.k-err .kd { color: var(--fail); }
+
+  /* the harness layer, made visible: a strip under the canvas rather than lines in a chat */
+  .rail {
+    border-top: 1px solid var(--hair); background: var(--surface);
+    display: flex; align-items: center; gap: 0; overflow-x: auto; flex: none;
+  }
+  .rail .gauge { padding: 7px 14px; border-right: 1px solid var(--hair); min-width: 132px; }
+  .rail .gauge .gl { font-size: 10.5px; color: var(--faint); font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .rail .gauge .gv { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .rail .gauge .gv.warn { color: var(--judge); } .rail .gauge .gv.good { color: var(--machine); }
+  .rail .gbar { height: 4px; background: var(--sunk); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .rail .gbar i { display: block; height: 100%; background: var(--accent); }
+  .rail .toggle { margin-left: auto; border: 0; background: none; color: var(--muted); font-size: 11.5px; padding: 0 14px; white-space: nowrap; }
+
+  /* drawer: draggable width */
+  .panel { position: relative; }
+  .grip {
+    position: absolute; left: -3px; top: 0; width: 7px; height: 100%; cursor: col-resize; z-index: 2;
+  }
+  .grip:hover, .grip.on { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+  /* markdown preview with file tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hair); margin-bottom: 12px; overflow-x: auto; }
+  .tabs button {
+    border: 0; background: none; padding: 6px 11px; font-size: 12.5px; color: var(--muted);
+    border-bottom: 2px solid transparent; white-space: nowrap; font-family: var(--mono);
+  }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .md { font-size: 13.5px; line-height: 1.8; }
+  .md h1 { font-size: 18px; margin: 0 0 10px; font-weight: 650; }
+  .md h2 { font-size: 15px; margin: 18px 0 6px; font-weight: 650; }
+  .md p { margin: 0 0 8px; }
+  .md ul { margin: 0 0 8px; padding-left: 20px; display: block; }
+  .md li { margin-bottom: 3px; }
+  .md blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 3px solid var(--hair); color: var(--muted); }
+  .md table { margin-bottom: 10px; }
+  .md code { font-size: 12px; }
+  .md .hl { background: color-mix(in srgb, var(--accent) 18%, transparent); border-radius: 2px; padding: 0 2px; }
+
+  /* section navigation inside a settings-ish page */
+  .withnav { display: grid; grid-template-columns: 168px 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 720px) { .withnav { grid-template-columns: 1fr; } }
+  .subnav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; }
+  .subnav button {
+    border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 6px;
+    font-size: 13px; color: var(--muted);
+  }
+  .subnav button[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .subnav button:hover:not([aria-current="true"]) { background: var(--sunk); }
+  .subnav .grp { font-size: 10.5px; color: var(--faint); font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; padding: 10px 10px 3px; }
+  .secthead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .secthead h3 { margin: 0; font-size: 15px; font-weight: 650; }
+  .secthead .why { font-size: 12px; color: var(--muted); }
+</style>
+
+<div class="app">
+  <div class="top">
+    <div class="brand"><i></i>TestPilot</div>
+    <select class="proj" id="proj" aria-label="项目">
+      <option>TestPilot 自举 (SUT)</option>
+      <option>Acme Portal（mock spec）</option>
+    </select>
+    <nav class="nav" id="nav">
+      <button data-view="ws" aria-current="true" title="生成：spec → 故事 → 用例 → 代码">工作台</button>
+      <button data-view="as" title="产物与代码的控制迭代，以及怎么交到你们手上">资产</button>
+      <button data-view="ev" title="harness / workflow 的迭代：同一批题跑两版">迭代</button>
+      <button data-view="hi" title="被测产品的结果：执行、批次、基线、趋势">运行</button>
+      <button data-view="st" title="项目与运行时配置">设置</button>
+    </nav>
+    <div class="top-right">
+      <span class="pin mono" title="这次运行 pin 的图版本与提示词指纹">selftest-g1 · v2 · prompts 19da4de9</span>
+    </div>
+  </div>
+
+  <div id="view" style="min-height:0"></div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="panel">
+    <div class="panel-h">
+      <h2 id="sheet-t"></h2>
+      <button class="x" id="sheet-x" aria-label="关闭">✕</button>
+    </div>
+    <div class="panel-b" id="sheet-b"></div>
+  </div>
+</div>
+<script>
+
+const DOCS = {"docs/spec/02-业务规格与用户故事.md": "# 02 业务规格与用户故事\n\n> **本文档有双重身份**：既是产品规格，也是阶段二自举时喂给 harness 的 spec 输入。\n> 因此结构必须规整：故事 `US-xx`、验收标准 `AC-xx.y`、状态机显式列出。改本文即改测试输入。\n\n## 1. 产品定位\n\nTestPilot 是一个**垂类 harness agent**：吃产品规格 / 代码库 / 运行中的界面，产出两级产物——\n\n## 4. 用户故事\n\n### 4.1 项目与目标\n- **US-01** 作为 QA，我要新建项目并指定目标端（web/iOS/Android）与入口，以便后续所有产物挂在它下面。\n  - AC-01.1 目标端为 web 时可选启用 web3 能力；iOS/Android 时该选项不可见。\n  - AC-01.2 删除项目级联删除其用例、运行、基线，且需二次确认。\n- **US-02** 作为 QA，我要为项目配置多套环境（变量、固定头、query、登录方式），以便同一批用例跑在不同环境上。\n  - AC-02.1 登录支持三种：UI 步骤、API 登录、粘贴会话（cookie/storageState）。\n  - AC-02.2 密钥只以 `${secret.KEY}` 引用，明文永不返回前端。\n\n### 4.2 输入源与阶段一\n- **US-03** 作为 QA，我要上传/指向产品规格文档作为输入源，让 harness 拆出用户故事主干。\n  - AC-03.1 拆解结果以故事树呈现，每个故事可展开为测试点。\n  - AC-03.2 每条用例可追溯到唯一的故事/需求；孤儿用例被计数并高亮。\n- **US-04** 作为 QA，我要用探索模式让 agent 漫游界面补充故事（无规格或规格不全时）。\n  - AC-04.1 探索过程实时可见（页面截图 + 日志 + 逐条产出）。\n  - AC-04.2 探索产物与规格产物同构，进入同一条流水线。\n- **US-05** 作为 QA，我要 harness 按测试设计方法展开用例（等价类、边界值、状态迁移、判定表、异常路径）。\n  - AC-05.1 每条用例标注所用设计方法。\n  - AC-05.2 负例/边界用例占比不低于阈值。\n  - AC-05.3 每条用例标注判定硬度 tier1/2/3，看板显示分布。\n- **US-06** 作为 QA，我要看到门禁①的逐条判据结果与总分，以便决定复核哪些。", "docs/spec/03-UI交互规格.md": "# 03 UI 交互规格\n\n> **双重身份**：本文档同时是自举时 gold checklist 的来源——每条\"可验证的交互契约\"都能被抽成一条黄金用例。\n> 因此每页都要写出：元素、交互、状态（空/载入/错误）、以及**可验证的断言点**。\n\n## 1. 信息架构\n\n```\n侧栏\n├─ 项目（Projects）              现有\n├─ 项目内\n│  ├─ 探索（Explore）            现有\n│  ├─ 用例看板（Cases）          现有 → 增加 tier/设计方法/门禁分列\n│  ├─ 复核队列（Review）         新增\n│  ├─ 工作流画布（Canvas）        新增 ★\n│  ├─ 套件（Suite）              现有\n│  ├─ 运行报告（Runs）           现有\n│  └─ 趋势（Trends）             现有\n├─ 评测（Evals）                 新增\n├─ 能力（Capabilities）+ Chat    新增\n├─ 进程（Processes）             🟡 已实现\n├─ 模型配置（Model）             现有\n└─ 链配置（Chain）               现有\n```\n\n## 2. 工作流画布（Canvas）★\n\n**定位**：画布是执行图的**真实视图**，不是示意图。它显示什么，运行时就在做什么。\n\n| 元素 | 交互 | 断言点 |"};
+const CODE = {"code": {"US-17-1-通过对话请求启动本地链生成声明式recipe": "await agent.aiAction('Navigate to the Agent chat interface and ensure the Agent is in an idle state');\nawait agent.aiInput('起一条本地链，请只输出声明式Recipe定义和健康检查配置，不要包含任何临时进程启动命令', '对话输入框');\nawait agent.aiAction('Click the send button to send the message');\nawait agent.aiAssert('The Agent reply contains a declarative recipe definition and health check configuration, and does not contain any temporary process startup commands');", "US-17-3-输入空消息时agent无响应": "await agent.aiAction('Navigate to the Agent chat interface and ensure the conversation input box is visible and focused');\nawait agent.aiAction('Click the send button without entering any text in the conversation input box');\nawait agent.aiAssert('The system displays a message saying \"消息不能为空\" or the send button remains disabled, and the Agent does not produce any reply');", "US-18-1-验证进程列表展示所有必需字段": "await agent.aiAction('Navigate to the monitoring and process management page');\nawait agent.aiAssert('The process list displays at least one running process row');\nawait agent.aiAction('Click on the first process row in the process list to view its details');\nawait agent.aiAssert('The process row displays the \"类型\" field with a non-empty value');\nawait agent.aiAssert('The process row displays the \"pid\" field with a non-empty value');\nawait agent.aiAssert('The process row displays the \"心跳\" field with a non-empty value');\nawait agent.aiAssert('The process row displays the \"重启次数\" field with a non-empty value');\nawait agent.aiAssert('The process row displays the \"当前任务\" field with a non-empty value');\nawait agent.aiAssert('The process row displays the \"累计成本\" field with a non-empty value');", "US-18-3-验证停止操作后进程状态": "await agent.aiAction('Navigate to the process management page and select a process whose status is \"运行中\" (Running)');\nawait agent.aiAction('Click the \"停止\" (Stop) button for the selected process');\nawait agent.aiAction('Wait until the system finishes processing the stop operation and the process status updates');\nawait agent.aiAssert('The status of the selected process is \"已停止\" (Stopped)');\nawait agent.aiAssert('The \"当前任务\" (Current Task) field of the selected process is empty or displays \"无\" (None)');"}, "rounds": {"US-17-1-通过对话请求启动本地链生成声明式recipe": {"changes": ["selector-wording"], "before": "Assertion failed: The Agent reply contains a declarative recipe definition and health check configuration, and does not contain any temporary process startup commands\nReason: I need to check the conte", "note": ""}, "US-17-3-输入空消息时agent无响应": {"changes": ["none"], "before": "Assertion failed: The system displays a message saying \"消息不能为空\" or the send button remains disabled, and the Agent does not produce any reply\nReason: Looking at the screenshot, I need to check if the ", "note": "The test case is designed to verify that the system prevents sending empty messages. The failure reason indicates that the send button is enabled and clickable, and no error message is displayed, whic"}}, "gate2": 1, "outcomes": [{"id": "US-17-1-通过对话请求启动本地链生成声明式recipe", "status": "failed", "kind": "assert", "ms": 158419}, {"id": "US-17-3-输入空消息时agent无响应", "status": "failed", "kind": "assert", "ms": 39138}, {"id": "US-18-1-验证进程列表展示所有必需字段", "status": "passed", "kind": "", "ms": 42849}, {"id": "US-18-3-验证停止操作后进程状态", "status": "failed", "kind": "infra", "ms": 28178}]};
+const CASES = [{"id":"US-01-1-选择web目标端时显示web3选项","t":"选择Web目标端时显示Web3选项","s":"US-01","m":"equivalence","tier":1,"exp":"页面中显示 'web3' 选项，且该选项处于可选状态","steps":["在目标端下拉菜单中选择 'web'","观察页面中 'web3' 选项的可见性"],"f":[]},{"id":"US-01-2-选择ios目标端时隐藏web3选项","t":"选择iOS目标端时隐藏Web3选项","s":"US-01","m":"equivalence","tier":1,"exp":"页面中不显示 'web3' 选项","steps":["在目标端下拉菜单中选择 'iOS'","观察页面中 'web3' 选项的可见性"],"f":[]},{"id":"US-02-1-验证ui步骤登录配置保存与回显","t":"验证UI步骤登录配置保存与回显","s":"US-02","m":"equivalence","tier":1,"exp":"系统提示保存成功，且重新加载页面后登录方式显示为“UI 步骤”，步骤内容完整回显","steps":["进入测试环境配置页面","选择登录方式为“UI 步骤”","输入有效的UI操作步骤序列"],"f":[]},{"id":"US-02-2-验证api登录配置保存与回显","t":"验证API登录配置保存与回显","s":"US-02","m":"equivalence","tier":1,"exp":"系统提示保存成功，且重新加载页面后登录方式显示为“API 登录”，API参数完整回显","steps":["进入测试环境配置页面","选择登录方式为“API 登录”","输入有效的API端点和参数"],"f":[]},{"id":"US-03-1-验证拆解结果以故事树形式呈现且可展开","t":"验证拆解结果以故事树形式呈现且可展开","s":"US-03","m":"state-transition","tier":3,"exp":"界面显示“故事树”结构，每个故事节点旁存在可点击的展开图标，点击后显示该故事下的测试点列表","steps":["点击“上传产品规格”按钮并选择文档","等待系统完成解析","查看主界面展示区域"],"f":[{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-03-2-验证用例与故事的唯一追溯关系","t":"验证用例与故事的唯一追溯关系","s":"US-03","m":"equivalence","tier":1,"exp":"用例详情中显示“关联故事”字段，且该字段指向且仅指向一个具体的故事ID或标题","steps":["在故事树中选中任意一条测试用例","查看该用例的属性面板或详情区域"],"f":[]},{"id":"US-04-1-探索过程实时展示页面截图","t":"探索过程实时展示页面截图","s":"US-04","m":"state-transition","tier":3,"exp":"界面实时显示当前步骤的页面截图","steps":["观察探索界面","等待探索步骤执行"],"f":[{"r":"oracle-vague","m":"assertion names no observable phenomenon: \"界面实时显示当前步骤的页面截图\""},{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-04-2-探索过程实时展示日志","t":"探索过程实时展示日志","s":"US-04","m":"state-transition","tier":3,"exp":"界面实时显示当前步骤的执行日志","steps":["观察探索界面","等待探索步骤执行"],"f":[{"r":"oracle-vague","m":"assertion names no observable phenomenon: \"界面实时显示当前步骤的执行日志\""},{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-05-1-验证用例列表页显示设计方法标签","t":"验证用例列表页显示设计方法标签","s":"US-05","m":"equivalence","tier":1,"exp":"该用例行的'设计方法'列显示文本为'equivalence'","steps":["登录系统","导航至测试用例列表页","查看该用例所在行的'设计方法'列"],"f":[]},{"id":"US-05-2-验证负例占比低于阈值时的警告提示","t":"验证负例占比低于阈值时的警告提示","s":"US-05","m":"negative","tier":1,"exp":"界面显示红色警告文本'负例/边界用例占比低于阈值'","steps":["登录系统","导航至测试计划详情页","查看'用例质量'模块中的占比统计区域"],"f":[]},{"id":"US-06-1-验证门禁-评分后流程继续执行","t":"验证门禁①评分后流程继续执行","s":"US-06","m":"state-transition","tier":1,"exp":"系统显示门禁①评分结果，且流程状态变更为“继续执行”或“进入下一环节”，未出现阻断提示","steps":["触发门禁①判据检查","观察系统流程状态"],"f":[]},{"id":"US-06-2-验证不合格项自动进入复核队列","t":"验证不合格项自动进入复核队列","s":"US-06","m":"state-transition","tier":1,"exp":"复核队列列表中显示该任务，且状态标记为“待复核”","steps":["触发门禁①判据检查","导航至复核队列页面"],"f":[]},{"id":"US-07-1-验证代码分层结构符合规范","t":"验证代码分层结构符合规范","s":"US-07","m":"equivalence","tier":3,"exp":"cases/ 目录仅包含意图描述代码，actions/ 目录包含页面操作细节代码，flows/ 目录包含业务流程代码，且三者无内容交叉复制","steps":["检查生成的文件目录结构","查看 cases/ 目录下的文件内容","查看 actions/ 目录下的文件内容"],"f":[{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-07-2-验证公共片段被引用而非复制","t":"验证公共片段被引用而非复制","s":"US-07","m":"negative","tier":3,"exp":"登录逻辑仅在一个公共模块中定义，其他用例通过引用方式使用，不存在复制的登录代码块","steps":["在 cases/ 目录中搜索登录相关代码","检查登录逻辑是否以 import 或引用形式存在","检查是否存在重复的登录实现代码块"],"f":[{"r":"oracle-vague","m":"assertion names no observable phenomenon: \"登录逻辑仅在一个公共模块中定义，其他用例通过引用方式使"},{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-08-1-连续k轮无进展触发停止并标记原因","t":"连续K轮无进展触发停止并标记原因","s":"US-08","m":"boundary","tier":1,"exp":"系统停止修复流程，并在日志或报告中明确标记停止原因为“连续3轮无进展”","steps":["触发失败用例的自主修复流程","模拟前2轮修复均产生代码改动但测试仍失败","模拟第3轮修复未产生任何代码改动（无进展）"],"f":[]},{"id":"US-08-2-修复次数达到上限强制停止","t":"修复次数达到上限强制停止","s":"US-08","m":"boundary","tier":1,"exp":"系统在第5轮修复后停止，不执行第6轮修复，并标记停止原因为“达到最大修复次数上限”","steps":["触发失败用例的自主修复流程","模拟前4轮修复均产生改动但测试仍失败","模拟第5轮修复产生改动但测试仍失败"],"f":[]},{"id":"US-09-1-数据驱动单条用例执行多次","t":"数据驱动单条用例执行多次","s":"US-09","m":"equivalence","tier":1,"exp":"系统执行3次测试，结果列表显示3条独立的执行记录","steps":["选择该单条用例","点击运行按钮"],"f":[]},{"id":"US-09-2-数据驱动空数据行处理","t":"数据驱动空数据行处理","s":"US-09","m":"boundary","tier":1,"exp":"系统提示“无测试数据”或执行0次，不产生执行记录","steps":["选择该单条用例","点击运行按钮"],"f":[]},{"id":"US-10-1-首次运行生成视觉基线","t":"首次运行生成视觉基线","s":"US-10","m":"state-transition","tier":1,"exp":"系统保存当前截图为基线，执行状态显示为“通过”，且无差异百分比数值","steps":["执行该视觉测试用例","查看执行结果详情"],"f":[]},{"id":"US-10-2-后续运行无差异时通过","t":"后续运行无差异时通过","s":"US-10","m":"equivalence","tier":1,"exp":"执行状态显示为“通过”，差异百分比显示为“0%”，不生成差异图","steps":["执行该视觉测试用例","查看执行结果详情"],"f":[]},{"id":"US-11-1-性能指标低于基线时标记为回归","t":"性能指标低于基线时标记为回归","s":"US-11","m":"decision-table","tier":1,"exp":"页面显示TTFB、FCP、DCL、Load四项指标均无回归标记，状态为“正常”","steps":["执行性能测试任务，采集到指标：TTFB=180ms, FCP=900ms, DCL=1800ms, Load=2800ms","查看性能测试结果页面"],"f":[{"r":"oracle-vague","m":"assertion promises nothing checkable: \"页面显示TTFB、FCP、DCL、Load四项指标均无回归标记"}]},{"id":"US-11-2-性能指标超过预算时标记为回归","t":"性能指标超过预算时标记为回归","s":"US-11","m":"decision-table","tier":1,"exp":"页面显示TTFB指标旁有“回归”标记，FCP、DCL、Load无回归标记","steps":["执行性能测试任务，采集到指标：TTFB=300ms, FCP=1100ms, DCL=1900ms, Load=2900ms","查看性能测试结果页面"],"f":[]},{"id":"US-12-1-启动本地链后状态显示为运行中","t":"启动本地链后状态显示为运行中","s":"US-12","m":"state-transition","tier":1,"exp":"环境状态显示为“运行中”","steps":["进入Web3环境管理页面","点击“启动”按钮","等待系统响应"],"f":[]},{"id":"US-12-2-停止运行中的本地链后状态显示为已停止","t":"停止运行中的本地链后状态显示为已停止","s":"US-12","m":"state-transition","tier":1,"exp":"环境状态显示为“已停止”","steps":["进入Web3环境管理页面","点击“停止”按钮","等待系统响应"],"f":[]},{"id":"US-13-1-验证趋势页展示通过率指标","t":"验证趋势页展示通过率指标","s":"US-13","m":"equivalence","tier":1,"exp":"页面显示包含“通过率”字样的指标卡片或图表","steps":["导航至趋势页面","查看页面显示的指标列表"],"f":[]},{"id":"US-13-2-验证趋势页展示抖动率指标","t":"验证趋势页展示抖动率指标","s":"US-13","m":"equivalence","tier":1,"exp":"页面显示包含“抖动率”字样的指标卡片或图表","steps":["导航至趋势页面","查看页面显示的指标列表"],"f":[]},{"id":"US-14-1-验证画布显示工作流执行图及节点状态","t":"验证画布显示工作流执行图及节点状态","s":"US-14","m":"equivalence","tier":3,"exp":"画布上显示该工作流的执行图，且每个节点上均显示状态、耗时、token、门禁结果四项信息","steps":["进入该工作流的执行详情页面","观察无限画布区域"],"f":[{"r":"oracle-vague","m":"assertion names no observable phenomenon: \"画布上显示该工作流的执行图，且每个节点上均显示状态、耗"},{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-14-2-验证执行中工作流节点状态实时更新","t":"验证执行中工作流节点状态实时更新","s":"US-14","m":"state-transition","tier":3,"exp":"该节点的状态从“运行中”变为“成功”或“失败”，且耗时、token、门禁结果字段随之更新为最终值","steps":["进入该工作流的执行详情页面","等待该运行中的节点执行完成","观察该节点在画布上的显示"],"f":[{"r":"tier","m":"judged by a model — reserve tier 3 for what nothing else can decide"}]},{"id":"US-15-1-连线类型不兼容时显示明确错误原因","t":"连线类型不兼容时显示明确错误原因","s":"US-15","m":"negative","tier":1,"exp":"系统拒绝连接，并显示包含“类型不兼容”或具体类型名称（如“String 与 Integer 不兼容”）的错误提示","steps":["尝试将节点A的输出端口连接到节点B的输入端口"],"f":[]},{"id":"US-15-2-连线类型兼容时成功建立连接","t":"连线类型兼容时成功建立连接","s":"US-15","m":"equivalence","tier":1,"exp":"连接成功建立，画布上显示连接线，且无错误提示","steps":["将节点A的输出端口连接到节点B的输入端口"],"f":[{"r":"oracle-vague","m":"assertion names no observable phenomenon: \"连接成功建立，画布上显示连接线，且无错误提示\""}]},{"id":"US-16-1-验证仅执行拆解子图并生成覆盖矩阵","t":"验证仅执行拆解子图并生成覆盖矩阵","s":"US-16","m":"state-transition","tier":1,"exp":"界面显示覆盖矩阵，且矩阵中明确标注“该拆成 N 个吗”的判定结果，N 为实际拆解出的子图数量","steps":["选择调试模式为“只跑拆解子图”","点击执行按钮","查看执行结果中的覆盖矩阵"],"f":[]},{"id":"US-16-2-验证抽样1条用例执行阶段一并展示门禁详情","t":"验证抽样1条用例执行阶段一并展示门禁详情","s":"US-16","m":"boundary","tier":1,"exp":"界面显示门禁①逐条命中详情，且详情中包含“结构合理吗”的判定文本","steps":["选择调试模式为“抽样跑阶段一”","设置抽样数量为1","点击执行按钮"],"f":[{"r":"oracle-vague","m":"assertion promises nothing checkable: \"界面显示门禁①逐条命中详情，且详情中包含“结构合理吗”的判定文"}]},{"id":"US-17-1-通过对话请求启动本地链生成声明式recipe","t":"通过对话请求启动本地链生成声明式Recipe","s":"US-17","m":"equivalence","tier":1,"exp":"Agent回复中包含声明式recipe定义及健康检查配置，且未出现临时进程启动指令","steps":["在对话输入框中输入“起一条本地链”","发送消息"],"f":[]},{"id":"US-17-2-通过对话请求扩展外部能力生成健康检查","t":"通过对话请求扩展外部能力生成健康检查","s":"US-17","m":"equivalence","tier":1,"exp":"Agent回复中包含健康检查逻辑描述，且未包含直接执行外部调用的临时脚本","steps":["在对话输入框中输入“添加一个外部API调用能力”","发送消息"],"f":[]},{"id":"US-18-1-验证进程列表展示所有必需字段","t":"验证进程列表展示所有必需字段","s":"US-18","m":"equivalence","tier":1,"exp":"该进程行同时显示“类型”、“pid”、“心跳”、“重启次数”、“当前任务”、“累计成本”六个字段，且值非空","steps":["进入监控与管理进程页面","查看进程列表中的任一进程行"],"f":[]},{"id":"US-18-2-验证重启操作后状态变更","t":"验证重启操作后状态变更","s":"US-18","m":"state-transition","tier":2,"exp":"该进程的“重启次数”数值增加1，且“当前任务”字段更新为重启后的新任务状态","steps":["点击该进程的“重启”按钮","等待系统响应完成"],"f":[]},{"id":"US-19-1-验证评测报告包含coverage指标","t":"验证评测报告包含Coverage指标","s":"US-19","m":"equivalence","tier":1,"exp":"结果面板中显示“Coverage”字段，且其值为一个介于0到1之间的数值","steps":["进入模型评测页面","选择目标模型版本","点击“运行评测”按钮"],"f":[]},{"id":"US-19-2-验证评测报告包含以fail为正类的precision指标","t":"验证评测报告包含以Fail为正类的Precision指标","s":"US-19","m":"equivalence","tier":1,"exp":"结果面板中显示“Precision”字段，且其值为一个介于0到1之间的数值","steps":["进入模型评测页面","选择目标模型版本","点击“运行评测”按钮"],"f":[]},{"id":"US-20-1-验证图类型配对比较生成差值与显著性","t":"验证图类型配对比较生成差值与显著性","s":"US-20","m":"equivalence","tier":1,"exp":"页面显示包含差值数值和显著性标记的结果表格","steps":["进入配对比较功能页面","选择版本A和版本B作为比较对象","选择比较维度为“图”"],"f":[]},{"id":"US-20-2-验证提示词类型配对比较生成差值与显著性","t":"验证提示词类型配对比较生成差值与显著性","s":"US-20","m":"equivalence","tier":1,"exp":"页面显示包含差值数值和显著性标记的结果表格","steps":["进入配对比较功能页面","选择版本A和版本B作为比较对象","选择比较维度为“提示词”"],"f":[]}];
+
+/* Real numbers from run wf-mt0xaw2g (selftest-g1 v2) and wf-mt12q57n (g2-code). */
+const RUN = {
+  id: "wf-mt0xaw2g", graph: "selftest-g1", version: 2, prompts: "19da4de9",
+  nodes: [
+    { id: "spec",    type: "source.spec",   ms: 400,    calls: 0, tokens: 0 },
+    { id: "stories", type: "plan.stories",  ms: 323000, calls: 1, tokens: 8270 },
+    { id: "design",  type: "design.cases",  ms: 1435000,calls: 20,tokens: 27517 },
+    { id: "gate",    type: "gate.textcase", ms: 60,     calls: 0, tokens: 0 },
+    { id: "codegen", type: "codegen.case",  ms: 60000,  calls: 4, tokens: 2350 },
+    { id: "codegate",type: "gate.code",     ms: 40,     calls: 0, tokens: 0 },
+    { id: "repair",  type: "repair.loop",   ms: 351000, calls: 2, tokens: 1181 },
+  ],
+  gate: { score: 0.93, findings: { "oracle-vague": 20, tier: 11 }, tiers: { 1: 77, 2: 12, 3: 11 }, backed: { 3: 100 } },
+  stories: 20,
+  m2: [
+    { id: "US-18-1-验证进程列表展示所有必需字段", status: "passed", by: "judge", detail: "六个字段齐全（累计成本补上之后）" },
+    { id: "US-17-1-通过对话请求启动本地链生成声明式recipe", status: "failed", by: "judge", kind: "assert", detail: "断言时回复还在「生成中」" },
+    { id: "US-17-3-输入空消息时agent无响应", status: "failed", by: "judge", kind: "assert", detail: "按钮确实是禁用的，判定模型说它「看起来可用」" },
+    { id: "US-18-3-验证停止操作后进程状态", status: "failed", by: "machine", kind: "infra", detail: "Midscene 重规划超限 + puppeteer 协议错误" },
+  ],
+};
+
+const PARAMS = {
+  spec: { paths: ["docs/spec/02-业务规格与用户故事.md", "docs/spec/03-UI交互规格.md"] },
+  stories: { maxStories: 20, lang: "zh" },
+  design: { maxCasesPerStory: 5, lang: "zh", oracleGuidance: "default" },
+  gate: { minNegativeRatio: 0.3, maxSteps: 8 },
+  codegen: { maxTokens: 1200 },
+  codegate: { maxActions: 12 },
+  repair: { maxRounds: 1, limit: 4 },
+};
+
+/* ---------- state ---------- */
+const S = {
+  view: "ws",
+  sel: null,            // {kind:'node'|'card'|'case', id}
+  ctx: null,            // chat context chip
+  bp: new Set(["design"]),
+  phase: "done",        // idle | running | paused | done
+  nodeState: {},        // id -> idle|running|done|paused
+  msgs: [],
+  pan: { x: 40, y: 30 }, zoom: 0.9, traceOpen: true, traceFilter: "all", drawerW: 880,
+  hi: "runs", st: "target", as: "cases",
+  filter: { tier: "", m: "", s: "", gate: "", degraded: false },
+  picked: new Set(),
+  stage2: true,
+};
+RUN.nodes.forEach((n) => (S.nodeState[n.id] = "done"));
+
+/**
+ * The IO contract each node type speaks.
+ *
+ * A connection is checked against this when it is drawn — not when the graph runs. Catching
+ * a bad wire while someone is drawing it is the difference between "that is not allowed,
+ * because design.cases hands you cases and gate.code wants code" and a stack trace twenty
+ * minutes into a run.
+ */
+const KINDS = {
+  "source.spec": { in: null, out: "spec" },
+  "source.explore": { in: null, out: "spec" },
+  "plan.stories": { in: "spec", out: "stories" },
+  "design.cases": { in: "stories", out: "cases" },
+  "gate.textcase": { in: "cases", out: "gated-cases" },
+  "codegen.case": { in: "gated-cases", out: "code" },
+  "gate.code": { in: "code", out: "gated-code" },
+  "repair.loop": { in: "gated-code", out: "repaired" },
+};
+
+/** Saved versions. A run pins one, so an edit can never rewrite what an old result meant. */
+const VERSIONS = [
+  { v: 3, at: "08-20 17:51", note: "revert canvas smoke test" },
+  { v: 2, at: "08-19 17:51", note: "cover both documents: 20 stories, 5 cases each" },
+  { v: 1, at: "08-19 17:51", note: "built-in" },
+];
+
+const NODE_POS = {
+  spec:     { x: 20,  y: 60 },
+  stories:  { x: 230, y: 60 },
+  design:   { x: 440, y: 60 },
+  gate:     { x: 650, y: 60 },
+  codegen:  { x: 860, y: 60 },
+  codegate: { x: 1070, y: 60 },
+  repair:   { x: 1280, y: 60 },
+};
+const CARD_Y = 210, CARD_Y2 = 330;
+
+const $ = (s, r = document) => r.querySelector(s);
+const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const fmtMs = (ms) => (ms >= 60000 ? Math.round(ms / 60000) + " min" : ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms");
+
+/* ---------- chat ---------- */
+function say(role, text, ref) { S.msgs.push({ role, text, ref }); renderChat(); }
+
+function seedChat() {
+  S.msgs = [
+    { role: "sys", text: "运行 wf-mt0xaw2g · selftest-g1 v2 · 41 min · 21 calls · 35 787 tokens" },
+    { role: "bot", text: "跑完了。20 个故事、100 条用例，门禁① 93%。<b>有一件事值得先看</b>：100 条里声称 tier1 的有 77 条，带机器判据的 <b>0 条</b>——执行时它们仍会由模型看截图判定。" },
+    { role: "you", text: "先看看门禁挑出来的那些" },
+    { role: "bot", text: "31 条 finding：<b>oracle-vague 20 条</b>（断言没指向可观测现象）、<b>tier 11 条</b>（用了 tier3）。点画布上「门禁①」那张卡可以展开成表。" },
+  ];
+  renderChat();
+}
+
+function renderChat() {
+  const box = $("#stream");
+  if (!box) return;
+  box.innerHTML = "";
+  for (const m of S.msgs) {
+    const d = el("div", "msg " + (m.role === "you" ? "you" : m.role === "sys" ? "sys" : ""));
+    if (m.ref) { const r = el("span", "ref", m.ref); d.appendChild(r); }
+    const span = el("span");
+    span.innerHTML = m.text;
+    d.appendChild(span);
+    box.appendChild(d);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+/* Canned but honest: each reply describes something the backend can actually do today. */
+function reply(text) {
+  const t = text.trim();
+  const c = S.ctx;
+  if (/重生成|改写|重写/.test(t)) {
+    if (c && c.kind === "case") return `已按门禁意见重写 <b>${c.id.slice(0, 22)}…</b>，落成一条 <code>by: model</code> 的编辑——<b>产物没有被改写</b>，两版并排可比。门禁①对这条已无意见。<br><span class="mono" style="font-size:11px;color:var(--faint)">一次模型调用 · 本地模型约 80 秒</span>`;
+    return "先在画布上选一条用例，我才知道要重写哪条。";
+  }
+  if (/凭证|占位符|替换/.test(t)) return "查找替换作用于选中的这批：<b>改了 8 条</b>，其余不含该字面量的未动——不匹配就不记编辑，否则 diff 会开在两列一模一样的内容上。";
+  if (/判据|oracle|tier/.test(t)) return "要让 tier 兑现，得让用例带上机器判据（<code>text/noText/url/count</code> 是 tier1，<code>delta</code> 是 tier2）。<b>把 design.cases 的 oracleGuidance 调成 strict 再跑一次</b>，我可以起草这个改动——保存会立一版新图。";
+  if (/跑|运行|执行/.test(t)) return "执行不经过我：右上角 <b>▶ 跑这张图</b>，或者在节点上「只跑此节点 / 从此节点续跑」。<br>理由是可复现——同一句话两次跑出不同的东西，配对评测就失去意义了。<b>我能做的是改下一次怎么跑</b>：参数、提示词、图的形状。";
+  if (/断点/.test(t)) return "断点在节点卡片左上角那个圆点上点一下就能开关；停下来之后工具栏出现「继续」。";
+  if (/为什么|失败|挂了/.test(t)) return "阶段二 4 条里 1 条通过。失败的三条互不相同：一条断言时回复还在「生成中」，一条是<b>判定模型的假阴性</b>（按钮 DOM 上确实 disabled），一条是 infra（puppeteer 协议错误）——<b>没有一条是用例写得不好</b>。";
+  return "我能起草图、能力 recipe 与提示词改写，也能对选中的产物下指令（重生成、批量替换、重新打分）。<b>我只出草稿</b>，校验通过才可保存。";
+}
+
+function send() {
+  const ta = $("#ta");
+  const v = ta.value.trim();
+  if (!v) return;
+  const refText = S.ctx ? S.ctx.label : null;
+  say("you", v.replace(/</g, "&lt;"), refText);
+  ta.value = "";
+  $("#send").disabled = true;
+  setTimeout(() => { say("bot", reply(v)); $("#send").disabled = false; }, 260);
+}
+
+/* ---------- run simulation ---------- */
+let runTimer = null;
+function startRun(from) {
+  const order = RUN.nodes.map((n) => n.id).filter((id) => S.stage2 || !["codegen", "codegate", "repair"].includes(id));
+  let i = from ? order.indexOf(from) : 0;
+  order.forEach((id, k) => { if (k >= i) S.nodeState[id] = "idle"; });
+  S.phase = "running";
+  say("sys", "运行开始 · " + order.slice(i).join(" → "));
+  render();
+  const step = () => {
+    if (i >= order.length) { S.phase = "done"; say("sys", "运行结束 · done"); render(); return; }
+    const id = order[i];
+    if (S.bp.has(id) && id !== from) {
+      S.nodeState[id] = "paused"; S.phase = "paused";
+      say("sys", `停在断点：${id} 之前 · 零模型调用`);
+      say("bot", `停在 <b>${id}</b> 前面了。上游产物都在画布上，可以先看再决定要不要继续。`);
+      render(); return;
+    }
+    S.nodeState[id] = "running"; render();
+    runTimer = setTimeout(() => {
+      S.nodeState[id] = "done";
+      const n = RUN.nodes.find((x) => x.id === id);
+      if (n.calls) say("sys", `${id} 完成 · ${fmtMs(n.ms)} · ${n.calls} calls · ${n.tokens} tok`);
+      i += 1; render(); step();
+    }, 620);
+  };
+  step();
+}
+function resumeRun() {
+  const paused = Object.keys(S.nodeState).find((k) => S.nodeState[k] === "paused");
+  if (!paused) return;
+  say("sys", `继续 · 从 ${paused} 开始（被点名的节点不被自己的断点拦）`);
+  startRun(paused);
+}
+
+/* ---------- canvas ---------- */
+function artifactCards() {
+  const st = S.nodeState;
+  const cards = [];
+  if (st.spec === "done") cards.push({ id: "a-spec", node: "spec", t: "规格材料", n: "2", s: "docs/spec/02 + 03", y: CARD_Y, table: "spec" });
+  if (st.stories === "done") cards.push({ id: "a-stories", node: "stories", t: "用户故事", n: String(RUN.stories), s: "故事树 · 2 份文档", y: CARD_Y, table: "stories" });
+  if (st.design === "done") cards.push({
+    id: "a-cases", node: "design", t: "文本用例", n: "100", s: "抽样 3 条 · 展开成表", y: CARD_Y, table: "cases",
+    samples: CASES.slice(0, 3).map((c) => c.t),
+  });
+  if (st.gate === "done") {
+    cards.push({ id: "a-gate", node: "gate", t: "门禁①", n: "93%", s: "31 条 finding · 负例 29%", y: CARD_Y, table: "findings" });
+    cards.push({ id: "a-tier", node: "gate", t: "判据有据率", n: "0%", s: "声称 77×t1 · 有据 0", y: CARD_Y2, table: "tier", warn: true });
+    cards.push({ id: "a-cov", node: "gate", t: "覆盖矩阵", n: "50%", s: "命中 7 · 遗漏 9 · 多余 79", y: CARD_Y2 + 120, table: "matrix", warn: true });
+  }
+  if (st.codegen === "done") cards.push({ id: "a-code", node: "codegen", t: "用例代码", n: "4", s: "门禁② 1.00", y: CARD_Y, table: "code" });
+  if (st.repair === "done") {
+    cards.push({ id: "a-runs", node: "repair", t: "执行", n: "1/4", s: "loose=strict · 零退化", y: CARD_Y, table: "runs" });
+    cards.push({ id: "a-rep", node: "repair", t: "修复循环", n: "4", s: "改动分类 · 双口径", y: CARD_Y2, table: "repair" });
+  }
+  return cards;
+}
+
+function renderCanvas() {
+  const wrap = el("div", "canvas-wrap");
+  wrap.id = "cv";
+  wrap.appendChild(el("div", "grid-bg"));
+
+  const stage = el("div", "stage");
+  stage.id = "stage";
+  stage.style.transform = `translate(${S.pan.x}px, ${S.pan.y}px) scale(${S.zoom})`;
+
+  const wires = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  wires.setAttribute("class", "wires");
+  wires.style.width = "1600px"; wires.style.height = "480px";
+  EDGES.forEach((e) => {
+    const a = NODE_POS[e.from], b = NODE_POS[e.to];
+    if (!a || !b) return;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const x1 = a.x + 168, y1 = a.y + 26, x2 = b.x, y2 = b.y + 26;
+    p.setAttribute("d", `M${x1},${y1} C${x1 + 22},${y1} ${x2 - 22},${y2} ${x2},${y2}`);
+    if (S.nodeState[e.from] === "done") p.setAttribute("class", "hot");
+    wires.appendChild(p);
+  });
+  // wire nodes to their artifact cards
+  for (const c of artifactCards()) {
+    const a = NODE_POS[c.node];
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", `M${a.x + 84},${a.y + 58} L${a.x + 84},${c.y}`);
+    wires.appendChild(p);
+  }
+  stage.appendChild(wires);
+
+  const tagA = el("div", "layer-tag", "流程层"); tagA.style.left = "20px"; tagA.style.top = "34px"; stage.appendChild(tagA);
+  const tagB = el("div", "layer-tag", "产物层"); tagB.style.left = "20px"; tagB.style.top = (CARD_Y - 26) + "px"; stage.appendChild(tagB);
+
+  for (const n of RUN.nodes) {
+    if (!S.stage2 && ["codegen", "codegate", "repair"].includes(n.id)) continue;
+    const st = S.nodeState[n.id] || "idle";
+    const d = el("div", `node ${st}` + (S.sel && S.sel.kind === "node" && S.sel.id === n.id ? " sel" : ""));
+    d.style.left = NODE_POS[n.id].x + "px"; d.style.top = NODE_POS[n.id].y + "px";
+    const h = el("div", "node-h");
+    h.appendChild(el("div", "node-t", n.id));
+    const bp = el("button", "bp" + (S.bp.has(n.id) ? " on" : ""));
+    bp.title = "断点";
+    bp.onclick = (e) => { e.stopPropagation(); S.bp.has(n.id) ? S.bp.delete(n.id) : S.bp.add(n.id); render(); };
+    h.appendChild(bp);
+    d.appendChild(h);
+    d.appendChild(el("div", "node-y", n.type));
+    const m = el("div", "node-m");
+    if (st === "done") {
+      m.appendChild(el("span", null, fmtMs(n.ms)));
+      if (n.calls) m.appendChild(el("span", null, n.calls + " calls"));
+      if (n.tokens) m.appendChild(el("span", null, n.tokens + " tok"));
+    } else m.appendChild(el("span", null, st === "running" ? "运行中…" : st === "paused" ? "停在断点前" : "未运行"));
+    d.appendChild(m);
+    if (S.editing) {
+      d.classList.add("editable");
+      if (S.linkFrom === n.id) d.classList.add("linking");
+      else if (S.linkFrom) d.classList.add(canLink(S.linkFrom, n.id) ? "target-ok" : "target-bad");
+      const port = el("button", "port", "→");
+      port.title = "从这里连一条线";
+      port.onclick = (e) => { e.stopPropagation(); S.linkFrom = S.linkFrom === n.id ? null : n.id; S.editIssue = ""; render(); };
+      d.appendChild(port);
+      const del = el("button", "bp");
+      del.textContent = "✕";
+      del.style.cssText = "border:0;color:var(--fail);font-size:11px;line-height:1";
+      del.title = "删除节点";
+      del.onclick = (e) => { e.stopPropagation(); dropNode(n.id); };
+      h.appendChild(del);
+      // dragging is layout only: where a node sits says nothing about what the graph does,
+      // so moving one is not a change that needs a version.
+      d.onmousedown = (e) => {
+        if (e.target.closest(".port, .bp")) return;
+        const start = { x: e.clientX, y: e.clientY, ox: NODE_POS[n.id].x, oy: NODE_POS[n.id].y };
+        const move = (ev) => {
+          NODE_POS[n.id] = {
+            x: Math.round(start.ox + (ev.clientX - start.x) / S.zoom),
+            y: Math.round(start.oy + (ev.clientY - start.y) / S.zoom),
+          };
+          d.style.left = NODE_POS[n.id].x + "px";
+          d.style.top = NODE_POS[n.id].y + "px";
+        };
+        const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); render(); };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+        e.preventDefault();
+      };
+    }
+    d.onclick = () => {
+      if (S.editing && S.linkFrom && S.linkFrom !== n.id) return linkTo(n.id);
+      selectNode(n.id);
+    };
+    stage.appendChild(d);
+  }
+
+  for (const c of artifactCards()) {
+    const d = el("div", "card" + (S.sel && S.sel.id === c.id ? " sel" : ""));
+    d.style.left = NODE_POS[c.node].x + "px"; d.style.top = c.y + "px";
+    d.appendChild(el("div", "card-t", c.t));
+    const n = el("div", "card-n", c.n);
+    if (c.warn) n.style.color = "var(--judge)";
+    d.appendChild(n);
+    d.appendChild(el("div", "card-s", c.s));
+    if (c.samples) {
+      const box = el("div", "samples");
+      for (const s of c.samples) box.appendChild(el("div", "sample", s));
+      d.appendChild(box);
+    }
+    if (c.table) {
+      const a = el("button", "card-a", "展开成表 →");
+      a.onclick = (e) => { e.stopPropagation(); openTable(c.table); };
+      d.appendChild(a);
+    }
+    d.onclick = () => selectCard(c);
+    stage.appendChild(d);
+  }
+
+  wrap.appendChild(stage);
+
+  const zoom = el("div", "zoom");
+  const zin = el("button", null, "+"); zin.onclick = () => { S.zoom = Math.min(1.6, S.zoom + 0.12); render(); };
+  const zout = el("button", null, "−"); zout.onclick = () => { S.zoom = Math.max(0.4, S.zoom - 0.12); render(); };
+  const zfit = el("button", null, "⤢"); zfit.title = "适应视图";
+  zfit.onclick = () => { S.zoom = 0.62; S.pan = { x: 20, y: 40 }; render(); };
+  zoom.append(zin, zout, zfit);
+  wrap.appendChild(zoom);
+
+  /* 输入源：规格文档 或 探索。两条路进同一条流水线（AC-04.2）。 */
+  if (!S.editing) {
+    const src = el("div", "editbar");
+    src.style.borderColor = "var(--hair)";
+    src.appendChild(el("span", "card-s", "输入源"));
+    const seg = el("div", "seg");
+    [["spec", "规格文档"], ["explore", "探索界面"]].forEach(([k, label]) => {
+      const bb = el("button", null, label);
+      bb.setAttribute("aria-pressed", String(S.source === k));
+      bb.onclick = () => {
+        S.source = k;
+        // 换输入源就是换第一个节点：source.spec ↔ source.explore，其余流水线不变
+        const first = RUN.nodes[0];
+        first.id = k === "spec" ? "spec" : "explore";
+        first.type = k === "spec" ? "source.spec" : "source.explore";
+        NODE_POS[first.id] = NODE_POS.spec || NODE_POS.explore || { x: 20, y: 60 };
+        EDGES[0].from = first.id;
+        S.nodeState[first.id] = "done";
+        render();
+      };
+      seg.appendChild(bb);
+    });
+    src.appendChild(seg);
+    src.appendChild(el("span", "warn", S.source === "spec"
+      ? "docs/spec/02 + 03 · 点产物层「规格材料」可读全文"
+      : "无规格或规格不全时：让 agent 漫游界面补故事，产物与规格产物同构"));
+    if (S.source === "explore") {
+      const go = el("button", null, "开始探索");
+      go.onclick = openExplore;
+      src.appendChild(go);
+    }
+    wrap.appendChild(src);
+  }
+
+  if (S.editing) {
+    const eb = el("div", "editbar");
+    const add = el("select");
+    add.appendChild(new Option("+ 加节点", ""));
+    Object.keys(KINDS).forEach((t) => add.appendChild(new Option(t, t)));
+    add.onchange = () => { if (add.value) addNode(add.value); };
+    eb.appendChild(add);
+    const save = el("button", "save", "保存为新版本");
+    save.onclick = saveTopology;
+    eb.appendChild(save);
+    const drop = el("button", null, "放弃");
+    drop.onclick = () => { S.editing = false; S.linkFrom = null; S.editIssue = ""; S.draft = null; render(); };
+    eb.appendChild(drop);
+    eb.appendChild(el("span", "warn", S.editIssue || (S.linkFrom ? `从 ${S.linkFrom} 连线中：点目标节点，或再点一次取消` : "拖动摆位不算改动；增删节点与连线才算")));
+    wrap.appendChild(eb);
+  }
+
+  const bar = el("div", "runbar");
+  const go = el("button", "go", S.phase === "running" ? "运行中…" : "▶ 跑这张图");
+  go.disabled = S.phase === "running";
+  go.title = "从头跑一遍 spec → stories → design → gate（→ 阶段二）";
+  go.onclick = () => startRun();
+  bar.appendChild(go);
+  if (S.phase === "paused") {
+    const at = Object.keys(S.nodeState).find((k) => S.nodeState[k] === "paused");
+    const cont = el("button", null, "⏭ 从 " + at + " 继续");
+    cont.onclick = resumeRun;
+    bar.appendChild(cont);
+  }
+  // Three unrelated things used to sit here unlabelled ("运行 断点 1 done"). Each one now
+  // says what it is: what the run is doing, and how many stops are armed.
+  const st = el("span", "status");
+  const phaseText = { idle: "未跑过", running: "正在跑", paused: "停在断点", done: "跑完了" }[S.phase] || S.phase;
+  st.appendChild(el("span", "chip " + (S.phase === "done" ? "machine" : S.phase === "paused" ? "judge" : "warn"), "状态：" + phaseText));
+  bar.appendChild(st);
+  const bpc = el("span", "status", S.bp.size ? `断点 ${S.bp.size} 个（节点左上角的圆点）` : "未设断点");
+  bpc.title = "运行会停在这些节点之前，停下时零模型调用";
+  bar.appendChild(bpc);
+  if (!S.editing) {
+    const ed = el("button", null, "编辑拓扑");
+    ed.title = "增删节点与连线。保存必然新起一版——已完成的运行仍指向它当时那一版。";
+    ed.onclick = () => { S.editing = true; S.draft = { added: [], removed: [], edges: [] }; render(); };
+    bar.appendChild(ed);
+  }
+  wrap.appendChild(bar);
+
+  wrap.appendChild(renderVersions());
+
+  // pan + zoom
+  let drag = null;
+  wrap.addEventListener("mousedown", (e) => {
+    if (e.target.closest(".node, .card, .zoom, .runbar")) return;
+    drag = { x: e.clientX - S.pan.x, y: e.clientY - S.pan.y };
+    wrap.classList.add("grabbing");
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!drag) return;
+    S.pan = { x: e.clientX - drag.x, y: e.clientY - drag.y };
+    const st = $("#stage");
+    if (st) st.style.transform = `translate(${S.pan.x}px, ${S.pan.y}px) scale(${S.zoom})`;
+  });
+  window.addEventListener("mouseup", () => { drag = null; wrap.classList.remove("grabbing"); });
+  wrap.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const k = e.deltaY > 0 ? 0.92 : 1.08;
+    S.zoom = Math.max(0.4, Math.min(1.6, S.zoom * k));
+    const st = $("#stage");
+    if (st) st.style.transform = `translate(${S.pan.x}px, ${S.pan.y}px) scale(${S.zoom})`;
+  }, { passive: false });
+
+  return wrap;
+}
+
+
+/* ---------- 拓扑编辑：连线校验、增删、立版、版本 diff（US-15） ---------- */
+
+/** Would this wire type-check? The reason is what the UI shows when it would not. */
+function linkReason(fromId, toId) {
+  const a = RUN.nodes.find((n) => n.id === fromId), b = RUN.nodes.find((n) => n.id === toId);
+  if (!a || !b) return "节点不存在";
+  const out = (KINDS[a.type] || {}).out, need = (KINDS[b.type] || {}).in;
+  if (need === null) return `${b.id} 是输入源，它不接收上游`;
+  if (out !== need) return `类型不兼容：${a.id} 产出 ${out}，而 ${b.id} 需要 ${need}`;
+  if (EDGES.some((e) => e.from === fromId && e.to === toId)) return "这条线已经有了";
+  return "";
+}
+const canLink = (a, b) => linkReason(a, b) === "";
+
+/** The graph's wires, as data — the canvas draws these, and editing changes these. */
+const EDGES = [
+  { from: "spec", to: "stories" }, { from: "stories", to: "design" },
+  { from: "design", to: "gate" }, { from: "gate", to: "codegen" },
+  { from: "codegen", to: "codegate" }, { from: "codegate", to: "repair" },
+];
+
+function linkTo(toId) {
+  const why = linkReason(S.linkFrom, toId);
+  if (why) {
+    // Refused while it is being drawn, with the contract spelled out — not at run time.
+    S.editIssue = why;
+    render();
+    return;
+  }
+  EDGES.push({ from: S.linkFrom, to: toId });
+  S.draft.edges.push({ from: S.linkFrom, to: toId });
+  S.editIssue = `已连 ${S.linkFrom} → ${toId}`;
+  S.linkFrom = null;
+  render();
+}
+
+function addNode(type) {
+  const base = type.split(".").pop();
+  let id = base, i = 2;
+  while (RUN.nodes.some((n) => n.id === id)) id = base + i++;
+  RUN.nodes.push({ id, type, ms: 0, calls: 0, tokens: 0 });
+  const xs = Object.values(NODE_POS).map((p) => p.x);
+  NODE_POS[id] = { x: Math.max(...xs) + 210, y: 60 };
+  S.nodeState[id] = "idle";
+  S.draft.added.push(id);
+  S.editIssue = `加了 ${id}（${type}）· 还没有连线`;
+  render();
+}
+
+function dropNode(id) {
+  const at = RUN.nodes.findIndex((n) => n.id === id);
+  if (at === -1) return;
+  RUN.nodes.splice(at, 1);
+  // A wire to a node that is gone is not a wire; drop them with it rather than letting the
+  // save fail with an error about something invisible.
+  for (let i = EDGES.length - 1; i >= 0; i--) if (EDGES[i].from === id || EDGES[i].to === id) EDGES.splice(i, 1);
+  delete NODE_POS[id];
+  S.draft.removed.push(id);
+  S.editIssue = `删了 ${id}，连着它的线一并去掉`;
+  render();
+}
+
+function saveTopology() {
+  const d = S.draft || { added: [], removed: [], edges: [] };
+  if (!d.added.length && !d.removed.length && !d.edges.length) {
+    S.editIssue = "没有结构改动——挪动摆位不产生新版本";
+    render();
+    return;
+  }
+  const v = VERSIONS[0].v + 1;
+  VERSIONS.unshift({
+    v, at: "刚刚",
+    note: [d.added.length && `+${d.added.join(",")}`, d.removed.length && `-${d.removed.join(",")}`,
+           d.edges.length && `${d.edges.length} 条连线`].filter(Boolean).join(" · "),
+  });
+  S.verA = v - 1; S.verB = v; S.verDiff = null;
+  S.editing = false; S.draft = null; S.editIssue = "";
+  say("sys", `已保存为 v${v} · 已完成的运行仍指向它当时那一版`);
+  render();
+}
+
+/** Two versions and the line-by-line difference between them. */
+function renderVersions() {
+  const box = el("div", "vers");
+  const head = el("div", "row2");
+  head.appendChild(el("span", "card-s", "图版本"));
+  const mk = (val, on) => {
+    const sel = el("select");
+    VERSIONS.forEach((x) => sel.appendChild(new Option("v" + x.v + (x.note ? " · " + x.note.slice(0, 12) : ""), x.v)));
+    sel.value = String(val);
+    sel.onchange = () => { on(Number(sel.value)); S.verDiff = null; render(); };
+    return sel;
+  };
+  head.appendChild(mk(S.verA, (v) => (S.verA = v)));
+  head.appendChild(el("span", "card-s", "→"));
+  head.appendChild(mk(S.verB, (v) => (S.verB = v)));
+  const go = el("button", "hint", "比较");
+  go.onclick = () => { S.verDiff = diffVersions(S.verA, S.verB); render(); };
+  head.appendChild(go);
+  box.appendChild(head);
+  if (S.verDiff) {
+    const pre = el("pre");
+    pre.textContent = S.verDiff.join("\n");
+    box.appendChild(pre);
+  } else {
+    box.appendChild(el("div", "card-s", "运行 pin 的是 v" + RUN.version + "：改图不会改写它当时的含义"));
+  }
+  return box;
+}
+
+/**
+ * The difference between two versions, per node and per parameter key.
+ *
+ * "参数变了" is not an answer to "你改了什么", and this project's loop is usually exactly
+ * one threshold moving.
+ */
+function diffVersions(a, b) {
+  if (a === b) return ["两个版本相同"];
+  const known = {
+    "1→2": ["~ spec.paths: [02] → [02, 03]", "~ stories.maxStories: 12 → 20", "~ design.maxCasesPerStory: unset → 5"],
+    "2→3": ["+ node case (codegen.case)", "+ edge gate → case", "（随后已还原，实验留在版本历史里）"],
+  };
+  const key = `${Math.min(a, b)}→${Math.max(a, b)}`;
+  if (known[key]) return a < b ? known[key] : known[key].map((l) => l.replace(/^\+/, "-").replace(/^~/, "~"));
+  const nv = VERSIONS.find((x) => x.v === Math.max(a, b));
+  return [nv && nv.note ? "· " + nv.note : "（这两版之间没有记录的结构差异）",
+          "节点位置不算变更——挪一下摆位没有改变图做什么"];
+}
+
+/**
+ * 探索：让 agent 漫游界面补故事（US-04）。
+ *
+ * 这是三种控制形态里唯一必须是 agent loop 的一段——界面未知，步骤没法预先写死。
+ * 所以它的实时性要求也不同：截图 + 日志 + 逐条产出，边跑边看。
+ */
+function openExplore() {
+  let i = 0;
+  const found = [];
+  const STEPS = [
+    { log: "打开 http://localhost:5300/?api=http://127.0.0.1:5401", shot: "首页" },
+    { log: "识别到导航：工作台 / 资产 / 迭代 / 运行 / 设置", shot: "导航" },
+    { log: "进入「运行」→ 发现批次列表与门禁结论", shot: "运行页",
+      story: { id: "EX-01", t: "套件批次给出门禁结论与抖动统计", from: "运行页" } },
+    { log: "进入「设置 · 能力」→ 发现起停与健康检查", shot: "能力页",
+      story: { id: "EX-02", t: "能力可起停，且「运行中」与「就绪」分开显示", from: "设置·能力" } },
+    { log: "尝试提交空表单 → 发送按钮为禁用态", shot: "Chat 页",
+      story: { id: "EX-03", t: "空消息不可发送", from: "能力与 Chat" } },
+  ];
+  sheet("探索 · 实时", (b) => {
+    const draw = () => {
+      b.innerHTML = "";
+      b.appendChild(el("div", "note", "步骤不是预先写死的：界面未知时只能让模型自己决定下一步。这一段是 agent loop，不是 workflow。"));
+      const shots = el("div", "shots");
+      STEPS.slice(Math.max(0, i - 3), i).forEach((st) => {
+        const sh = el("div", "shot");
+        sh.appendChild(el("div", "cap", st.shot));
+        sh.appendChild(el("div", "ph"));
+        shots.appendChild(sh);
+      });
+      if (i) b.appendChild(shots);
+      b.appendChild(el("div", "sec", "日志"));
+      const log = el("pre", "note mono");
+      log.style.whiteSpace = "pre-wrap";
+      log.textContent = STEPS.slice(0, i).map((st, k) => `${String(k + 1).padStart(2, "0")}  ${st.log}`).join("\n") || "（未开始）";
+      b.appendChild(log);
+      b.appendChild(el("div", "sec", `逐条产出 · ${found.length} 个故事`));
+      if (!found.length) b.appendChild(el("div", "card-s", "还没有产出"));
+      found.forEach((f) => {
+        const d = el("div", "box");
+        d.style.marginBottom = "6px";
+        const r = el("div", "row");
+        r.appendChild(el("span", "card-t", f.t));
+        r.appendChild(el("span", "chip machine", f.id));
+        r.appendChild(el("span", "card-s", "来自 " + f.from));
+        d.appendChild(r);
+        b.appendChild(d);
+      });
+      const act = el("div", "act");
+      if (i < STEPS.length) {
+        const step = el("button", "primary", i ? "继续漫游" : "开始漫游");
+        step.onclick = () => { if (STEPS[i].story) found.push(STEPS[i].story); i += 1; draw(); };
+        act.appendChild(step);
+      } else {
+        const into = el("button", "primary", `把 ${found.length} 个故事送进流水线`);
+        into.onclick = () => {
+          $("#sheet").hidden = true;
+          RUN.stories += found.length;
+          say("sys", `探索产出 ${found.length} 个故事 → 进入 design.cases，与规格产物走同一条流水线`);
+          render();
+        };
+        act.appendChild(into);
+      }
+      const stop = el("button", null, "停止");
+      stop.onclick = () => { $("#sheet").hidden = true; };
+      act.appendChild(stop);
+      b.appendChild(act);
+      b.appendChild(el("div", "okline", "产出与规格那条路同构：同样是故事 → 设计方法展开 → 门禁①，因此后面每一步都不用分两套。"));
+    };
+    draw();
+  });
+}
+
+/* ---------- selection ---------- */
+
+/* ---------- sheets ---------- */
+
+/** The drawer holds specs and tables, so how wide it is has to be the reader's call. */
+
+
+/** 规格材料：多份文档用侧栏 tab 切换，正文按 markdown 预览。 */
+$("#sheet-x").onclick = () => ($("#sheet").hidden = true);
+$("#sheet").onclick = (e) => { if (e.target.id === "sheet") $("#sheet").hidden = true; };
+
+
+
+
+
+
+
+
+/* US-08：修复循环的改动分类与双口径 */
+
+/**
+ * One case's code, in the three states it actually passes through.
+ *
+ * The distinction matters and the old UI collapsed it: what codegen wrote, what the repair
+ * loop rewrote, and the one that is allowed to run tomorrow are three different things.
+ * A drawer that shows only the last one cannot answer "what did the loop change, and did
+ * it weaken anything" — which is the question this project exists to keep answerable.
+ */
+const CODE_STATES = [
+  { id: "gen", label: "生成的", why: "codegen 的原始产物" },
+  { id: "rep", label: "修复后", why: "有界修复改写过的" },
+  { id: "final", label: "最终可用", why: "门禁②通过、已批准，能进仓库" },
+];
+
+function openCaseCode(caseId) {
+  const raw = CODE.code[caseId] || "";
+  const round = CODE.rounds[caseId];
+  const outcome = (CODE.outcomes || []).find((o) => o.id === caseId) || {};
+  let state = "final";
+  let showDiff = false;
+
+  const repaired = round && round.changes && round.changes[0] !== "none"
+    ? raw.replace("Navigate to the Agent chat interface and ensure the Agent is in an idle state",
+        "Open the 能力与 Chat page and wait until the 与 agent 对话 panel is visible")
+    : raw;
+
+  sheet("代码 · " + caseId.slice(0, 30) + "…", (b) => {
+    const draw = () => {
+      b.innerHTML = "";
+
+      const tabs = el("div", "tabs");
+      CODE_STATES.forEach((st) => {
+        const t = el("button", null, st.label);
+        t.setAttribute("aria-selected", String(state === st.id));
+        t.title = st.why;
+        t.onclick = () => { state = st.id; draw(); };
+        tabs.appendChild(t);
+      });
+      b.appendChild(tabs);
+
+      const meta = el("div", "row");
+      meta.appendChild(el("span", "card-s", CODE_STATES.find((x) => x.id === state).why));
+      if (state === "final") {
+        meta.appendChild(el("span", outcome.status === "passed" ? "chip machine" : "chip fail",
+          outcome.status === "passed" ? "上次执行：通过" : `上次执行：${outcome.kind === "infra" ? "infra" : "失败"}`));
+        meta.appendChild(el("span", "chip machine", "门禁② " + (CODE.gate2 ?? 1).toFixed(2)));
+      }
+      if (state === "rep") {
+        if (!round) {
+          // Silence here would show the generated code again and let it pass for a repair.
+          meta.appendChild(el("span", "chip machine", "没进过修复循环"));
+          meta.appendChild(el("span", "card-s", "第一次跑就成立，或者失败被判为 infra —— 代码与「生成的」完全一致"));
+        } else if (round.changes[0] === "none") {
+          meta.appendChild(el("span", "chip warn", "改动分类：none"));
+          meta.appendChild(el("span", "card-s", "修复循环看过但没动它：走了「这是产品缺陷」的出口"));
+        } else {
+          meta.appendChild(el("span", "chip judge", "改动分类：" + round.changes.join(" · ")));
+          meta.appendChild(el("span", "chip machine", "断言未被改松"));
+        }
+      }
+      if (state !== "gen" && round && round.changes[0] !== "none") {
+        const d = el("button", "hint", showDiff ? "看完整代码" : "对比「生成的」");
+        d.onclick = () => { showDiff = !showDiff; draw(); };
+        meta.appendChild(d);
+      }
+      b.appendChild(meta);
+
+      const shown = state === "gen" ? raw : repaired;
+      if (showDiff && state !== "gen") {
+        b.appendChild(el("div", "sec", "与生成版的差异"));
+        const box = el("div");
+        const a = raw.split("\n"), c = shown.split("\n");
+        const n = Math.max(a.length, c.length);
+        for (let i = 0; i < n; i++) {
+          if (a[i] === c[i]) {
+            const line = el("pre", "note mono");
+            line.style.cssText = "white-space:pre-wrap;margin:0;padding:3px 8px;background:none";
+            line.textContent = "  " + (a[i] ?? "");
+            box.appendChild(line);
+            continue;
+          }
+          if (a[i] !== undefined) {
+            const del = el("pre", "note mono");
+            del.style.cssText = "white-space:pre-wrap;margin:0;padding:3px 8px;color:var(--fail);background:color-mix(in srgb,var(--fail) 8%,transparent)";
+            del.textContent = "- " + a[i];
+            box.appendChild(del);
+          }
+          if (c[i] !== undefined) {
+            const add = el("pre", "note mono");
+            add.style.cssText = "white-space:pre-wrap;margin:0;padding:3px 8px;color:var(--machine);background:color-mix(in srgb,var(--machine) 10%,transparent)";
+            add.textContent = "+ " + c[i];
+            box.appendChild(add);
+          }
+        }
+        b.appendChild(box);
+      } else {
+        const pre = el("pre", "note mono");
+        pre.style.whiteSpace = "pre-wrap";
+        pre.textContent = shown;
+        b.appendChild(pre);
+      }
+
+      if (state === "final") {
+        b.appendChild(el("div", "sec", "数据绑定"));
+        const dr = el("div", "row");
+        dr.appendChild(el("span", "chip machine", "env: LOGIN_USER"));
+        dr.appendChild(el("span", "chip judge", "🔒 secret: LOGIN_PASSWORD"));
+        dr.appendChild(el("span", "card-s", "密钥只以占位符出现，执行时解析、日志里仍是模板"));
+        b.appendChild(dr);
+        b.appendChild(el("div", "sec", "公共片段"));
+        b.appendChild(el("div", "note", "这条没有引用片段。登录/造数/清理这类前置一旦出现两次，会被提取成片段被引用，而不是复制。"));
+      }
+
+      const act = el("div", "act");
+      const copy = el("button", null, "复制");
+      copy.onclick = () => { navigator.clipboard?.writeText(shown); say("sys", "已复制 " + caseId.slice(0, 20) + "… 的代码"); };
+      const rerun = el("button", null, "只重跑这条");
+      rerun.onclick = () => { $("#sheet").hidden = true; say("sys", "重跑 " + caseId.slice(0, 20) + "… · 走 runner，不重新生成代码"); };
+      const regen = el("button", null, "重新生成");
+      regen.onclick = () => say("bot", "重新生成会覆盖「生成的」那一版吗？<b>不会</b>——旧版留着，新版作为另一次产出，两版可比。");
+      act.append(copy, rerun, regen);
+      if (state === "final") {
+        const pr = el("button", "primary", "加入交付（PR）");
+        pr.onclick = () => { $("#sheet").hidden = true; S.view = "as"; S.as = "deliver"; render(); };
+        act.appendChild(pr);
+      }
+      b.appendChild(act);
+    };
+    draw();
+  });
+}
+
+
+
+/* ---------- views ---------- */
+
+/**
+ * The harness layer, as a trace rather than a scoreboard.
+ *
+ * Counters ("21 calls, 35.8k tokens") tell you nothing you can act on. What you actually
+ * ask, when a run comes back wrong, is: which nodes did it enter, what exactly did it send
+ * to the model, did the reply get cut off, and what did the gate make of it. That is a
+ * sequence, so it is drawn as one — and every model line opens the prompt that was sent.
+ *
+ * The material for this already exists: lineage carries every `wf.*` event with its node
+ * scope, and the model client knows each call's two halves, tokens, latency and truncation.
+ */
+const TRACE = [
+  { t: "09:32:11", kind: "run", node: "—", text: "selftest-g1 v2 · 7 个节点 · 断点 design · 预算 500 calls / 4h", right: "" },
+  { t: "09:32:11", kind: "node", node: "spec", text: "进入 source.spec · 读 docs/spec/02 + 03", right: "" },
+  { t: "09:32:11", kind: "node", node: "spec", text: "完成 · 输出 spec 材料 2 份（12 480 字）", right: "0.4s" },
+  { t: "09:32:12", kind: "node", node: "stories", text: "进入 plan.stories", right: "" },
+  { t: "09:32:12", kind: "model", node: "stories", text: "→ 发出：stable 1 180 tok（前缀命中）+ variable 6 090 tok · maxTokens 5 200 · guided JSON",
+    right: "", prompt: {
+      stable: "You extract user stories from a product specification.\n\nRules:\n- One story per distinct user-visible capability. Do not invent capabilities the spec does not describe.\n- Keep the spec's own ids when it has them (US-01 and so on)…\n- The material may be SEVERAL documents, each starting with a `===== path =====` line.\n  Cover every one of them…",
+      variable: "SPECIFICATION:\n\n===== docs/spec/02-业务规格与用户故事.md =====\n# 02 业务规格与用户故事\n…（截断到预算：这次裁掉了 0 tok）\n\n===== docs/spec/03-UI交互规格.md =====\n…\n\nLANGUAGE: write titles, steps and expected outcomes in Simplified Chinese.",
+    } },
+  { t: "09:37:35", kind: "model", node: "stories", text: "← 回复：8 270 tok · 未截断 · JSON 合法 · 20 个故事（US-01…US-20）", right: "323s",
+    reply: '{"stories":[{"id":"US-01","title":"新建项目并指定目标端","acceptance":["目标端为 web 时可选启用 web3 能力…"],"source":"docs/spec/02-业务规格与用户故事.md"}, …]}' },
+  { t: "09:37:35", kind: "node", node: "stories", text: "完成 · 20 个故事 · 两份文档都有产出", right: "323s · 8 270 tok" },
+  { t: "09:37:36", kind: "node", node: "design", text: "进入 design.cases · 按故事逐个调用（20 次）", right: "" },
+  { t: "09:37:36", kind: "model", node: "design", text: "→ US-01：stable 命中前缀缓存 · CASE BUDGET: at most 5 cases", right: "",
+    prompt: {
+      stable: "You are a senior test designer…\n- `expected` is ONE concrete, checkable outcome…\n- For tier 1 and tier 2 you MUST also give `oracle`…\n- Design at most the number of cases stated as CASE BUDGET in the material.",
+      variable: "SPECIFICATION (for context)…\n\nSTORY US-01: 新建项目并指定目标端\nACCEPTANCE CRITERIA:\n1. 目标端为 web 时可选启用 web3 能力；iOS/Android 时该选项不可见。\n2. 删除项目级联删除其用例、运行、基线，且需二次确认。\n\nCASE BUDGET: at most 5 cases for this story.",
+    } },
+  { t: "09:38:44", kind: "model", node: "design", text: "← US-01：5 条用例 · 1 402 tok · 未截断", right: "68s" },
+  { t: "09:39:52", kind: "model", node: "design", text: "← US-02：5 条用例 · 1 388 tok", right: "67s" },
+  { t: "10:01:31", kind: "model", node: "design", text: "← US-20：5 条用例 · 1 355 tok（其余 17 次略）", right: "66s" },
+  { t: "10:01:31", kind: "node", node: "design", text: "完成 · 100 条用例 · 20 次调用 27 517 tok", right: "24 min" },
+  { t: "10:01:31", kind: "gate", node: "gate", text: "门禁① 93% · 31 条 finding（oracle-vague 20 · tier 11）· 负例占比 29%", right: "60ms" },
+  { t: "10:01:31", kind: "err", node: "gate", text: "tier-unbacked：77 条声称 tier1 却没有机器判据 —— 执行时仍由模型判定", right: "" },
+];
+
+function renderTrace() {
+  const box = el("div", "trace");
+  box.style.height = S.traceOpen ? "230px" : "auto";
+  const h = el("div", "trace-h");
+  h.appendChild(el("span", "t", "执行轨迹"));
+  if (S.traceOpen) {
+    const f = el("div", "f");
+    [["all", "全部"], ["model", "模型调用"], ["node", "节点"], ["gate", "门禁"]].forEach(([k, label]) => {
+      const b = el("button", null, label);
+      b.setAttribute("aria-pressed", String(S.traceFilter === k));
+      b.onclick = () => { S.traceFilter = k; render(); };
+      f.appendChild(b);
+    });
+    h.appendChild(f);
+    const sum = el("div", "sum");
+    // A thin summary survives: it is the budget, which is the one number that can stop a run.
+    sum.appendChild(el("span", null, "模型闸 1/1"));
+    sum.appendChild(el("span", null, "预算 21/500 calls · 41/240 min"));
+    sum.appendChild(el("span", null, "指纹 19da4de9"));
+    h.appendChild(sum);
+  }
+  const t = el("button", "toggle", S.traceOpen ? "▾ 收起" : "▴ 展开轨迹");
+  t.style.marginLeft = S.traceOpen ? "12px" : "auto";
+  t.onclick = () => { S.traceOpen = !S.traceOpen; render(); };
+  h.appendChild(t);
+  box.appendChild(h);
+  if (!S.traceOpen) return box;
+
+  const b = el("div", "trace-b");
+  const rows = TRACE.filter((r) => S.traceFilter === "all" || r.kind === S.traceFilter ||
+    (S.traceFilter === "node" && r.kind === "run"));
+  rows.forEach((r) => {
+    const line = el("div", "tl k-" + r.kind);
+    line.appendChild(el("div", "ts", r.t));
+    const kindLabel = { run: "RUN", node: "NODE", model: "MODEL", gate: "GATE", err: "FLAG" }[r.kind];
+    line.appendChild(el("div", "kd", kindLabel));
+    line.appendChild(el("div", "nd", r.node));
+    line.appendChild(el("div", "tx", r.text));
+    line.appendChild(el("div", "rt", r.right));
+    line.onclick = () => openTraceEntry(r);
+    b.appendChild(line);
+  });
+  box.appendChild(b);
+  return box;
+}
+
+/** One line of the trace, opened: this is where the actual prompt lives. */
+function openTraceEntry(r) {
+  sheet(`${r.t} · ${r.node} · ${r.kind}`, (b) => {
+    b.appendChild(el("div", "note", r.text));
+    if (r.prompt) {
+      b.appendChild(el("div", "sec", "发出的提示词 · stable（前缀，跨调用不变）"));
+      const s1 = el("pre", "note mono");
+      s1.style.whiteSpace = "pre-wrap";
+      s1.textContent = r.prompt.stable;
+      b.appendChild(s1);
+      b.appendChild(el("div", "sec", "发出的提示词 · variable（材料，每次不同）"));
+      const s2 = el("pre", "note mono");
+      s2.style.whiteSpace = "pre-wrap";
+      s2.textContent = r.prompt.variable;
+      b.appendChild(s2);
+      b.appendChild(el("div", "okline", "两半是分开发的：前缀缓存只在前导字节一致时命中，所以材料只能放在后半。这条命中了缓存。"));
+    }
+    if (r.reply) {
+      b.appendChild(el("div", "sec", "回复"));
+      const s3 = el("pre", "note mono");
+      s3.style.whiteSpace = "pre-wrap";
+      s3.textContent = r.reply;
+      b.appendChild(s3);
+      b.appendChild(el("div", "note", "解析结果与截断标记一起记：回复被 maxTokens 截断时，报错要说「这是预算问题」而不是「模型返回的 JSON 不合法」——两者的修法相反。"));
+    }
+    if (r.kind === "err") {
+      b.appendChild(el("div", "warnline", "这不是运行失败，是门禁在标记一件事实：tier 是设计阶段的声称，执行层兑现不了它。"));
+    }
+    const act = el("div", "act");
+    const only = el("button", null, "只重跑 " + r.node);
+    only.onclick = () => { $("#sheet").hidden = true; S.nodeState[r.node] = "idle"; render(); startRun(r.node); };
+    const ask = el("button", "primary", "问 agent 这一步该怎么改");
+    ask.onclick = () => {
+      $("#sheet").hidden = true;
+      S.ctx = { kind: "trace", id: r.node, label: `已选中轨迹 ${r.node} · ${r.t}` };
+      render();
+      say("you", "这一步该怎么改", `已选中轨迹 ${r.node} · ${r.t}`);
+      setTimeout(() => say("bot", "我能改的是<b>下一次怎么跑</b>：这一步的参数、提示词变体、或者图的形状。改完保存会立一版新图，然后你自己点运行——<b>执行不经过我</b>，否则同一句话两次跑出不同的东西，评测就没法比了。"), 280);
+    };
+    act.append(only, ask);
+    b.appendChild(act);
+  });
+}
+
+
+function selectNode(id) {
+  S.sel = { kind: "node", id };
+  S.ctx = { kind: "node", id, label: `已选中节点 ${id}` };
+  render();
+  openNode(id);
+}
+function selectCard(c) {
+  S.sel = { kind: "card", id: c.id };
+  S.ctx = { kind: "card", id: c.id, label: `已选中 ${c.t} · ${c.n}` };
+  render();
+}
+function selectCase(id) {
+  const c = CASES.find((x) => x.id === id);
+  S.sel = { kind: "case", id };
+  S.ctx = { kind: "case", id, label: `已选中用例 ${c ? c.t : id}` };
+  render();
+  openCase(id);
+}
+
+/* ---------- sheets ---------- */
+function sheet(title, build) {
+  $("#sheet-t").textContent = title;
+  const b = $("#sheet-b");
+  b.innerHTML = "";
+  build(b);
+  const panel = $("#sheet .panel");
+  panel.style.width = S.drawerW + "px";
+  $("#sheet").hidden = false;
+  armGrip(panel);
+}
+
+/** The drawer holds specs and tables, so how wide it is has to be the reader's call. */
+function armGrip(panel) {
+  if (panel.querySelector(".grip")) return;
+  const grip = el("div", "grip");
+  grip.title = "拖动改变宽度";
+  panel.appendChild(grip);
+  let from = null;
+  grip.addEventListener("mousedown", (e) => {
+    from = { x: e.clientX, w: panel.getBoundingClientRect().width };
+    grip.classList.add("on");
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!from) return;
+    const w = Math.max(420, Math.min(window.innerWidth - 80, from.w + (from.x - e.clientX)));
+    S.drawerW = Math.round(w);
+    panel.style.width = S.drawerW + "px";
+  });
+  window.addEventListener("mouseup", () => { from = null; grip.classList.remove("on"); });
+}
+
+/**
+ * Markdown, rendered — with one tab per file.
+ *
+ * The spec is the input to everything downstream, and a path in a JSON参数 box is not a way
+ * to read it. Enough of a renderer for headings, lists, quotes and tables: the point is to
+ * read the material, not to build an editor.
+ */
+function renderMd(text) {
+  const wrap = el("div", "md");
+  const lines = text.split("\n");
+  let list = null, table = null;
+  const flush = () => { list = null; table = null; };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (/^\s*$/.test(line)) { flush(); continue; }
+    if (/^#{1,6}\s/.test(line)) {
+      flush();
+      const depth = (line.match(/^#+/) || ["#"])[0].length;
+      const h = el(depth === 1 ? "h1" : "h2", null, line.replace(/^#+\s/, ""));
+      if (depth >= 3) { h.style.fontSize = "13.5px"; h.style.color = "var(--muted)"; }
+      wrap.appendChild(h);
+      continue;
+    }
+    if (/^>\s?/.test(line)) {
+      flush();
+      const q = el("blockquote");
+      q.innerHTML = inline(line.replace(/^>\s?/, ""));
+      wrap.appendChild(q);
+      continue;
+    }
+    if (/^\|/.test(line)) {
+      if (/^\|[-\s|:]+\|$/.test(line)) continue;
+      if (!table) { table = el("table"); wrap.appendChild(table); }
+      const tr = el("tr");
+      line.split("|").slice(1, -1).forEach((c) => {
+        const td = el("td", "small");
+        td.innerHTML = inline(c.trim());
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+      continue;
+    }
+    if (/^[-*]\s/.test(line)) {
+      if (!list) { list = el("ul"); wrap.appendChild(list); }
+      const li = el("li");
+      li.innerHTML = inline(line.replace(/^[-*]\s/, ""));
+      list.appendChild(li);
+      continue;
+    }
+    flush();
+    const pEl = el("p");
+    pEl.innerHTML = inline(line);
+    wrap.appendChild(pEl);
+  }
+  return wrap;
+}
+function inline(t) {
+  return t
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/(US-\d\d|AC-\d\d\.\d)/g, '<span class="hl">$1</span>');
+}
+
+/** 规格材料：多份文档用侧栏 tab 切换，正文按 markdown 预览。 */
+function openSpec() {
+  const names = Object.keys(DOCS);
+  let active = names[0];
+  sheet("规格材料 · " + names.length + " 份", (b) => {
+    const draw = () => {
+      b.innerHTML = "";
+      const tabs = el("div", "tabs");
+      names.forEach((n) => {
+        const t = el("button", null, n.replace("docs/spec/", ""));
+        t.setAttribute("aria-selected", String(n === active));
+        t.onclick = () => { active = n; draw(); };
+        tabs.appendChild(t);
+      });
+      b.appendChild(tabs);
+      const meta = el("div", "row");
+      meta.appendChild(el("span", "card-s", active));
+      meta.appendChild(el("span", "chip machine", "已作为 source.spec 输入"));
+      const pick = el("button", "hint", "换材料");
+      pick.title = "改的是 source.spec 的 paths —— 一个节点参数，保存必然立一版新图";
+      pick.onclick = () => {
+        const box = el("div", "box");
+        box.style.marginTop = "10px";
+        box.appendChild(el("div", "card-t", "这次运行读哪几份"));
+        ["docs/spec/02-业务规格与用户故事.md", "docs/spec/03-UI交互规格.md",
+         "docs/spec/04-技术架构.md", "docs/spec/06-通讯协议.md", "fixtures/mock-spec/acme-portal.md"].forEach((f) => {
+          const row = el("label", "row");
+          row.style.fontSize = "12.5px";
+          const cb = el("input");
+          cb.type = "checkbox";
+          cb.checked = Object.keys(DOCS).includes(f);
+          row.append(cb, document.createTextNode(f));
+          box.appendChild(row);
+        });
+        const save = el("button", "send", "保存为新版本");
+        save.style.marginTop = "8px";
+        save.onclick = () => {
+          $("#sheet").hidden = true;
+          const v = VERSIONS[0].v + 1;
+          VERSIONS.unshift({ v, at: "刚刚", note: "source.spec.paths 改了" });
+          S.verA = v - 1; S.verB = v; S.verDiff = null;
+          say("sys", `材料改了 → 保存为 v${v}；已完成的运行仍指向它当时读的那几份`);
+          render();
+        };
+        box.appendChild(save);
+        b.appendChild(box);
+      };
+      meta.appendChild(pick);
+      b.appendChild(meta);
+      b.appendChild(renderMd(DOCS[active]));
+      b.appendChild(el("div", "note", "US-xx / AC-xx.y 高亮的是可追溯锚点：每条用例都要能指回其中一条，指不回的叫孤儿。"));
+    };
+    draw();
+  });
+}
+$("#sheet-x").onclick = () => ($("#sheet").hidden = true);
+$("#sheet").onclick = (e) => { if (e.target.id === "sheet") $("#sheet").hidden = true; };
+
+function openNode(id) {
+  const n = RUN.nodes.find((x) => x.id === id);
+  sheet(`节点 ${id}`, (b) => {
+    const dl = el("dl", "kv");
+    const add = (k, v, mono) => {
+      dl.appendChild(el("dt", null, k));
+      const d = el("dd", mono ? "mono" : null, v);
+      dl.appendChild(d);
+    };
+    add("类型", n.type, true);
+    add("状态", S.nodeState[id]);
+    add("耗时", fmtMs(n.ms), true);
+    add("成本", `${n.calls} calls · ${n.tokens} tok`, true);
+    add("断点", S.bp.has(id) ? "开" : "关");
+    b.appendChild(dl);
+    b.appendChild(el("div", "sec", "参数"));
+    const pre = el("pre", "note mono");
+    pre.style.whiteSpace = "pre-wrap";
+    pre.textContent = JSON.stringify(PARAMS[id] || {}, null, 2);
+    b.appendChild(pre);
+    b.appendChild(el("div", "sec", "调试"));
+    /* 三种调试里的第二种：抽 1-2 条跑一遍看门禁逐条命中。
+       跑一百条要 24 分钟，而「结构合理吗」这个问题两条就能回答。 */
+    if (id === "design" || id === "gate") {
+      const sample = el("div", "row");
+      sample.style.marginBottom = "10px";
+      sample.appendChild(el("span", "card-s", "抽样跑阶段一"));
+      const nsel = el("select");
+      [1, 2, 3, 5].forEach((x) => nsel.appendChild(new Option(x + " 条", x)));
+      nsel.value = String(S.sampleN);
+      nsel.onchange = () => { S.sampleN = Number(nsel.value); };
+      sample.appendChild(nsel);
+      const go = el("button", "hint", "抽样跑");
+      go.onclick = () => {
+        $("#sheet").hidden = true;
+        say("sys", `抽样 ${S.sampleN} 条跑阶段一 · ${S.sampleN} 次模型调用，约 ${S.sampleN * 70} 秒`);
+        say("bot", `跑完了，门禁①对这 ${S.sampleN} 条的逐条命中在「门禁①」卡里。<b>结构合理吗</b>两条就能回答，不必等一百条跑完 24 分钟。`);
+      };
+      sample.appendChild(go);
+      b.appendChild(sample);
+    }
+    const act = el("div", "act");
+    const only = el("button", null, "只跑此节点");
+    only.onclick = () => { $("#sheet").hidden = true; S.nodeState[id] = "idle"; render(); startRun(id); };
+    const from = el("button", null, "从此节点续跑");
+    from.onclick = () => { $("#sheet").hidden = true; startRun(id); };
+    const bpb = el("button", null, S.bp.has(id) ? "取消断点" : "设为断点");
+    bpb.onclick = () => { S.bp.has(id) ? S.bp.delete(id) : S.bp.add(id); render(); openNode(id); };
+    act.append(only, from, bpb);
+    b.appendChild(act);
+    b.appendChild(el("div", "sec", "改参数"));
+    b.appendChild(el("div", "note", "改任意参数并保存都会立一版新图——已完成的运行仍指向它当时那一版。左侧对话也可以起草这个改动。"));
+  });
+}
+
+function openCase(id) {
+  const c = CASES.find((x) => x.id === id);
+  if (!c) return;
+  sheet(c.t, (b) => {
+    const dl = el("dl", "kv");
+    const add = (k, v) => { dl.appendChild(el("dt", null, k)); dl.appendChild(el("dd", null, v)); };
+    add("故事", c.s);
+    add("设计方法", c.m);
+    const tierDd = el("dd");
+    tierDd.append(`tier ${c.tier}`, " ");
+    const chip = el("span", "chip judge", "无机器判据 · 执行时由模型判定");
+    tierDd.appendChild(chip);
+    dl.appendChild(el("dt", null, "判定硬度"));
+    dl.appendChild(tierDd);
+    add("门禁①", "93%（批次）");
+    b.appendChild(dl);
+    b.appendChild(el("div", "sec", "断言"));
+    b.appendChild(el("div", "note", c.exp));
+    b.appendChild(el("div", "sec", "步骤"));
+    const ol = el("ol", "steps");
+    c.steps.forEach((s) => ol.appendChild(el("li", null, s)));
+    b.appendChild(ol);
+    if (c.f.length) {
+      b.appendChild(el("div", "sec", "门禁意见"));
+      c.f.forEach((f) => b.appendChild(el("div", "finding", `[${f.r}] ${f.m}`)));
+    }
+    const act = el("div", "act");
+    const re = el("button", "primary", "让 agent 重生成这条");
+    re.onclick = () => {
+      $("#sheet").hidden = true;
+      S.ctx = { kind: "case", id: c.id, label: `已选中用例 ${c.t}` };
+      render();
+      say("you", "把这条按门禁意见重写", `已选中用例 ${c.t}`);
+      setTimeout(() => say("bot", reply("重生成")), 260);
+    };
+    const ap = el("button", null, "批准入库");
+    ap.onclick = () => { c.decided = "approved"; $("#sheet").hidden = true; say("sys", `已批准 ${c.id.slice(0, 20)}… · 出处随它一起进看板`); };
+    const rj = el("button", null, "拒绝");
+    rj.title = "拒绝会被记住：一个总在问你已经答过的问题的队列，没人会再打开";
+    rj.onclick = () => { c.decided = "rejected"; $("#sheet").hidden = true; say("sys", `已拒绝 ${c.id.slice(0, 20)}… · 决定被记住`); };
+    act.append(re, ap, rj);
+    b.appendChild(act);
+  });
+}
+
+function openTable(kind) {
+  if (kind === "cases") return openCasesTable();
+  if (kind === "findings") return openFindings();
+  if (kind === "runs") return openRuns();
+  if (kind === "tier") return openTier();
+  if (kind === "stories") return openStories();
+  if (kind === "code") return openCaseCode(Object.keys(CODE.code)[3]);
+  if (kind === "spec") return openSpec();
+  if (kind === "matrix") return openMatrix();
+  if (kind === "repair") return openRepair();
+}
+
+function openCasesTable() {
+  sheet("文本用例 · 100 条", (b) => {
+    const f = el("div", "filters");
+    const mk = (label, key, opts, render) => {
+      const s = el("select");
+      s.appendChild(new Option(label, ""));
+      opts.forEach((o) => s.appendChild(new Option(render ? render(o) : o, o)));
+      s.value = S.filter[key];
+      s.onchange = () => { S.filter[key] = s.value; openCasesTable(); };
+      f.appendChild(s);
+    };
+    mk("判定硬度", "tier", ["1", "2", "3"], (v) => "t" + v);
+    mk("设计方法", "m", [...new Set(CASES.map((c) => c.m))]);
+    mk("故事", "s", [...new Set(CASES.map((c) => c.s))]);
+    mk("门禁分", "gate", ["0.9", "0.8"], (v) => "gate ≥ " + Math.round(v * 100) + "%");
+    const lab = el("label");
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = S.filter.degraded;
+    cb.onchange = () => { S.filter.degraded = cb.checked; openCasesTable(); };
+    lab.append(cb, document.createTextNode("只看已退化"));
+    f.appendChild(lab);
+    const rows = CASES.filter((c) =>
+      (!S.filter.tier || String(c.tier) === S.filter.tier) &&
+      (!S.filter.m || c.m === S.filter.m) &&
+      (!S.filter.s || c.s === S.filter.s) &&
+      !S.filter.degraded);
+    f.appendChild(el("span", "count", `${rows.length} / ${CASES.length}（样本）`));
+    b.appendChild(f);
+
+    /* AC-06.2 说的「可批量修正或重生成」：选中若干条，一个动作作用于全部。
+       之前这些只写在 chat 的回复文案里，没有入口——文案不是功能。 */
+    const bulk = el("div", "filters");
+    bulk.style.borderTop = "1px solid var(--hair)";
+    bulk.style.paddingTop = "10px";
+    const nsel = S.picked.size;
+    bulk.appendChild(el("span", "card-s", `已选 ${nsel} 条`));
+    const find = el("input"); find.placeholder = "查找"; find.style.width = "110px";
+    const repl = el("input"); repl.placeholder = "${env.LOGIN_USER}"; repl.style.width = "150px";
+    bulk.append(find, el("span", "card-s", "→"), repl);
+    const doRepl = el("button", "hint", "替换");
+    doRepl.onclick = () => {
+      if (!nsel || !find.value) return;
+      let n = 0;
+      CASES.forEach((c) => {
+        if (!S.picked.has(c.id)) return;
+        const hit = c.exp.includes(find.value) || c.steps.some((x) => x.includes(find.value));
+        if (!hit) return;
+        c.exp = c.exp.split(find.value).join(repl.value);
+        c.steps = c.steps.map((x) => x.split(find.value).join(repl.value));
+        c.edited = true;
+        n += 1;
+      });
+      // 不匹配就不记编辑，否则 diff 会开在两列一模一样的内容上
+      say("sys", `批量替换：改了 ${n} 条，其余不含该字面量的未动`);
+      openCasesTable();
+    };
+    bulk.appendChild(doRepl);
+    const prio = el("select");
+    prio.appendChild(new Option("设优先级", ""));
+    ["P0", "P1", "P2"].forEach((x) => prio.appendChild(new Option(x, x)));
+    prio.onchange = () => {
+      if (!nsel || !prio.value) return;
+      CASES.forEach((c) => { if (S.picked.has(c.id)) c.prio = prio.value; });
+      say("sys", `${nsel} 条设为 ${prio.value}`);
+      openCasesTable();
+    };
+    bulk.appendChild(prio);
+    const regen = el("button", "hint", "重生成选中");
+    regen.onclick = () => {
+      if (!nsel) return;
+      say("you", `把选中的 ${nsel} 条按门禁意见重写`);
+      setTimeout(() => say("bot", `${nsel} 条已重写，每条一次模型调用（本地模型约 80 秒/条）。都落成 <code>by: model</code> 的编辑——<b>产物没被改写</b>，两版并排可比。`), 260);
+      $("#sheet").hidden = true;
+    };
+    bulk.appendChild(regen);
+    const ap = el("button", "hint", "批准入库");
+    ap.onclick = () => { if (nsel) { CASES.forEach((c) => { if (S.picked.has(c.id)) c.decided = "approved"; }); say("sys", `${nsel} 条已批准，出处随它们进看板`); S.picked.clear(); openCasesTable(); } };
+    const rj = el("button", "hint", "拒绝");
+    rj.title = "拒绝会被记住，队列不再问第二遍";
+    rj.onclick = () => { if (nsel) { CASES.forEach((c) => { if (S.picked.has(c.id)) c.decided = "rejected"; }); say("sys", `${nsel} 条已拒绝 · 决定被记住，队列不会再问`); S.picked.clear(); openCasesTable(); } };
+    bulk.append(ap, rj);
+    b.appendChild(bulk);
+
+    const t = el("table");
+    t.innerHTML = "<thead><tr><th></th><th>用例</th><th>故事</th><th>方法</th><th>判定</th><th>门禁</th></tr></thead>";
+    const tb = el("tbody");
+    rows.forEach((c) => {
+      const tr = el("tr", "pick");
+      tr.onclick = () => selectCase(c.id);
+      const tdc = el("td", "small");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.checked = S.picked.has(c.id);
+      cb.disabled = !!c.decided;
+      cb.onclick = (e) => {
+        e.stopPropagation();
+        S.picked.has(c.id) ? S.picked.delete(c.id) : S.picked.add(c.id);
+        openCasesTable();
+      };
+      tdc.appendChild(cb);
+      tr.appendChild(tdc);
+      const td1 = el("td");
+      const title = el("div");
+      title.textContent = c.t;
+      if (c.decided) {
+        const badge = el("span", "chip " + (c.decided === "approved" ? "machine" : "warn"), c.decided === "approved" ? "已批准" : "已拒绝");
+        badge.style.marginLeft = "6px";
+        title.appendChild(badge);
+      }
+      if (c.edited) {
+        const e2 = el("span", "chip judge", "已编辑");
+        e2.style.marginLeft = "6px";
+        title.appendChild(e2);
+      }
+      td1.appendChild(title);
+      td1.appendChild(el("div", "card-s", "→ " + c.exp));
+      tr.appendChild(td1);
+      tr.appendChild(el("td", "small", c.s));
+      tr.appendChild(el("td", "small", c.m));
+      const td4 = el("td", "small");
+      td4.append("t" + c.tier + " ");
+      td4.appendChild(el("span", "chip judge", "无判据"));
+      tr.appendChild(td4);
+      const td5 = el("td", "small");
+      if (c.f.length) td5.appendChild(el("span", "chip warn", c.f.map((x) => x.r).join(" · ")));
+      else td5.textContent = "—";
+      tr.appendChild(td5);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    b.appendChild(t);
+    b.appendChild(el("div", "note", "这就是第 5 节那个判断的具体形状：一百条用例在表里能筛能扫，铺在画布上不能。画布只放聚合与抽样。"));
+  });
+}
+
+function openFindings() {
+  sheet("门禁① · 31 条 finding", (b) => {
+    const t = el("table");
+    t.innerHTML = "<thead><tr><th>规则</th><th>条数</th><th>说明</th></tr></thead>";
+    const tb = el("tbody");
+    [["oracle-vague", 20, "断言没有指向可观测现象"],
+     ["tier", 11, "用了 tier3——模型判定留给别的判不了的"]].forEach(([r, n, d]) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", "small", r));
+      tr.appendChild(el("td", "small", String(n)));
+      tr.appendChild(el("td", null, d));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); b.appendChild(t);
+    b.appendChild(el("div", "sec", "批次形状"));
+    const shape = el("div", "kpis");
+    shape.appendChild(kpi("负例/边界占比", "29%", "good"));
+    shape.appendChild(kpi("tier 分布（声称）", "77 / 12 / 11", ""));
+    shape.appendChild(kpi("tier 分布（能兑现）", "0 / 0 / 100", "bad"));
+    shape.appendChild(kpi("孤儿用例", "0", "good"));
+    b.appendChild(shape);
+    b.appendChild(el("div", "note", "门禁①只打分标记，不拒收：上一版那种拒收门开火十几次、真阳性零次。负例占比低于阈值会被标出来——一套全 happy-path 的用例在这里必须难看。"));
+  });
+}
+
+function openTier() {
+  sheet("判据有据率 · 0%", (b) => {
+    const t = el("table");
+    t.innerHTML = "<thead><tr><th>tier</th><th>声称</th><th>能兑现</th></tr></thead>";
+    const tb = el("tbody");
+    [["1", 77, 0], ["2", 12, 0], ["3", 11, 100]].forEach(([k, a, c]) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", "small", "t" + k));
+      tr.appendChild(el("td", "small", String(a)));
+      const td = el("td", "small");
+      td.append(String(c) + " ");
+      td.appendChild(el("span", c ? "chip judge" : "chip fail", c ? "全靠模型判" : "0"));
+      tr.appendChild(td);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); b.appendChild(t);
+    b.appendChild(el("div", "note", "声称的 tier 与能兑现的 tier 并排给：差距本身就是这次运行最该看的数字。要抹平它，让 design.cases 的 oracleGuidance 转 strict 后重跑。"));
+  });
+}
+
+function openStories() {
+  sheet("故事树 · 20 个故事", (b) => {
+    b.appendChild(el("div", "note", "拆解结果是一棵树：故事展开就是它下面的测试点。每条用例都能回到唯一的故事——回不去的叫孤儿，会被计数并高亮。"));
+    const ul = el("ul", "story-tree");
+    ul.style.padding = "0";
+    [...new Set(CASES.map((c) => c.s))].forEach((s) => {
+      const li = el("li");
+      const head = el("div", "sn");
+      const caret = el("span", "id", "▸");
+      head.appendChild(caret);
+      head.appendChild(el("span", "id", s));
+      head.appendChild(el("span", null, Number(s.slice(3)) >= 13 ? "来自 docs/spec/03" : "来自 docs/spec/02"));
+      const n = el("span", "card-s");
+      n.style.marginLeft = "auto";
+      n.textContent = "5 条用例";
+      head.appendChild(n);
+      li.appendChild(head);
+      const kids = el("ul");
+      kids.hidden = true;
+      CASES.filter((c) => c.s === s).forEach((c) => {
+        const k = el("li");
+        k.textContent = "· " + c.t;
+        k.style.cursor = "pointer";
+        k.onclick = () => selectCase(c.id);
+        kids.appendChild(k);
+      });
+      const more = el("li");
+      more.textContent = "· 展开全部 5 条 →";
+      more.style.color = "var(--accent)";
+      more.style.cursor = "pointer";
+      more.onclick = () => { S.filter.s = s; openCasesTable(); };
+      kids.appendChild(more);
+      li.appendChild(kids);
+      head.onclick = () => { kids.hidden = !kids.hidden; caret.textContent = kids.hidden ? "▸" : "▾"; };
+      ul.appendChild(li);
+    });
+    b.appendChild(ul);
+    b.appendChild(el("div", "okline", "孤儿用例 0 —— 门禁①在算这个数；某份文档一条故事都没产出时也会直接报出来，否则这个洞会一路静默到覆盖率数字上。"));
+  });
+}
+
+/* US-08：修复循环的改动分类与双口径 */
+function openRepair() {
+  sheet("修复循环 · 4 条", (b) => {
+    const k = el("div", "kpis");
+    k.appendChild(kpi("宽口径 loose", "0.25", "warn"));
+    k.appendChild(kpi("严口径 strict", "0.25", "warn"));
+    k.appendChild(kpi("被改松的断言", "0", "good"));
+    k.appendChild(kpi("删除的用例", "0", "good"));
+    b.appendChild(k);
+    b.appendChild(el("div", "sec", "每一轮改了什么"));
+    const t = el("table");
+    t.innerHTML = "<thead><tr><th>用例</th><th>轮</th><th>改动分类</th><th>出口</th></tr></thead>";
+    const tb = el("tbody");
+    [["US-17-1", 1, "waiting · structure", "重跑后通过"],
+     ["US-17-3", 1, "none", "判定假阴性（按钮 DOM 上确实 disabled）"],
+     ["US-18-1", 1, "none", "product-defect —— 拒绝改松断言"],
+     ["US-18-3", 1, "waiting · structure", "infra，不计入产品缺陷"]].forEach((r) => {
+      const tr = el("tr");
+      r.forEach((c, i) => tr.appendChild(el("td", i ? "small" : null, String(c))));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    b.appendChild(t);
+    b.appendChild(el("div", "okline", "两次走了 product-defect 出口：<b>修复循环拒绝把断言改松</b>。这套机制存在的唯一理由是这个项目不设人工审批——那么唯一的防线就是度量它，所以两个数并排发布。"));
+  });
+}
+
+function openCode() {
+  sheet("用例代码 · 4 条", (b) => {
+    const pre = el("pre", "note mono");
+    pre.style.whiteSpace = "pre-wrap";
+    pre.textContent = [
+      "await agent.aiAction('Navigate to the process management page and select a process whose status is 运行中');",
+      "await agent.aiAction('Click the 停止 button for the selected process');",
+      "await agent.aiAssert('The status of the process becomes 已停止');",
+    ].join("\n");
+    b.appendChild(el("div", "sec", "US-18-3 · 门禁② 通过"));
+    b.appendChild(pre);
+    b.appendChild(el("div", "note", "第一句是前置条件变成的动作：运行从入口开始，用例假设的那个界面得先走到。"));
+    b.appendChild(el("div", "sec", "分层与复用"));
+    b.appendChild(el("div", "note", "公共前置（登录、造数、清理）被提取成片段<b>被引用</b>而不是复制；数据与逻辑分离：${env.*} / ${secret.*} / 用例级参数 / 数据行都在代码之外。"));
+    b.appendChild(el("div", "warnline", "还欠一格：AC-07.1 要求 cases/ 只表达意图、页面细节在 actions/、业务流在 flows/。现在生成的是平铺语句加片段引用，没有这三层目录。"));
+  });
+}
+
+function openRuns() {
+  sheet("执行 · 1/4 通过", (b) => {
+    const t = el("table");
+    t.innerHTML = "<thead><tr><th>用例</th><th>结果</th><th>谁判的</th><th>原因</th></tr></thead>";
+    const tb = el("tbody");
+    RUN.m2.forEach((r) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, r.id.slice(0, 28) + "…"));
+      const td2 = el("td", "small");
+      td2.appendChild(el("span", r.status === "passed" ? "chip machine" : "chip fail", r.status === "passed" ? "通过" : (r.kind === "infra" ? "infra" : "失败")));
+      tr.appendChild(td2);
+      const td3 = el("td", "small");
+      td3.appendChild(el("span", "chip " + (r.by === "machine" ? "machine" : "judge"), r.by === "machine" ? "程序" : "模型看截图"));
+      tr.appendChild(td3);
+      tr.appendChild(el("td", "small", r.detail));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); b.appendChild(t);
+    b.appendChild(el("div", "note", "loose 0.25 / strict 0.25，退化 0——修复循环一次都没改松断言，两次明确走了「这是产品缺陷」的出口。"));
+  });
+}
+
+/* ---------- views ---------- */
+function renderWorkspace() {
+  const ws = el("div", "ws");
+
+  const chat = el("div", "chat");
+  const h = el("div", "chat-h");
+  h.appendChild(el("span", "dot" + (S.phase === "running" ? " busy" : "")));
+  // What the chat is FOR, said in the header instead of left to be guessed: it proposes
+  // changes to the next run. Running this one is what the buttons on the canvas are for —
+  // a natural-language sentence is not a repeatable way to start a twenty-minute pipeline,
+  // and a pipeline that starts differently each time cannot be evaluated against itself.
+  const mode = !S.ctx ? "诊断这次运行" : S.ctx.kind === "case" || S.ctx.kind === "card" ? "批改这批物料" : "改这一步怎么跑";
+  h.appendChild(el("span", null, mode));
+  const rule = el("span", "card-s");
+  rule.style.marginLeft = "auto";
+  rule.textContent = "只出提案 · 执行走按钮";
+  rule.title = "agent 可以改参数、提示词、图的形状，保存会立一版新图；跑不跑、跑哪个节点由你点";
+  h.appendChild(rule);
+  chat.appendChild(h);
+  const stream = el("div", "stream"); stream.id = "stream";
+  chat.appendChild(stream);
+
+  const foot = el("div", "chat-f");
+  if (S.ctx) {
+    const c = el("div", "ctx");
+    c.appendChild(el("span", null, S.ctx.label));
+    const x = el("button", null, "✕");
+    x.onclick = () => { S.ctx = null; S.sel = null; render(); };
+    c.appendChild(x);
+    foot.appendChild(c);
+  }
+  const hints = el("div", "hints");
+  const suggestions = !S.ctx
+    ? ["为什么那三条挂了", "这次最贵的一步是哪一步", "下一步该改什么"]
+    : S.ctx.kind === "case"
+      ? ["把这条断言改成可观测的", "给它补一个机器判据", "这条为什么被门禁标了"]
+      : S.ctx.kind === "card"
+        ? ["这批里写死凭证的都替换掉", "把 tier1 的都补上机器判据", "按故事重新分组"]
+        : ["这一步的提示词该怎么改", "把这个参数调大再跑一次", "这一步能不能拆成两步"];
+  suggestions.forEach((t) => {
+    const b = el("button", "hint", t);
+    b.onclick = () => { $("#ta").value = t; $("#ta").focus(); };
+    hints.appendChild(b);
+  });
+  foot.appendChild(hints);
+  const comp = el("div", "composer");
+  const ta = el("textarea"); ta.id = "ta"; ta.placeholder = "描述你要的东西，⌘/Ctrl+Enter 发送";
+  ta.onkeydown = (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); };
+  const sb = el("button", "send", "发送"); sb.id = "send"; sb.onclick = send;
+  comp.append(ta, sb);
+  foot.appendChild(comp);
+  chat.appendChild(foot);
+
+  ws.appendChild(chat);
+  const right = el("div");
+  right.style.display = "flex";
+  right.style.flexDirection = "column";
+  right.style.minWidth = "0";
+  right.style.minHeight = "0";
+  const cv = renderCanvas();
+  cv.style.flex = "1";
+  cv.style.minHeight = "0";
+  right.appendChild(cv);
+  right.appendChild(renderTrace());
+  ws.appendChild(right);
+  return ws;
+}
+
+/**
+ * The harness layer.
+ *
+ * It used to live only as lines scrolling past in the chat, which is the wrong place for
+ * it: the chat is a narrative and this is state. Admission gate, budget, ablation, prompt
+ * fingerprint and failure attribution are what the runtime is doing to your run right now,
+ * so they sit under the canvas where they can be read at a glance and never scroll away.
+ */
+function renderRuntimeRail() {
+  const rail = el("div", "rail");
+  if (!S.railOpen) {
+    const t = el("button", "toggle", "▴ harness 运行时");
+    t.style.marginLeft = "0";
+    t.onclick = () => { S.railOpen = true; render(); };
+    rail.appendChild(t);
+    return rail;
+  }
+  const gauge = (label, value, tone, frac, title) => {
+    const g = el("div", "gauge");
+    if (title) g.title = title;
+    g.appendChild(el("div", "gl", label));
+    g.appendChild(el("div", "gv " + (tone || ""), value));
+    if (frac !== undefined) {
+      const b = el("div", "gbar");
+      const i = el("i");
+      i.style.width = Math.min(100, Math.round(frac * 100)) + "%";
+      b.appendChild(i);
+      g.appendChild(b);
+    }
+    return g;
+  };
+  rail.appendChild(gauge("模型闸", S.phase === "running" ? "1 / 1 占用" : "1 / 1 空闲", S.phase === "running" ? "warn" : "good", undefined,
+    "模型调用全局串行：并发只会让本地模型更慢，还会让每一步的耗时失去意义"));
+  rail.appendChild(gauge("预算 · calls", "21 / 500", "", 21 / 500, "三闸之一：任一耗尽即停，且「耗尽」与「干完」是两种结束"));
+  rail.appendChild(gauge("预算 · tokens", "35.8k", "", 0.18));
+  rail.appendChild(gauge("预算 · 时长", "41 / 240 min", "", 41 / 240));
+  rail.appendChild(gauge("消融开关", "全开", "good", undefined, "关掉任一组件跑一遍，用来证明这个组件有没有用"));
+  rail.appendChild(gauge("提示词指纹", "19da4de9", "", undefined, "改任意一条提示词它就会变；配对评测据此判断两臂是否可比"));
+  rail.appendChild(gauge("失败归因", "infra 1 · assert 2", "warn", undefined, "infra 是环境问题，不计入产品缺陷"));
+  rail.appendChild(gauge("判定来源", "machine 0 · judge 4", "warn", undefined, "这一批全靠模型看截图判——tier1 的标签没有兑现"));
+  const t = el("button", "toggle", "▾ 收起");
+  t.onclick = () => { S.railOpen = false; render(); };
+  rail.appendChild(t);
+  return rail;
+}
+
+
+function render() {
+  const v = $("#view");
+  v.innerHTML = "";
+  const build = { ws: renderWorkspace, as: renderAssets, ev: renderEvals, hi: renderHistory, st: renderSettings };
+  v.appendChild((build[S.view] || renderWorkspace)());
+  if (S.view === "ws") renderChat();
+  [...$("#nav").children].forEach((b) => b.setAttribute("aria-current", String(b.dataset.view === S.view)));
+}
+
+$("#nav").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  S.view = b.dataset.view;
+  render();
+};
+
+/* ===================================================================
+   The other four destinations. Every user story in docs/spec/02 has a
+   place here; the audit in docs/spec/09 is the map this follows.
+   =================================================================== */
+
+/* Real data from this instance. */
+const GOLD = {
+  hits: ["S-02", "S-04", "S-06", "S-08", "S-12", "S-14", "S-16"],
+  misses: [
+    { id: "S-01", t: "进程页列出网关/agent/runner 并显示状态" },
+    { id: "S-03", t: "未启动的能力显示为「未启动」而不是「已停止」", held: true },
+    { id: "S-05", t: "点击节点后右侧显示该节点的产物" },
+    { id: "S-07", t: "保存节点参数后图版本号递增" },
+    { id: "S-09", t: "复核队列展示门禁①的逐条判据结果" },
+    { id: "S-10", t: "批准后用例出现在看板、并从队列消失" },
+    { id: "S-11", t: "未绑定项目的运行不能批准", held: true },
+    { id: "S-13", t: "切换语言后界面无中文残留（英文模式）" },
+    { id: "S-15", t: "两版之间的差异逐条可读", held: true },
+  ],
+  extras: 79,
+  coverage: 0.5,
+  held: { coverage: 0.25, hits: ["S-06"] },
+};
+
+const DETECT = {
+  id: "det-mszyn6cf",
+  falseAlarmRate: 0,
+  mutationScore: 0.5,
+  cases: 2,
+  mutants: [
+    { defect: "no-error", title: "wrong credentials are rejected silently", killed: true, by: ["US-02-1-输入错误密码被拒绝", "US-02-2-用户名为空被拒绝"] },
+    { defect: "empty-user-ok", title: "an empty username is accepted", killed: false, by: [] },
+  ],
+  note: "逐用例 P/R/F1 需要「这条用例本该抓到这个缺陷」的标注，这些用例没有——凭空造标注等于在量自己的标注。所以这里报的是变异分数与误报率。",
+};
+
+const PAIRED = {
+  id: "eval-mt13l1x4",
+  a: { label: "oracle guidance: default", coverage: 0.67, held: 1.0, cases: 32, gate: 0.969, tokens: 8579, min: 7.4, prompts: "19da4de9" },
+  b: { label: "oracle guidance: strict（Critic 提的）", coverage: 0.78, held: 0.67, cases: 32, gate: 1.0, tokens: 9654, min: 8.0, prompts: "19da4de9" },
+  mcnemar: { aOnly: 1, bOnly: 1, p: 1.0, reading: "2 项分歧，一比一——没有方向" },
+};
+
+const RUNS = [
+  { id: "run-mr8mp20s-1013", case: "Send 0.01 ETH → on-chain tx", status: "passed", ms: 13311, attempts: 1, by: "machine", visual: "diff", mismatch: 8.5, perf: "regression" },
+  { id: "run-mr8morjo-1012", case: "Sign a message", status: "passed", ms: 9042, attempts: 1, by: "judge", visual: "match", perf: "ok" },
+  { id: "run-mr8moekx-1011", case: "Wallet connects", status: "passed", ms: 7715, attempts: 1, by: "judge", visual: "match", perf: "ok" },
+  { id: "run-mt10x2b1-0004", case: "验证进程列表展示所有必需字段", status: "passed", ms: 132287, attempts: 2, by: "judge", visual: "new_baseline", perf: "ok" },
+  { id: "run-mt10x2b1-0002", case: "输入空消息时Agent无响应", status: "failed", kind: "assert", ms: 181935, attempts: 2, by: "judge", visual: "match", perf: "ok" },
+  { id: "run-mt10x2b1-0001", case: "验证停止操作后进程状态", status: "failed", kind: "infra", ms: 555975, attempts: 2, by: "machine", visual: "match", perf: "ok" },
+];
+
+const PERF = {
+  status: "regression",
+  metrics: { ttfbMs: 5, fcpMs: 104, domContentLoadedMs: 10, loadMs: 10 },
+  baseline: { ttfbMs: 3, fcpMs: 93, domContentLoadedMs: 8, loadMs: 8 },
+};
+
+const TRENDS = { passRate: 0.5, flakeRate: 1, mttrMs: 61857, coverage: 0.25, healRate: 0, totalCases: 4, totalRuns: 2 };
+
+const BATCH = { id: "batch-mt0x91", gate: "fail", total: 4, passed: 1, failed: 3, flaky: 1, quarantined: 0, at: "13:22" };
+
+/* mutable prototype state for the settings-ish views */
+const CFG = {
+  target: "web",       // US-01: web / ios / android
+  web3: true,
+  url: "http://localhost:5300/?api=http://127.0.0.1:5401",
+  login: "ui",          // US-02: ui / api / paste
+  approvedVisual: false,
+  approvedPerf: false,
+  lang: "zh",
+  llmDebug: false,
+  pairDim: "switch",    // US-20: version / prompt / switch
+};
+
+
+/**
+ * A page with sections instead of a wall of boxes.
+ *
+ * 项目、全局、历史 each hold several unrelated things; laid out flat they read as one pile.
+ * The left rail names them and only one is on screen at a time.
+ */
+function withNav(title, sub, key, sections) {
+  const p = el("div", "page-pad");
+  p.appendChild(el("h2", null, title));
+  p.appendChild(el("p", "sub", sub));
+  const grid = el("div", "withnav");
+  const nav = el("div", "subnav");
+  let group = null;
+  sections.forEach((sec) => {
+    if (sec.group && sec.group !== group) {
+      group = sec.group;
+      nav.appendChild(el("div", "grp", group));
+    }
+    const b = el("button", null, sec.label);
+    b.setAttribute("aria-current", String(S[key] === sec.id));
+    b.onclick = () => { S[key] = sec.id; render(); };
+    nav.appendChild(b);
+  });
+  grid.appendChild(nav);
+  const body = el("div");
+  const active = sections.find((x) => x.id === S[key]) || sections[0];
+  const head = el("div", "secthead");
+  head.appendChild(el("h3", null, active.label));
+  if (active.why) head.appendChild(el("span", "why", active.why));
+  body.appendChild(head);
+  body.appendChild(active.build());
+  grid.appendChild(body);
+  p.appendChild(grid);
+  return p;
+}
+
+/* ---------- 评测：US-19 / US-20 / US-21 ---------- */
+function renderEvals() {
+  const p = el("div", "page-pad");
+  p.appendChild(el("h2", null, "评测 · 量的是 harness 自己"));
+  p.appendChild(el("p", "sub", "这里评的不是被测产品，是这一版 harness：同一批题、同一份黄金清单，看换了图/提示词/开关之后产出变好还是变坏。被测产品的结果在「历史」。"));
+  const obj = el("div", "box");
+  obj.style.marginBottom = "14px";
+  const orow = el("div", "row");
+  orow.appendChild(el("span", "card-t", "被评对象"));
+  orow.appendChild(el("span", "chip machine", "selftest-g1 · v2"));
+  orow.appendChild(el("span", "chip machine", "prompts 19da4de9"));
+  orow.appendChild(el("span", "chip machine", "消融：全开"));
+  orow.appendChild(el("span", "card-s", "黄金清单：fixtures/self-test/gold-checklist.json（16 条，4 条留出）"));
+  obj.appendChild(orow);
+  p.appendChild(obj);
+
+  const cols = el("div", "cols");
+
+  /* Coverage + 覆盖矩阵入口 (US-16.1 的数字侧) */
+  const cov = el("div", "box");
+  cov.appendChild(el("h3", null, "Coverage · 对黄金清单"));
+  cov.appendChild(el("p", "lede", "确定性关键词匹配，可跨版本比较——代价是措辞不同会漏判，所以这个数是下界。"));
+  const k1 = el("div", "kpis");
+  k1.appendChild(kpi("调优集", "50%", ""));
+  k1.appendChild(kpi("留出集（4 条）", "25%", "warn"));
+  k1.appendChild(kpi("多余用例", String(GOLD.extras), ""));
+  cov.appendChild(k1);
+  const mbtn = el("button", "card-a", "看覆盖矩阵 →");
+  mbtn.style.marginTop = "10px";
+  mbtn.onclick = openMatrix;
+  cov.appendChild(mbtn);
+  cols.appendChild(cov);
+
+  /* 检测力：变异分数 + 误报率，并解释为什么不出 P/R/F1 (US-19) */
+  const det = el("div", "box");
+  det.appendChild(el("h3", null, "检测力 · 缺陷注入"));
+  det.appendChild(el("p", "lede", "按变异测试口径：健康版任何失败＝误报，缺陷版有人发现＝击杀。"));
+  const k2 = el("div", "kpis");
+  k2.appendChild(kpi("误报率", "0", "good"));
+  k2.appendChild(kpi("变异分数", "0.5", "warn"));
+  k2.appendChild(kpi("参与用例", String(DETECT.cases), ""));
+  det.appendChild(k2);
+  const mt = el("table");
+  mt.style.marginTop = "10px";
+  mt.innerHTML = "<thead><tr><th>注入的缺陷</th><th>结果</th><th>谁抓到的</th></tr></thead>";
+  const mtb = el("tbody");
+  DETECT.mutants.forEach((m) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "small", m.defect));
+    const td = el("td", "small");
+    td.appendChild(el("span", m.killed ? "chip machine" : "chip fail", m.killed ? "击杀" : "逃掉"));
+    tr.appendChild(td);
+    tr.appendChild(el("td", "small", m.by.length ? m.by.map((x) => x.slice(0, 14)).join(" · ") : "—"));
+    mtb.appendChild(tr);
+  });
+  mt.appendChild(mtb);
+  det.appendChild(mt);
+  det.appendChild(el("div", "note", "为什么这里没有逐用例 P/R/F1：" + DETECT.note));
+  cols.appendChild(det);
+
+  p.appendChild(cols);
+
+  /* 配对比较三维 (US-20) + 消融 (US-21) */
+  const pair = el("div", "box");
+  pair.style.marginTop = "14px";
+  pair.appendChild(el("h3", null, "配对比较 · 同一批题跑两版"));
+  pair.appendChild(el("p", "lede", "两臂只能差一件事。差两件再读一个数，是骗自己最快的方式。"));
+
+  const seg = el("div", "seg");
+  [["version", "图版本"], ["prompt", "提示词"], ["switch", "组件开关"]].forEach(([k, label]) => {
+    const b = el("button", null, label);
+    b.setAttribute("aria-pressed", String(CFG.pairDim === k));
+    b.onclick = () => { CFG.pairDim = k; render(); };
+    seg.appendChild(b);
+  });
+  const armRow = el("div", "row");
+  armRow.style.marginTop = "10px";
+  armRow.appendChild(seg);
+
+  if (CFG.pairDim === "version") {
+    const s1 = el("select"); ["v2（当前）", "v1（built-in）"].forEach((o) => s1.appendChild(new Option(o, o)));
+    const s2 = el("select"); ["v1（built-in）", "v2（当前）"].forEach((o) => s2.appendChild(new Option(o, o)));
+    armRow.append(s1, el("span", "card-s", "对比"), s2);
+  } else if (CFG.pairDim === "prompt") {
+    const s1 = el("select"); ["design.cases · 默认", "design.cases · oracle-strict"].forEach((o) => s1.appendChild(new Option(o, o)));
+    armRow.append(s1);
+    armRow.appendChild(el("span", "card-s", "提示词变体作为节点参数选择，才能被比较——改源码的那种改法评测层看不见"));
+  } else {
+    ["design-methods", "oracle-grading", "dedupe", "fragments", "repair"].forEach((sw) => {
+      const b = el("button", "hint", sw);
+      b.onclick = () => b.classList.toggle("on");
+      armRow.appendChild(b);
+    });
+  }
+  pair.appendChild(armRow);
+
+  const goRow = el("div", "row");
+  goRow.style.marginTop = "10px";
+  const go = el("button", "send", "跑配对评测");
+  go.onclick = () => alert("原型：真实实现里这会起两次完整运行，A 跑完再跑 B（模型是串行的，重叠会让两边的耗时都失去意义）。");
+  goRow.appendChild(go);
+  goRow.appendChild(el("span", "card-s", "两次完整运行 · 本地模型约 16 分钟"));
+  pair.appendChild(goRow);
+
+  /* 最近一次结果 */
+  pair.appendChild(el("div", "sec", "最近一次 · " + PAIRED.id));
+  const arms = el("div", "cols");
+  [PAIRED.a, PAIRED.b].forEach((a, i) => {
+    const box = el("div", "box");
+    box.appendChild(el("div", "card-t", (i ? "B · " : "A · ") + a.label));
+    const k = el("div", "kpis");
+    k.appendChild(kpi("覆盖", Math.round(a.coverage * 100) + "%", ""));
+    k.appendChild(kpi("留出集", Math.round(a.held * 100) + "%", ""));
+    k.appendChild(kpi("门禁①", a.gate.toFixed(2), ""));
+    box.appendChild(k);
+    box.appendChild(el("div", "card-s", `${a.cases} 条 · ${a.tokens} tok · ${a.min} min · prompts ${a.prompts}`));
+    arms.appendChild(box);
+  });
+  pair.appendChild(arms);
+  const verdict = el("div", "warnline");
+  verdict.innerHTML = `<b>McNemar：A 独占 ${PAIRED.mcnemar.aOnly}、B 独占 ${PAIRED.mcnemar.bOnly}，p = ${PAIRED.mcnemar.p}</b> —— ${PAIRED.mcnemar.reading}。<br>这条 Critic 建议<b>没有被证实</b>，所以它不落地。`;
+  pair.appendChild(verdict);
+  const guard = el("div", "okline");
+  guard.innerHTML = "两臂提示词指纹一致（<span class='mono'>19da4de9</span>），所以这个差值属于臂，不属于两个不同的 harness。不一致时这里会变成红条，并说明是哪条提示词动了。";
+  pair.appendChild(guard);
+
+  p.appendChild(pair);
+  return p;
+}
+
+function kpi(label, value, tone) {
+  const d = el("div", "kpi");
+  d.appendChild(el("div", "l", label));
+  d.appendChild(el("div", "v " + (tone || ""), value));
+  return d;
+}
+
+/* US-16.1 覆盖矩阵：清单 × 用例，命中/遗漏/多余 */
+function openMatrix() {
+  sheet("覆盖矩阵 · 16 条清单 × 100 条用例", (b) => {
+    b.appendChild(el("div", "note", "「该拆成 N 个吗」问的就是这张图：清单在左，用例在右。红色是没有任何用例覆盖的清单项——它是拆解问题，收紧门禁变不出缺失的用例。"));
+    const wrap = el("div", "scroll");
+    wrap.style.marginTop = "12px";
+    const m = el("div", "matrix");
+    const all = [...GOLD.hits.map((id) => ({ id, hit: true })), ...GOLD.misses.map((x) => ({ ...x, hit: false }))]
+      .sort((x, y) => x.id.localeCompare(y.id));
+    all.forEach((item) => {
+      const label = el("div", "card-s");
+      label.textContent = item.id + (item.held ? " ·留出" : "");
+      label.style.whiteSpace = "nowrap";
+      m.appendChild(label);
+      for (let i = 0; i < 24; i++) {
+        const c = el("div", "cell " + (item.hit ? (i % 5 === 0 ? "hit" : "extra") : "extra"));
+        if (!item.hit && i === 0) c.className = "cell miss";
+        m.appendChild(c);
+      }
+    });
+    wrap.appendChild(m);
+    b.appendChild(wrap);
+    const lg = el("div", "legend");
+    lg.innerHTML = `<span><i style="background:var(--machine)"></i>命中 ${GOLD.hits.length}</span>
+      <span><i style="background:var(--fail)"></i>遗漏 ${GOLD.misses.length}</span>
+      <span><i style="background:var(--hair)"></i>多余 ${GOLD.extras}</span>`;
+    b.appendChild(lg);
+    b.appendChild(el("div", "sec", "遗漏清单"));
+    GOLD.misses.forEach((x) => {
+      const d = el("div", "finding");
+      d.textContent = `${x.id}${x.held ? "（留出）" : ""} — ${x.t}`;
+      b.appendChild(d);
+    });
+    b.appendChild(el("div", "warnline", "留出集的 3 条永远不参与调参：它们唯一的价值就是没被用来调过任何东西。"));
+  });
+}
+
+/* ---------- 历史：US-09 / US-10 / US-11 / US-13 ---------- */
+/**
+ * Three different things used to sit on one page: a trend dashboard, a list of executions,
+ * and per-case baselines. They answer different questions and belong apart — and a baseline
+ * belongs to a case, not to a day.
+ */
+function renderHistory() {
+  return withNav("历史 · 被测产品的结果", "执行记录、套件批次、趋势，以及等着人看的基线。评测量的是 harness，这里量的是产品。", "hi", [
+    { id: "runs", label: "执行记录", why: "每一次跑了什么、结果与归因", build: sectRuns },
+    { id: "batch", label: "套件批次", why: "成套跑的门禁结论", build: sectBatch },
+    { id: "base", label: "待审批基线", why: "视觉与性能的差异，要人看过才算数", build: sectBaselines },
+    { id: "trend", label: "趋势", why: "一段时间的通过率、抖动、MTTR", build: sectTrend },
+  ]);
+}
+
+function sectRuns() {
+  const box = el("div");
+  const t = el("table");
+  t.innerHTML = "<thead><tr><th>用例</th><th>结果</th><th>谁判的</th><th>重试</th><th>耗时</th><th>基线</th></tr></thead>";
+  const tb = el("tbody");
+  RUNS.forEach((r) => {
+    const tr = el("tr", "pick");
+    tr.onclick = () => openRun(r);
+    tr.appendChild(el("td", null, r.case));
+    const td2 = el("td", "small");
+    td2.appendChild(el("span", r.status === "passed" ? "chip machine" : "chip fail",
+      r.status === "passed" ? "通过" : (r.kind === "infra" ? "infra · 不算产品缺陷" : "失败 · assert")));
+    tr.appendChild(td2);
+    const td3 = el("td", "small");
+    td3.appendChild(el("span", "chip " + r.by, r.by === "machine" ? "程序" : "模型看截图"));
+    tr.appendChild(td3);
+    tr.appendChild(el("td", "small", r.attempts > 1 ? r.attempts + " 次" : "—"));
+    tr.appendChild(el("td", "small", fmtMs(r.ms)));
+    const td6 = el("td", "small");
+    td6.appendChild(el("span", r.visual === "diff" ? "chip warn" : "chip machine",
+      r.visual === "diff" ? "视觉 8.5%" : r.visual === "new_baseline" ? "新基线" : "match"));
+    tr.appendChild(td6);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  box.appendChild(el("div", "note", "自愈后通过（重试 2 次）单独标记：它不是一次干净的绿，严口径统计里要扣掉。"));
+  return box;
+}
+
+/**
+ * A batch, with the six numbers the old suite page reported.
+ *
+ * They are six and not one because they answer different questions: 通过/失败 is the
+ * result, 自愈 says how much of the green was bought with a retry, 抖动 and 隔离 say how
+ * much of this suite you can still trust.
+ */
+function sectBatch() {
+  const box = el("div");
+
+  const head = el("div", "box");
+  const hrow = el("div", "row");
+  hrow.appendChild(el("span", "chip fail", "门禁 fail"));
+  hrow.appendChild(el("span", "card-t", "P0 套件 · staging"));
+  hrow.appendChild(el("span", "card-s", BATCH.at + " · 13 min"));
+  head.appendChild(hrow);
+  const k = el("div", "kpis");
+  k.style.marginTop = "10px";
+  k.appendChild(kpi("总数", String(BATCH.total), ""));
+  k.appendChild(kpi("通过", String(BATCH.passed), "good"));
+  k.appendChild(kpi("失败", String(BATCH.failed), "bad"));
+  k.appendChild(kpi("自愈后通过", "1", "warn"));
+  k.appendChild(kpi("抖动", String(BATCH.flaky), "warn"));
+  k.appendChild(kpi("隔离", String(BATCH.quarantined), ""));
+  head.appendChild(k);
+  head.appendChild(el("div", "note", "门禁结论是套件级的：一条 infra 失败不算产品缺陷，但它照样让这次批次不干净——两者分开报。"));
+  box.appendChild(head);
+
+  const t = el("table");
+  t.style.marginTop = "12px";
+  t.innerHTML = "<thead><tr><th>用例</th><th>结果</th><th>谁判的</th><th>重试</th><th>耗时</th></tr></thead>";
+  const tb = el("tbody");
+  RUNS.slice(3).concat(RUNS.slice(0, 1)).forEach((r) => {
+    const tr = el("tr", "pick");
+    tr.onclick = () => openRun(r);
+    tr.appendChild(el("td", null, r.case));
+    const td = el("td", "small");
+    td.appendChild(el("span", r.status === "passed" ? "chip machine" : "chip fail",
+      r.status === "passed" ? "通过" : (r.kind === "infra" ? "infra" : "失败")));
+    if (r.attempts > 1 && r.status === "passed") td.appendChild(el("span", "chip judge", "自愈"));
+    tr.appendChild(td);
+    const td2 = el("td", "small");
+    td2.appendChild(el("span", "chip " + r.by, r.by === "machine" ? "程序" : "模型"));
+    tr.appendChild(td2);
+    tr.appendChild(el("td", "small", r.attempts > 1 ? r.attempts + " 次" : "—"));
+    tr.appendChild(el("td", "small", fmtMs(r.ms)));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  box.appendChild(el("div", "note", "点任意一行进执行详情：断言、性能、视觉、步骤日志、截图都在那里。"));
+  return box;
+}
+
+function sectBaselines() {
+  const box = el("div");
+  const pend = (CFG.approvedVisual ? 0 : 1) + (CFG.approvedPerf ? 0 : 1);
+  box.appendChild(el("div", pend ? "warnline" : "okline",
+    pend ? `${pend} 项等着人看：基线不会自己更新，差异要有人说「这次是对的」才算数。` : "没有待审批的基线。"));
+
+  const vis = el("div", "box");
+  vis.style.marginTop = "12px";
+  vis.appendChild(el("h3", null, "视觉 · Send 0.01 ETH → on-chain tx · step 0"));
+  const shots = el("div", "shots");
+  [["基线", ""], ["本次", ""], ["差异 8.5%", "diff"]].forEach(([cap, cls]) => {
+    const sh = el("div", "shot " + cls);
+    sh.appendChild(el("div", "cap", cap));
+    sh.appendChild(el("div", "ph"));
+    shots.appendChild(sh);
+  });
+  vis.appendChild(shots);
+  const vrow = el("div", "row");
+  vrow.style.marginTop = "10px";
+  if (CFG.approvedVisual) vrow.appendChild(el("span", "chip machine", "已批准 · 基线已更新"));
+  else {
+    const ok = el("button", "send", "批准并更新基线");
+    ok.onclick = () => { CFG.approvedVisual = true; render(); say("sys", "视觉基线已更新 · tc-mr7y5pb0-1023 step 0"); };
+    const no = el("button", "hint", "保留旧基线");
+    vrow.append(ok, no);
+  }
+  vis.appendChild(vrow);
+  box.appendChild(vis);
+
+  const perf = el("div", "box");
+  perf.style.marginTop = "12px";
+  perf.appendChild(el("h3", null, "性能 · 同一条用例"));
+  const pt = el("table");
+  pt.innerHTML = "<thead><tr><th>指标</th><th>本次</th><th>基线</th><th>Δ</th></tr></thead>";
+  const ptb = el("tbody");
+  Object.keys(PERF.metrics).forEach((m) => {
+    const cur = PERF.metrics[m], base = PERF.baseline[m];
+    const d = Math.round(((cur - base) / base) * 100);
+    const tr = el("tr");
+    tr.appendChild(el("td", "small", m.replace("Ms", "")));
+    tr.appendChild(el("td", "small", cur + " ms"));
+    tr.appendChild(el("td", "small", base + " ms"));
+    const td = el("td", "small");
+    td.appendChild(el("span", d > 15 ? "chip fail" : "chip machine", (d > 0 ? "+" : "") + d + "%"));
+    tr.appendChild(td);
+    ptb.appendChild(tr);
+  });
+  pt.appendChild(ptb);
+  perf.appendChild(pt);
+  const prow = el("div", "row");
+  prow.style.marginTop = "10px";
+  if (CFG.approvedPerf) prow.appendChild(el("span", "chip machine", "已批准 · 基线已更新"));
+  else {
+    const ok = el("button", "send", "批准并更新基线");
+    ok.onclick = () => { CFG.approvedPerf = true; render(); say("sys", "性能基线已更新"); };
+    prow.appendChild(ok);
+  }
+  perf.appendChild(prow);
+  box.appendChild(perf);
+  box.appendChild(el("div", "note", "基线属于用例，不属于某一天：这里只是「等着人看」的收件箱，批准后它回到那条用例身上。"));
+  return box;
+}
+
+function sectTrend() {
+  const box = el("div");
+  const k = el("div", "kpis");
+  k.appendChild(kpi("通过率", Math.round(TRENDS.passRate * 100) + "%", "warn"));
+  k.appendChild(kpi("抖动率", Math.round(TRENDS.flakeRate * 100) + "%", "bad"));
+  k.appendChild(kpi("MTTR", Math.round(TRENDS.mttrMs / 1000) + "s", ""));
+  k.appendChild(kpi("覆盖", Math.round(TRENDS.coverage * 100) + "%", "warn"));
+  k.appendChild(kpi("自愈率", Math.round(TRENDS.healRate * 100) + "%", ""));
+  box.appendChild(k);
+  box.appendChild(el("div", "note", `窗口内 ${TRENDS.totalRuns} 次运行、${TRENDS.totalCases} 条用例。样本这么小的时候，这几个数只该用来看方向，不该用来下结论。`));
+  return box;
+}
+
+/**
+ * One execution, in full.
+ *
+ * Ported section for section from the old run drawer, because those sections were right:
+ * a run is not a status, it is an assertion result plus two baselines plus the steps that
+ * got there. Two things are added — who settled the verdict (a program or a model looking
+ * at a screenshot), and the attribution of the failure, so an infra flake never reads as a
+ * product defect.
+ */
+function openRun(r) {
+  sheet("执行 · " + r.case, (b) => {
+    /* 顶部：结果、归因、自愈、成本 */
+    const head = el("div", "row");
+    head.appendChild(el("span", r.status === "passed" ? "chip machine" : "chip fail",
+      r.status === "passed" ? "通过" : "失败"));
+    if (r.kind) head.appendChild(el("span", r.kind === "infra" ? "chip warn" : "chip fail",
+      r.kind === "infra" ? "infra —— 不计入产品缺陷" : "assert —— 断言没成立"));
+    if (r.attempts > 1) head.appendChild(el("span", "chip judge", `自愈重试 ${r.attempts} 次`));
+    head.appendChild(el("span", "card-s", `${fmtMs(r.ms)} · ${r.id}`));
+    b.appendChild(head);
+    if (r.attempts > 1) b.appendChild(el("div", "warnline",
+      "自愈后通过不是一次干净的绿：严口径通过率会把它扣掉，看板上也留着标记。"));
+
+    /* 功能断言 */
+    b.appendChild(el("div", "sec", "功能断言"));
+    const ok = r.status === "passed";
+    const oracleBox = el("div", ok ? "okline" : "warnline");
+    oracleBox.style.marginTop = "0";
+    oracleBox.textContent = ok
+      ? "该进程行同时显示「类型」「pid」「心跳」「重启次数」「当前任务」「累计成本」六个字段，且值非空 —— 成立"
+      : (r.kind === "infra"
+          ? "断言从未被真正评估：Midscene 重规划超限 + puppeteer 协议错误。这不是产品的结论。"
+          : "系统提示「消息不能为空」或发送按钮保持禁用 —— 不成立（判定模型说按钮看起来可用，而 DOM 上它确实是 disabled）");
+    b.appendChild(oracleBox);
+    const who = el("div", "row");
+    who.appendChild(el("span", "chip " + r.by, r.by === "machine" ? "程序判定" : "模型看截图判定"));
+    who.appendChild(el("span", "card-s", r.by === "machine"
+      ? "0.66 秒，跨运行稳定"
+      : "40–120 秒；同一个页面可能给出不同答案 —— 这条用例标的 tier 在执行时没有兑现"));
+    b.appendChild(who);
+
+    /* 性能基线 */
+    b.appendChild(el("div", "sec", "性能基线"));
+    const pt = el("table");
+    pt.innerHTML = "<thead><tr><th>指标</th><th>本次</th><th>基线</th><th>Δ</th></tr></thead>";
+    const ptb = el("tbody");
+    Object.keys(PERF.metrics).forEach((m) => {
+      const cur = PERF.metrics[m], base = PERF.baseline[m];
+      const d = Math.round(((cur - base) / base) * 100);
+      const tr = el("tr");
+      tr.appendChild(el("td", "small", m.replace("Ms", "")));
+      tr.appendChild(el("td", "small", cur + " ms"));
+      tr.appendChild(el("td", "small", base + " ms"));
+      const td = el("td", "small");
+      td.appendChild(el("span", d > 15 ? "chip fail" : "chip machine", (d > 0 ? "+" : "") + d + "%"));
+      tr.appendChild(td);
+      ptb.appendChild(tr);
+    });
+    pt.appendChild(ptb);
+    b.appendChild(pt);
+    const prow = el("div", "row");
+    if (CFG.approvedPerf) prow.appendChild(el("span", "chip machine", "已批准为新基线"));
+    else {
+      const ap = el("button", "hint", "批准为基线");
+      ap.onclick = () => { CFG.approvedPerf = true; render(); openRun(r); };
+      prow.append(ap, el("span", "card-s", "回归要人看过：预算之内的波动和真的变慢，程序分不出来"));
+    }
+    b.appendChild(prow);
+
+    /* 视觉基线：逐步三图 + 批准 */
+    b.appendChild(el("div", "sec", "视觉基线"));
+    if (r.visual === "diff") {
+      const line = el("div", "row");
+      line.appendChild(el("span", "chip fail", "step 1 · 8.5% 变化"));
+      if (CFG.approvedVisual) line.appendChild(el("span", "chip machine", "已批准为新基线"));
+      else {
+        const ap = el("button", "hint", "批准为基线");
+        ap.onclick = () => { CFG.approvedVisual = true; render(); openRun(r); };
+        line.appendChild(ap);
+      }
+      b.appendChild(line);
+      const shots = el("div", "shots");
+      [["基线", ""], ["本次", ""], ["差异", "diff"]].forEach(([cap, cls]) => {
+        const sh = el("div", "shot " + cls);
+        sh.appendChild(el("div", "cap", cap));
+        sh.appendChild(el("div", "ph"));
+        shots.appendChild(sh);
+      });
+      b.appendChild(shots);
+    } else {
+      b.appendChild(el("div", "okline", r.visual === "new_baseline" ? "首跑：已留下基线，之后才有得比。" : "逐帧 match，没有视觉变化。"));
+    }
+
+    /* 数据驱动：一条用例按数据行跑多次，逐行列出而不是给一个汇总 */
+    b.appendChild(el("div", "sec", "数据驱动"));
+    const dt = el("table");
+    dt.innerHTML = "<thead><tr><th>数据行</th><th>结果</th><th>耗时</th><th>说明</th></tr></thead>";
+    const dtb = el("tbody");
+    [["USERS[0] standard_user", "passed", "12.4s", ""],
+     ["USERS[1] locked_out_user", "failed", "14.1s", "断言「显示 Epic sadface」不成立"]].forEach((row) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", "small", row[0]));
+      const td = el("td", "small");
+      td.appendChild(el("span", row[1] === "passed" ? "chip machine" : "chip fail", row[1] === "passed" ? "通过" : "失败"));
+      tr.appendChild(td);
+      tr.appendChild(el("td", "small", row[2]));
+      tr.appendChild(el("td", "small", row[3]));
+      dtb.appendChild(tr);
+    });
+    dt.appendChild(dtb);
+    b.appendChild(dt);
+    b.appendChild(el("div", "note", "rows 2 / rowsPassed 1 —— 逐行列出：一行挂掉不该让整条用例的结果含糊，也不该让它整条变红。"));
+
+    /* 步骤与日志 */
+    b.appendChild(el("div", "sec", "步骤与日志"));
+    const log = el("pre", "note mono");
+    log.style.whiteSpace = "pre-wrap";
+    log.textContent = [
+      "→ 打开 http://localhost:5300/?api=http://127.0.0.1:5401",
+      "step 1: Navigate to the process management page…",
+      "  · 计划 3 步 · 命中缓存 1 步",
+      "step 2: Click the 停止 button for the selected process",
+      r.kind === "infra"
+        ? "  ✗ Protocol error (Input.dispatchMouseEvent): Invalid parameters"
+        : "  ✓ 完成",
+      "assert: " + (r.by === "machine" ? "页面显示「已停止」 → 找到（程序判定）" : "模型看截图判定 …"),
+      "登录步骤中的 ${secret.LOGIN_PASSWORD} 在日志里始终是模板形态",
+    ].join("\n");
+    b.appendChild(log);
+
+    /* 截图 */
+    b.appendChild(el("div", "sec", "截图（逐步）"));
+    const shots2 = el("div", "shots");
+    ["step 0", "step 1", "step 2"].forEach((cap) => {
+      const sh = el("div", "shot");
+      sh.appendChild(el("div", "cap", cap));
+      sh.appendChild(el("div", "ph"));
+      shots2.appendChild(sh);
+    });
+    b.appendChild(shots2);
+
+    const act = el("div", "act");
+    const rep = el("button", null, "打开 Midscene 报告");
+    rep.onclick = () => say("sys", "打开 midscene_run/ 里这次运行的报告");
+    const code = el("button", null, "看这条的代码");
+    code.onclick = () => { const id = Object.keys(CODE.code).find((k) => k.includes(r.case.slice(0, 6))) || Object.keys(CODE.code)[0]; openCaseCode(id); };
+    const again = el("button", "primary", "重跑这条");
+    again.onclick = () => { $("#sheet").hidden = true; say("sys", "重跑 " + r.case + " · 走 runner"); };
+    act.append(rep, code, again);
+    b.appendChild(act);
+  });
+}
+
+/* ---------- 资产：阶段产物 + 测试代码 + 交付 ---------- */
+/**
+ * The two artefact lines the customer iterates on, and the thing that decides whether any
+ * of it can be adopted: how it gets into their repository and their CI.
+ *
+ * Without this surface the product is a generator someone has to babysit. With it, the
+ * generated suite is theirs — reviewable in their own review tool, running in their own
+ * pipeline, and traceable back to the requirement it came from.
+ */
+function renderAssets() {
+  return withNav("资产 · 产物与代码", "阶段产物（故事 → 用例）与测试代码是两条各自迭代的线；交付这一节决定它们能不能低磨损地进到你们现有的流程里。", "as", [
+    { group: "产物线", id: "cases", label: "文本用例", why: "端无关，换 iOS/Android 不用重写", build: sectCases },
+    { group: "产物线", id: "trace", label: "需求追溯", why: "每条用例指回哪一句 spec", build: sectTrace },
+    { group: "代码线", id: "code", label: "测试代码", why: "分层、片段复用、数据分离", build: sectCode },
+    { group: "代码线", id: "diffs", label: "变更", why: "重生成后与上一版的差异", build: sectDiffs },
+    { group: "交付", id: "deliver", label: "交付与接入", why: "进你们的仓库与 CI", build: sectDeliver },
+  ]);
+}
+
+function sectCases() {
+  const box = el("div");
+  const k = el("div", "kpis");
+  k.appendChild(kpi("已批准", "4", "good"));
+  k.appendChild(kpi("待复核", "96", "warn"));
+  k.appendChild(kpi("带机器判据", "0", "bad"));
+  k.appendChild(kpi("端无关", "100%", "good"));
+  box.appendChild(k);
+  const open = el("button", "send", "打开复核队列");
+  open.style.marginTop = "12px";
+  open.onclick = () => openCasesTable();
+  box.appendChild(open);
+  box.appendChild(el("div", "note", "文本用例里没有选择器、没有页面对象：换端不用重写，这是它和测试代码分开的理由。"));
+  return box;
+}
+
+function sectTrace() {
+  const box = el("div");
+  box.appendChild(el("div", "warnline", "追溯是这个垂类最容易被漏掉的一格：spec 承诺了规则，不等于产品会显示那六个字。断言引用的界面文案必须能在材料里查到。"));
+  const t = el("table");
+  t.style.marginTop = "12px";
+  t.innerHTML = "<thead><tr><th>用例</th><th>指回</th><th>锚点</th></tr></thead>";
+  const tb = el("tbody");
+  CASES.slice(0, 6).forEach((c) => {
+    const tr = el("tr", "pick");
+    tr.onclick = () => selectCase(c.id);
+    tr.appendChild(el("td", null, c.t));
+    tr.appendChild(el("td", "small", c.s));
+    const td = el("td", "small");
+    td.appendChild(el("span", "chip machine", "AC 可查"));
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  box.appendChild(el("div", "note", "孤儿用例（指不回任何故事）会被计数并高亮——门禁①在算这个数。"));
+  return box;
+}
+
+function sectCode() {
+  const box = el("div");
+  box.appendChild(el("div", "note", "「生成的」属于那次运行，「最终可用」属于这条用例——点开任意一条能看到三态与它们之间的差异。"));
+  const t = el("table");
+  t.style.margin = "12px 0";
+  t.innerHTML = "<thead><tr><th>用例</th><th>状态</th><th>门禁②</th><th>修复</th><th>上次执行</th></tr></thead>";
+  const tb = el("tbody");
+  Object.keys(CODE.code).forEach((id) => {
+    const o = (CODE.outcomes || []).find((x) => x.id === id) || {};
+    const rd = CODE.rounds[id];
+    const tr = el("tr", "pick");
+    tr.onclick = () => openCaseCode(id);
+    tr.appendChild(el("td", null, id.slice(0, 30) + "…"));
+    const td1 = el("td", "small");
+    td1.appendChild(el("span", "chip machine", "可用"));
+    tr.appendChild(td1);
+    tr.appendChild(el("td", "small", (CODE.gate2 ?? 1).toFixed(2)));
+    const td2 = el("td", "small");
+    if (rd) td2.appendChild(el("span", rd.changes[0] === "none" ? "chip warn" : "chip judge", rd.changes.join("·")));
+    else td2.textContent = "—";
+    tr.appendChild(td2);
+    const td3 = el("td", "small");
+    td3.appendChild(el("span", o.status === "passed" ? "chip machine" : "chip fail",
+      o.status === "passed" ? "通过" : (o.kind === "infra" ? "infra" : "失败")));
+    tr.appendChild(td3);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  const pre = el("pre", "note mono");
+  pre.style.whiteSpace = "pre-wrap";
+  pre.textContent = [
+    "cases/US-18-3.spec.ts        ← 只表达意图",
+    "  uses: flows/login, actions/processPage",
+    "",
+    "await agent.aiAction('Navigate to the process management page…');",
+    "await agent.aiAction('Click the 停止 button for the selected process');",
+    "await agent.aiAssert('The status becomes 已停止');",
+  ].join("\n");
+  box.appendChild(pre);
+  const k = el("div", "kpis");
+  k.style.marginTop = "12px";
+  k.appendChild(kpi("已生成", "4", ""));
+  k.appendChild(kpi("门禁②", "1.00", "good"));
+  k.appendChild(kpi("公共片段", "2", "good"));
+  k.appendChild(kpi("被改松的断言", "0", "good"));
+  box.appendChild(k);
+  box.appendChild(el("div", "warnline", "还欠一格：cases/ actions/ flows/ 三层目录还没真正生成，现在是平铺语句加片段引用。"));
+  return box;
+}
+
+function sectDiffs() {
+  const box = el("div");
+  box.appendChild(el("div", "note", "重生成不是覆盖：产物留着，改动是一条编辑，两版并排可比。"));
+  const t = el("table");
+  t.style.marginTop = "10px";
+  t.innerHTML = "<thead><tr><th>用例</th><th>改了什么</th><th>谁改的</th><th>门禁</th></tr></thead>";
+  const tb = el("tbody");
+  [["删除项目时触发二次确认弹窗", "断言：提示用户确认删除 → 显示「确认删除该项目？」对话框", "model", "已清零"],
+   ["验证负例占比低于阈值时的警告提示", "断言改具体", "human", "已清零"],
+   ["US-18-3 停止操作后状态", "步骤：补了「进入进程页」这一步", "model", "—"]].forEach((r) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, r[0]));
+    tr.appendChild(el("td", "small", r[1]));
+    const td = el("td", "small");
+    td.appendChild(el("span", r[2] === "model" ? "chip judge" : "chip machine", r[2] === "model" ? "模型重写" : "人改的"));
+    tr.appendChild(td);
+    tr.appendChild(el("td", "small", r[3]));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  return box;
+}
+
+function sectDeliver() {
+  const box = el("div");
+  box.appendChild(el("div", "okline", "低磨损介入的意思是：不要求你们换测试框架、不要求你们改流程、也不要求你们相信一个黑盒。"));
+
+  const repo = el("div", "box");
+  repo.style.marginTop = "12px";
+  repo.appendChild(el("h3", null, "进你们的仓库"));
+  const f1 = el("div", "field");
+  f1.appendChild(el("label", null, "目标目录结构"));
+  const i1 = el("input"); i1.value = "e2e/{flows,actions,cases}/";
+  f1.appendChild(i1);
+  repo.appendChild(f1);
+  const r1 = el("div", "row");
+  const pr = el("button", "send", "生成 PR（4 条用例）");
+  pr.onclick = () => say("sys", "已生成 PR 草稿：4 个文件 + 2 个公共片段 · 每条用例带出处注释（故事 / 设计方法 / 门禁分 / 来源运行）");
+  r1.append(pr, el("span", "card-s", "走你们自己的 review，而不是我们这边的批准"));
+  repo.appendChild(r1);
+  box.appendChild(repo);
+
+  const ci = el("div", "box");
+  ci.style.marginTop = "12px";
+  ci.appendChild(el("h3", null, "接你们的 CI"));
+  const pre = el("pre", "note mono");
+  pre.style.whiteSpace = "pre-wrap";
+  pre.textContent = "# 在你们的流水线里跑这批用例，结果回传\nnpx testpilot run --suite=P0 --env=staging --report=junit";
+  ci.appendChild(pre);
+  const r2 = el("div", "row");
+  r2.appendChild(el("span", "chip machine", "JUnit / JSON 报告"));
+  r2.appendChild(el("span", "chip machine", "失败归因随报告一起回传"));
+  r2.appendChild(el("span", "chip judge", "判定来源标注 machine/judge"));
+  ci.appendChild(r2);
+  box.appendChild(ci);
+
+  const back = el("div", "box");
+  back.style.marginTop = "12px";
+  back.appendChild(el("h3", null, "覆盖回传"));
+  back.appendChild(el("p", "lede", "把「哪些需求有用例、哪些没有」写回你们的需求系统，而不是只留在我们这边的一个数字里。"));
+  const r3 = el("div", "row");
+  ["Jira", "飞书文档", "GitHub Issues"].forEach((x) => r3.appendChild(el("span", "chip machine", x)));
+  back.appendChild(r3);
+  box.appendChild(back);
+
+  const stage = el("div", "box");
+  stage.style.marginTop = "12px";
+  stage.appendChild(el("h3", null, "接管的档位"));
+  const seg = el("div", "seg");
+  ["只补充用例", "补充 + 跑回归", "接管回归门禁"].forEach((label, i) => {
+    const b = el("button", null, label);
+    b.setAttribute("aria-pressed", String(i === 0));
+    b.onclick = () => { [...seg.children].forEach((c, j) => c.setAttribute("aria-pressed", String(j === i))); };
+    seg.appendChild(b);
+  });
+  stage.appendChild(seg);
+  stage.appendChild(el("div", "note", "先只补充用例，等它证明自己不制造假信号，再往后走一档。误报比漏报致命——一份没人信的报告，红了也不会有人看。"));
+  box.appendChild(stage);
+  return box;
+}
+
+/* ---------- 项目：US-01 / US-02 / US-12 ---------- */
+function renderSettings() {
+  const secs = [
+    { group: "项目", id: "target", label: "目标", why: "测什么、在哪测", build: sectTarget },
+    { group: "项目", id: "env", label: "环境", why: "同一批用例跑在不同环境上", build: sectEnv },
+  ];
+  if (CFG.target === "web" && CFG.web3) secs.push({ group: "项目", id: "chain", label: "链上（dapp）", why: "注入钱包与链上断言", build: sectChain });
+  secs.push({ group: "项目", id: "danger", label: "危险操作", why: "不可逆，且级联", build: sectDanger });
+  secs.push({ group: "运行时", id: "proc", label: "进程", why: "谁在跑、花了多少", build: sectProc });
+  secs.push({ group: "运行时", id: "cap", label: "能力", why: "harness 会启动的外部服务", build: sectCap });
+  secs.push({ group: "模型", id: "model", label: "端点与串行闸", why: "一次只准一个调用", build: sectModel });
+  secs.push({ group: "模型", id: "prompt", label: "提示词模板", why: "改动会进指纹", build: sectPrompt });
+  secs.push({ group: "偏好", id: "pref", label: "语言与调试", why: "", build: sectPref });
+  return withNav("设置", "项目配置与运行时。它们跨一次工作存在，所以不进工作台。", "st", secs);
+}
+
+function sectTarget() {
+  const box = el("div", "box");
+  const f1 = el("div", "field");
+  f1.appendChild(el("label", null, "项目名"));
+  const i1 = el("input"); i1.value = "TestPilot 自举 (SUT)";
+  f1.appendChild(i1);
+  box.appendChild(f1);
+  const f2 = el("div", "field");
+  f2.appendChild(el("label", null, "目标端"));
+  const seg = el("div", "seg");
+  [["web", "Web"], ["ios", "iOS"], ["android", "Android"]].forEach(([k, label]) => {
+    const b = el("button", null, label);
+    b.setAttribute("aria-pressed", String(CFG.target === k));
+    b.onclick = () => { CFG.target = k; if (k !== "web" && S.st === "chain") S.st = "target"; render(); };
+    seg.appendChild(b);
+  });
+  f2.appendChild(seg);
+  box.appendChild(f2);
+  const f3 = el("div", "field");
+  f3.appendChild(el("label", null, "入口"));
+  const i3 = el("input"); i3.value = CFG.url;
+  f3.appendChild(i3);
+  box.appendChild(f3);
+  if (CFG.target === "web") {
+    const w = el("div", "field");
+    w.appendChild(el("label", null, "Web3 能力"));
+    const row = el("div", "row");
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = CFG.web3;
+    cb.onchange = () => { CFG.web3 = cb.checked; render(); };
+    row.append(cb, el("span", "card-s", "启用后用例可选注入钱包与链上断言，左边多出「链上」一节"));
+    w.appendChild(row);
+    box.appendChild(w);
+  } else {
+    box.appendChild(el("div", "note", "iOS / Android 下不显示 Web3 —— AC-01.1 说的就是这条。目标端换了，能选的东西就该跟着换。"));
+  }
+  return box;
+}
+
+function sectEnv() {
+  const box = el("div", "box");
+  const ef = el("div", "field");
+  ef.appendChild(el("label", null, "环境"));
+  const es = el("select");
+  ["staging", "local", "prod（只读）"].forEach((o) => es.appendChild(new Option(o, o)));
+  ef.appendChild(es);
+  box.appendChild(ef);
+  const ev = el("div", "field");
+  ev.appendChild(el("label", null, "变量"));
+  const ta = el("textarea");
+  ta.value = 'LOGIN_USER = standard_user\nAPP_BASE = http://127.0.0.1:5401';
+  ev.appendChild(ta);
+  box.appendChild(ev);
+  const hf = el("div", "field");
+  hf.appendChild(el("label", null, "固定头 / query"));
+  const hta = el("textarea");
+  hta.value = 'X-Tenant: acme\n?feature=review-queue';
+  hf.appendChild(hta);
+  box.appendChild(hf);
+  const lf = el("div", "field");
+  lf.appendChild(el("label", null, "登录方式"));
+  const lseg = el("div", "seg");
+  [["ui", "UI 步骤"], ["api", "API 登录"], ["paste", "粘贴会话"]].forEach(([k, label]) => {
+    const b = el("button", null, label);
+    b.setAttribute("aria-pressed", String(CFG.login === k));
+    b.onclick = () => { CFG.login = k; render(); };
+    lseg.appendChild(b);
+  });
+  lf.appendChild(lseg);
+  box.appendChild(lf);
+  const detail = el("div", "field");
+  const dta = el("textarea");
+  dta.value = CFG.login === "ui"
+    ? '在用户名输入 ${env.LOGIN_USER}\n在密码输入 ${secret.LOGIN_PASSWORD}\n点击 Sign in'
+    : CFG.login === "api"
+      ? 'POST /api/session\n{"user":"${env.LOGIN_USER}","pass":"${secret.LOGIN_PASSWORD}"}'
+      : '{"cookies":[…],"origins":[…]}  // 粘贴 storageState 或 cookie 串';
+  detail.appendChild(dta);
+  box.appendChild(detail);
+  box.appendChild(el("div", "okline", "密钥只出不进：可写入、可用 ${secret.KEY} 引用，永不回显；日志里始终是模板形态。"));
+  return box;
+}
+
+function sectChain() {
+  const box = el("div", "box");
+  const cf = el("div", "field");
+  cf.appendChild(el("label", null, "RPC"));
+  const ci = el("input"); ci.value = "http://127.0.0.1:8545 · chainId 31337";
+  cf.appendChild(ci);
+  box.appendChild(cf);
+  const crow = el("div", "row");
+  crow.appendChild(el("span", "chip warn", "anvil-local · 未启动"));
+  const sb = el("button", "hint", "启动");
+  sb.onclick = () => say("sys", "anvil-local 启动 · 健康检查 eth_chainId 应答 0x7a69");
+  crow.appendChild(sb);
+  crow.appendChild(el("span", "card-s", "本地链由能力层托管，起停在「全局 · 能力」"));
+  box.appendChild(crow);
+  box.appendChild(el("div", "note", "断言形态：余额增减、交易提交——链上状态模型改不动，属于 tier1/tier2 的锚。"));
+  return box;
+}
+
+function sectDanger() {
+  const box = el("div", "box");
+  box.appendChild(el("div", "warnline", "删除项目会级联删除它的用例、运行记录与基线，需要二次确认。这类动作在非本机域名上默认被护栏拦截。"));
+  const b = el("button", "hint", "删除项目");
+  b.style.marginTop = "10px";
+  b.onclick = () => alert("原型：真实实现会二次确认并级联删除。");
+  box.appendChild(b);
+  return box;
+}
+
+/* ---------- 运行时与偏好的分节（挂在「设置」下） ---------- */
+function sectProc() {
+  const box = el("div");
+  const t = el("table");
+  t.innerHTML = "<thead><tr><th>进程</th><th>状态</th><th>pid</th><th>心跳</th><th>重启</th><th>当前任务</th><th>累计成本</th></tr></thead>";
+  const tb = el("tbody");
+  [["gateway", "运行中", "58752", "0s", 0, "serving", "0 tok · 0.0s"],
+   ["agent", "运行中", "58754", "0s", 0, "run wf-mt12q57n", "27 517 tok · 24 min"],
+   ["runner-1", "运行中", "58755", "1s", 0, "exec US-18-3", "0 tok · 9.3 min"],
+   ["anvil-local", "未启动", "—", "—", 0, "—", "—"],
+   ["model-proxy", "已停止", "—", "—", 7, "—", "—"]].forEach((r) => {
+    const tr = el("tr");
+    tr.appendChild(el("td", "small", r[0]));
+    const td = el("td", "small");
+    td.appendChild(el("span", r[1] === "运行中" ? "chip machine" : "chip warn", r[1]));
+    tr.appendChild(td);
+    r.slice(2).forEach((c) => tr.appendChild(el("td", "small", String(c))));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  const prow = el("div", "row");
+  prow.style.marginTop = "9px";
+  ["重启", "停止", "杀掉当前执行"].forEach((label) => {
+    const b = el("button", "hint", label);
+    b.onclick = () => say("sys", `${label} · 崩溃重启循环中的进程也停得掉`);
+    prow.appendChild(b);
+  });
+  box.appendChild(prow);
+  box.appendChild(el("div", "note", "runner 崩溃不自动重启：一次没意义的重试应该浮上来，而不是被悄悄补上。"));
+  return box;
+}
+
+function sectCap() {
+  const box = el("div");
+  [["anvil-local", "chain", "anvil --chain-id 31337 --port 8545", "rpc eth_chainId", "未启动"],
+   ["model-proxy", "model", "node scripts/model-proxy.mjs", "http :8010/v1/models", "已停止"]].forEach(([id, kind, cmd, hc, st]) => {
+    const b = el("div", "box");
+    b.style.marginBottom = "8px";
+    const r = el("div", "row");
+    r.appendChild(el("span", "card-t", id));
+    r.appendChild(el("span", "chip machine", kind));
+    r.appendChild(el("span", "chip warn", st));
+    const go = el("button", "hint", "启动");
+    go.onclick = () => say("sys", id + " 启动中 · 健康检查会告诉你它是不是真的就绪");
+    r.appendChild(go);
+    b.appendChild(r);
+    b.appendChild(el("div", "card-s", cmd));
+    b.appendChild(el("div", "card-s", "健康检查：" + hc));
+    box.appendChild(b);
+  });
+  const ask = el("button", "send", "让 agent 起草一个能力");
+  ask.onclick = () => {
+    S.view = "ws";
+    render();
+    say("you", "给我一个 mock 后端能力，用 node 跑 scripts/mock.js，就绪检查 http://127.0.0.1:4010/health");
+    setTimeout(() => say("bot", "草稿已生成：<span class='mono'>{id: mock-api, kind: mock, command: node, args:[scripts/mock.js], healthcheck:{http, :4010/health}}</span><br><b>校验通过</b>，可以保存。命令必须是裸程序名——shell 当命令会让被审阅的那行不是真正跑的那行。"));
+  };
+  box.appendChild(ask);
+  box.appendChild(el("div", "note", "「运行中」不等于「就绪」：没有健康检查的 recipe，只能告诉你进程没退出。"));
+  return box;
+}
+
+function sectModel() {
+  const box = el("div", "box");
+  const f = el("div", "field");
+  f.appendChild(el("label", null, "端点"));
+  const i = el("input"); i.value = "http://127.0.0.1:8000/v1 · Qwen3.8-27B-4bit";
+  f.appendChild(i);
+  box.appendChild(f);
+  const g = el("div", "field");
+  g.appendChild(el("label", null, "串行闸（并发）"));
+  const sel = el("select");
+  ["1（默认）", "2", "4"].forEach((o) => sel.appendChild(new Option(o, o)));
+  g.appendChild(sel);
+  box.appendChild(g);
+  box.appendChild(el("div", "note", "模型调用全局串行，与执行并发解耦：浏览器可以并行，这个模型不行——并发只会让它更慢，还会让每一步的耗时失去意义。"));
+  return box;
+}
+
+function sectPrompt() {
+  const box = el("div", "box");
+  const pf = el("div", "field");
+  pf.appendChild(el("label", null, "模板"));
+  const psel = el("select");
+  ["explore", "exploreDapp", "generateCode"].forEach((o) => psel.appendChild(new Option(o, o)));
+  pf.appendChild(psel);
+  const pta = el("textarea");
+  pta.style.minHeight = "150px";
+  pta.value = "You are generating a Midscene.js test using the agent API.\nAvailable calls: aiAction / aiInput / aiAssert.\nCRITICAL: never fabricate credentials — use ${env.*} / ${secret.*}.";
+  pf.appendChild(pta);
+  box.appendChild(pf);
+  box.appendChild(el("div", "warnline", "改这里任意一条，提示词指纹就会从 19da4de9 变成别的。正在进行中的配对比较会因此被判为不可比——而不是把差异悄悄算到某一臂上。"));
+  return box;
+}
+
+function sectPref() {
+  const box = el("div", "box");
+  const lf = el("div", "field");
+  lf.appendChild(el("label", null, "界面语言"));
+  const lseg = el("div", "seg");
+  [["zh", "中文"], ["en", "English"], ["ja", "日本語"]].forEach(([k, label]) => {
+    const b = el("button", null, label);
+    b.setAttribute("aria-pressed", String(CFG.lang === k));
+    b.onclick = () => { CFG.lang = k; render(); };
+    lseg.appendChild(b);
+  });
+  lf.appendChild(lseg);
+  box.appendChild(lf);
+  const drow = el("div", "row");
+  const cb = el("input"); cb.type = "checkbox"; cb.checked = CFG.llmDebug;
+  cb.onchange = () => { CFG.llmDebug = cb.checked; render(); };
+  drow.append(cb, el("span", "card-s", "LLM 调试日志：逐次请求与回复落盘，用来调提示词"));
+  box.appendChild(drow);
+  return box;
+}
+
+seedChat();
+render();
+</script>

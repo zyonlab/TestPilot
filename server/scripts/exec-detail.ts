@@ -1,0 +1,13 @@
+import { config } from "dotenv";
+import { join, resolve } from "node:path";
+config({ path: join(resolve(import.meta.dirname, "../.."), "server/.env"), quiet: true } as never);
+const { runLedger } = await import("../src/runService.js");
+const [projectId, executionId] = process.argv.slice(2);
+const l = runLedger();
+const row = l.db.prepare("SELECT resultRevision FROM workflow_executions WHERE id=?").get(executionId) as { resultRevision: string };
+const c = l.readRevision(row.resultRevision, projectId!).content as Record<string, unknown>;
+console.log("top keys:", Object.keys(c).join(", "));
+console.log("top:", JSON.stringify({ ...c, results: undefined }, null, 1).slice(0, 1200));
+const first = (c.results as Array<Record<string, unknown>>)[0];
+console.log("first result keys:", Object.keys(first).join(", "));
+console.log(JSON.stringify({ ...first, pngBuffers: undefined, screenshots: undefined, modelRequests: Array.isArray(first.modelRequests) ? (first.modelRequests as unknown[]).length : first.modelRequests }, null, 1).slice(0, 1800));

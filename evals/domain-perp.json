@@ -1,0 +1,85 @@
+{
+  "id": "domain-perp",
+  "title": "装 vs 卸领域 REFERENCE：合约交易的规则让生成器写出能反驳产品的用例吗",
+  "why": "对着观察写的用例只能发现产品变了，永远发现不了产品错了。REFERENCE-domain-perp.md 是十条能变成判据的不变量；把它作为可选文件装上或卸掉，其余（skill 版本、材料、模型、gold）全同，看用例分布与覆盖率差在哪。这是「领域知识让 agent 生成的合约用例 P0 命中率从 X 到 Y」那句话唯一的来源。",
+  "graphId": "g1-text-cases",
+  "goldPath": "benchmark/hyperliquid-testnet/gold.json",
+  "casesNode": "gate",
+  "a": {
+    "label": "卸掉领域 REFERENCE",
+    "ablate": [
+      "domain-perp"
+    ]
+  },
+  "b": {
+    "label": "装着领域 REFERENCE（现状）",
+    "ablate": []
+  },
+  "expect": {
+    "direction": "b-better",
+    "note": "2026-09-07 跑之前写（见 docs/build-log/04）。① b 臂「反驳型」用例更多：expected 里出现被拒 / 不变 / 不得超过，且 oracle 是 kind: api；② 覆盖率不一定更高——十条规则会把注意力从观察到的屏幕拉走，按屏幕抽的 heldOut 可能反而少命中；③ 最可能的白跑形状：REFERENCE 太长被检索截掉——先数两臂产物里 kind: api 的比例再读分。gold 由人复核冻结前，只数产物，不读分。"
+  },
+  "result": {
+    "at": "2026-09-08",
+    "status": "两臂各 3 次产物已跑，但**都不算数**；分数仍等人复核的 gold",
+    "runtime": "claude-code",
+    "materialsHash": "070839f69ea51bc6",
+    "model": "qwen3.8-flash@dashscope",
+    "limit": 3,
+    "arms_as_run": {
+      "b_reference_on": [
+        {
+          "run": "20260908T075210",
+          "cases": 20,
+          "api": 0,
+          "refuting": 13,
+          "gate": 1.0,
+          "tokens": 25874
+        },
+        {
+          "run": "20260908T075823",
+          "cases": 21,
+          "api": 0,
+          "refuting": 13,
+          "gate": 1.0,
+          "tokens": 25784
+        },
+        {
+          "run": "20260908T080006",
+          "cases": 21,
+          "api": 0,
+          "refuting": 13,
+          "gate": 0.952,
+          "tokens": 27039
+        }
+      ],
+      "a_reference_off_INVALID": [
+        {
+          "run": "20260908T074351",
+          "cases": 14,
+          "api": 0,
+          "refuting": 7,
+          "ablated": []
+        },
+        {
+          "run": "20260908T074708",
+          "cases": 9,
+          "api": 0,
+          "refuting": 3,
+          "ablated": []
+        },
+        {
+          "run": "20260908T075023",
+          "cases": 22,
+          "api": 0,
+          "refuting": 11,
+          "ablated": []
+        }
+      ]
+    },
+    "why_invalid": "① a 臂三次 meta 里 `ablated: []`——agent 照 SKILL.md「不要改参数」把话术里的 `ablate` 丢了，两臂其实是同一配置（所以 refuting 7/3/11 vs 13/13/13 是同配置的抖动，n=3 就有这么大）；② 两臂 `kind: api` 都是 0：`CASES_SCHEMA` 的 oracle.kind enum 没有 `api`，约束解码产不出提示词要的形式——`expected` 里写着 `clearinghouseState…szi = 0.001`，oracle 却是 `text`。两处都修了（schema 加 api；`ablate` 走 MCP env `TP_ABLATE` 兜底 + skill 明说原样传）。",
+    "rerun_blocked_by": "重跑第一次时 DashScope 回 403 `AllocationQuota.FreeTierOnly`（免费额度用尽，需充值或关掉「仅用免费额度」）。修后的两臂一次都没跑成。",
+    "prediction_check": "预判 ③（白跑形状：先数 api 比例再读分）正是这次抓到问题的方式；① ② 要等修后的重跑。",
+    "rerun": "node $S/arm-runs.mjs claude-code 3 benchmark/hyperliquid-testnet/materials 3 t12-a domain-perp && node $S/arm-runs.mjs claude-code 3 benchmark/hyperliquid-testnet/materials 3 t12-b（驱动脚本见 memory testpilot-runtimes-ops）"
+  }
+}

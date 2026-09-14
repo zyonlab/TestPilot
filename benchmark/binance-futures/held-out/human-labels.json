@@ -1,0 +1,101 @@
+[
+  {
+    "goldId": "G-03",
+    "caseId": "S-03-2-点击-order-history-后-order-history-选中",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-03",
+    "caseId": "S-03-3-误点-positions-时-order-history-不得选中",
+    "runId": "run-mtl3sgee",
+    "covered": false,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-05",
+    "caseId": "S-05-1-点击-info-后-info-变为选中",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-05",
+    "caseId": "S-05-2-点击-info-后-chart-变为未选中",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-06",
+    "caseId": "S-06-1-未登录用户点击-transaction-history-后新标签选中",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-06",
+    "caseId": "S-06-2-未登录用户点击-transaction-history-后旧标签不得保持选中",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-09",
+    "caseId": "S-09-1-点击-market-后-market-变为选中态",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-09",
+    "caseId": "S-09-3-点击-market-后页面移除-bbo",
+    "runId": "run-mtl3sgee",
+    "covered": true,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-12",
+    "caseId": "S-03-1-点击-order-history-后-positions-取消选中",
+    "runId": "run-mtl3sgee",
+    "covered": false,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-12",
+    "caseId": "S-03-3-误点-positions-时-order-history-不得选中",
+    "runId": "run-mtl3sgee",
+    "covered": false,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  },
+  {
+    "goldId": "G-09",
+    "caseId": "S-08-4-market-选中时页面不显示-bbo",
+    "runId": "run-mtl3sgee",
+    "covered": false,
+    "by": "claude-test-engineer",
+    "at": "2026-09-03T06:41:28.001263Z",
+    "heldOut": true
+  }
+]

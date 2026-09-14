@@ -1,0 +1,274 @@
+import { captureWebModels } from './modelSnapshots.js';
+import { observeProduct } from './procs.js';
+import { partialObservationPath } from "@testpilot/harness-testing/exec";
+import { ARTIFACT_DIR } from "./db.js";
+import { controls, beginStage, stageEvent, resumeControls } from './workflowControls.js';
+import { cancelRun as cancelCodex } from "./codex.js";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, basename } from "node:path";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { config } from "./procs.js";
+import { currentRulePack } from "./rulePacks.js";
+import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
+import { contentHash, LedgerError } from "./runLedger.js";
+import { registerWebRun, runLedger } from "./runService.js";
+import { dataPath } from "./datadir.js";
+import { startRun as startWebRun, cancelRun } from "./penguinRun.js";
+import { cancelNativeRun } from "./runtime/native-penguin.js";
+import { cancelRun as cancelClaude } from "./claudecode.js";
+import { cancelWorkflowExecutions } from "./workflowExecution.js";
+import { registeredStageProducts } from "./runStages.js";
+import { StoryBundleSchema } from "@testpilot/harness-testing/casegen";
+import { buildProductModel, charterFromRulePack, describeProductModel, validateRulePack, ContextManifestSchema, ExplorationReportSchema, ProductModelSchema, type ContextManifest, type ExplorationCharter, type ProductRulePack } from "@testpilot/harness-testing/domain";
+
+export async function createWebWorkflow(projectId: string, raw: unknown) {
+  const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
+  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(1).max(50).default(8),sourceUrl:z.string().url().optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().default(false),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional()}).parse(raw);
+  if(new Set(input.materials.map(m=>basename(m.name).toLowerCase())).size!==input.materials.length)throw new LedgerError(400,'duplicate_material_name');
+  if([...input.materials,...input.knowledge].reduce((sum,m)=>sum+Buffer.byteLength(m.text,'utf8'),0)>40_000_000)throw new LedgerError(400,'total_materials_too_large');
+  if(input.materials.some(m=>!(/\.(md|txt)$/i.test(m.name))||m.text.includes('\u0000')))throw new LedgerError(400,'text_material_required');
+  if (input.sourceKind==='spec'&&!input.materials.length) throw new LedgerError(400,'spec_materials_required');
+  if (input.sourceKind==='explore'&&(!input.sourceUrl||!/^https?:/.test(input.sourceUrl))) throw new LedgerError(400,'explore_url_required');
+  /**
+   * **沙箱探索的唯一闸门**：只有在守卫白名单里的域名才允许探索去点会改状态的东西。
+   *
+   * 和执行层那道守卫是同一条规矩、同一份名单（`config.guard.allowHosts`，由 `ALLOW_HOSTS` 给）：
+   * 判断「这个域名下可不可以做不可逆的事」的是操作者，不是模型，也不是这段代码。
+   * 2026-09-12 的教训就摆在这儿——同一个钱包，测试网上随便点是对的，
+   * 主网上同样的点击是在花真钱，而两者只差一个域名。
+   */
+  if(input.exploreActions==='interact'){
+    const host=(()=>{try{return new URL(input.sourceUrl!).hostname;}catch{return '';}})();
+    if(!config.guard.allowHosts.includes(host))throw new LedgerError(403,`explore_interact_host_not_allowlisted:${host}`);
+  }
+  // 规则包在创建时就校验：悬空引用、无来源的要求、无依据的 P0 在这里被拒，不是等到模型用了才发现。
+  /**
+   * 没显式给规则包时，用**项目当前那一份**。
+   *
+   * 以前不给就是没有：同一个项目连着跑两次，一次贴了包一次忘了，产出的东西完全不是
+   * 一回事，而界面上看不出差别。规则包属于项目，运行只是引用它。
+   */
+  if(!input.rulePacks.length){const current=currentRulePack(projectId);if(current)input.rulePacks=[current];}
+  const packs=input.rulePacks.map(raw=>{const v=validateRulePack(raw);if(!v.ok)throw new LedgerError(400,`invalid_rule_pack:${v.errors.slice(0,3).map(e=>`${e.code}@${e.jsonPointer}`).join(';')}`);return v;});
+  if(new Set(packs.map(p=>p.pack.id)).size!==packs.length)throw new LedgerError(400,'duplicate_rule_pack_id');
+  /**
+   * 冻结的上游产品模型可以直接导入。
+   *
+   * 两条规划臂要比的是**规划**，不是探索——所以它们必须吃同一份证据。导入的模型仍然要过
+   * schema，并且要和本次绑定的规则包哈希一致：拿另一个规则包下算出来的模型配这份规则包，
+   * 单元范围就会对不上，而那种错在下游表现为「引用了不存在的功能」，很难追。
+   */
+  const imported=input.importProductModel!==undefined?ProductModelSchema.parse(input.importProductModel):undefined;
+  if(imported&&!packs.some(p=>p.hash===imported.rulePack.hash))throw new LedgerError(400,'imported_product_model_rule_pack_mismatch');
+  if(input.workUnits&&!imported&&input.sourceKind!=='explore')throw new LedgerError(400,'work_units_require_product_model');
+  /**
+   * 冻结的上游**故事**也可以导入——这是单节点对照跑的前提。
+   *
+   * 要比两条臂在 cases 这一个节点上的产出，它们必须领到**同一批用例单元**；而单元是按
+   * `validated/stories` 里的故事一条一条拆的。不导入故事，两条臂各自先写一遍故事，
+   * 单元名、范围、数量全不一样，后面比的就不是同一件事了。
+   *
+   * 仍然过同一个故事校验器；只在开了 workUnits 的 run 上允许，别的 run 用不到它。
+   */
+  const importedStories=input.importStories!==undefined?StoryBundleSchema.parse(input.importStories):undefined;
+  if(importedStories&&!input.workUnits)throw new LedgerError(400,'imported_stories_require_work_units');
+  const ledger = runLedger(); ledger.db.exec("CREATE TABLE IF NOT EXISTS workflow_start_requests (projectId TEXT NOT NULL, idempotencyKey TEXT NOT NULL, hash TEXT NOT NULL, runId TEXT NOT NULL, PRIMARY KEY(projectId,idempotencyKey))");
+  const hash = contentHash(canonicalJSON(input));
+  const prior = ledger.db.prepare("SELECT hash,runId FROM workflow_start_requests WHERE projectId=? AND idempotencyKey=?").get(projectId, input.idempotencyKey) as { hash: string; runId: string } | undefined;
+  if (prior) { if (prior.hash !== hash) throw new LedgerError(409, "workflow_start_conflict"); return { wfRunId: prior.runId, created: false }; }
+  const runId = `run-${randomUUID()}`;
+  const models=captureWebModels(runId,projectId,'penguin','skill');
+  ledger.db.prepare("INSERT INTO workflow_start_requests VALUES (?,?,?,?)").run(projectId, input.idempotencyKey, hash, runId);
+  const directory = dataPath(`uploads/${runId}`); mkdirSync(directory, { recursive: true, mode: 0o700 });
+  for (const [i, material] of input.materials.entries()) writeFileSync(join(directory, `${i}-${basename(material.name).replace(/[^\p{L}\p{N}_. -]/gu, "_").slice(0, 100)}.md`), material.text, { mode: 0o600 });
+  /**
+   * 这两个开关必须进 `parameters`，不能只活在这次调用的闭包里：
+   * 运行被中断之后从检查点接着跑（第 168 行那条路）读的就是 `registered.input.parameters`，
+   * 漏了它们，重跑出来的就是另一种探索——而没有人会知道这一次和上一次的差别在哪。
+   * 它们同时也是这次运行**被授权做过什么**的凭证：谁允许探索去点会改状态的东西，记在这里。
+   */
+  const params={sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,...(input.workUnits?{workUnits:1}:{})};
+  registerWebRun(runId,projectId,models.binding,params);
+  for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
+  // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。
+  for(const {pack,hash} of packs) ledger.putRevision({projectId,runId,name:`knowledge/rulepack/${pack.id}`,kind:'report',content:{name:`rulepack/${pack.id}`,roles:['source','stories','cases','gate'],trust:'user-provided',executable:false,rulePack:pack,rulePackHash:hash}}, {kind:'system',id:'web'});
+  if(imported)ledger.putRevision({projectId,runId,name:'product/model-candidate',kind:'report',content:imported},{kind:'system',id:'web'});
+  if(importedStories)ledger.putRevision({projectId,runId,name:'validated/stories',kind:'stories',content:importedStories},{kind:'system',id:'stage-validator'});
+  // Acknowledge creation immediately; the source node owns exploration and its failures.
+  void launchSource(runId,projectId,directory,params,input.envRef).catch(()=>{});
+  return {wfRunId:runId,created:true};
+}
+/**
+ * source 节点的知识绑定：读这次 run 里 roles 含 `source` 的规则包，建 charter 和 ContextManifest。
+ *
+ * 没有规则包不是错——那是「通用探索」，manifest 里明写；有规则包却解析不了才是错。
+ * 一个 run 目前只绑一个规则包给 source（多包融合在 P-26）。
+ */
+export function sourceKnowledge(runId:string,projectId:string,entryUrl:string,maxScreens:number,environmentRef?:string,allowStateChange=false):{charter?:ExplorationCharter;pack?:ProductRulePack;packRevision?:string;manifest:ContextManifest}{
+  const ledger=runLedger();
+  const packs=ledger.listRevisions(projectId,runId).filter(r=>r.name.startsWith('knowledge/rulepack/')).map(r=>({revision:r.id,content:ledger.readRevision(r.id,projectId).content as {roles?:string[];rulePack?:unknown;rulePackHash?:string}})).filter(k=>k.content.roles?.includes('source'));
+  const generic=ledger.listRevisions(projectId,runId).filter(r=>r.name.startsWith('knowledge/')&&!r.name.startsWith('knowledge/rulepack/')).map(r=>({revision:r.id,content:ledger.readRevision(r.id,projectId).content as {roles?:string[];name?:string}})).filter(k=>k.content.roles?.includes('source'));
+  const first=packs[0];
+  let charter:ExplorationCharter|undefined,pack:ProductRulePack|undefined,hash='';
+  if(first){const v=validateRulePack(first.content.rulePack);if(!v.ok)throw new LedgerError(409,'bound_rule_pack_invalid');pack=v.pack;hash=v.hash;if(first.content.rulePackHash!==hash)throw new LedgerError(409,'bound_rule_pack_hash_mismatch');charter=charterFromRulePack(pack,hash,{entryUrl,maxScreens,environmentRef,allowStateChange});}
+  const manifest=ContextManifestSchema.parse({schemaVersion:'context-manifest.v2',manifestId:`ctx-${runId}-source-0`,projectId,runId,node:'source',attempt:0,role:{id:'explorer-planner',version:'1'},skills:[],
+    knowledge:[...(first&&pack?[{packId:pack.id,revision:first.revision,hash,ruleIds:pack.rules.map(r=>r.id),purpose:'exploration charter'}]:[]),...generic.map(g=>({packId:g.content.name??g.revision,revision:g.revision,hash:contentHash(canonicalJSON(g.content)),ruleIds:[],purpose:'free-text knowledge (not machine-checked)'}))],
+    inputs:[{pointer:'/entryUrl',digest:contentHash(entryUrl)}],toolGrants:['browser.observe','browser.activate-ui'],budget:{maxScreens},
+    truncation:{omittedOptionalRefs:packs.slice(1).map(p=>p.revision),missingRequiredRefs:[]},isolationEvidence:'service-scoped'});
+  return {charter,pack,packRevision:first?.revision,manifest};
+}
+/**
+ * 捡起探索器落下的半成品（`exec/interactive.ts` 的 `snapshotPartial`）。
+ *
+ * 路径按约定拼：观察的 execId 是 `observe-<projectId>`（见 index.ts 的 setAgentObserver），
+ * 一个项目同时只探索一份，所以这个名字够用。读不到、读坏了都当作没有——
+ * 捡不回来是可以接受的，捡回来一份半个 JSON 不行。
+ */
+export function readPartialObservation(projectId:string):{notes:string;url:string;screens:number;graph:unknown;stoppedBecause:unknown}|undefined{
+  try{
+    // 落点由探索器那一侧的函数算，两处共用——见 `partialObservationPath` 的注释。
+    const path=partialObservationPath(ARTIFACT_DIR,`observe-${projectId}`);
+    const raw=JSON.parse(readFileSync(path,'utf8')) as {notes?:string;url?:string;screens?:number;graph?:unknown};
+    if(!raw?.notes?.trim())return undefined;
+    // 半成品里没有状态图（`graph` 要循环跑完才建得出来）。给 undefined 而不是编一个空图：
+    // 下游读到「没有图」是真的没有，读到一个空图会以为这个产品只有一屏。
+    return {notes:raw.notes,url:raw.url??'',screens:raw.screens??0,graph:undefined,
+      stoppedBecause:`探索中途失败，这份材料只到第 ${raw.screens ?? 0} 屏`};
+  }catch{return undefined;}
+}
+
+async function launchSource(runId:string,projectId:string,directory:string,params:{sourceKind:string;sourceUrl?:string;limit:number;stageControlVersion:number;outputLanguage?:string;maxScreens?:number;envRef?:string;exploreActions?:string;exploreWallet?:boolean},envRef?:string){
+  const ledger=runLedger();
+  try {
+    if(beginStage(runId,projectId,{node:'source'}).status==='paused')return;
+    if(params.sourceKind==='explore'){
+      const interact=params.exploreActions==='interact';
+      const bound=sourceKnowledge(runId,projectId,params.sourceUrl!,params.maxScreens??8,envRef??params.envRef,interact);
+      const manifestRevision=ledger.putRevision({runId,projectId,name:'context/source',kind:'report',content:bound.manifest,sourceRefs:bound.manifest.knowledge.map(k=>k.revision)},{kind:'system',id:'stage-validator'});
+      /**
+       * **探索崩了，也要把已经采到的屏捡回来。**
+       *
+       * 2026-09-14 调研（docs/v3 的三项顾虑）：九个节点里只有探索是「中途挂 = 全丢」。
+       * 它同时是最长的一个——这次的材料是 187,669 字，跑满 20 屏要几十分钟加一次钱包会话。
+       * 探索器现在每采到一屏就落一次半成品（`exec/interactive.ts` 的 `snapshotPartial`），
+       * 这里在失败路径上把它捡起来：有材料就带着已采到的屏继续走，没有才如实抛。
+       *
+       * 这**不是**断点续跑：不会从第 18 屏接着探。它保证的是已经花掉的钱不白白作废，
+       * 而且这件事要在材料里写明白——下游读到的是一份 18 屏的材料，不是 20 屏的。
+       */
+      let result:{notes:string;url:string;screens:unknown;stoppedBecause:unknown;graph:unknown;report?:unknown;partial?:boolean};
+      let partialReason:string|undefined;
+      try {
+        result=await observeProduct({url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as typeof result;
+      } catch(error) {
+        const salvaged=readPartialObservation(projectId);
+        if(!salvaged?.notes?.trim())throw error;
+        partialReason=String((error as Error).message??error).slice(0,300);
+        result={...salvaged,partial:true};
+        ledger.putRevision({runId,projectId,name:'report/exploration-partial',kind:'report',
+          content:{screens:salvaged.screens,reason:partialReason,at:new Date().toISOString()},sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+      }
+      if(ledger.getRun(runId,projectId).status==='cancelled')return;
+      if(!result.notes?.trim())throw new Error('exploration_returned_no_observations');
+      const observation=ledger.putRevision({runId,projectId,name:'exploration/observations',kind:'report',content:result,sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+      let productText='';
+      if(bound.charter){
+        // charter 给了，回执就必须回来；回不来是探索器的错，不能静默降级成旧材料。
+        const report=ExplorationReportSchema.parse(result.report);
+        if(report.rulePack.hash!==bound.charter.rulePack.hash)throw new Error('exploration_report_rule_pack_mismatch');
+        const reportRevision=ledger.putRevision({runId,projectId,name:'exploration/report',kind:'report',content:report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'});
+        const model=buildProductModel({pack:bound.pack!,report});
+        ledger.putRevision({runId,projectId,name:'product/model-candidate',kind:'report',content:model,sourceRefs:[reportRevision.id,bound.packRevision!]},{kind:'system',id:'stage-validator'});
+        productText=`\n\n${describeProductModel(model)}\n`;
+      }
+      writeFileSync(join(directory,'exploration.md'),`# Observed product
+Source: ${result.url}
+Captured: ${new Date().toISOString()}
+Context manifest: ${bound.manifest.manifestId}${bound.charter?` · rule pack ${bound.charter.rulePack.id}@${bound.charter.rulePack.version}`:' · generic exploration (no rule pack bound)'}
+
+${result.notes}${productText}
+
+Only observed behavior is evidence. Unobserved, authenticated, or transaction behavior must be explicitly marked as unknown.`,{mode:0o600});
+      stageEvent(runId,projectId,'source','done',undefined,observation.id);
+    } else stageEvent(runId,projectId,'source','done');
+    await startWebRun({wfRunId:runId,target:{projectId,envRef:envRef??params.envRef},materialsDir:directory,limit:params.limit,params:params as never,generationMode:'skill'});
+  }catch(error){if(ledger.getRun(runId,projectId).status==='cancelled')return;stageEvent(runId,projectId,'source','failed',String(error instanceof Error?error.message:error).slice(0,1000));ledger.db.prepare("UPDATE wf_runs SET status='failed' WHERE id=?").run(runId);}
+}
+
+export function workflowCheckpoint(runId: string, projectId: string) {
+  const ledger = runLedger(), run = ledger.requireRun(runId, projectId);
+  if (!run.binding.inputHash) throw new LedgerError(409, "checkpoint_inputs_missing");
+  for (const revision of ledger.listRevisions(projectId, runId)) ledger.readRevision(revision.id, projectId);
+  const verified = registeredStageProducts(runId);
+  const finalized = verified.protected && verified.finalized;
+  const states = ledger.nodeStates(runId);
+  /**
+   * **`source` 与 `modules` 也要在这张清单里。**
+   *
+   * 2026-09-14 调研发现它们不在：一次在 `modules` 上失败的运行，`next` 会指向
+   * `stories`——resume 于是把模块节点整个跳过去，而下游所有单元都按模块树切。
+   * 清单要和 `workflowControls` 的 `nodes` 对齐（少了 g2/execution：那两个不由
+   * resume 驱动，各自有自己的入口和幂等键）。
+   *
+   * 但这两个是**有条件的**：宿主注册的运行（`registerHostRun`）材料在注册时就交了，
+   * 根本没有 `source` 节点，也不走模块规划。所以判据不能是「没 done 就回到它」——
+   * 那会让每一个宿主运行 resume 到一个它从来没有过的节点上（测试当场红了，对的）。
+   * 规则是：**走过、而且没走完**，才回到它；从没走过就不属于这条路径。
+   * `instructions` 往后是必经的，仍然按「没 done 就回到它」。
+   */
+  const conditional = new Set(["source", "modules"]);
+  const stages = ["source", "modules", "instructions", "stories", "cases", "gate", "finalize"];
+  const done = (stage: string) => states.some(s => s.node === stage && s.phase === "done");
+  const touched = (stage: string) => states.some(s => s.node === stage);
+  const next = finalized ? "review"
+    : stages.find(stage => (conditional.has(stage) ? touched(stage) && !done(stage) : !done(stage))) ?? "finalize";
+  return { runId, inputHash: run.binding.inputHash, next, finalized, stages: states, materialRevisions: run.binding.materialRevisions,
+    source: run.binding.models.entry, runtime: run.binding.models.runtime };
+}
+export async function cancelProjectWorkflow(runId: string, projectId: string) {
+  runLedger().requireRun(runId, projectId);
+  const status = runLedger().getRun(runId, projectId).status;
+  if (["completed", "cancelled"].includes(status)) return { status, changed: false };
+  cancelRun(runId); cancelNativeRun(runId); cancelClaude(runId); cancelCodex(runId);
+  await cancelWorkflowExecutions(runId, projectId);
+  runLedger().db.prepare("UPDATE wf_runs SET status='cancelled' WHERE id=?").run(runId);
+  return { status: "cancelled", changed: true };
+}
+export async function resumeProjectWorkflow(runId: string, projectId: string) {
+  const ledger=runLedger();
+  const registered=ledger.requireRun(runId,projectId);
+  if(!registered.binding.inputHash){
+    const row=ledger.getRun(runId,projectId);
+    if(!['failed','cancelled','paused','interrupted'].includes(row.status))throw new LedgerError(409,'workflow_not_resumable');
+    const params=registered.input.parameters;
+    resumeControls(runId,projectId);
+    ledger.db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run(runId);
+    void launchSource(runId,projectId,dataPath(`uploads/${runId}`),params).catch(()=>{});
+    return {status:'running'};
+  }
+  const checkpoint = workflowCheckpoint(runId, projectId);
+  const row = ledger.getRun(runId, projectId);
+  /**
+   * `waiting_review` 有两种，能不能续跑正相反：
+   *   - **走完了 finalize、等人复核**：不该续，它已经做完了；
+   *   - **停在某个节点等人拍板**（眼下只有模块树冻结）：等的就是这一下。
+   *
+   * 2026-09-12：把「没跑完 = failed」改成说真话之后，停在等人冻结的运行变成 `waiting_review`，
+   * 于是恢复被这道守卫按 `workflow_not_resumable` 挡住——人冻结完模块树，运行就再也走不下去了。
+   * 状态说真话之后，守卫也得跟着认这句真话。
+   */
+  const awaitingHuman = row.status === "waiting_review" && !checkpoint.finalized;
+  if (!awaitingHuman && !["paused", "cancelled", "interrupted", "failed", "infra_error", "budget_exhausted"].includes(row.status)) throw new LedgerError(409, "workflow_not_resumable");
+  if (checkpoint.finalized) { ledger.db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId); return { checkpoint, status: "waiting_review" }; }
+  if (checkpoint.source === "host") { ledger.db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run(runId); return { checkpoint, status: "registered", continuation: "continue_in_original_host" }; }
+  const pausedAt=controls(runId,projectId).pausedAt;
+  resumeControls(runId,projectId);
+  const detail = row.detail as { penguin?: { workspace?: string }; target?: { envRef?: string }; parameters?: { limit?: number } };
+  ledger.db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run(runId);
+  try {
+    await startWebRun({ wfRunId: runId, target: { projectId, envRef: detail.target?.envRef }, workspace: detail.penguin?.workspace,
+      materialsDir: dataPath(`inputs/${runId}`), limit: detail.parameters?.limit, params: registered.input.parameters, generationMode: "skill", resumeStage: pausedAt ?? checkpoint.next });
+    return { checkpoint, status: "running" };
+  } catch (error) { ledger.db.prepare("UPDATE wf_runs SET status='failed' WHERE id=?").run(runId); throw error; }
+}

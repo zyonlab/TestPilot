@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "testpilot": {
+      "command": "testpilot-mcp",
+      "env": {
+        "TP_RUNTIME": "codex"
+      }
+    }
+  }
+}

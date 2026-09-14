@@ -1,132 +1,130 @@
 import { create } from "zustand";
 import type {
   ConnectionState,
-  ExploreLog,
   Flakiness,
   ModelConfig,
   Priority,
   Project,
+  ProjectOverview,
   RunRecord,
+  TargetPlatform,
   TestCase,
 } from "./types";
 import { api } from "./api";
-import { usePrefs } from "./prefs";
-
-const API_BASE = "http://localhost:5301";
-// The live-explore SSE connection (module-scoped so stopExplore can close it).
-let exploreES: EventSource | null = null;
-
-let idSeq = 100;
-const nextId = () => `x-${++idSeq}`;
-const clock = () => new Date().toLocaleTimeString("en-GB", { hour12: false });
 
 interface StoreState {
   cases: TestCase[];
   selectedId: string;
   runs: RunRecord[];
   projects: Project[];
+  /** 每个项目的两套账：已批准的资产 与 还没人看的候选。见 ProjectOverview 的注释。 */
+  overviews: Record<string, ProjectOverview>;
   activeProjectId: string;
   backendUp: boolean;
+  projectsLoading: boolean;
+  projectsError: boolean;
+  projectDataLoading: boolean;
+  projectDataError: boolean;
   model: ModelConfig;
   connection: ConnectionState;
   connectionDetail: string;
-  exploring: boolean;
-  exploreLogs: ExploreLog[];
-  exploreUrl: string;
-  exploreDeep: boolean;
-  exploreWeb3: boolean;
   exploreScreenshot: string;
   exploreLastCount: number;
   flakiness: Flakiness[];
 
   loadData: () => Promise<void>;
   loadFlakiness: () => Promise<void>;
+
   setQuarantine: (id: string, quarantined: boolean) => Promise<void>;
-  setExploreDeep: (v: boolean) => void;
-  setExploreWeb3: (v: boolean) => void;
   selectProject: (id: string) => Promise<void>;
   exitProject: () => void;
-  createProject: (name: string, targetUrl: string) => Promise<void>;
+  /** 建成了就把它交出来；后端不通时返回 `undefined`——调用方得能分辨这两种情况。 */
+  createProject: (
+    name: string,
+    targetUrl: string,
+    targetPlatform?: TargetPlatform,
+    materials?: string[],
+  ) => Promise<Project | undefined>;
+  /** Rename / re-point / switch ends. */
+  updateProject: (
+    id: string,
+    patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>,
+  ) => Promise<void>;
   select: (id: string) => void;
   patchCase: (id: string, patch: Partial<TestCase>) => Promise<void>;
   setPriority: (id: string, p: Priority) => Promise<void>;
   generateCode: (id: string) => Promise<void>;
   runCase: (id: string) => Promise<void>;
-  runAllP0: () => void;
-  setExploreUrl: (url: string) => void;
-  startExplore: () => Promise<void>;
-  stopExplore: () => void;
+  runAllP0: () => Promise<void>;
   setModel: (patch: Partial<ModelConfig>) => void;
   testConnection: () => Promise<void>;
 }
+
+let projectSelection = 0;
+let projectListLoad: Promise<void> | undefined;
 
 export const useStore = create<StoreState>((set, get) => ({
   cases: [],
   selectedId: "",
   runs: [],
   projects: [],
+  overviews: {},
   activeProjectId: "",
   backendUp: false,
+  projectsLoading: false,
+  projectsError: false,
+  projectDataLoading: false,
+  projectDataError: false,
   model: {
-    // The no-think proxy (:8010), not the raw model (:8000). The proxy injects
-    // enable_thinking:false so vision requests return fast/clean — the raw endpoint
-    // runs in thinking mode and times out the connection probe. Matches server/.env.
-    baseUrl: "http://127.0.0.1:8010/v1",
+    // The model endpoint itself. The no-think proxy (:8010) is a capability you can start
+    // from the Processes page when you want prompts/responses captured for tuning; it is
+    // not on the default path. Matches server/.env.
+    baseUrl: "http://127.0.0.1:8000/v1",
     apiKey: "1234",
-    modelName: "Qwen3.6-35B-A3B-4bit",
+    modelName: "Qwen3.8-27B-4bit",
     modelFamily: "qwen-vl",
   },
   connection: "idle",
   connectionDetail: "",
-  exploring: false,
-  exploreLogs: [],
-  exploreUrl: "",
-  exploreDeep: false,
-  exploreWeb3: false,
   exploreScreenshot: "",
   exploreLastCount: 0,
   flakiness: [],
 
-  // Load projects/cases/runs from the backend (source of truth). Falls back to the
-  // built-in mock data if the backend is offline, so the UI still works standalone.
-  loadData: async () => {
+  // Refresh the project list without clearing a valid current selection.
+  loadData: () => {
+    if (projectListLoad) return projectListLoad;
+    set({ projectsLoading: true, projectsError: false });
+    projectListLoad = (async () => {
     try {
-      const { projects } = await api.getProjects();
-      if (!projects.length) {
-        // Backend is up but has no projects → a genuinely empty state. Clear the
-        // built-in mock data (which is only a fallback for when the backend is OFFLINE),
-        // otherwise the UI shows a phantom "shop.acme.com" project + mock cases.
-        set({
-          backendUp: true,
-          projects: [],
-          activeProjectId: "",
-          cases: [],
-          runs: [],
-          flakiness: [],
-          selectedId: "",
-          exploreUrl: "",
-          exploreLastCount: 0,
-          exploreScreenshot: "",
-          exploreLogs: [],
-        });
-        return;
-      }
-      // Backend is up and has projects. Do NOT auto-select — Level 0 (the portfolio)
-      // is the default landing. Cases/runs load lazily on enter (selectProject).
-      set({ projects, activeProjectId: "", backendUp: true });
-    } catch {
-      set({ backendUp: false }); // keep mock data
+      const { projects, overviews } = await api.getProjects();
+      if (!Array.isArray(projects)) throw new Error("Invalid project list response");
+      const keepSelection = projects.some((p) => p.id === get().activeProjectId);
+      set({
+        projects, overviews: overviews ?? {}, backendUp: true,
+        ...(!keepSelection ? {
+          activeProjectId: "", cases: [], runs: [], flakiness: [], selectedId: "",
+          exploreLastCount: 0, exploreScreenshot: "", projectDataLoading: false, projectDataError: false,
+        } : {}),
+      });
+    } catch (error) {
+      console.warn("[TestPilot] Project loading failed", error);
+      set({ backendUp: false, projectsError: true });
+    } finally {
+      set({ projectsLoading: false });
+      projectListLoad = undefined;
     }
+    })();
+    return projectListLoad;
   },
 
   loadFlakiness: async () => {
-    const pid = get().activeProjectId;
+    const pid = get().activeProjectId, selection = projectSelection;
     if (!pid) return;
     try {
       const { flakiness } = await api.getFlakiness(pid);
-      set({ flakiness });
+      if (get().activeProjectId === pid && selection === projectSelection) set({ flakiness });
     } catch {
-      set({ flakiness: [] }); // backend offline / no data
+      if (get().activeProjectId === pid && selection === projectSelection) set({ flakiness: [] });
     }
   },
 
@@ -141,53 +139,66 @@ export const useStore = create<StoreState>((set, get) => ({
     } catch {
       // revert on failure
       set((s) => ({
-        cases: s.cases.map((c) =>
-          c.id === id ? { ...c, quarantined: !quarantined } : c,
-        ),
+        cases: s.cases.map((c) => (c.id === id ? { ...c, quarantined: !quarantined } : c)),
       }));
     }
   },
 
-  // Switch the active project → load its cases from the backend.
+  // Select immediately: history loading must not disable workflows or project settings.
   selectProject: async (id) => {
-    const proj = get().projects.find((p) => p.id === id);
-    if (!proj) return;
-    try {
-      const [{ cases }, { runs }] = await Promise.all([
-        api.getCases(id),
-        api.getRuns({ projectId: id }),
-      ]);
-      set({
-        activeProjectId: id,
-        cases,
-        runs, // project-scoped: Runs page now follows the active project
-        exploreUrl: proj.targetUrl,
-        selectedId: cases[0]?.id ?? "",
-      });
-      void get().loadFlakiness();
-    } catch {
-      /* backend offline */
-    }
+    if (!get().projects.some((p) => p.id === id)) return;
+    const selection = ++projectSelection;
+    set({ activeProjectId: id, cases: [], runs: [], flakiness: [], selectedId: "",
+      projectDataLoading: true, projectDataError: false });
+    const [cases, runs] = await Promise.allSettled([api.getCases(id), api.getRuns({ projectId: id })]);
+    // A late response must not replace another project's data (including A → B → A).
+    if (selection !== projectSelection || get().activeProjectId !== id) return;
+    set({
+      cases: cases.status === "fulfilled" ? cases.value.cases : [],
+      runs: runs.status === "fulfilled" ? runs.value.runs : [],
+      selectedId: cases.status === "fulfilled" ? cases.value.cases[0]?.id ?? "" : "",
+      projectDataLoading: false,
+      projectDataError: cases.status === "rejected" || runs.status === "rejected",
+    });
+    void get().loadFlakiness();
   },
 
   // Leave the project → return to the portfolio (Level 0). Clears project-scoped data.
-  exitProject: () =>
+  exitProject: () => {
+    ++projectSelection;
     set({
       activeProjectId: "",
       cases: [],
       runs: [],
       flakiness: [],
       selectedId: "",
-      exploreUrl: "",
-    }),
+      projectDataLoading: false,
+      projectDataError: false,
+    });
+  },
 
-  createProject: async (name, targetUrl) => {
+  createProject: async (name, targetUrl, targetPlatform = "web", materials = []) => {
     try {
-      const { project } = await api.createProject(name, targetUrl);
+      const { project } = await api.createProject(name, targetUrl, targetPlatform, materials);
       set((s) => ({ projects: [...s.projects, project] }));
       await get().selectProject(project.id);
+      return project;
     } catch {
-      /* backend offline */
+      // 后端不通。此前这里静默返回，于是「建好了」和「一个字都没写进去」在界面上
+      // 长得一模一样——表单关掉、列表照旧，人只会以为自己点漏了。
+      return undefined;
+    }
+  },
+
+  updateProject: async (id, patch) => {
+    // Optimistic, then reconciled: the end switch changes what the rest of the UI offers,
+    // and a dropdown that snaps back while a request is in flight reads as a rejection.
+    set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+    try {
+      const { project } = await api.updateProject(id, patch);
+      set((s) => ({ projects: s.projects.map((p) => (p.id === id ? project : p)) }));
+    } catch {
+      await get().loadData();
     }
   },
 
@@ -236,99 +247,54 @@ export const useStore = create<StoreState>((set, get) => ({
       // Single-case runs do NOT enter s.runs — the Runs page is the suite ledger.
       // The case detail shows this run inline (fetched by caseId).
       set((s) => ({ cases: s.cases.map((c) => (c.id === id ? updated : c)) }));
-    } catch {
-      set((s) => ({ cases: s.cases.map((c) => (c.id === id ? { ...c, runStatus: "failed" } : c)) }));
+    } catch (e) {
+      /**
+       * 请求没回来 ≠ 这条用例失败了。
+       *
+       * 此前这里一律写 `runStatus:"failed"`——**界面记下了一个它从没收到过的判决**。
+       * 600 秒超时、网络抖动、网关重启，全都会变成一条红色的用例，而它可能跑得好好的。
+       * 「没拿到结果」是它自己的状态，理由要留着，人才知道该重试还是该去看代码。
+       */
+      set((s) => ({
+        cases: s.cases.map((c) =>
+          c.id === id ? { ...c, runStatus: "unknown", runNote: (e as Error).message } : c,
+        ),
+      }));
     }
   },
 
-  runAllP0: () => {
+  /**
+   * 跑一批 P0。
+   *
+   * 走**队列**，不再每 300ms 直接发一个 POST：那条路不进队列，而 runnerCount 默认是 1，
+   * `pickRunner` 找不到空闲的就把活交给正忙的那个，runner 抛"runner busy"，
+   * 路由 catch 里把用例标成 failed——**把根本没跑成的用例直接标红，而且不留任何记录**。
+   */
+  runAllP0: async () => {
     const p0 = get().cases.filter((c) => c.priority === "P0");
-    p0.forEach((c, i) => window.setTimeout(() => void get().runCase(c.id), i * 300));
-  },
-
-  setExploreUrl: (url) => set({ exploreUrl: url }),
-  setExploreDeep: (v) => set({ exploreDeep: v }),
-  setExploreWeb3: (v) => set({ exploreWeb3: v }),
-
-  startExplore: async () => {
-    if (get().exploring) return;
-    const url = get().exploreUrl;
-    const pid = get().activeProjectId;
-    const pushLog = (message: string, kind: ExploreLog["kind"]) =>
-      set((s) => ({ exploreLogs: [...s.exploreLogs, { id: nextId(), ts: clock(), message, kind }] }));
-
-    if (!get().backendUp || !pid) {
-      pushLog(pid ? "Backend offline — cannot explore" : "Enter a project first", "warn");
-      return;
+    if (!p0.length || !get().backendUp) return;
+    set((s) => ({
+      cases: s.cases.map((c) => (c.priority === "P0" ? { ...c, runStatus: "running" } : c)),
+    }));
+    try {
+      const pid = get().activeProjectId;
+      if (!pid) return;
+      await api.runSuite(pid, "P0");
+      await get().loadData();
+    } catch (e) {
+      set((s) => ({
+        cases: s.cases.map((c) =>
+          c.priority === "P0" ? { ...c, runStatus: "unknown", runNote: (e as Error).message } : c,
+        ),
+      }));
     }
-
-    set({ exploring: true, exploreLogs: [], exploreScreenshot: "", exploreLastCount: 0 });
-    const deep = get().exploreDeep;
-    const web3 = get().exploreWeb3;
-    pushLog(
-      `Exploring ${url} with Midscene${deep ? " (deep crawl)" : ""}${web3 ? " (dapp mode)" : ""}…`,
-      "info",
-    );
-
-    const qs = new URLSearchParams({
-      url,
-      deep: deep ? "1" : "0",
-      web3: web3 ? "1" : "0",
-      lang: usePrefs.getState().lang,
-    }).toString();
-    const es = new EventSource(`${API_BASE}/api/projects/${pid}/explore/stream?${qs}`);
-    exploreES = es;
-    const finish = () => {
-      es.close();
-      if (exploreES === es) exploreES = null;
-      set({ exploring: false });
-    };
-
-    es.onmessage = (e) => {
-      let ev: Record<string, unknown>;
-      try {
-        ev = JSON.parse(e.data);
-      } catch {
-        return;
-      }
-      switch (ev.type) {
-        case "navigated":
-          if (ev.screenshot) set({ exploreScreenshot: ev.screenshot as string });
-          break;
-        case "log":
-          pushLog(ev.message as string, (ev.kind as ExploreLog["kind"]) || "info");
-          break;
-        case "flow": {
-          const c = ev.case as TestCase;
-          set((s) => ({ cases: [...s.cases, c] }));
-          pushLog(`Found flow: ${c.title} → ${c.priority}`, "found");
-          break;
-        }
-        case "done":
-          if (ev.screenshot) set({ exploreScreenshot: ev.screenshot as string });
-          if (!(ev.count as number)) pushLog("No new flows returned by the model", "warn");
-          set({ exploreLastCount: (ev.count as number) || 0 });
-          pushLog("Exploration complete", "info");
-          finish();
-          break;
-        case "error":
-          pushLog(`Explore failed: ${ev.message as string}`, "warn");
-          finish();
-          break;
-      }
-    };
-    // A terminal close also fires onerror; only surface it if we're still exploring.
-    es.onerror = () => {
-      if (get().exploring) pushLog("Exploration stream ended / connection lost", "warn");
-      finish();
-    };
   },
 
-  stopExplore: () => {
-    exploreES?.close();
-    exploreES = null;
-    set({ exploring: false });
-  },
+  /*
+   * 「探索直接产用例」已经下掉（2026-08-21）：观察现在是**材料**，和用户文档一样先经
+   * `spec.compose` 整理成标准规格，再推出故事与用例。观察本身仍然做，在画布上的
+   * `source.explore` 节点里。
+   */
 
   setModel: (patch) =>
     set((s) => ({ model: { ...s.model, ...patch }, connection: "idle", connectionDetail: "" })),

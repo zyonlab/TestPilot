@@ -1,0 +1,306 @@
+{
+  "id": "hyperliquid-testnet-v0-DRAFT",
+  "spec": "benchmark/hyperliquid-testnet/materials/rules.md（2026-09-07 人写的规则层）",
+  "reviewed": false,
+  "note": "**草稿，未经人复核，不能用来打分。** 2026-09-08 从 rules.md 的 12 段机械导出：每段一条，title 是那段的可核对句子，match.anyOf 取自段内的字段名、按钮文案与数字，assertAnyOf 取自能进判据的字段。人要做的：删掉不该考的（G-12 是反向约束，可能该进 outOfScope）、收紧 anyOf、标一半 heldOut，然后在 gold 屏保存并冻结。冻结前 score_run 对这个基准没有可打的分。",
+  "items": [
+    {
+      "id": "G-01",
+      "title": "下单数量按 szDecimals 截断而不是四舍五入",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#1"
+      },
+      "match": {
+        "anyOf": [
+          "截断",
+          "szDecimals",
+          "四舍五入",
+          "0.0016",
+          "szi"
+        ],
+        "assertAnyOf": [
+          "szi",
+          "截断",
+          "0.001"
+        ]
+      }
+    },
+    {
+      "id": "G-02",
+      "title": "价格按 tick 对齐，小数位不超过 6 − szDecimals",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#2"
+      },
+      "match": {
+        "anyOf": [
+          "tick",
+          "小数位",
+          "有效数字",
+          "对齐"
+        ],
+        "assertAnyOf": [
+          "limitPx",
+          "tick",
+          "对齐"
+        ]
+      }
+    },
+    {
+      "id": "G-03",
+      "title": "限价单离参考价超过 80% 被前端拒绝且不进交易所",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#3"
+      },
+      "match": {
+        "anyOf": [
+          "80%",
+          "参考价",
+          "Order price cannot be more than",
+          "historicalOrders"
+        ],
+        "assertAnyOf": [
+          "historicalOrders",
+          "被拒",
+          "80%"
+        ]
+      }
+    },
+    {
+      "id": "G-04",
+      "title": "市价单最大名义价值随最大杠杆分档",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#4"
+      },
+      "match": {
+        "anyOf": [
+          "名义价值",
+          "30,000,000",
+          "5,000,000",
+          "分档",
+          "最大名义"
+        ],
+        "assertAnyOf": [
+          "名义",
+          "上限",
+          "被拒"
+        ]
+      }
+    },
+    {
+      "id": "G-05",
+      "title": "BTC 杠杆按名义价值分档：<10k 40x、10k–50k 25x、≥50k 10x",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#5"
+      },
+      "match": {
+        "anyOf": [
+          "40x",
+          "25x",
+          "10x",
+          "分档",
+          "maxLeverage",
+          "杠杆上限"
+        ],
+        "assertAnyOf": [
+          "leverage",
+          "40",
+          "25",
+          "10"
+        ]
+      }
+    },
+    {
+      "id": "G-06",
+      "title": "杠杆与保证金模式以 clearinghouseState 的 position.leverage 为准",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#6"
+      },
+      "match": {
+        "anyOf": [
+          "leverage.type",
+          "cross",
+          "isolated",
+          "全仓",
+          "逐仓",
+          "position.leverage"
+        ],
+        "assertAnyOf": [
+          "leverage",
+          "cross",
+          "isolated"
+        ]
+      }
+    },
+    {
+      "id": "G-07",
+      "title": "保证金不足时按钮变 Not Enough Margin 且 totalNtlPos 不变",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#7"
+      },
+      "match": {
+        "anyOf": [
+          "Not Enough Margin",
+          "保证金不足",
+          "totalNtlPos",
+          "不可点击"
+        ],
+        "assertAnyOf": [
+          "totalNtlPos",
+          "不变",
+          "Not Enough Margin"
+        ]
+      }
+    },
+    {
+      "id": "G-08",
+      "title": "止盈止损以触发单出现在 frontendOpenOrders，带 triggerPx 与 isTrigger",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#8"
+      },
+      "match": {
+        "anyOf": [
+          "Take Profit",
+          "Stop Market",
+          "triggerPx",
+          "isTrigger",
+          "frontendOpenOrders",
+          "止盈",
+          "止损"
+        ],
+        "assertAnyOf": [
+          "frontendOpenOrders",
+          "Take Profit",
+          "Stop",
+          "isTrigger"
+        ]
+      }
+    },
+    {
+      "id": "G-09",
+      "title": "TP/SL 按百分比输入，触发价同样受 80% 价格带约束",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#9"
+      },
+      "match": {
+        "anyOf": [
+          "Gain",
+          "Loss",
+          "百分比",
+          "触发价",
+          "80%"
+        ],
+        "assertAnyOf": [
+          "触发价",
+          "被拒",
+          "80%"
+        ]
+      }
+    },
+    {
+      "id": "G-10",
+      "title": "撤单后从 openOrders 消失；平仓后币种从 assetPositions 消失",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#10"
+      },
+      "match": {
+        "anyOf": [
+          "openOrders",
+          "撤单",
+          "Cancel",
+          "平仓",
+          "Close",
+          "assetPositions"
+        ],
+        "assertAnyOf": [
+          "openOrders",
+          "assetPositions",
+          "消失",
+          "absent"
+        ]
+      }
+    },
+    {
+      "id": "G-11",
+      "title": "Unified 模式下 accountValue 读 0、余额在 spot，usdClassTransfer 被拒",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#11"
+      },
+      "match": {
+        "anyOf": [
+          "Unified",
+          "Portfolio Margin",
+          "Manual",
+          "spotClearinghouseState",
+          "usdClassTransfer",
+          "accountValue"
+        ],
+        "assertAnyOf": [
+          "accountValue",
+          "spotClearinghouseState",
+          "Action disabled"
+        ]
+      }
+    },
+    {
+      "id": "G-12",
+      "title": "易变读数（资金费率、倒计时、24h 量、标记价）不得钉在判据里",
+      "designMethod": "rule",
+      "expectTier": 1,
+      "reviewed": false,
+      "draftFrom": {
+        "material": "rules.md#12"
+      },
+      "match": {
+        "anyOf": [
+          "资金费率",
+          "倒计时",
+          "24h",
+          "标记价",
+          "预言机价",
+          "funding"
+        ],
+        "assertAnyOf": [
+          "存在",
+          "exists",
+          "两次读数"
+        ]
+      }
+    }
+  ],
+  "outOfScope": [
+    "资金与水龙头（rules.md#13）：环境准备，不是产品行为"
+  ]
+}

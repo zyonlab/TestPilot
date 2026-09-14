@@ -1,0 +1,12 @@
+import { config } from "dotenv";
+import { join, resolve } from "node:path";
+config({ path: join(resolve(import.meta.dirname, "../.."), "server/.env"), quiet: true } as never);
+const { runLedger } = await import("../src/runService.js");
+const rows = runLedger().db.prepare("SELECT json FROM run_work_units WHERE runId=? ORDER BY json").all(process.argv[2]!) as Array<{json:string}>;
+const us = rows.map(r => JSON.parse(r.json));
+console.log("单元数:", us.length);
+const byAttempt = new Map<number, number>();
+for (const u of us) byAttempt.set(u.attempt, (byAttempt.get(u.attempt) ?? 0) + 1);
+console.log("attempt 分布:", JSON.stringify([...byAttempt].sort((a,z)=>a[0]-z[0])));
+console.log("claimedBy:", JSON.stringify([...new Set(us.map(u=>u.claimedBy))]));
+for (const u of us.slice(0, 5)) console.log(` ${u.unitId} ${u.node} ${u.status} attempt=${u.attempt} by=${u.claimedBy} claimedAt=${u.claimedAt} updatedAt=${u.updatedAt}`);

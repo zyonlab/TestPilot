@@ -1,0 +1,14 @@
+{
+  "id": "oracle-grading",
+  "title": "门禁①评判据硬度、并挑出含糊断言，值不值这一步",
+  "why": "判据有据率是这个项目最看重的一个数字，而它靠的是门禁①去评每条断言的硬度、把「工作正常」这类含糊说法挑出来。关掉它以后用例会变多还是变少不重要——要看的是 tier 1 的占比会不会塌，因为一批全是 tier 3 的用例和一批没有用例，在可信度上是同一件事。",
+  "graphId": "g1-text-cases",
+  "goldPath": "fixtures/mock-spec/gold-checklist.json",
+  "casesNode": "gate",
+  "a": { "label": "评判据硬度（现状）", "ablate": [] },
+  "b": { "label": "不评判据硬度", "ablate": ["oracle-grading"] },
+  "expect": {
+    "direction": "unknown",
+    "note": "覆盖率上大概率看不出差别——门禁①不生成用例，只筛选和打标。真正想看的是关掉它之后 tier 分布往哪边偏。如果覆盖率反而更高，那说明它在误杀，那是比「它没用」更需要处理的结论。"
+  }
+}

@@ -48,9 +48,7 @@ export function AppControls({ collapsed = false }: { collapsed?: boolean }) {
             title={l.name}
             className={cn(
               "flex-1 rounded px-1 py-0.5 text-xs font-medium transition-colors",
-              lang === l.code
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground",
+              lang === l.code ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {l.label}

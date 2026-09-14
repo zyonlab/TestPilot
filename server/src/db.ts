@@ -1,3 +1,17 @@
+import { DATA_DIR } from "./datadir.js";
+import type { RunSpend } from "@testpilot/harness-testing";
+import type {
+  ChainAssertion,
+  MachineOracle,
+  OracleCheck,
+  StorageState,
+  VisualDiff,
+  VisualStatus,
+} from "@testpilot/harness-testing";
+// These types describe what crosses the process boundary to the runner, so the domain
+// package owns them; re-exported here because the whole gateway imports them from db.
+export type { ChainAssertion, OracleCheck, StorageState, VisualDiff, VisualStatus };
+
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -5,13 +19,21 @@ import { dirname, resolve } from "node:path";
 import { encryptSecret, decryptSecret } from "./vault.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = resolve(__dirname, "..", ".data");
 mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new Database(resolve(DATA_DIR, "testpilot.db"));
 db.pragma("journal_mode = WAL");
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS model_profiles (
+  projectId TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('planner', 'executor')),
+  version INTEGER NOT NULL, profileJson TEXT NOT NULL, keyEnc TEXT,
+  createdAt TEXT NOT NULL, PRIMARY KEY(projectId, role, version)
+);
+CREATE TABLE IF NOT EXISTS run_model_snapshots (
+  runId TEXT PRIMARY KEY, projectId TEXT, bindingJson TEXT NOT NULL,
+  connectionsEnc TEXT NOT NULL, createdAt TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, targetUrl TEXT NOT NULL, createdAt TEXT NOT NULL
 );
@@ -74,6 +96,8 @@ CREATE TABLE IF NOT EXISTS environments (
   headersJson TEXT NOT NULL DEFAULT '{}',   -- fixed request headers (may hold secret refs)
   queryJson TEXT NOT NULL DEFAULT '{}',     -- fixed query-string params appended to navigations
   sessionEnc TEXT NOT NULL DEFAULT '',      -- captured login state (storageState), AES-encrypted
+  viewportJson TEXT NOT NULL DEFAULT '{}',   -- 这个被测对象要多大的视口（见 U-69）
+  visualThresholdPct REAL,                   -- 这个被测对象的视觉差异阈值；空=用默认 0.5
   isDefault INTEGER NOT NULL DEFAULT 0,
   createdAt TEXT NOT NULL,
   UNIQUE(projectId, name)
@@ -134,6 +158,44 @@ CREATE TABLE IF NOT EXISTS flakiness (
   verdict TEXT NOT NULL,                      -- stable | flaky | broken | unknown
   updatedAt TEXT NOT NULL
 );
+
+-- 隔离台账：谁、什么时候、为什么，以及当时门禁是什么判决。
+--
+-- 隔离是**唯一一个会改变门禁结论的人工动作**：一条被隔离的用例照跑，但它的红不再拦门禁。
+-- 没有台账的话，一个绿灯说不清自己是「真的都过了」还是「挂的那几条被人挪出去了」，
+-- 而那正是这套东西最容易被悄悄绕过的地方。所以理由是必填的，记录只增不删。
+CREATE TABLE IF NOT EXISTS quarantine_log (
+  id TEXT PRIMARY KEY,
+  caseId TEXT NOT NULL,
+  projectId TEXT NOT NULL,
+  on_ INTEGER NOT NULL,                       -- 1 = 隔离，0 = 解除
+  reason TEXT NOT NULL,
+  by TEXT NOT NULL,
+  at TEXT NOT NULL,
+  -- 当时最近一次批次的门禁判决。隔离影响的就是它——写下来，事后能对上。
+  gateAtTime TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qlog_project ON quarantine_log(projectId);
+CREATE INDEX IF NOT EXISTS idx_qlog_case ON quarantine_log(caseId);
+
+-- 基线待办的裁决。
+--
+-- 「接受为新基线」此前是**唯一一个出口**——于是一次真回归和一次改版走同一个按钮，
+-- 而按下去之后回归就变成了新的正确答案。三个出口：接受 / 判为回归 / 承认是环境噪声。
+-- 后两个都不动基线：回归要让这条用例继续红，噪声只是把这一条从待办里划掉。
+CREATE TABLE IF NOT EXISTS baseline_verdicts (
+  id TEXT PRIMARY KEY,
+  caseId TEXT NOT NULL,
+  projectId TEXT NOT NULL,
+  kind TEXT NOT NULL,                         -- visual | perf
+  stepIdx INTEGER,
+  runId TEXT NOT NULL,
+  verdict TEXT NOT NULL,                      -- regression | noise
+  note TEXT NOT NULL DEFAULT '',
+  by TEXT NOT NULL DEFAULT 'unknown',
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bverdict_case ON baseline_verdicts(caseId);
 `);
 
 // Migrations: add columns if missing (DB may predate them).
@@ -144,6 +206,8 @@ if (!runCols.has("reportPath")) db.exec("ALTER TABLE runs ADD COLUMN reportPath 
 if (!runCols.has("visualJson"))
   db.exec("ALTER TABLE runs ADD COLUMN visualJson TEXT NOT NULL DEFAULT '[]'");
 if (!runCols.has("tokens")) db.exec("ALTER TABLE runs ADD COLUMN tokens INTEGER");
+// 一次运行的账（模型调用数/毫秒/缓存三态），见 harness-testing `RunSpend`。tokens 单列保留，spendJson 是它的展开。
+if (!runCols.has("spendJson")) db.exec("ALTER TABLE runs ADD COLUMN spendJson TEXT");
 if (!runCols.has("perfJson")) db.exec("ALTER TABLE runs ADD COLUMN perfJson TEXT");
 if (!runCols.has("oracleJson"))
   db.exec("ALTER TABLE runs ADD COLUMN oracleJson TEXT NOT NULL DEFAULT '[]'");
@@ -162,6 +226,171 @@ if (!runCols.has("infraError")) {
       "failureReason LIKE '%ECONNREFUSED%' OR failureReason LIKE '%502%' OR failureReason LIKE '%timeout%')",
   );
 }
+// Structured failure attribution (docs/archive/spec/06). `infraError` stays for compatibility;
+// these two say WHICH kind of failure it was, which is what the statistics bucket by.
+if (!runCols.has("failCode")) db.exec("ALTER TABLE runs ADD COLUMN failCode TEXT");
+if (!runCols.has("failKind")) db.exec("ALTER TABLE runs ADD COLUMN failKind TEXT");
+
+// A case executed inside a workflow run is still an execution.
+//
+// 执行记录 used to list only suite batches, and product runs were the only thing written
+// here at all — so a project whose cases were exercised by the repair loop showed an empty
+// execution page. An empty page reads as "never ran", which was false: those cases had run,
+// passed, and their timings were sitting in the workflow's repair report where the board
+// could not see them.
+//
+// `projectId` is stored rather than joined because a workflow execution has no board case
+// to join through: it runs a candidate (`S-01-1-…`) that only becomes `tc-…` if someone
+// approves it later, and may never. `origin` is what keeps the two readable apart.
+if (!runCols.has("origin"))
+  db.exec("ALTER TABLE runs ADD COLUMN origin TEXT NOT NULL DEFAULT 'board'");
+if (!runCols.has("wfRunId")) db.exec("ALTER TABLE runs ADD COLUMN wfRunId TEXT");
+if (!runCols.has("projectId")) {
+  db.exec("ALTER TABLE runs ADD COLUMN projectId TEXT");
+  // Backfill once, from the join the page used to do at read time. Rows whose case has
+  // since been deleted stay null and simply do not appear under any project.
+  db.exec(
+    `UPDATE runs SET projectId =
+       (SELECT c.projectId FROM test_cases c WHERE c.id = runs.caseId)
+     WHERE projectId IS NULL`,
+  );
+}
+
+// Which end the project is tested on. It decides what the rest of the UI may offer: web3
+// and chain configuration are web-only capabilities, and leaving them visible on an iOS
+// project would be offering a control that cannot do anything. Defaults to 'web' so every
+// project that predates the column keeps behaving exactly as it did.
+const projCols = new Set(
+  (db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map((r) => r.name),
+);
+if (!projCols.has("targetPlatform"))
+  db.exec("ALTER TABLE projects ADD COLUMN targetPlatform TEXT NOT NULL DEFAULT 'web'");
+/**
+ * 这个项目的规格来自哪几份文档。
+ *
+ * 建项目时只有名称、URL、目标端三格——没有地方交材料。可是 `spec.compose` 明确认两种
+ * 来源，而它们**能说明的事完全不同**：文档表达意图，所以对着它写的用例可能发现「产品错了」；
+ * 探索表达现状，对着它写的用例只可能发现「产品变了」，永远不可能发现「产品错了」
+ * ——观察不可能反驳被观察者。
+ *
+ * 一个从不交材料的项目，它的整套用例都只是回归网。这一列存在，是为了让这件事在建项目
+ * 那一刻就被问一次。
+ */
+if (!projCols.has("materialsJson"))
+  db.exec("ALTER TABLE projects ADD COLUMN materialsJson TEXT NOT NULL DEFAULT '[]'");
+
+// Where a generated case came from and what the harness thought of it. A case that entered
+// the board through review should still be able to answer "which run made me, from which
+// story, by which design method" — otherwise the board loses the traceability that gate ①
+// spent its effort establishing.
+const genCols = new Set(
+  (db.prepare("PRAGMA table_info(test_cases)").all() as { name: string }[]).map((r) => r.name),
+);
+if (!genCols.has("storyId")) db.exec("ALTER TABLE test_cases ADD COLUMN storyId TEXT");
+if (!genCols.has("designMethod")) db.exec("ALTER TABLE test_cases ADD COLUMN designMethod TEXT");
+if (!genCols.has("tier")) db.exec("ALTER TABLE test_cases ADD COLUMN tier INTEGER");
+if (!genCols.has("gateScore")) db.exec("ALTER TABLE test_cases ADD COLUMN gateScore REAL");
+if (!genCols.has("sourceRunId")) db.exec("ALTER TABLE test_cases ADD COLUMN sourceRunId TEXT");
+// The machine-checkable form of the case's outcome, when stage one produced one. Stored
+// with the case because the board runs cases too, and a verdict that only the workflow
+// path could settle deterministically would make the two paths disagree.
+if (!genCols.has("oracleJson")) db.exec("ALTER TABLE test_cases ADD COLUMN oracleJson TEXT");
+// Whether this case only went green after its assertion was weakened during repair. It is
+// the one mark on the board that says "this pass is worth less than it looks".
+if (!genCols.has("degraded")) db.exec("ALTER TABLE test_cases ADD COLUMN degraded INTEGER NOT NULL DEFAULT 0");
+/**
+ * 模块与覆盖的转移：批准这一步此前把它们丢在门外。
+ *
+ * `activity` 在规格里是**算出来的**（`computeModules` 按路由聚类，模型只贡献名字），
+ * 故事的 activity 还被约束成模块名的枚举——一等实体，做得相当讲究。可是看板没有这一列，
+ * 于是它活不过 `approve()`：批准之后再也没人说得出这条用例属于哪个模块，
+ * 看板没法按模块分组，导出也没法按模块建目录。
+ *
+ * `covers` 同理：它是唯一一根**来自产品本身**的追溯线（一共 M 条转移，覆盖了几条），
+ * 丢掉之后结构覆盖率只能一批一批地算，没法在项目层累计。
+ */
+if (!genCols.has("activity")) db.exec("ALTER TABLE test_cases ADD COLUMN activity TEXT DEFAULT ''");
+if (!genCols.has("coversJson"))
+  db.exec("ALTER TABLE test_cases ADD COLUMN coversJson TEXT NOT NULL DEFAULT '[]'");
+/**
+ * `acRefs` 同理，而且是这三根线里最直接的一根：**这条用例了结的是哪条验收准则**。
+ *
+ * 2026-09-14 之后它才真正值钱——那天起 `acRefs` 从自由文本变成了稳定编号
+ * （`S-05/AC-2`，见 `acceptanceIndex.ts`），95 条引用里 0 条是模型自己编的。
+ * 而它到看板这一步就被丢掉了，于是导出的 spec 只说得出 `@story:S-MB-01`，
+ * 说不出是哪条准则——一条测试红了，人还是得回平台去猜它本来想证明什么。
+ */
+if (!genCols.has("acRefsJson"))
+  db.exec("ALTER TABLE test_cases ADD COLUMN acRefsJson TEXT NOT NULL DEFAULT '[]'");
+
+/**
+ * 抽取层的记忆：这个项目里曾经被命名过的步骤与共享前置。
+ *
+ * 见 `exportLayers.ts` 的 `LayerMemory`——门槛（至少两条用例用它）会让成员资格随
+ * 用例增删而变，于是加一条用例会把一批不相干的 spec 一起改。记住命名过的内容，
+ * 让这一层只增不减；导出对增量就没有多余的 diff。
+ *
+ * 按**内容**记，不按名字：名字本来就是内容的函数（slug 化的原文）。
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS export_layer_memory (
+    projectId TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    PRIMARY KEY (projectId, kind, key))`);
+
+// Review decisions live apart from the cases, because a rejection has no case to hang on:
+// the point of recording it is that the queue stops offering it again.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS review_decisions (
+    wfRunId TEXT NOT NULL,
+    caseId TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    note TEXT,
+    createdCaseId TEXT,
+    at TEXT NOT NULL,
+    PRIMARY KEY (wfRunId, caseId)
+  );
+`);
+// Edits made in the review queue, kept apart from both the product and the board: the
+// workflow's output is what the harness produced and must stay as it was (it is evidence
+// in every later comparison), while the board only ever sees a case that was approved. An
+// edit is the third thing — a proposal, waiting on the same decision as the case itself.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS review_edits (
+    wfRunId TEXT NOT NULL,
+    caseId TEXT NOT NULL,
+    json TEXT NOT NULL,
+    at TEXT NOT NULL,
+    PRIMARY KEY (wfRunId, caseId)
+  );
+`);
+
+/**
+ * 从一条缺口补出来的用例。
+ *
+ * 缺口分析（`gaps.ts`）能把缺口分成三类、算得出、显示得出——**然后停在那里**：
+ * 没有任何一条代码路径把一条缺口变回一条用例。「这套 harness 会把自己漏掉的东西
+ * 补回来」这句话今天说不出口，缺的就是这张表。
+ *
+ * 为什么不写进那次运行的产出：运行的产出是**证据**，它必须保持原样，
+ * 否则以后每一次对比都在跟一个被后来改过的东西比。补出来的用例是第三样东西——
+ * 一份提案，和复核队列里的编辑一样，等的是同一个决定。
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS gap_cases (
+    id TEXT PRIMARY KEY,
+    wfRunId TEXT NOT NULL,
+    projectId TEXT NOT NULL,
+    gapWhat TEXT NOT NULL,
+    gapKind TEXT NOT NULL,
+    anchorJson TEXT NOT NULL DEFAULT '{}',
+    caseJson TEXT NOT NULL,
+    at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_gapcase_run ON gap_cases(wfRunId);
+`);
+
 const caseCols = new Set(
   (db.prepare("PRAGMA table_info(test_cases)").all() as { name: string }[]).map((r) => r.name),
 );
@@ -199,15 +428,30 @@ if (envCols.size && !envCols.has("queryJson"))
   db.exec("ALTER TABLE environments ADD COLUMN queryJson TEXT NOT NULL DEFAULT '{}'");
 if (envCols.size && !envCols.has("sessionEnc"))
   db.exec("ALTER TABLE environments ADD COLUMN sessionEnc TEXT NOT NULL DEFAULT ''");
+if (envCols.size && !envCols.has("viewportJson"))
+  db.exec("ALTER TABLE environments ADD COLUMN viewportJson TEXT NOT NULL DEFAULT '{}'");
+if (envCols.size && !envCols.has("visualThresholdPct"))
+  db.exec("ALTER TABLE environments ADD COLUMN visualThresholdPct REAL");
 
 export type Priority = "P0" | "P1" | "P2";
-export type RunStatus = "passed" | "failed" | "notRun" | "running";
+/** `unobservable`：判据没量到——没有判决，不是通过也不是失败（harness-testing/exec/oracle.ts）。 */
+export type RunStatus = "passed" | "failed" | "unobservable" | "notRun" | "running";
 
+export type TargetPlatform = "web" | "ios" | "android";
 export interface Project {
   id: string;
   name: string;
   targetUrl: string;
+  /** web | ios | android — web3 and chain assertions exist only on web. */
+  targetPlatform: TargetPlatform;
   createdAt: string;
+  /**
+   * 这个项目的规格来自哪几份文档（相对仓库根的路径）。
+   *
+   * 空数组不是「还没填」，它是一个结论：这个项目的规格只能从**观察**里来，
+   * 于是它的整套用例只可能发现「产品变了」，永远不可能发现「产品错了」。
+   */
+  materials: string[];
 }
 export interface Step {
   order: number;
@@ -217,16 +461,122 @@ export type CaseType = "functional" | "negative" | "boundary" | "e2e";
 export type Web3Mode = "" | "injected" | "metamask"; // "" = no wallet
 // An on-chain assertion checked against the RPC after the case's steps run — verifies the
 // real chain state, not just the UI (e.g. a token balance rose after a swap).
-export interface ChainAssertion {
-  // txSubmitted: the wallet sent ≥/=/≤ N successful (mined, status 1) transactions this run.
-  kind: "erc20Balance" | "nativeBalance" | "txSubmitted";
-  account?: string; // default: the test wallet
-  token?: string; // ERC-20 contract (for erc20Balance)
-  decimals?: number; // token decimals for display/compare (default 18; USDC=6)
-  op: "increased" | "decreased" | "changed" | "gte" | "lte" | "eq";
-  value?: string; // human-unit threshold (balance) or count (txSubmitted) for gte/lte/eq
-  label?: string; // display label
+export interface ReviewDecision {
+  wfRunId: string;
+  caseId: string;
+  decision: "approved" | "rejected";
+  note?: string;
+  createdCaseId?: string;
+  at: string;
 }
+
+export function recordReviewDecision(d: ReviewDecision): void {
+  db.prepare(
+    `INSERT INTO review_decisions (wfRunId, caseId, decision, note, createdCaseId, at)
+     VALUES (@wfRunId, @caseId, @decision, @note, @createdCaseId, @at)
+     ON CONFLICT(wfRunId, caseId) DO UPDATE SET decision=excluded.decision, note=excluded.note,
+       createdCaseId=excluded.createdCaseId, at=excluded.at`,
+  ).run({ ...d, note: d.note ?? null, createdCaseId: d.createdCaseId ?? null });
+}
+
+export const listReviewDecisions = (wfRunId: string): ReviewDecision[] =>
+  db.prepare("SELECT * FROM review_decisions WHERE wfRunId=?").all(wfRunId) as ReviewDecision[];
+
+/** One reviewer's (or the model's) proposed replacement for a generated case. */
+export interface ReviewEdit {
+  title?: string;
+  expected?: string;
+  steps?: string[];
+  precondition?: string[];
+  tier?: number;
+  designMethod?: string;
+  priority?: Priority;
+  /** Who proposed it: a person in the queue, or a regeneration. */
+  by?: "human" | "model";
+  note?: string;
+}
+
+export interface GapCase {
+  id: string;
+  wfRunId: string;
+  projectId: string;
+  gapWhat: string;
+  gapKind: string;
+  anchor?: unknown;
+  kase: Record<string, unknown>;
+  at: string;
+}
+
+/** 把一条从缺口补出来的用例记下来。它进的是复核队列，不是看板——它还没被人看过。 */
+export function saveGapCase(input: Omit<GapCase, "id" | "at">): GapCase {
+  const row: GapCase = { ...input, id: newId("gapc"), at: new Date().toISOString() };
+  db.prepare(
+    "INSERT INTO gap_cases (id,wfRunId,projectId,gapWhat,gapKind,anchorJson,caseJson,at) VALUES (?,?,?,?,?,?,?,?)",
+  ).run(
+    row.id,
+    row.wfRunId,
+    row.projectId,
+    row.gapWhat,
+    row.gapKind,
+    JSON.stringify(row.anchor ?? {}),
+    JSON.stringify(row.kase),
+    row.at,
+  );
+  return row;
+}
+
+/** 这次运行补出来的那些。它们会和原生的那一批一起进复核队列。 */
+export function listGapCases(wfRunId: string): GapCase[] {
+  const rows = db
+    .prepare("SELECT * FROM gap_cases WHERE wfRunId=? ORDER BY at")
+    .all(wfRunId) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    wfRunId: String(r.wfRunId),
+    projectId: String(r.projectId),
+    gapWhat: String(r.gapWhat),
+    gapKind: String(r.gapKind),
+    anchor: JSON.parse(String(r.anchorJson || "{}")),
+    kase: JSON.parse(String(r.caseJson)) as Record<string, unknown>,
+    at: String(r.at),
+  }));
+}
+
+export function saveReviewEdit(wfRunId: string, caseId: string, edit: ReviewEdit): void {
+  db.prepare(
+    `INSERT INTO review_edits (wfRunId, caseId, json, at) VALUES (?,?,?,?)
+     ON CONFLICT(wfRunId, caseId) DO UPDATE SET json=excluded.json, at=excluded.at`,
+  ).run(wfRunId, caseId, JSON.stringify(edit), new Date().toISOString());
+}
+
+export function clearReviewEdit(wfRunId: string, caseId: string): void {
+  db.prepare("DELETE FROM review_edits WHERE wfRunId=? AND caseId=?").run(wfRunId, caseId);
+}
+
+export const listReviewEdits = (wfRunId: string): Record<string, ReviewEdit> =>
+  Object.fromEntries(
+    (db.prepare("SELECT caseId, json FROM review_edits WHERE wfRunId=?").all(wfRunId) as Array<{
+      caseId: string;
+      json: string;
+    }>).map((r) => [r.caseId, JSON.parse(r.json) as ReviewEdit]),
+  );
+
+/**
+ * Every edit ever made in the review queue, newest first.
+ *
+ * The per-run lookup answers "what was changed in this batch"; the code line needs the
+ * other question — "what has been rewritten in this project, by whom" — and that one
+ * cannot be assembled from per-run calls without knowing every run id first.
+ */
+export const listAllReviewEdits = (limit = 200): Array<{ wfRunId: string; caseId: string; at: string; edit: ReviewEdit }> =>
+  (db.prepare("SELECT wfRunId, caseId, json, at FROM review_edits ORDER BY at DESC LIMIT ?").all(limit) as Array<{
+    wfRunId: string; caseId: string; json: string; at: string;
+  }>).map((r) => ({ wfRunId: r.wfRunId, caseId: r.caseId, at: r.at, edit: JSON.parse(r.json) as ReviewEdit }));
+
+/** The decision that created a given board case, if it came through review at all. */
+export const decisionForCreatedCase = (caseId: string): ReviewDecision | undefined =>
+  db.prepare("SELECT * FROM review_decisions WHERE createdCaseId=?").get(caseId) as ReviewDecision | undefined;
+
 export interface TestCase {
   id: string;
   projectId: string;
@@ -248,15 +598,23 @@ export interface TestCase {
   steps: Step[];
   code?: string;
   createdAt: string;
+  /* ---- provenance, for a case that came out of a workflow ---- */
+  storyId?: string; // the user story it was designed from
+  activity?: string; // 所属模块。规格里算出来的路由聚类，故事地图的横轴
+  covers?: string[]; // 走了哪些状态转移（`from->to`）——唯一来自产品本身的追溯线
+  acRefs?: string[]; // 了结了哪几条验收准则（`S-05/AC-2`）——用例与用户故事之间那根线
+  designMethod?: string; // equivalence / boundary / state-transition / decision-table / negative
+  tier?: number; // how hard its verdict is: 1 assert, 2 invariant, 3 judge
+  gateScore?: number; // what gate ① thought of the batch it arrived in
+  sourceRunId?: string; // the workflow run that produced it
+  /** The outcome in a form a program settles — no model, no screenshot, no wobble. */
+  oracle?: MachineOracle;
+  /** Its assertion was weakened (or the case rebuilt) during stage-two repair. */
+  degraded?: boolean;
 }
 
 // A captured browser session (Playwright-compatible storageState shape) — cookies plus
 // per-origin localStorage. Injected before navigation so runs start authenticated.
-export interface StorageState {
-  cookies: Array<Record<string, unknown>>;
-  origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
-  headers?: Record<string, string>; // captured auth headers (e.g. Authorization from API login)
-}
 // API-style login (method C): call the site's login endpoint directly, capture the
 // session cookie and/or a token from the response — no UI driving. Body/url may hold
 // ${env.KEY}/${secret.KEY} placeholders.
@@ -287,6 +645,27 @@ export interface Environment {
   vars: Record<string, string | string[]>;
   headers: Record<string, string>; // fixed request headers (may hold ${env}/${secret} refs)
   query: Record<string, string>; // fixed query-string params appended to navigations
+  /**
+   * 这个被测对象要多大的视口。
+   *
+   * 默认 1024×720 是为压小视觉模型的图定的，而它对一部分真实界面撑不开——
+   * Binance 期货在这个宽度下下单面板整块不渲染，探索器只看得到图表和订单簿，
+   * 而它不报错，它只是看不见半个产品。
+   *
+   * 放在环境上而不是做成全局环境变量：把默认调大，所有 SUT 的每一次模型调用
+   * 都跟着变贵，而大多数界面在 1024 下是完整的。不配就沿用默认。
+   */
+  viewport?: { width?: number; height?: number };
+  /**
+   * 这个被测对象的视觉差异阈值（百分比）。不配就用默认的 0.5。
+   *
+   * 放在环境上，和视口同一个理由：**它是被测对象的属性，不是全局口味**。
+   * 2026-09-11 在 Hyperliquid 主网上实测：130 个可比步骤里 40 步逐像素相同，
+   * 其余 90 步的差异中位数 1.21%、最大 3.27%——价格区每秒都在动，而 0.5%
+   * 这个默认值是给静态界面定的。结果是 90 条待审批差异里没有一条是真回归，
+   * 全是行情在跳。把阈值调成全局的会让静态应用跟着变迟钝；不给出口则这一页没法用。
+   */
+  visualThresholdPct?: number;
   login: LoginFlow;
   isDefault: boolean;
   createdAt: string;
@@ -299,26 +678,12 @@ export interface SecretMeta {
   key: string;
   updatedAt: string;
 }
-export type VisualStatus = "new_baseline" | "match" | "diff";
-export interface VisualDiff {
-  stepIdx: number;
-  status: VisualStatus;
-  mismatchPct: number;
-  baselineRef?: string; // artifact filename served by /api/artifacts/:name
-  currentRef?: string;
-  diffRef?: string;
-}
 export interface Baseline {
   id: string;
   caseId: string;
   stepIdx: number;
   imgPath: string;
   updatedAt: string;
-}
-export interface OracleCheck {
-  assertion: string; // the expected condition that was verified
-  status: "pass" | "fail";
-  detail?: string;
 }
 export interface RunRecord {
   id: string;
@@ -333,12 +698,33 @@ export interface RunRecord {
   screenshots?: string[];
   reportPath?: string;
   tokens?: number;
+  /** 一次运行的账：`RunSpend`（模型调用数、毫秒、缓存命中/未命中/失效）。 */
+  spend?: RunSpend;
   visual?: VisualDiff[];
   perf?: unknown; // PerfResult from perf.ts (stored opaque to avoid coupling)
   oracle?: OracleCheck[];
   attempts?: number; // how many tries this run took (1 = passed first time)
   healed?: boolean; // passed only after a self-heal retry → a flake signal
   infraError?: boolean; // model/network failure — not a real test failure; excluded from flake/MTTR
+  failCode?: string; // wire code, e.g. EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT
+  failKind?: "infra" | "locate" | "assert"; // which bucket the statistics should count it in
+  /**
+   * Which project this execution belongs to.
+   *
+   * Stored, not joined: a workflow execution runs a candidate case that has no board row
+   * to join through, and may never get one.
+   */
+  projectId?: string;
+  /** The workflow run that executed it, when it came from one. */
+  wfRunId?: string;
+  /**
+   * Where the execution came from — the reader needs this to know what a green row means.
+   *
+   * `suite` and `case` both ran a case the board already accepted; `workflow` ran a
+   * candidate during generation, before anyone approved it. Reported by the ledger query;
+   * only `board` vs `workflow` is stored (suite-vs-case is a batch membership question).
+   */
+  origin?: "suite" | "case" | "workflow";
 }
 
 export type FlakeVerdict = "stable" | "flaky" | "broken" | "unknown";
@@ -381,16 +767,24 @@ export interface BatchRun {
 /* ---- serialization ---- */
 type CaseRow = Omit<
   TestCase,
-  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions"
+  "steps" | "postSteps" | "hasCode" | "quarantined" | "chainAssertions" | "oracle" | "degraded" | "covers" | "acRefs"
 > & {
   steps: string;
   postSteps: string;
+  coversJson: string;
+  acRefsJson: string;
   hasCode: number;
   quarantined: number;
   chainAssertionsJson: string;
+  oracleJson: string | null;
+  degraded: number;
 };
 const rowToCase = (r: CaseRow): TestCase => ({
   ...r,
+  oracle: r.oracleJson ? (JSON.parse(r.oracleJson) as MachineOracle) : undefined,
+  covers: JSON.parse(r.coversJson || "[]"),
+  acRefs: JSON.parse(r.acRefsJson || "[]"),
+  degraded: !!r.degraded,
   hasCode: !!r.hasCode,
   quarantined: !!r.quarantined,
   type: r.type || "functional",
@@ -400,8 +794,11 @@ const rowToCase = (r: CaseRow): TestCase => ({
 });
 type RunRow = Omit<
   RunRecord,
-  "logs" | "screenshots" | "visual" | "perf" | "oracle" | "healed" | "infraError"
+  "logs" | "screenshots" | "visual" | "perf" | "oracle" | "healed" | "infraError" | "origin" | "spend"
 > & {
+  spendJson?: string | null;
+  /** As stored: 'board' or 'workflow'. The ledger refines 'board' into suite/case. */
+  origin?: string;
   logs: string;
   screenshots: string;
   visualJson: string | null;
@@ -416,25 +813,60 @@ const rowToRun = (r: RunRow): RunRecord => ({
   screenshots: JSON.parse(r.screenshots || "[]"),
   visual: JSON.parse(r.visualJson || "[]"),
   perf: r.perfJson ? JSON.parse(r.perfJson) : undefined,
+  spend: r.spendJson ? JSON.parse(r.spendJson) : undefined,
   oracle: JSON.parse(r.oracleJson || "[]"),
   healed: !!r.healed,
   infraError: !!r.infraError,
+  // 'board' is left undefined here rather than guessed: telling suite from ad-hoc needs
+  // batch membership, which only the ledger query looks up.
+  origin: r.origin === "workflow" ? "workflow" : undefined,
 });
 
 let seq = 1000;
 export const newId = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
 
 /* ---- projects ---- */
+type ProjectRow = Omit<Project, "materials"> & { materialsJson: string };
+const rowToProject = (r: ProjectRow): Project => ({
+  ...r,
+  materials: JSON.parse(r.materialsJson || "[]") as string[],
+});
 export const listProjects = (): Project[] =>
-  db.prepare("SELECT * FROM projects ORDER BY createdAt").all() as Project[];
-export const getProject = (id: string): Project | undefined =>
-  db.prepare("SELECT * FROM projects WHERE id=?").get(id) as Project | undefined;
-export function createProject(name: string, targetUrl: string): Project {
-  const p: Project = { id: newId("prj"), name, targetUrl, createdAt: new Date().toISOString() };
-  db.prepare("INSERT INTO projects (id,name,targetUrl,createdAt) VALUES (?,?,?,?)").run(
-    p.id, p.name, p.targetUrl, p.createdAt,
-  );
+  (db.prepare("SELECT * FROM projects ORDER BY createdAt").all() as ProjectRow[]).map(rowToProject);
+export const getProject = (id: string): Project | undefined => {
+  const r = db.prepare("SELECT * FROM projects WHERE id=?").get(id) as ProjectRow | undefined;
+  return r ? rowToProject(r) : undefined;
+};
+export function createProject(
+  name: string,
+  targetUrl: string,
+  targetPlatform: TargetPlatform = "web",
+  materials: string[] = [],
+): Project {
+  const p: Project = {
+    id: newId("prj"),
+    name,
+    targetUrl,
+    targetPlatform,
+    createdAt: new Date().toISOString(),
+    materials,
+  };
+  db.prepare(
+    "INSERT INTO projects (id,name,targetUrl,targetPlatform,createdAt,materialsJson) VALUES (?,?,?,?,?,?)",
+  ).run(p.id, p.name, p.targetUrl, p.targetPlatform, p.createdAt, JSON.stringify(p.materials));
   return p;
+}
+export function updateProject(
+  id: string,
+  patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials">>,
+): Project | undefined {
+  const cur = getProject(id);
+  if (!cur) return undefined;
+  const next = { ...cur, ...patch };
+  db.prepare(
+    "UPDATE projects SET name=?, targetUrl=?, targetPlatform=?, materialsJson=? WHERE id=?",
+  ).run(next.name, next.targetUrl, next.targetPlatform, JSON.stringify(next.materials ?? []), id);
+  return next;
 }
 // Delete a project and everything under it (cases, runs, baselines, envs, secrets, batches).
 export function deleteProject(id: string): void {
@@ -490,12 +922,34 @@ export function createCase(input: Partial<TestCase> & { projectId: string; title
     steps: input.steps || [],
     code: input.code || "",
     createdAt: input.createdAt || new Date().toISOString(),
+    // Provenance travels with the case, or the board cannot answer the first question
+    // anyone asks of a generated case: where did this come from?
+    storyId: input.storyId,
+    activity: input.activity,
+    covers: input.covers ?? [],
+    acRefs: input.acRefs ?? [],
+    designMethod: input.designMethod,
+    tier: input.tier,
+    gateScore: input.gateScore,
+    sourceRunId: input.sourceRunId,
+    oracle: input.oracle,
+    degraded: input.degraded,
   };
   db.prepare(
-    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt)
-     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt)`,
+    `INSERT INTO test_cases (id,projectId,title,priority,priorityReason,runStatus,hasCode,precondition,expected,type,requirementId,envRef,dataKey,web3Mode,chainAssertionsJson,postSteps,quarantined,steps,code,createdAt,storyId,designMethod,tier,gateScore,sourceRunId,oracleJson,degraded,activity,coversJson,acRefsJson)
+     VALUES (@id,@projectId,@title,@priority,@priorityReason,@runStatus,@hasCode,@precondition,@expected,@type,@requirementId,@envRef,@dataKey,@web3Mode,@chainAssertionsJson,@postSteps,@quarantined,@steps,@code,@createdAt,@storyId,@designMethod,@tier,@gateScore,@sourceRunId,@oracleJson,@degraded,@activity,@coversJson,@acRefsJson)`,
   ).run({
     ...c,
+    storyId: c.storyId ?? null,
+    activity: c.activity ?? "",
+    coversJson: JSON.stringify(c.covers ?? []),
+    acRefsJson: JSON.stringify(c.acRefs ?? []),
+    designMethod: c.designMethod ?? null,
+    tier: c.tier ?? null,
+    gateScore: c.gateScore ?? null,
+    sourceRunId: c.sourceRunId ?? null,
+    oracleJson: c.oracle ? JSON.stringify(c.oracle) : null,
+    degraded: c.degraded ? 1 : 0,
     hasCode: c.hasCode ? 1 : 0,
     quarantined: c.quarantined ? 1 : 0,
     web3Mode: c.web3Mode || "",
@@ -518,9 +972,20 @@ export function updateCase(id: string, patch: Partial<TestCase>): TestCase | und
   db.prepare(
     `UPDATE test_cases SET title=@title,priority=@priority,priorityReason=@priorityReason,
      runStatus=@runStatus,hasCode=@hasCode,precondition=@precondition,expected=@expected,
-     type=@type,requirementId=@requirementId,envRef=@envRef,dataKey=@dataKey,web3Mode=@web3Mode,chainAssertionsJson=@chainAssertionsJson,postSteps=@postSteps,quarantined=@quarantined,steps=@steps,code=@code WHERE id=@id`,
+     type=@type,requirementId=@requirementId,envRef=@envRef,dataKey=@dataKey,web3Mode=@web3Mode,chainAssertionsJson=@chainAssertionsJson,postSteps=@postSteps,quarantined=@quarantined,steps=@steps,code=@code,
+     oracleJson=@oracleJson,degraded=@degraded,coversJson=@coversJson,acRefsJson=@acRefsJson WHERE id=@id`,
   ).run({
     ...next,
+    /**
+     * 判据、降级标记、覆盖点三列此前**不在这条 UPDATE 里**：看板或 API 改了判据，
+     * 返回值回显的是合并后的对象，库里还是旧的——下一次运行照旧判。2026-09-07 在
+     * hyperliquid 基准上把限价从 10000 改成 40000，运行仍报「要求 eq 10000」才发现。
+     * 一个回显成功、落库失败的更新，比一个报错的更新糟。写法照 createCase。
+     */
+    oracleJson: next.oracle ? JSON.stringify(next.oracle) : null,
+    degraded: next.degraded ? 1 : 0,
+    coversJson: JSON.stringify(next.covers ?? []),
+    acRefsJson: JSON.stringify(next.acRefs ?? []),
     web3Mode: next.web3Mode ?? "",
     chainAssertionsJson: JSON.stringify(next.chainAssertions ?? []),
     expected: next.expected ?? "",
@@ -543,32 +1008,54 @@ export const getRun = (id: string): RunRecord | undefined => {
   const r = db.prepare("SELECT * FROM runs WHERE id=?").get(id) as RunRow | undefined;
   return r ? rowToRun(r) : undefined;
 };
+/** 成本账要的原始行（07 T-21）：不解析，交给 `scripts/lib/cost-aggregate.mjs`——脚本读的也是这几列。 */
+export const listProjectRunRows = (projectId: string, limit = 2000): Array<Record<string, unknown>> =>
+  db
+    .prepare(
+      `SELECT id, caseId, caseTitle, priority, status, durationMs, startedAt, tokens, spendJson, oracleJson, infraError, failKind, healed, attempts
+         FROM runs WHERE projectId = ? ORDER BY startedAt DESC LIMIT ?`,
+    )
+    .all(projectId, limit) as Array<Record<string, unknown>>;
+
 export const listRuns = (caseId?: string): RunRecord[] =>
   (
     caseId
       ? (db.prepare("SELECT * FROM runs WHERE caseId=? ORDER BY startedAt DESC").all(caseId) as RunRow[])
       : (db.prepare("SELECT * FROM runs ORDER BY startedAt DESC LIMIT 200").all() as RunRow[])
   ).map(rowToRun);
-// Project-scoped runs for the Runs page. Runs is the SUITE (batch) execution ledger,
-// so it only lists runs that came from a suite (id present in batch_runs). Ad-hoc
-// single-case runs are viewed inline in the case detail, not here.
+/**
+ * Every execution this project has had — the ledger the Runs page is named after.
+ *
+ * It used to list only suite batches, which made the page a batch ledger wearing an
+ * execution ledger's name: a project whose cases had only ever been exercised by the
+ * repair loop showed nothing at all, and nothing reads as "never ran".
+ *
+ * Three origins, told apart rather than merged, because a green row means a different
+ * thing in each: `suite` and `case` ran a case the board accepted, `workflow` ran a
+ * candidate during generation that nobody had approved yet. The LEFT JOIN is what lets
+ * the last kind appear — it has no board row to join through.
+ */
 export const listRunsByProject = (projectId: string): RunRecord[] =>
   (
     db
       .prepare(
-        `SELECT r.* FROM runs r
-         JOIN test_cases c ON c.id = r.caseId
-         WHERE c.projectId = ?
-           AND r.id IN (SELECT runId FROM batch_runs WHERE runId IS NOT NULL)
+        `SELECT r.*,
+                (r.id IN (SELECT runId FROM batch_runs WHERE runId IS NOT NULL)) AS inBatch
+         FROM runs r
+         LEFT JOIN test_cases c ON c.id = r.caseId
+         WHERE r.projectId = ? OR c.projectId = ?
          ORDER BY r.startedAt DESC LIMIT 200`,
       )
-      .all(projectId) as RunRow[]
-  ).map(rowToRun);
+      .all(projectId, projectId) as Array<RunRow & { inBatch: number }>
+  ).map((r) => ({
+    ...rowToRun(r),
+    origin: r.origin === "workflow" ? ("workflow" as const) : r.inBatch ? ("suite" as const) : ("case" as const),
+  }));
 export function createRun(r: Omit<RunRecord, "id">): RunRecord {
   const run: RunRecord = { ...r, id: newId("run") };
   db.prepare(
-    `INSERT INTO runs (id,caseId,caseTitle,priority,status,durationMs,startedAt,failureReason,logs,screenshots,reportPath,tokens,visualJson,perfJson,oracleJson,attempts,healed,infraError)
-     VALUES (@id,@caseId,@caseTitle,@priority,@status,@durationMs,@startedAt,@failureReason,@logs,@screenshots,@reportPath,@tokens,@visualJson,@perfJson,@oracleJson,@attempts,@healed,@infraError)`,
+    `INSERT INTO runs (id,caseId,caseTitle,priority,status,durationMs,startedAt,failureReason,logs,screenshots,reportPath,tokens,visualJson,perfJson,oracleJson,attempts,healed,infraError,failCode,failKind,origin,projectId,wfRunId)
+     VALUES (@id,@caseId,@caseTitle,@priority,@status,@durationMs,@startedAt,@failureReason,@logs,@screenshots,@reportPath,@tokens,@visualJson,@perfJson,@oracleJson,@attempts,@healed,@infraError,@failCode,@failKind,@origin,@projectId,@wfRunId)`,
   ).run({
     ...run,
     failureReason: run.failureReason ?? null,
@@ -582,6 +1069,12 @@ export function createRun(r: Omit<RunRecord, "id">): RunRecord {
     attempts: run.attempts ?? 1,
     healed: run.healed ? 1 : 0,
     infraError: run.infraError ? 1 : 0,
+    failCode: run.failCode ?? null,
+    failKind: run.failKind ?? null,
+    // Only the two stored values; the ledger derives suite-vs-case from batch membership.
+    origin: run.origin === "workflow" ? "workflow" : "board",
+    projectId: run.projectId ?? null,
+    wfRunId: run.wfRunId ?? null,
   });
   return run;
 }
@@ -617,22 +1110,24 @@ export function updateRunResults(
   patch: {
     reportPath?: string;
     tokens?: number;
+    spend?: RunSpend;
     visual?: VisualDiff[];
     perf?: unknown;
     oracle?: OracleCheck[];
   },
 ): void {
   const cur = db
-    .prepare("SELECT reportPath, tokens, visualJson, perfJson, oracleJson FROM runs WHERE id=?")
+    .prepare("SELECT reportPath, tokens, spendJson, visualJson, perfJson, oracleJson FROM runs WHERE id=?")
     .get(id) as
-    | { reportPath: string | null; tokens: number | null; visualJson: string | null; perfJson: string | null; oracleJson: string | null }
+    | { reportPath: string | null; tokens: number | null; spendJson: string | null; visualJson: string | null; perfJson: string | null; oracleJson: string | null }
     | undefined;
   if (!cur) return;
   db.prepare(
-    "UPDATE runs SET reportPath=?, tokens=?, visualJson=?, perfJson=?, oracleJson=? WHERE id=?",
+    "UPDATE runs SET reportPath=?, tokens=?, spendJson=?, visualJson=?, perfJson=?, oracleJson=? WHERE id=?",
   ).run(
     patch.reportPath ?? cur.reportPath ?? null,
     patch.tokens ?? cur.tokens ?? null,
+    patch.spend !== undefined ? JSON.stringify(patch.spend) : cur.spendJson,
     JSON.stringify(patch.visual ?? JSON.parse(cur.visualJson || "[]")),
     patch.perf !== undefined ? JSON.stringify(patch.perf) : cur.perfJson,
     JSON.stringify(patch.oracle ?? JSON.parse(cur.oracleJson || "[]")),
@@ -647,6 +1142,12 @@ export const getPerfBaseline = (caseId: string): Record<string, number> | undefi
     | undefined;
   return r ? (JSON.parse(r.metricsJson) as Record<string, number>) : undefined;
 };
+/** When this case's performance baseline was last accepted. */
+export const perfBaselineUpdatedAt = (caseId: string): string | undefined =>
+  (db.prepare("SELECT updatedAt FROM perf_baselines WHERE caseId=?").get(caseId) as
+    | { updatedAt: string }
+    | undefined)?.updatedAt;
+
 export function upsertPerfBaseline(caseId: string, metrics: Record<string, number>): void {
   db.prepare(
     "INSERT INTO perf_baselines (caseId,metricsJson,updatedAt) VALUES (?,?,?) " +
@@ -664,6 +1165,8 @@ type EnvRow = {
   loginJson: string;
   headersJson: string;
   queryJson: string;
+  viewportJson: string;
+  visualThresholdPct: number | null;
   sessionEnc: string;
   isDefault: number;
   createdAt: string;
@@ -686,6 +1189,12 @@ const rowToEnv = (r: EnvRow): Environment => {
     vars: JSON.parse(r.varsJson || "{}"),
     headers: JSON.parse(r.headersJson || "{}"),
     query: JSON.parse(r.queryJson || "{}"),
+    ...(() => {
+      const vp = JSON.parse(r.viewportJson || "{}") as { width?: number; height?: number };
+      // 空对象不发：一个 `viewport: {}` 在界面上看起来像"配过了"，而它什么都没说。
+      return vp.width || vp.height ? { viewport: vp } : {};
+    })(),
+    ...(typeof r.visualThresholdPct === "number" ? { visualThresholdPct: r.visualThresholdPct } : {}),
     login,
     isDefault: !!r.isDefault,
     createdAt: r.createdAt,
@@ -720,6 +1229,8 @@ export function upsertEnvironment(
     vars: input.vars ?? existing?.vars ?? {},
     headers: input.headers ?? existing?.headers ?? {},
     query: input.query ?? existing?.query ?? {},
+    ...(input.viewport ?? existing?.viewport ? { viewport: input.viewport ?? existing?.viewport } : {}),
+    ...(input.visualThresholdPct ?? existing?.visualThresholdPct ? { visualThresholdPct: input.visualThresholdPct ?? existing?.visualThresholdPct } : {}),
     // Preserve the captured session across saves: the UI never round-trips the blob, so
     // only overwrite it when the caller explicitly provides `session` (object or null).
     login: input.login
@@ -741,9 +1252,9 @@ export function upsertEnvironment(
   if (env.isDefault)
     db.prepare("UPDATE environments SET isDefault=0 WHERE projectId=?").run(env.projectId);
   db.prepare(
-    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,sessionEnc,isDefault,createdAt)
-     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@sessionEnc,@isDefault,@createdAt)
-     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,sessionEnc=@sessionEnc,isDefault=@isDefault`,
+    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,viewportJson,visualThresholdPct,sessionEnc,isDefault,createdAt)
+     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@viewportJson,@visualThresholdPct,@sessionEnc,@isDefault,@createdAt)
+     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,viewportJson=@viewportJson,visualThresholdPct=@visualThresholdPct,sessionEnc=@sessionEnc,isDefault=@isDefault`,
   ).run({
     id: env.id,
     projectId: env.projectId,
@@ -753,6 +1264,8 @@ export function upsertEnvironment(
     loginJson: JSON.stringify(loginRest),
     headersJson: JSON.stringify(env.headers),
     queryJson: JSON.stringify(env.query),
+    viewportJson: JSON.stringify(env.viewport ?? {}),
+    visualThresholdPct: env.visualThresholdPct ?? null,
     sessionEnc,
     isDefault: env.isDefault ? 1 : 0,
     createdAt: env.createdAt,
@@ -838,6 +1351,110 @@ export function computeFlakiness(caseId: string, windowSize = 10): Flakiness {
   ).run(f);
   return f;
 }
+export interface QuarantineEntry {
+  id: string;
+  caseId: string;
+  projectId: string;
+  on: boolean;
+  reason: string;
+  by: string;
+  at: string;
+  gateAtTime?: string;
+}
+
+/**
+ * 记一次隔离或解除。
+ *
+ * 理由是必填的，而且在这一层就拦——不是在界面上提示一句。隔离会让一条红用例
+ * 不再拦门禁，一个没有理由的隔离等于把门禁悄悄调松，而且事后查不出是谁调的。
+ */
+export function logQuarantine(e: Omit<QuarantineEntry, "id" | "at">): QuarantineEntry {
+  const reason = e.reason.trim();
+  if (!reason) throw new Error("隔离要写理由——它会让这条用例的红不再拦门禁");
+  const row: QuarantineEntry = { ...e, reason, id: newId("qlog"), at: new Date().toISOString() };
+  db.prepare(
+    "INSERT INTO quarantine_log (id,caseId,projectId,on_,reason,by,at,gateAtTime) VALUES (?,?,?,?,?,?,?,?)",
+  ).run(row.id, row.caseId, row.projectId, row.on ? 1 : 0, row.reason, row.by, row.at, row.gateAtTime ?? null);
+  return row;
+}
+
+/**
+ * 一个项目（或一条用例）的隔离台账，新的在前。
+ *
+ * **按 `at` 排序不够**：`at` 是毫秒精度的 ISO 串，同一毫秒里写进来的两条会并列，
+ * SQLite 于是按 rowid 升序返回——**老的排到了前面**，而「新的在前」正是这张台账的全部意义
+ * （「这条用例现在到底是隔离着还是解除了」看的就是第一条）。用 rowid 兜底：它单调递增，
+ * 表达的正是写入顺序。2026-09-11：全量测试里偶发失败过两次，单跑必过——就是这个。
+ */
+export function listQuarantineLog(projectId: string, caseId?: string): QuarantineEntry[] {
+  const rows = (
+    caseId
+      ? db
+          .prepare("SELECT * FROM quarantine_log WHERE projectId=? AND caseId=? ORDER BY at DESC, rowid DESC")
+          .all(projectId, caseId)
+      : db.prepare("SELECT * FROM quarantine_log WHERE projectId=? ORDER BY at DESC, rowid DESC LIMIT 200").all(projectId)
+  ) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    caseId: String(r.caseId),
+    projectId: String(r.projectId),
+    on: !!r.on_,
+    reason: String(r.reason),
+    by: String(r.by),
+    at: String(r.at),
+    ...(r.gateAtTime ? { gateAtTime: String(r.gateAtTime) } : {}),
+  }));
+}
+
+export interface BaselineVerdict {
+  id: string;
+  caseId: string;
+  projectId: string;
+  kind: "visual" | "perf";
+  stepIdx?: number;
+  runId: string;
+  verdict: "regression" | "noise";
+  note: string;
+  by: string;
+  at: string;
+}
+
+/**
+ * 记一次「不是新基线」的裁决。
+ *
+ * 两种都**不动基线**：判为回归是说「产品错了，这条用例应该继续红」；
+ * 承认是噪声是说「这次的数字不算数」。把它们混进「接受」那一个按钮里，
+ * 等于让一次回归自己变成新的正确答案——那是这套东西最贵的一种失效。
+ */
+export function recordBaselineVerdict(v: Omit<BaselineVerdict, "id" | "at">): BaselineVerdict {
+  if (v.verdict === "regression" && !v.note.trim())
+    throw new Error("判为回归要写一句为什么——这条用例会一直红着，后面的人得知道在等什么");
+  const row: BaselineVerdict = { ...v, id: newId("bv"), at: new Date().toISOString() };
+  db.prepare(
+    "INSERT INTO baseline_verdicts (id,caseId,projectId,kind,stepIdx,runId,verdict,note,by,at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+  ).run(row.id, row.caseId, row.projectId, row.kind, row.stepIdx ?? null, row.runId, row.verdict, row.note, row.by, row.at);
+  return row;
+}
+
+/** 这条用例上已经裁决过的基线待办——用来把它们从待办里划掉。 */
+export function listBaselineVerdicts(projectId: string): BaselineVerdict[] {
+  const rows = db
+    .prepare("SELECT * FROM baseline_verdicts WHERE projectId=? ORDER BY at DESC LIMIT 500")
+    .all(projectId) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    id: String(r.id),
+    caseId: String(r.caseId),
+    projectId: String(r.projectId),
+    kind: r.kind as "visual" | "perf",
+    ...(r.stepIdx === null || r.stepIdx === undefined ? {} : { stepIdx: Number(r.stepIdx) }),
+    runId: String(r.runId),
+    verdict: r.verdict as "regression" | "noise",
+    note: String(r.note ?? ""),
+    by: String(r.by ?? "unknown"),
+    at: String(r.at),
+  }));
+}
+
 export const getFlakiness = (caseId: string): Flakiness | undefined =>
   db.prepare("SELECT * FROM flakiness WHERE caseId=?").get(caseId) as Flakiness | undefined;
 export const listFlakiness = (projectId: string): Flakiness[] =>
@@ -897,3 +1514,20 @@ export const getBatchRuns = (batchId: string): BatchRun[] =>
   (db.prepare("SELECT * FROM batch_runs WHERE batchId=?").all(batchId) as (Omit<BatchRun, "healed"> & { healed: number })[]).map(
     (r) => ({ ...r, healed: !!r.healed }),
   );
+
+/** 这个项目曾经命名过的步骤与前置。见 export_layer_memory 的建表注释。 */
+export function exportLayerMemory(projectId: string): { actions: Set<string>; flows: Set<string> } {
+  const rows = db.prepare("SELECT kind, key FROM export_layer_memory WHERE projectId=?").all(projectId) as Array<{ kind: string; key: string }>;
+  return {
+    actions: new Set(rows.filter((r) => r.kind === "action").map((r) => r.key)),
+    flows: new Set(rows.filter((r) => r.kind === "flow").map((r) => r.key)),
+  };
+}
+/** 记下这一次抽出来的名字。只增不删——忘掉一个名字就等于让下次导出把一批 spec 改回去。 */
+export function rememberExportLayers(projectId: string, seen: { actions: readonly string[]; flows: readonly string[] }): void {
+  const put = db.prepare("INSERT OR IGNORE INTO export_layer_memory VALUES (?,?,?)");
+  db.transaction(() => {
+    for (const key of seen.actions) put.run(projectId, "action", key);
+    for (const key of seen.flows) put.run(projectId, "flow", key);
+  })();
+}

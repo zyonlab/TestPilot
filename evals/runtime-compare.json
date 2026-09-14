@@ -1,0 +1,126 @@
+{
+  "id": "runtime-compare",
+  "title": "同一份 skill + gold + MCP，换运行时：Penguin 0.2.9（无 hook）vs Claude Code（hook 执行）",
+  "why": "这张表回答「领域资产能不能脱离 harness 存在」。两臂的 skills / hooks / MCP 工具 / 材料 / gold / 模型端点全部相同，只差 runtime；而 Penguin 0.2.9 的发布包里没有 pre_tool_use / stop，所以它那一臂的门禁只剩 SKILL.md 的一句话——两臂之间的任何差异，第一嫌疑都是 hook 有无，不是运行时本身。Codex 本应是第三臂（门禁在 write_cases 工具里），这台机器的 Codex 账号无可用模型，先空着。",
+  "graphId": "g1",
+  "goldPath": "benchmark/casegen/gold.json",
+  "casesNode": "gate",
+  "a": {
+    "label": "Penguin 0.2.9（无 hook）",
+    "ablate": [],
+    "runtime": "penguin"
+  },
+  "b": {
+    "label": "Claude Code（hook 执行）",
+    "ablate": [],
+    "runtime": "claude-code"
+  },
+  "expect": {
+    "direction": "unknown",
+    "note": "2026-09-08 跑之前写。材料 = docs/archive/spec/02+03（gold 就是从它们抽的），limit 3，每臂 n=3，模型 qwen3.8-flash@dashscope。预判：① 覆盖率两臂差不到一个条目（gold 16 条，3 条故事顶多碰到 5～6 条）；② Claude Code 臂产物里 sourceRefs 齐全率更高——那是 hook 拦出来的，不是运行时更聪明；③ Claude Code 臂墙钟更长（每次写盘多一次 hook 子进程），tokens 相近。如果 Penguin 臂反而覆盖率高，先数它有没有把 gold 里的原句抄进 expected（无 hook 的臂没有出处门）。"
+  },
+  "result": {
+    "at": "2026-09-08",
+    "materialsHash": "25a3d392b572e2e2",
+    "goldHash": "2405209c3fe70ac7",
+    "model": "qwen3.8-flash@dashscope",
+    "skillVersion": "2026-09-03.1",
+    "limit": 3,
+    "a_penguin": [
+      {
+        "run": "20260908T071737",
+        "cases": 21,
+        "coverage": 0,
+        "heldOut": 0.25,
+        "gate": 1.0,
+        "tokens": 48308,
+        "wallS": 161
+      },
+      {
+        "run": "20260908T072018",
+        "cases": 17,
+        "coverage": 0.1667,
+        "heldOut": 0.5,
+        "gate": 0.941,
+        "tokens": 47390,
+        "wallS": 456
+      },
+      {
+        "run": "20260908T072754",
+        "cases": 14,
+        "coverage": 0,
+        "heldOut": 0.25,
+        "gate": 0.857,
+        "tokens": 43776,
+        "wallS": 927
+      }
+    ],
+    "b_claudeCode": [
+      {
+        "run": "20260908T065446",
+        "cases": 21,
+        "coverage": 0.0833,
+        "heldOut": 0.25,
+        "gate": 1.0,
+        "tokens": 45894,
+        "wallS": 162
+      },
+      {
+        "run": "20260908T065728",
+        "cases": 22,
+        "coverage": 0.1667,
+        "heldOut": 0.25,
+        "gate": 1.0,
+        "tokens": 39043,
+        "wallS": 207
+      },
+      {
+        "run": "20260908T070055",
+        "cases": 16,
+        "coverage": 0,
+        "heldOut": 0,
+        "gate": 0.9375,
+        "tokens": 53485,
+        "wallS": 207
+      }
+    ],
+    "paired": [
+      {
+        "a": "20260908T071737",
+        "b": "20260908T065446",
+        "mcnemar": {
+          "aOnly": 0,
+          "bOnly": 1,
+          "bothPassed": 1,
+          "bothFailed": 14,
+          "p": 1
+        }
+      },
+      {
+        "a": "20260908T072018",
+        "b": "20260908T065728",
+        "mcnemar": {
+          "aOnly": 3,
+          "bOnly": 2,
+          "bothPassed": 1,
+          "bothFailed": 10,
+          "p": 1
+        }
+      },
+      {
+        "a": "20260908T072754",
+        "b": "20260908T070055",
+        "mcnemar": {
+          "aOnly": 1,
+          "bOnly": 0,
+          "bothPassed": 0,
+          "bothFailed": 15,
+          "p": 1
+        }
+      }
+    ],
+    "codex": "未跑：账号无可用模型（T-09）",
+    "verdict": "三对 McNemar p 全是 1.0：换运行时量不出差别，翻转（1 / 5 / 1 条）是同一臂两次运行之间就有的抖动。预判 ① 对（覆盖率差不到一个条目：两臂各 0 / 0.17 / 0.08 与 0 / 0.17 / 0）；② 没法判——sourceRefs 齐全率 Claude Code 13/16/8 vs Penguin 7/17/6，重叠，且 g1 走 run_pipeline 一步写盘、hook 在这条路上不触发，所以「hook 拦出来的差」根本没机会出现；③ 错：Claude Code 臂墙钟 162–207s，Penguin 臂 161–927s，长的是 Penguin——它自己的 agent 回合（读工具结果、复述）比 claude -p 慢，第 3 次 927s 里 MCP 只用了 4 次模型调用。tokens 相近（39–53k vs 44–48k，只算 MCP 内的）。",
+    "surprise": "第一遍 Penguin 三次里两次的 binding 缺 runtime（MCP 的 TP_RUNTIME 没进 Penguin 的 mcpServers env），按 §0 第 8 条拒收，修了再跑一遍；第一遍第 3 次死在 spec.compose 120 秒超时（为 Midscene 设的 TP_MODEL_TIMEOUT_MS 也管着流水线），调到 300 秒。replay.mjs 对夹具重打分时把一行夹具的分追加进了真记分板——scoreRun 加了 scoreboard:false。"
+  }
+}

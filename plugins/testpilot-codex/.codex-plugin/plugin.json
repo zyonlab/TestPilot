@@ -1,0 +1,21 @@
+{
+  "name": "testpilot-codex",
+  "version": "2026.9.10+skill.1",
+  "description": "Versioned test design, human review and Midscene execution using the host planner.",
+  "author": {
+    "name": "TestPilot"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "TestPilot",
+    "shortDescription": "Design, review and execute traceable tests.",
+    "longDescription": "Use your Codex planner with TestPilot domain skills and a separate Midscene executor. Requires a running TestPilot server and the testpilot-mcp command.",
+    "developerName": "TestPilot",
+    "category": "Developer Tools",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Use TestPilot to design tests from this project’s requirements."
+    ]
+  }
+}

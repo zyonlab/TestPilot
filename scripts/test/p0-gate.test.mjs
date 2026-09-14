@@ -1,0 +1,8 @@
+import{test}from'node:test';import assert from'node:assert/strict';import{mkdtempSync,writeFileSync,rmSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';import{assessP0,verifyExport,sha256}from'../lib/p0-gate.mjs';
+test('hash-bound gate rejects weakened artifacts, missing/stale/infra evidence and retries that hide red',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'tp-gate-'));try{writeFileSync(join(dir,'case.ts'),'oracle eq 1');const raw=JSON.stringify({cases:[{id:'c1',priority:'P0'}],files:{'case.ts':sha256('oracle eq 1')}});writeFileSync(join(dir,'testpilot-manifest.json'),raw);const digest=sha256(raw),integrity=verifyExport(dir,digest);const now=Date.now();const args={integrity,executedManifestHash:digest,startedAt:new Date(now-2000).toISOString(),finishedAt:new Date(now-1000).toISOString(),now,report:{suites:[{specs:[{title:'[@P0] Case',tests:[{results:[{status:'passed'}]}]}]}]}};
+ assert.equal(assessP0(args).status,'passed');assert.equal(assessP0({...args,executedManifestHash:'old'}).status,'blocked');assert.equal(assessP0({...args,now:now+3600000}).status,'blocked');assert.equal(assessP0({...args,report:{}}).status,'blocked');
+ args.report.suites[0].specs[0].tests[0].results=[{status:'failed'},{status:'passed'}];assert.equal(assessP0(args).status,'failed');args.report.suites[0].specs[0].tests[0].results=[{status:'failed',error:{message:'ORACLE_UNOBSERVABLE'}}];assert.equal(assessP0(args).status,'blocked');
+ writeFileSync(join(dir,'case.ts'),'oracle exists');assert.equal(verifyExport(dir,digest).reason,'artifact_modified');assert.equal(verifyExport(dir,null).status,'blocked');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

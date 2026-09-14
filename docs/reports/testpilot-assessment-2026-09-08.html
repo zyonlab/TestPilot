@@ -1,0 +1,931 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="TestPilot v3 项目评估：用户故事、Agent 交互、架构、数据契约、研究专业性与自进化。"><title>TestPilot v3 · 项目与研究评估</title><style>
+:root{--paper:#f4f2e9;--card:#fdfcf7;--ink:#172f30;--muted:#607171;--rule:#cdd3c9;--green:#216956;--amber:#9c5c1b;--red:#a24032;--aqua:#bee0ce;--mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;--sans:"PingFang SC","Microsoft YaHei",sans-serif;--serif:"Songti SC","Noto Serif CJK SC","STSong",serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:35px}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.85 var(--sans)}button,input,select{font:inherit}button,a{-webkit-tap-highlight-color:transparent}a{color:var(--green);text-underline-offset:4px}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #b87828;outline-offset:3px}button{color:inherit}aside{position:fixed;inset:0 auto 0 0;width:232px;background:var(--ink);color:#edf2e8;padding:34px 23px;display:flex;flex-direction:column;z-index:10}.brand{font:26px/1.2 var(--serif);letter-spacing:1px}.brand small{display:block;font:10px var(--mono);letter-spacing:2.5px;color:#a0bdb5;margin-top:13px}nav{margin-top:37px;overflow:auto}nav a{display:block;color:#b8cec5;text-decoration:none;padding:9px 10px;border-left:2px solid transparent;font-size:12px}nav a span{font:10px var(--mono);display:inline-block;width:26px;opacity:.7}nav a:hover,nav a.active{color:#fff;background:#ffffff0a;border-color:#d5b46a}.sidefoot{font:10px/1.8 var(--mono);color:#a2beb5;margin-top:auto;padding-top:25px}.sidefoot div{height:2px;background:#405b55;margin:13px 0}.sidefoot i{display:block;height:2px;background:#dfbd75;width:0}main{margin-left:232px;max-width:1430px;padding:0 54px 30px}.toolbar{display:flex;justify-content:space-between;align-items:center;padding:20px 0;border-bottom:1px solid var(--rule);font:11px var(--mono);color:var(--muted)}.toolbar button,.smallbutton{padding:7px 13px;border:1px solid var(--rule);background:transparent;font-size:12px}.hero{padding:65px 0 42px}.eyebrow{font:11px var(--mono);letter-spacing:2px;color:var(--amber);text-transform:uppercase}h1{font:clamp(38px,4.4vw,68px)/1.2 var(--serif);letter-spacing:-1.4px;margin:20px 0 24px;font-weight:600}h1 em{font-style:normal;color:var(--green)}.hero-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:42px;align-items:start}.lede{font-size:17px;line-height:1.95;max-width:730px}.abstract{border-left:3px solid var(--green);padding-left:22px;margin-top:10px}.abstract strong{font:22px/1.5 var(--serif);display:block;margin-bottom:14px}.abstract p{font-size:13px;color:var(--muted)}.hero-meta{font:11px/1.9 var(--mono);color:var(--muted);margin-top:28px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);margin-top:38px}.metric{padding:20px 18px;border-right:1px solid var(--rule)}.metric:first-child{padding-left:0}.metric:last-child{border:0}.metric b{font:38px/1.2 var(--serif);display:block}.metric span{display:block;font-size:12px;margin-top:10px}.metric small{display:block;font-size:11px;color:var(--muted);margin-top:5px}.note{padding:18px 22px;background:#e7ebe0;font-size:13px;border-left:3px solid #7b8b74;margin:22px 0}.note.warn{background:#f2e7d5;border-color:var(--amber)}.note.red{background:#f3e1d9;border-color:var(--red)}section{padding:46px 0;border-top:1px solid var(--rule)}.section-head{display:flex;gap:22px;margin-bottom:25px}.sec-no{font:15px var(--mono);color:var(--amber);padding-top:9px}h2{font:29px/1.5 var(--serif);margin:0;letter-spacing:-.3px}.section-head p{margin:8px 0 0;color:var(--muted);max-width:850px;font-size:13px}h3{font:21px/1.5 var(--serif);margin:26px 0 12px}h4{font-size:14px;margin:0 0 8px}p{margin:10px 0 16px}code{font:12px/1.6 var(--mono);background:#e8eae0;padding:2px 5px;border-radius:2px;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font:12px/1.75 var(--mono)}.table-wrap{overflow-x:auto;margin:18px 0}table{border-collapse:collapse;width:100%;font-size:12px;min-width:620px}th{text-align:left;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);padding:12px 13px;background:#e9ece2;font-weight:600}td{padding:14px 13px;border-bottom:1px solid var(--rule);vertical-align:top}td:first-child{font-weight:600}tr:hover td{background:#fdfcf77a}.tag{display:inline-block;white-space:nowrap;font:10px/1.8 var(--sans);padding:1px 7px;border:1px solid #adbbac;border-radius:2px;color:#31574a;background:#e8eee4;margin:2px 4px 2px 0}.tag.record{background:#e5eced;border-color:#a7bec0;color:#3d6067}.tag.verified{background:#dfeee4;border-color:#8bb69b;color:#235c3b}.tag.gap{background:#f5e7d6;border-color:#d8b588;color:#8b5520}.tag.risk{background:#f5dfd8;border-color:#d6a89b;color:#933e2d}.tag.proposal{background:#ece8f0;border-color:#bfb2cb;color:#655272}.cite{border:0;border-bottom:1px dotted #8f9e91;background:none;padding:0 2px;margin-left:3px;font:10px var(--mono);color:var(--green);vertical-align:baseline}.cite:hover{background:#dce8d9}.legend{display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--muted);align-items:center}.cols{display:grid;grid-template-columns:1fr 1fr;gap:26px}.card{padding:24px;background:var(--card);border:1px solid var(--rule)}.card h3{margin-top:0}.tabs{display:flex;border-bottom:1px solid var(--ink);gap:5px;flex-wrap:wrap;margin:20px 0}.tabs button{background:transparent;border:0;border-bottom:3px solid transparent;padding:11px 18px;font-size:13px}.tabs button[aria-selected=true]{border-color:var(--green);color:var(--green);font-weight:600}.tab-panel[hidden]{display:none}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;padding:22px 0}.step{padding:18px 14px;background:var(--card);border-top:3px solid var(--green);position:relative;font-size:12px}.step b{display:block;font-size:13px;margin-bottom:10px}.step small{display:block;color:var(--muted)}.step:not(:last-child)::after{content:'→';position:absolute;right:-17px;top:40%;color:var(--green)}.step.pending{border-top:3px dashed var(--amber);background:#f2e7d5}.flow-note{font-size:12px;color:var(--muted)}.layer-layout{display:grid;grid-template-columns:1fr 1fr;gap:26px}.layers{display:grid;gap:7px}.layer{display:grid;grid-template-columns:46px 1fr;text-align:left;padding:16px;border:1px solid var(--rule);background:var(--card);gap:10px}.layer span:first-child{font:14px var(--mono);color:var(--amber)}.layer small{display:block;color:var(--muted);font-size:11px}.layer[aria-pressed=true]{background:var(--ink);color:white;border-color:var(--ink)}.layer[aria-pressed=true] small{color:#bed0c4}.layer-detail{background:#e7ebe0;padding:25px}.layer-detail h3{margin-top:0}.layer-detail ul{padding-left:20px;font-size:13px}.entity-map{font:13px/2 var(--mono);border:1px solid var(--rule);background:var(--card);padding:24px;white-space:pre-wrap;overflow-wrap:anywhere}.entity-layout{display:grid;grid-template-columns:.72fr 1.28fr;gap:20px;margin:20px 0}.entity-select label{display:block;font-size:12px}.entity-select select{width:100%;margin-top:9px;background:var(--card);border:1px solid var(--rule);padding:10px}.codebox{background:var(--ink);color:#e2e9d9;padding:24px}.codebox code{background:transparent;color:inherit;padding:0}.entity-doc{font-size:13px;margin-top:18px}.barbox{padding:25px;background:var(--card);border:1px solid var(--rule)}.bar-row{display:grid;grid-template-columns:70px 1fr 65px;align-items:center;gap:10px;font-size:12px;margin:14px 0}.track{height:24px;background:#e3e8dd;position:relative}.track i{display:block;height:100%;background:var(--green)}.track .threshold{position:absolute;left:33.333%;top:-5px;height:34px;border-left:2px dashed var(--amber)}.bar-caption{font-size:11px;color:var(--muted)}.findings-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0}.findings-tools input{flex:1;min-width:170px;padding:10px;border:1px solid var(--rule);background:var(--card)}.findings-tools select{padding:10px;border:1px solid var(--rule);background:var(--card)}.finding{border-top:1px solid var(--rule);padding:20px 0}.finding h3{margin:0 0 12px;font:19px/1.55 var(--serif)}.finding-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;font-size:13px}.finding .codebox{margin-top:15px;font-size:11px}.finding details{font-size:12px;margin-top:10px}.finding summary{cursor:pointer;color:var(--green)}.finding[hidden]{display:none}.papers{display:grid;grid-template-columns:1fr 1fr;gap:17px}.paper{border:1px solid var(--rule);padding:21px;background:var(--card);font-size:12px}.paper h3{font:18px/1.5 var(--serif);margin:8px 0 13px}.paper .paper-meta{font:10px/1.7 var(--mono);color:var(--muted)}.paper p{margin:9px 0}.paper a{font-size:11px}.evolution{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}.evolution article{padding:18px 14px;border-top:3px solid var(--rule);background:var(--card);font-size:12px}.evolution article.done{border-color:var(--green)}.evolution article.partial{border-color:var(--amber)}.evolution b{display:block;font:27px var(--serif);color:var(--muted);margin-bottom:15px}.evolution h4{font-size:13px}.roadmap{counter-reset:road;display:grid;gap:12px}.road{display:grid;grid-template-columns:62px 1fr;gap:18px;border:1px solid var(--rule);padding:22px;background:var(--card)}.road::before{counter-increment:road;content:'0' counter(road);font:30px var(--serif);color:var(--amber)}.road h3{margin:0;font-size:19px}.road p{font-size:13px;margin-bottom:0}.refs-list{font-size:12px}.refs-list li{margin:10px 0;overflow-wrap:anywhere}.source-index{display:grid;grid-template-columns:1fr 1fr;gap:6px}.source-index button{text-align:left;border:0;background:var(--card);padding:10px;font-size:11px;overflow-wrap:anywhere}.source-index span{font:10px var(--mono);margin-right:10px;color:var(--green)}dialog{max-width:min(850px,94vw);max-height:85vh;border:1px solid var(--rule);padding:0;background:var(--paper);color:var(--ink)}dialog::backdrop{background:#102b2bb5}.dialog-head{padding:20px;display:flex;justify-content:space-between;align-items:start;border-bottom:1px solid var(--rule);gap:15px}.dialog-head h3{margin:0;font-size:20px}.dialog-head p{font:11px/1.7 var(--mono);overflow-wrap:anywhere;margin:7px 0 0}.dialog-body{padding:24px}.dialog-body pre{font-size:11px}.dialog-head button{background:var(--ink);color:white;border:0;padding:6px 16px}.print-sources details{margin:10px 0;font-size:12px}.print-sources pre{font-size:10px}.print-sources summary{cursor:pointer;color:var(--green)}footer{padding:30px 0;font:11px/1.8 var(--mono);border-top:1px solid var(--ink);color:var(--muted)}.no-js{background:#f2e7d5;padding:10px} @media(min-width:1750px){main{margin-right:auto}}@media(max-width:1100px){aside{width:195px;padding:27px 16px}main{margin-left:195px;padding:0 30px 25px}.hero-grid{gap:22px}.flow{gap:13px}.step{padding:14px 10px}.step:not(:last-child)::after{right:-13px}.evolution{grid-template-columns:repeat(3,1fr)}}@media(max-width:800px){aside{position:relative;width:auto;display:block;padding:20px}.brand{font-size:22px}.brand small{margin-top:7px}nav{display:flex;gap:3px;margin-top:15px;overflow-x:auto}nav a{white-space:nowrap;border-left:0;border-bottom:2px solid transparent;padding:6px}.sidefoot{display:none}main{margin:0;padding:0 20px}.toolbar{font-size:9px}.hero{padding-top:36px}.hero-grid,.cols,.layer-layout,.entity-layout,.finding-grid,.papers{grid-template-columns:1fr}.hero-grid{gap:12px}.metrics{grid-template-columns:1fr 1fr}.metric{padding:17px!important;border-bottom:1px solid var(--rule)}.metric:nth-child(2){border-right:0}.metric b{font-size:31px}.flow{grid-template-columns:1fr}.step:not(:last-child)::after{content:'↓';right:50%;top:auto;bottom:-21px}.flow{gap:25px}.evolution{grid-template-columns:1fr 1fr}.source-index{grid-template-columns:1fr}.section-head{gap:12px}h2{font-size:25px}section{padding:32px 0}.road{grid-template-columns:36px 1fr;gap:10px}.toolbar span{max-width:65%}h1{font-size:41px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}@media print{aside,.toolbar,.tabs,.findings-tools,.smallbutton,.source-index,dialog{display:none!important}main{margin:0;padding:0;max-width:none}body{background:white;font-size:11px;color:#000}h1{font-size:36px}.hero{padding:10px 0}.hero-grid{grid-template-columns:1.5fr 1fr}.section-head p,.lede{font-size:11px}section{padding:20px 0;break-before:auto}.card,.paper,.road,.finding,.barbox{break-inside:avoid}.tab-panel[hidden],.finding[hidden]{display:block!important}.tab-panel{margin-bottom:20px}.tabs+div:before{content:''}table{min-width:0;font-size:9px}th,td{padding:7px}.codebox{background:#eee;color:#000}a{color:#000}.cite{color:#000}.layer-detail{min-height:0}.source-index{display:none}.print-sources details>*{display:block!important}.print-sources details{break-inside:avoid}.papers{grid-template-columns:1fr 1fr}.metrics{margin-top:20px}.metric b{font-size:28px}footer{font-size:9px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body><aside><div class="brand">TestPilot<span style="color:#d9b66b"> / </span>v3<small>SYSTEMS & RESEARCH REVIEW</small></div><nav aria-label="报告目录"><a href="#verdict"><span>00</span>评估结论</a><a href="#stories"><span>01</span>用户与故事</a><a href="#interaction"><span>02</span>Agent 交互</a><a href="#architecture"><span>03</span>架构分层</a><a href="#data"><span>04</span>数据与契约</a><a href="#evidence"><span>05</span>完成与实证</a><a href="#professional"><span>06</span>专业性评估</a><a href="#findings"><span>07</span>关键缺口</a><a href="#research"><span>08</span>论文对照</a><a href="#evolution"><span>09</span>自进化路径</a><a href="#next"><span>10</span>优先路线</a><a href="#sources"><span>11</span>方法与证据</a></nav><div class="sidefoot">2026.09.08 · LOCAL AUDIT<div><i id="reading-progress"></i></div>代码 × 运行记录 × 论文<br>一份可以追问证据的评估</div></aside><main><div class="toolbar"><span>ENGINEERING DOSSIER / 01 · 中文评估报告</span><button id="print-btn">打印 / 存为 PDF</button></div><noscript><p class="no-js">完整正文与文末证据可离线阅读；启用 JavaScript 可切换流程、数据示例与筛选发现。</p></noscript><header class="hero" id="verdict"><div class="eyebrow">A domain testing system, under examination</div><h1>从测试生成，走向<br><em>可验证的专业 Agent。</em></h1><div class="hero-grid"><div><p class="lede">TestPilot 已经具备一个专业测试系统的重要骨架：把业务规则转成可执行判据，把人放在复核位置，把模型运行变成可追溯的实验。当前最强的是<strong>验证与评测机制</strong>；最弱的是<strong>跨入口强制执行、闭环完整度，以及领域收益的有效实证</strong>。</p><div class="hero-meta">基线提交 923ab0d + 当前未提交工作树 · 分支 opt/tier4<br>评估日期 2026-09-08 · 范围：Web / 合约交易前端测试<br>本报告是代码与研究评估，不是线上验收或安全认证</div></div><div class="abstract"><strong>定位：有真实运行证据的<br>垂直测试工程原型</strong><p>可作为专业作品与实验平台展示；尚不宜声称“完整自主测试平台”“强隔离门禁”或“已证明持续自进化”。</p><button class="cite" data-source="C01" aria-label="查看代码证据 C01">C01</button> <button class="cite" data-source="C13" aria-label="查看代码证据 C13">C13</button> <button class="cite" data-source="C23" aria-label="查看代码证据 C23">C23</button><p>任务状态 89% 完成，并不等于验收通过 89%。本轮发现的 g2 缺口未被这份完成率反映。</p></div></div><div class="metrics"><div class="metric"><b>25 / 28</b><span>任务表标记 done</span><small>按任务计数，非验收得分</small></div><div class="metric"><b>2</b><span>服务端已接入运行时</span><small>Penguin · Claude Code</small></div><div class="metric"><b>6</b><span>机器判据类型</span><small>含 API / 前后状态关系</small></div><div class="metric"><b>30 / 30</b><span>本轮定向测试通过</span><small>另通过 typecheck 与 drift</small></div></div></header><div class="legend">证据标签：<span class="tag code">代码存在</span><span class="tag record">历史实测</span><span class="tag verified">本轮验证</span><span class="tag gap">尚有缺口</span><span class="tag proposal">建议设计</span>　点击 Cxx 可展开对应源码快照；Rxx 为论文原文。</div><section id="stories" aria-labelledby="h-stories"><div class="section-head"><span class="sec-no">01</span><div><h2 id="h-stories">谁在使用，如何得到价值</h2><p>用户目标可分成“测产品”和“评估测试 Agent”两条线；两条线需要不同的分数和工作入口。</p></div></div><div class="cols"><article class="card"><h3>第一用户：测试 / 领域负责人</h3><p>提供网址、登录态、规则材料与人工金标准；决定哪些候选进入回归套件；关注漏测、误报、机器判据是否真正代表业务意图。</p><p><strong>日常入口：</strong>复核、审计、运行报告、基线。研究入口是记分板与 gold。<button class="cite" data-source="C04" aria-label="查看代码证据 C04">C04</button> <button class="cite" data-source="C05" aria-label="查看代码证据 C05">C05</button></p></article><article class="card"><h3>第二用户：开发者与 coding agent</h3><p>改完前端后调用 TestPilot 跑 P0，读取具体失败值、报告与成本，再决定修产品还是交回人处理。Agent 是工具的使用者，也是需要被评价的对象。</p><p><strong>成功标准：</strong>缩短定位和修复时间，同时保持业务断言与测试集合不被悄悄放宽。<button class="cite" data-source="C29" aria-label="查看代码证据 C29">C29</button> <button class="cite" data-source="C38" aria-label="查看代码证据 C38">C38</button></p></article></div><div class="table-wrap"><table><thead><tr><th>故事 / 角色</th><th>用户实际动作</th><th>系统产物与反馈</th><th>当前边界</th></tr></thead><tbody><tr><td>US-A 接入被测产品<br>测试负责人</td><td>创建项目；配置 baseUrl、视口、登录、变量；导入规格或探索材料</td><td>Environment + materials；能复用会话、绑定数据和执行前复位</td><td>Web 是当前证据主体；类型包含 iOS/Android 不代表已有对应执行验收</td></tr><tr><td>US-B 从材料生成候选<br>测试设计者</td><td>提交生成任务或让宿主使用 generate skill</td><td>docs → spec → stories → design → gate；附出处、方法、优先级和判据</td><td>当前 MCP g1 只有 5 个阶段；文档中的“九步”是历史称法 <button class="cite" data-source="C01" aria-label="查看代码证据 C01">C01</button></td></tr><tr><td>US-C 复核进入套件<br>领域负责人</td><td>抽样校准；查看 Scanner 问题、变化；批准、拒绝、修改</td><td>review_decisions + TestCase；键盘操作与批量处理；保留 sourceRunId</td><td>批准成功不代表后续 g2 已打通；Claude 决定镜像有缺口 <button class="cite" data-source="C12" aria-label="查看代码证据 C12">C12</button> <button class="cite" data-source="C28" aria-label="查看代码证据 C28">C28</button></td></tr><tr><td>US-D 跑关键回归<br>开发者 / agent</td><td>run_case 或 run_p0；从 UI 启动套件</td><td>执行记录、机器读数、截图路径、失败分类与 spend</td><td>既有套件可执行；环境、账户状态和缓存仍影响可靠性 <button class="cite" data-source="C29" aria-label="查看代码证据 C29">C29</button></td></tr><tr><td>US-E 阻止错误交付<br>coding agent 使用者</td><td>在被测仓库装 Stop hook；修改产品后尝试结束</td><td>demo 中真实发生“被挡 → 修正数量取整 → 4 条 P0 通过”</td><td>仅是该 demo 的闭环证据；故障放行与 3 次封顶需另看 <button class="cite" data-source="C17" aria-label="查看代码证据 C17">C17</button> <button class="cite" data-source="C27" aria-label="查看代码证据 C27">C27</button></td></tr><tr><td>US-F 比较一个领域 skill<br>研究 / harness 维护者</td><td>冻结上游；只改一项；多次生成；按同一 gold 配对</td><td>RunMeta / inputHash / coverage / McNemar / scoreboard</td><td>机制存在；Hyperliquid 领域对比仍无有效结论 <button class="cite" data-source="C11" aria-label="查看代码证据 C11">C11</button> <button class="cite" data-source="C23" aria-label="查看代码证据 C23">C23</button></td></tr><tr><td>US-G 维护专业标准<br>领域负责人</td><td>复核 gold 草稿、划分留出项、冻结；代码变化后复审</td><td>新 goldHash、新谱系、stale 提醒</td><td>草稿存在不等于人工意图已确认；冻结也不等于文件权限只读 <button class="cite" data-source="C35" aria-label="查看代码证据 C35">C35</button></td></tr><tr><td>US-H 持续维护<br>测试维护者</td><td>查看趋势、成本、隔离原因；导出代码与数据</td><td>失败归因、缓存重试、自愈标记、代码工程</td><td>导出执行与网关缓存尚未完全统一；真实自愈退化样本少</td></tr></tbody></table></div><div class="note"><strong>产品交互评价：</strong>复核、差异与证据围绕同一批产物组织，是合理的工作台设计。但启动、配置、trace 在 TestPilot 与宿主之间分散；已有页面仍把迁移落点统一指向 Penguin。多运行时接线领先于多运行时用户体验，使用者需要理解较多“这是哪一种运行”。建议增加统一的任务详情页，展示宿主、生成阶段、执行批次与待处理动作。<button class="cite" data-source="C03" aria-label="查看代码证据 C03">C03</button> <button class="cite" data-source="C32" aria-label="查看代码证据 C32">C32</button></div><p class="flow-note">US-A～H 是本报告按现有代码重组的主要用户故事，不替换仓库旧版 US 编号；UI 评价来自组件和路由静态阅读，本轮未对产品做用户可用性实验。</p></section><section id="interaction" aria-labelledby="h-interaction"><div class="section-head"><span class="sec-no">02</span><div><h2 id="h-interaction">Agent 如何交互</h2><p>这是一个混合控制系统：固定工作流承担可重复的任务，自主 Agent 承担探索与工具使用，机器判据负责能程序化的结果。</p></div></div><div class="tabs" data-tabs="flows" role="tablist" aria-label="交互路径"><button id="tab-generation" role="tab" aria-controls="panel-generation" aria-selected="true" data-panel="generation">生成与复核</button><button id="tab-execution" role="tab" aria-controls="panel-execution" aria-selected="false" data-panel="execution">开发与执行</button><button id="tab-evaluation" role="tab" aria-controls="panel-evaluation" aria-selected="false" data-panel="evaluation">评测与改进</button></div><div class="tab-panel" id="panel-generation" data-tab-group="flows" role="tabpanel" aria-labelledby="tab-generation"><h3>生成与复核</h3><div class="flow"><div class="step "><b>01 / 人 / 宿主</b>材料、目标、生成指令<small>URL / materials / limit</small></div><div class="step "><b>02 / Agent 宿主</b>载入 skill，调用 MCP<small>Penguin 或 Claude Code</small></div><div class="step "><b>03 / 固定 g1</b>5 个阶段顺序运行<small>spec / stories / cases / gate</small></div><div class="step "><b>04 / 人复核</b>批准、拒绝、编辑<small>TestCase + decisions</small></div><div class="step pending"><b>05 / g2 续接</b>MCP 当前直接报未实现<small>规划链路，非已完成</small></div></div><p><strong>控制权：</strong>宿主控制会话与调用；g1 内的节点顺序由代码固定，模型负责内容。write_stories / write_cases 在工具内做形状和出处校验；但 run_pipeline 内部自己落盘，不经过宿主的 Write hook。<button class="cite" data-source="C01" aria-label="查看代码证据 C01">C01</button> <button class="cite" data-source="C03" aria-label="查看代码证据 C03">C03</button> <button class="cite" data-source="C15" aria-label="查看代码证据 C15">C15</button></p></div><div class="tab-panel" id="panel-execution" data-tab-group="flows" role="tabpanel" aria-labelledby="tab-execution"><h3>开发与执行</h3><div class="flow"><div class="step "><b>01 / 开发者 / agent</b>修改产品代码<small>如数量取整逻辑</small></div><div class="step "><b>02 / MCP / Stop hook</b>请求项目 P0 套件<small>run_p0 → HTTP gateway</small></div><div class="step "><b>03 / 网关 → runner</b>会话池、复位、UI 动作<small>Midscene + Puppeteer</small></div><div class="step "><b>04 / 机器判据</b>读页面 / 接口 / 链<small>pass / fail / unobservable</small></div><div class="step "><b>05 / Agent / 人</b>读失败值并修复或接管<small>重跑、审阅、留证</small></div></div><p><strong>反馈不是一句“失败了”：</strong>返回失败分类、oracle 读数、花费与报告路径；模型解释结果，不应重新发明判决。demo 有真闭环，但 Stop hook 达到封顶或网关异常会放行，正式合并门禁需独立状态。<button class="cite" data-source="C29" aria-label="查看代码证据 C29">C29</button> <button class="cite" data-source="C17" aria-label="查看代码证据 C17">C17</button> <button class="cite" data-source="C27" aria-label="查看代码证据 C27">C27</button></p></div><div class="tab-panel" id="panel-evaluation" data-tab-group="flows" role="tabpanel" aria-labelledby="tab-evaluation"><h3>评测与改进</h3><div class="flow"><div class="step "><b>01 / 维护者</b>先写假设与评价指标<small>evals/*.json</small></div><div class="step "><b>02 / 冻结输入</b>固定上游与测试集<small>inputHash / goldHash</small></div><div class="step "><b>03 / 候选 A / B</b>只差一个组件、多次跑<small>ablate / skillVersion</small></div><div class="step "><b>04 / 工具打分</b>匹配、留出项、配对统计<small>score_run / paired_eval</small></div><div class="step "><b>05 / 人工推广</b>接受后更新基线与资产<small>尚无自动推广控制器</small></div></div><p><strong>评测不是宿主互相评价：</strong>确定性工具算基础覆盖，语义判断单独标注；优化建议可以来自模型，金标准和最终推广仍要受独立控制。当前 T-12 的无效六次产物不能当成领域提升。<button class="cite" data-source="C20" aria-label="查看代码证据 C20">C20</button> <button class="cite" data-source="C24" aria-label="查看代码证据 C24">C24</button> <button class="cite" data-source="C25" aria-label="查看代码证据 C25">C25</button></p></div><div class="table-wrap"><table><thead><tr><th>参与者</th><th>自主空间</th><th>应受约束的边界</th></tr></thead><tbody><tr><td>外层 Agent / 宿主</td><td>读 skill、检索、探索、决定工具调用和重试</td><td>预算、可写范围、批准权限、可调用接口；目前未构成完整安全隔离</td></tr><tr><td>MCP + 固定工作流</td><td>参数校验与执行顺序由代码决定</td><td>不可把 schema 合法、gate 高分直接解释为真实业务正确</td></tr><tr><td>浏览器执行模型</td><td>按步骤识别控件、操作界面、缓存失效后重定位</td><td>UI 动作是否真发生，要通过状态证据确认；缓存命中不自动代表操作正确</td></tr><tr><td>Judge / Scanner</td><td>解释性判断、可疑项检测、语义对齐</td><td>独立标签校准与版本绑定；不能与确定性结果混为一个“准确率”</td></tr><tr><td>人</td><td>定义业务意图、批准用例、冻结 gold、推广新版本</td><td>需要减少逐条重复劳动，但不能把 self-declared human 当成可信身份</td></tr></tbody></table></div></section><section id="architecture" aria-labelledby="h-architecture"><div class="section-head"><span class="sec-no">03</span><div><h2 id="h-architecture">六层职责，四种运行边界</h2><p>点击分层查看职责与边界。下图描述当前逻辑架构，不把目录数量解释成服务数量。</p></div></div><div class="layer-layout"><div class="layers" role="group" aria-label="架构分层"><button class="layer" data-layer="0" aria-pressed="true"><span>L1</span><span>交互与展示<small>React · Zustand · ?open= 路由</small></span></button><button class="layer" data-layer="1" aria-pressed="false"><span>L2</span><span>应用服务与运行协调<small>Express gateway · 领域服务</small></span></button><button class="layer" data-layer="2" aria-pressed="false"><span>L3</span><span>会话与宿主运行时<small>Penguin / Claude Code</small></span></button><button class="layer" data-layer="3" aria-pressed="false"><span>L4</span><span>专业资产与工具边界<small>skills · hooks · stdio MCP</small></span></button><button class="layer" data-layer="4" aria-pressed="false"><span>L5</span><span>测试领域与执行引擎<small>casegen · gate · oracle · runner</small></span></button><button class="layer" data-layer="5" aria-pressed="false"><span>L6</span><span>证据与持久化<small>SQLite + JSON / JSONL + YAML</small></span></button></div><div class="layer-detail" id="layer-detail" aria-live="polite"><h3>交互与展示</h3><p>接收人的目标与决定；展示候选、执行证据、成本和评测。</p><p>不应让 UI 自己成为独立判官；页面文案应跟实际运行时对应。</p></div></div><div class="note"><strong>物理进程关系：</strong>浏览器 UI 通过 HTTP / WebSocket 访问 gateway；gateway 启动或连接宿主会话；宿主通过 stdio 调 MCP 子进程；用例执行由 gateway 调 runner；runner 驱动 Chromium 与被测站点。<strong>MCP 是协议边界，runner 是执行边界，二者不等于天然安全沙箱。</strong></div><div class="table-wrap"><table><thead><tr><th>判断</th><th>评价</th><th>优先改进</th></tr></thead><tbody><tr><td>分层设计</td><td>专业逻辑与宿主会话分离，运行时四函数接缝有价值</td><td>保留简单 g1，对长期存在的应用服务逐步拆模块；无需再造一套调度框架</td></tr><tr><td>真实结构</td><td>更接近模块化单体 + 多进程执行，而非已完成的微服务架构</td><td>将报告、review、gold、suite 端点移出巨型 index；明确 legacy graph 的保留用途</td></tr><tr><td>运行时可移植性</td><td>资产打包与生成插件做了漂移校验；业务流程仍有按 penguin 判断的遗留分支</td><td>对所有运行时执行同一套契约测试，尤其 approve → read_decisions <button class="cite" data-source="C12" aria-label="查看代码证据 C12">C12</button></td></tr><tr><td>模型可观测性</td><td>RunMeta 记录 MCP 内生成模型；外层宿主 token 不能从这些字段自动推得</td><td>拆 hostModel、generationModel、visionModel、judgeModel；分别计费与冻结配置</td></tr></tbody></table></div></section><section id="data" aria-labelledby="h-data"><div class="section-head"><span class="sec-no">04</span><div><h2 id="h-data">数据结构：把事实、决定和评分分开</h2><p>三个主要事实域：业务当前状态、一次生成的快照、一次评测的谱系。真正可靠的闭环必须保留它们之间的关联。</p></div></div><div class="entity-map" role="img" aria-label="项目、用例、运行和评测数据之间的逻辑关系">项目 Project ──1:N── 环境 Environment / 已批准用例 TestCase
+TestCase ──1:N── 执行 RunRecord ──N:M*── 批次 Batch
+生成 RunMeta ──1:1── stories / cases / gate / events
+生成 RunMeta ──1:N── 人工 Decision ──批准──→ TestCase
+生成 RunMeta + 人工 GoldChecklist ──评分──→ ScoreboardEntry
+ScoreboardEntry A + B ──同谱系检查──→ 配对差异 / McNemar
+运行证据 gate / holds / scan ──抽取──→ Episode 候选</div><p class="flow-note">以上是逻辑关联，不代表 SQLite 已声明外键。* 批次通过 batch_runs 关联用例及 runId；数据驱动和重试会带来额外执行，不应把 batch_runs 一行当作所有尝试。</p><div class="table-wrap"><table><thead><tr><th>对象 / 存储</th><th>关键字段</th><th>生产者 → 消费者 / 语义</th></tr></thead><tbody><tr><td>Story / TextCase<br>runs/*.json</td><td>storyId、steps:string[]、expected、designMethod、tier、oracle、sourceRefs</td><td>g1 / 写入工具 → gate、复核、评分；sourceRefs 表示引用段，不证明语义支持 <button class="cite" data-source="C01" aria-label="查看代码证据 C01">C01</button> <button class="cite" data-source="C09" aria-label="查看代码证据 C09">C09</button></td></tr><tr><td>TestCase<br>SQLite test_cases</td><td>projectId、steps:{order,text}[]、oracle、envRef、dataKey、sourceRunId</td><td>人批准或 CRUD → 套件执行；与候选 TextCase 不是同一形状 <button class="cite" data-source="C06" aria-label="查看代码证据 C06">C06</button> <button class="cite" data-source="C28" aria-label="查看代码证据 C28">C28</button></td></tr><tr><td>Environment / Secret<br>SQLite</td><td>baseUrl、vars、login、viewport；密文 session / secret</td><td>人配置 → gateway 解引用 → runner；不在报告中复制真实凭证</td></tr><tr><td>RunMeta / NodeEvent<br>meta.json / events.jsonl</td><td>runtime、skillVersion、promptsDigest、model、materialsHash、ablated、inputHash、spend；node/phase/wrote</td><td>MCP / 运行时 → 复核投影与评测；生成运行与一次浏览器执行要区分 <button class="cite" data-source="C08" aria-label="查看代码证据 C08">C08</button></td></tr><tr><td>RunRecord / RunSpend<br>SQLite + 执行日志</td><td>status、oracle[]、attempts、healed、infraError、failKind、spend、reportPath</td><td>runner / gateway → UI、MCP；模型调用、缓存命中、时间成本不等于美元金额 <button class="cite" data-source="C07" aria-label="查看代码证据 C07">C07</button> <button class="cite" data-source="C29" aria-label="查看代码证据 C29">C29</button></td></tr><tr><td>Decision / HumanLabel<br>DB + decisions.json / labels</td><td>caseId、decision、by、decidedByKind:human；goldId / covered / heldOut</td><td>人工审阅 → 下一轮读取、judge 校准；枚举值不证明真实操作者身份 <button class="cite" data-source="C34" aria-label="查看代码证据 C34">C34</button> <button class="cite" data-source="C12" aria-label="查看代码证据 C12">C12</button></td></tr><tr><td>Gold / ScoreboardEntry<br>benchmark/</td><td>match(anyOf,allOf,assertAnyOf)、heldOut；goldHash、inputHash、binding、coverage、vsPrev</td><td>人提供意图 → 工具打分；gold 变更代表新谱系 <button class="cite" data-source="C20" aria-label="查看代码证据 C20">C20</button> <button class="cite" data-source="C11" aria-label="查看代码证据 C11">C11</button></td></tr><tr><td>Episode<br>宿主 memory 目录</td><td>key≤64、value≤200、category、runTag、source</td><td>工具抽取候选 → agent 挑选写入；消费端实际使用效果尚未有独立实证 <button class="cite" data-source="C19" aria-label="查看代码证据 C19">C19</button> <button class="cite" data-source="C31" aria-label="查看代码证据 C31">C31</button></td></tr></tbody></table></div><div class="entity-layout"><div class="entity-select"><label for="entity">查看数据结构示例</label><select id="entity"><option value="case">TextCase / 合成接口判据示例</option><option value="meta">RunMeta / 字段示意</option><option value="outcome">执行结果 / 合成失败示例</option><option value="proposal">EvolutionCandidate / 建议新增</option></select><p id="entity-note" class="entity-doc">仅示意数据结构，不代表新生成或已验收的真实用例。sourceRefs 应来自真实检索；步骤前账户复位、账户/币种绑定必须独立验证。</p><p class="flow-note">所有样例均为合成或占位数据；未向产品写入用例。</p></div><div class="codebox"><pre id="entity-code">{
+  &quot;id&quot;: &quot;demo-case&quot;,
+  &quot;storyId&quot;: &quot;demo-story&quot;,
+  &quot;designMethod&quot;: &quot;boundary&quot;,
+  &quot;key&quot;: &quot;size.precision:0.001:position.eq&quot;,
+  &quot;precondition&quot;: [
+    &quot;测试账户 BTC 仓位为 0，复位已验证&quot;
+  ],
+  &quot;priority&quot;: &quot;P0&quot;,
+  &quot;title&quot;: &quot;按合法数量下单后持仓准确&quot;,
+  &quot;steps&quot;: [
+    &quot;输入合法数量 0.001&quot;,
+    &quot;点击买入&quot;
+  ],
+  &quot;expected&quot;: &quot;BTC 持仓等于 0.001&quot;,
+  &quot;tier&quot;: 1,
+  &quot;sourceRefs&quot;: [
+    &quot;rules.md#precision&quot;
+  ],
+  &quot;oracle&quot;: {
+    &quot;kind&quot;: &quot;api&quot;,
+    &quot;url&quot;: &quot;https://example.invalid/info&quot;,
+    &quot;method&quot;: &quot;POST&quot;,
+    &quot;body&quot;: &quot;{\&quot;type\&quot;:\&quot;clearinghouseState\&quot;,\&quot;user\&quot;:\&quot;${env.TEST_ACCOUNT}\&quot;}&quot;,
+    &quot;path&quot;: &quot;assetPositions[position.coin=BTC].position.szi&quot;,
+    &quot;op&quot;: &quot;eq&quot;,
+    &quot;value&quot;: &quot;0.001&quot;,
+    &quot;settleMs&quot;: 1000
+  }
+}</pre></div></div><div class="note warn"><strong>数据上的专业性与债务：</strong>判据是带 kind 的结构体、分数带谱系，是优势。欠缺的是实验快照的完整性：TestCase 不直接保存 sourceRefs，追溯依赖原始运行；RunRecord 主要存 caseId/title，长期复现还需要执行时用例版本、环境摘要、SUT 版本与全部模型版本。记分板是整文件读改写，多进程并发有丢更新风险；DB → decisions 镜像失败只记日志，应增加可靠重放或 outbox。<button class="cite" data-source="C06" aria-label="查看代码证据 C06">C06</button> <button class="cite" data-source="C07" aria-label="查看代码证据 C07">C07</button> <button class="cite" data-source="C10" aria-label="查看代码证据 C10">C10</button> <button class="cite" data-source="C12" aria-label="查看代码证据 C12">C12</button> <button class="cite" data-source="C39" aria-label="查看代码证据 C39">C39</button></div></section><section id="evidence" aria-labelledby="h-evidence"><div class="section-head"><span class="sec-no">05</span><div><h2 id="h-evidence">完成度：已有结果，不等于闭环已完整</h2><p>我没有沿用任务 done 数字作为专业性评分；逐项区分代码、真实运行记录和本轮验证。</p></div></div><div class="cols"><div class="barbox"><h3>执行时间确实下降，目标尚未达成</h3><div class="bar-row"><span>清缓存首跑</span><div class="track"><i style="width:100%"></i></div><strong>583 s</strong></div><div class="bar-row"><span>有效回放</span><div class="track"><i style="width:53.17%"></i><b class="threshold" aria-label="目标为首跑三分之一"></b></div><strong>310 s</strong></div><p class="bar-caption">虚线：首跑 1/3 ≈ 194 s；实际为首跑 53%。7 条 P0，另有 1 条 P1。数据来自既有记录，并非本轮重测。</p><button class="cite" data-source="C22" aria-label="查看代码证据 C22">C22</button> <button class="cite" data-source="C33" aria-label="查看代码证据 C33">C33</button></div><div class="card"><h3>成本改善的正确口径</h3><p><strong>50 → 5 次</strong>模型调用；<strong>177k → 15k</strong> tokens；有效回放缓存命中 <strong>93%</strong>。这些是指定批次的记录，不是跨项目通用承诺。</p><p>缓存地板包括截图、DOM 抓取、导航与等待。继续换更快的生成模型，未必能解决回放时间占比。</p><p class="flow-note">未收集单价及外层宿主完整账单，因此不换算节省多少美元；也不能用 7 条用例外推任意 30 条。</p></div></div><div class="table-wrap"><table><thead><tr><th>验收维度</th><th>现有证据</th><th>能得出的结论</th><th>不能得出的结论</th></tr></thead><tbody><tr><td>执行效率 / 稳定性</td><td><span class="tag record">历史实测</span>命中 93%，耗时 53%</td><td>缓存修复和会话复用有效</td><td>二跑 ≤1/3、长期 flake≤5% 已达标</td></tr><tr><td>门禁生效</td><td><span class="tag record">历史实测</span>T-08 故意缺出处写入被拦</td><td>选定 Write 路径的 hook 真执行</td><td>所有工具与 shell 写入都不可绕过</td></tr><tr><td>开发闭环</td><td><span class="tag record">历史实测</span>T-15 demo 被挡后修复，全绿放行</td><td>coding agent 能消费失败读数并修产品</td><td>一般产品、各种失败都能闭环；网关故障仍会挡</td></tr><tr><td>运行时对比</td><td><span class="tag record">历史实测</span>两宿主各 3 次，3 对 p=1.0</td><td>当前设计下未检出差异</td><td>两宿主等价；样本充分；测出了 hook 的因果收益</td></tr><tr><td>领域收益</td><td><span class="tag gap">尚有缺口</span>旧六次明确作废，gold 未冻结</td><td>发现并修正过消融与 schema 错误</td><td>领域 REFERENCE 已显著提高用例专业度</td></tr><tr><td>自动改进</td><td><span class="tag code">代码存在</span>冻结输入、记忆、配对评分</td><td>具备搭建受控改进实验的基础</td><td>持续、自主、跨任务泛化提升已得到证明</td></tr><tr><td>本轮核验</td><td><span class="tag verified">本轮验证</span>typecheck / drift / 30 条测试 / 合成探针</td><td>当前类型与选定契约检查通过；g2 与身份缺口已复现</td><td>全量测试、生产浏览器验收、安全攻防测试已通过</td></tr></tbody></table></div><div class="note warn"><strong>状态记录需要纠偏：</strong>T-28 标记 done，但正文承认耗时验收未达；T-22 标记 done，但三运行时表缺 Codex；T-12 的最新执行日志称第四轮起跑，结果 JSON 仍停在旧六次无效产物。应把“实现完成”“验收通过”“证据已归档”分成三个状态。这里按可核对产物保守判断，不推断后台实验此刻仍在运行。<button class="cite" data-source="C23" aria-label="查看代码证据 C23">C23</button> <button class="cite" data-source="C25" aria-label="查看代码证据 C25">C25</button> <button class="cite" data-source="C33" aria-label="查看代码证据 C33">C33</button></div></section><section id="professional" aria-labelledby="h-professional"><div class="section-head"><span class="sec-no">06</span><div><h2 id="h-professional">专业性评价：优势在“如何验证”</h2><p>本报告使用定性判断，不给没有校准依据的 8.7/10 分，也不把已有论文的提升幅度搬到本项目。</p></div></div><div class="table-wrap"><table><thead><tr><th>专业维度</th><th>当前判断</th><th>已有基础</th><th>专业级标准还缺什么</th></tr></thead><tbody><tr><td>Harness 设计</td><td>较强的工程思路</td><td>固定顺序、结构化工具、blocked 结果、外部宿主接缝、trace</td><td>全部入口统一强制；宿主异常与恢复的一致语义</td></tr><tr><td>Agent 交互设计</td><td>可用，仍有接线缺口</td><td>模型收到错误理由、计数、日志节选与路径；动作和判决分离</td><td>长任务状态模型、可恢复审批、每运行时同等的操作入口</td></tr><tr><td>垂直领域深度</td><td>已进入业务规则层</td><td>精度、杠杆、订单状态、撤单、持仓；接口事实可反驳页面</td><td>独立专业标准、多产品迁移、真实缺陷集、复位/时序/数值精度策略</td></tr><tr><td>评测方法</td><td>结构强，实证偏弱</td><td>人工 gold、留出项、输入/版本指纹、确定性覆盖、κ、McNemar</td><td>稳定的冻结集、真实召回与误报、多次独立重复、效应量及区间</td></tr><tr><td>权限与治理</td><td>协作式约束，非强隔离</td><td>hook、类型、工具内部检查、密文存储、退化账本</td><td>可信 actor、受限凭证、只读挂载/写入服务、工具异常拒绝、对抗评测</td></tr><tr><td>生产运行</td><td>本地研究型平台</td><td>runner、并发队列、环境、缓存、日志、重试与趋势</td><td>多用户鉴权、幂等任务、断点恢复一致性、事务/原子文件、稳定性 SLO</td></tr><tr><td>自进化</td><td>基础设施阶段</td><td>结构化 episode、消融、冻结上游、配对记录</td><td>候选生成器、独立验证、自动择优策略、人工推广、回滚及长期防遗忘</td></tr><tr><td>论文贡献潜力</td><td>可形成研究问题</td><td>同一套专业判据跨宿主；生成与验证分离；领域消融接口</td><td>可复现实验和对照结果；目前尚不能宣称新算法、SOTA 或领域提升</td></tr></tbody></table></div><h3>专业性的核心，是判据能否反驳产品</h3><p>“页面显示了成功”只能说明某个提示出现；“合法数量下单后指定账户的 BTC 持仓准确变化”更接近业务正确性。但接口判据也有前提：读的是哪个账户、币种、订单、时间点？如果账户本来已有仓位，直接比较最终持仓为 0.001 就可能错判；若每次复位后执行，则必须先证实复位成功。机器求值确定，并不保证判据业务上正确。</p><div class="table-wrap"><table><thead><tr><th>领域能力</th><th>当前形式</th><th>建议升级</th></tr></thead><tbody><tr><td>知识</td><td>REFERENCE-domain-perp + rules.md</td><td>每条规则挂 ruleId、官方来源、有效期、适用账户模式/产品版本</td></tr><tr><td>状态</td><td>API path + op + value / before-after</td><td>显式前置状态、订单 id 关联、状态迁移合法性、最终一致性轮询</td></tr><tr><td>数值</td><td>部分 API 比较先转 Number</td><td>对精度边界采用十进制定点/整数单位，明确容差和舍入策略；尤其大整数与资产精度</td></tr><tr><td>判据</td><td>单个 MachineOracle + 可选链上断言</td><td>多个子判据组合：下单意图、成交结果、风险约束、清理后置条件</td></tr><tr><td>验证</td><td>接口路径探针与一个领域样本</td><td>干净基线 + 已知真实缺陷 + 独立变异体；以误报、漏报与有效观察率共同衡量</td></tr></tbody></table></div><p>这些是从当前实现推导的改进建议，不是已经实现的新功能。领域规则、API 取值和数值比较见 <button class="cite" data-source="C09" aria-label="查看代码证据 C09">C09</button> <button class="cite" data-source="C36" aria-label="查看代码证据 C36">C36</button> <button class="cite" data-source="C37" aria-label="查看代码证据 C37">C37</button> <button class="cite" data-source="C40" aria-label="查看代码证据 C40">C40</button>。</p></section><section id="findings" aria-labelledby="h-findings"><div class="section-head"><span class="sec-no">07</span><div><h2 id="h-findings">九个决定下一阶段质量的缺口</h2><p>这部分优先依据可定位的代码行为，而不是以计划文档的承诺作为实现事实。</p></div></div><p>下列为本轮发现，优先级由本报告判断。P0 表示阻挡当前“完整闭环 / 强门禁”承诺，并不表示已发现公开网络攻击事件。</p><div class="findings-tools"><input id="finding-query" type="search" aria-label="搜索发现" placeholder="搜索：g2、权限、记忆、复位…"><select id="finding-filter" aria-label="按证据筛选"><option value="all">全部发现</option><option value="verified">本轮探针复现</option><option value="code">静态代码核对</option><option value="P0">P0 优先处理</option></select><span id="finding-count" role="status" class="flow-note"></span></div><div id="finding-list"><article class="finding" data-kind="verified" data-level="P0"><h3><span class="tag risk">P0</span> F01 · 批准之后的 MCP g2 尚未实现 <span class="tag verified">本轮探针复现</span></h3><div class="finding-grid"><div><h4>证据</h4><p>runPipeline 在 stage=g2 时立即抛出 not implemented。合成探针直接调用复现，未启动模型、未写产品数据。 <button class="cite" data-source="C01" aria-label="查看代码证据 C01">C01</button></p></div><div><h4>对产品与研究的影响</h4><p>不能把“生成 → 人批准 → MCP 二阶段生成/执行”描述为已完成；既有看板套件执行路径仍可单独工作。</p></div></div><details><summary>建议修正与验收方式</summary><p>先决定 g2 是否属于本版承诺；实现或明确移除入口。验收从人批准开始，覆盖 read_decisions → g2 → 产物/执行证据。</p></details><div class="codebox"><pre>stage &quot;g2&quot; (regenerate from approved cases) is not implemented yet — phase 1A only ships g1</pre></div></article><article class="finding" data-kind="code" data-level="P0"><h3><span class="tag risk">P0</span> F02 · Claude Code 的人工决定不会走当前文件镜像 <span class="tag code">静态代码核对</span></h3><div class="finding-grid"><div><h4>证据</h4><p>penguinRun 将 runtime 存为 rt.name；mirrorDecisions 仅 runtime === penguin 时写 decisions.json，claude-code 会提前返回。 <button class="cite" data-source="C03" aria-label="查看代码证据 C03">C03</button> <button class="cite" data-source="C12" aria-label="查看代码证据 C12">C12</button></p></div><div><h4>对产品与研究的影响</h4><p>数据库里批准成功，下一会话通过 read_decisions 读取的文件可能仍没有决定；用户会看到两种真相。此项为静态路径核对，未执行真实审批。</p></div></div><details><summary>建议修正与验收方式</summary><p>按 Runtime 接缝分发写入；给两宿主分别增加“批准一次、文件可读、重复批准幂等”的集成测试，并补失败重试。</p></details><div class="codebox"><pre>if (runtime !== &quot;penguin&quot;) return; // 当前镜像前置条件</pre></div></article><article class="finding" data-kind="verified" data-level="P0"><h3><span class="tag risk">P0</span> F03 · human / agent 是请求标签，不是可信身份 <span class="tag verified">本轮探针复现</span></h3><div class="finding-grid"><div><h4>证据</h4><p>degradeDecision 只有 actor === agent 才拦，缺省按 human。相同 eq→exists 修改：指定 agent 得 block=true，省略 actor 得 block=false。DELETE 路由也未接退化检查。 <button class="cite" data-source="C13" aria-label="查看代码证据 C13">C13</button> <button class="cite" data-source="C14" aria-label="查看代码证据 C14">C14</button> <button class="cite" data-source="C30" aria-label="查看代码证据 C30">C30</button></p></div><div><h4>对产品与研究的影响</h4><p>有 API 访问权的调用者可被当作人；DecisionSchema 的 human 字面量不能证明来源。局部退化检查不是不可绕过的权限。</p></div></div><details><summary>建议修正与验收方式</summary><p>从可信会话/服务凭证派生 actor；人工审批和 agent 写入使用不同能力；修改、删除、批量替换走同一策略入口。</p></details><div class="codebox"><pre>agentSpecified.block = true
+actorOmitted.block = false; actor = &quot;human&quot;</pre></div></article><article class="finding" data-kind="code" data-level="P0"><h3><span class="tag risk">P0</span> F04 · Hook 与 Stop 门禁存在明确的放行路径 <span class="tag code">静态代码核对</span></h3><div class="finding-grid"><div><h4>证据</h4><p>适配器遇 hook 失败/超时/非 JSON 视为弃权；仅适配 Write/Edit/MultiEdit。宿主允许 Bash(node *)。demo Stop 达到 3 次或网关异常则退出 0。 <button class="cite" data-source="C15" aria-label="查看代码证据 C15">C15</button> <button class="cite" data-source="C16" aria-label="查看代码证据 C16">C16</button> <button class="cite" data-source="C17" aria-label="查看代码证据 C17">C17</button></p></div><div><h4>对产品与研究的影响</h4><p>正常路径拦截成立，但 shell 写入不受同一 Write hook 约束；无法声称“P0 未绿就永远不能结束”或“模型无法修改保护文件”。没有做主动绕过试验。</p></div></div><details><summary>建议修正与验收方式</summary><p>让有限重试以 needs-human 终态退出，而非 pass；正式 CI 状态与对话结束分离；关键写入通过权限边界，hook 自身出错应 blocked。</p></details><div class="codebox"><pre>hook error → abstain
+P0 nudges &gt;= 3 → exit(0)
+gateway exception → exit(0)</pre></div></article><article class="finding" data-kind="verified" data-level="P1"><h3><span class="tag gap">P1</span> F05 · 退化检测不能保证 oracle 不变 <span class="tag verified">本轮探针复现</span></h3><div class="finding-grid"><div><h4>证据</h4><p>目前覆盖 eq→exists、字面量缩短、tier 下降等模式。合成 API eq 判据由 value=0.001 改为 0.002，classifyDegrade 返回空数组。 <button class="cite" data-source="C18" aria-label="查看代码证据 C18">C18</button></p></div><div><h4>对产品与研究的影响</h4><p>这不必然是“更弱”，但已经改变了业务真值。如果策略是“自愈不能改 oracle”，当前启发式检查无法兑现该更强承诺。</p></div></div><details><summary>建议修正与验收方式</summary><p>将“是否改变语义”和“是否变弱”分开；自动修复阶段固定 oracle 的规范化摘要，任何变化都转人工审阅。</p></details><div class="codebox"><pre>eq(0.001) → eq(0.002)
+classifyDegrade(...) = []</pre></div></article><article class="finding" data-kind="code" data-level="P1"><h3><span class="tag gap">P1</span> F06 · 实验可比性仍有软约束与未完成输入 <span class="tag code">静态代码核对</span></h3><div class="finding-grid"><div><h4>证据</h4><p>inputHash 两边都有且不同才硬拒；一有一无仅提示。runtime 在 RunMeta 可选，skillVersion 有历史默认值。版本/漂移检查能验摘要，不验证实验现场参数确实生效。 <button class="cite" data-source="C08" aria-label="查看代码证据 C08">C08</button> <button class="cite" data-source="C11" aria-label="查看代码证据 C11">C11</button> <button class="cite" data-source="C23" aria-label="查看代码证据 C23">C23</button> <button class="cite" data-source="C39" aria-label="查看代码证据 C39">C39</button></p></div><div><h4>对产品与研究的影响</h4><p>错误的消融臂可能完成并得到看似正常的分数；T-12 正发生过 ablated 丢失与 API schema 缺失。</p></div></div><details><summary>建议修正与验收方式</summary><p>正式评测模式要求同一冻结输入、生效参数证明、全部模型/规则/配置指纹；开跑前做消融差异与产物分布的 canary 校验。</p></details><div class="codebox"><pre>inputHash: optional
+runtime: optional
+DEFAULT_SKILL_VERSION: historical fallback</pre></div></article><article class="finding" data-kind="code" data-level="P1"><h3><span class="tag gap">P1</span> F07 · 复位失败不会阻止继续测试 <span class="tag code">静态代码核对</span></h3><div class="finding-grid"><div><h4>证据</h4><p>runEnvReset 收到非零返回码只生成日志；调用流程继续。批次复用浏览器时，共享账户和页面状态影响后续判据的独立性。 <button class="cite" data-source="C21" aria-label="查看代码证据 C21">C21</button></p></div><div><h4>对产品与研究的影响</h4><p>前置状态不满足会被误看成产品错、定位错，或偶然通过；高缓存命中率掩盖不了状态污染。</p></div></div><details><summary>建议修正与验收方式</summary><p>复位成功后读接口核对关键前置状态；失败返回 blocked/unobservable，避免做后续有副作用动作；测试共享会话的相互干扰。</p></details><div class="codebox"><pre>reset command exits non-zero → log only → next execution</pre></div></article><article class="finding" data-kind="code" data-level="P1"><h3><span class="tag gap">P1</span> F08 · 持久化与版本追溯尚未达到实验账本标准 <span class="tag code">静态代码核对</span></h3><div class="finding-grid"><div><h4>证据</h4><p>记分板整文件读改写无显式跨进程锁；批准的 TestCase 不直接带 sourceRefs；decisions 双写失败只记日志。 <button class="cite" data-source="C06" aria-label="查看代码证据 C06">C06</button> <button class="cite" data-source="C07" aria-label="查看代码证据 C07">C07</button> <button class="cite" data-source="C10" aria-label="查看代码证据 C10">C10</button> <button class="cite" data-source="C12" aria-label="查看代码证据 C12">C12</button></p></div><div><h4>对产品与研究的影响</h4><p>并行评分有丢更新风险；清理旧运行后可能失去来源；同一 case 修改后历史运行复现困难。这里是代码风险判断，不声称已复现数据丢失。</p></div></div><details><summary>建议修正与验收方式</summary><p>原子写入+锁或 SQLite 账本；执行绑定 caseRevision/envDigest/sutRevision；DB 决定通过 outbox 可靠投影至文件。</p></details></article><article class="finding" data-kind="code" data-level="P1"><h3><span class="tag gap">P1</span> F09 · 经验记录尚未形成可验证的消费与推广链 <span class="tag code">静态代码核对</span></h3><div class="finding-grid"><div><h4>证据</h4><p>Episode 提取与 memory skill 已有；本次读取的 pipeline / casegen 主路径没有明确的 episode 注入入口，也未找到候选择优、推广与回滚控制器。 <button class="cite" data-source="C19" aria-label="查看代码证据 C19">C19</button> <button class="cite" data-source="C31" aria-label="查看代码证据 C31">C31</button> <button class="cite" data-source="C24" aria-label="查看代码证据 C24">C24</button></p></div><div><h4>对产品与研究的影响</h4><p>宿主可能读到经验，但不意味着 MCP 内部生成调用读到它；“记住了”不能当作“下一轮质量提升”。</p></div></div><details><summary>建议修正与验收方式</summary><p>记录每次实际检索到的 episodeIds 与 memoryDigest；固定输入做开/关记忆实验；之后再建设候选生成与推广。</p></details></article></div><p class="flow-note">合成探针只调用纯逻辑与 g2 的即时拒绝分支；未修改真实用例，未发模型请求，未绕过保护文件。原始结果在文末方法部分可展开。</p></section><section id="research" aria-labelledby="h-research"><div class="section-head"><span class="sec-no">08</span><div><h2 id="h-research">从 Harness 与垂直 Agent 论文看项目</h2><p>专业领域 agent 的标准不是“有领域提示词”，而是领域规则、任务环境、可检验结果和泛化证据能否组成完整链条。</p></div></div><p>本轮查阅了下面 <strong>9 篇论文与 1 篇官方工程文章</strong>的原始页面。对照的是方法与验证要求；并未复现论文实验，也不把异构任务的分数横向排名。以下“项目映射 / 建议”均是本报告的分析推断。</p><div class="papers"><article class="paper" id="R01"><div class="paper-meta">R01 / Yang et al. · 2024</div><h3>SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering</h3><p><strong>来源方法：</strong>把 agent 与计算机之间的接口当成设计对象；编辑、浏览和执行反馈的形态会影响 agent 行为。 <a href="https://arxiv.org/abs/2405.15793" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>TestPilot 的结构化 MCP、错误原因、报告路径与日志截断属于同类接口工程。</p><p><strong>差距与实验：</strong>对应的是接口设计思想，不是复现 SWE-agent 的结果。应测“短结果 + 可追索详情”是否减少工具误用、修复耗时与 tokens。</p></article><article class="paper" id="R02"><div class="paper-meta">R02 / Xia et al. · 2024</div><h3>Agentless: Demystifying LLM-based Software Engineering Agents</h3><p><strong>来源方法：</strong>通过固定的定位、修复和验证阶段解决软件问题，说明自主规划的复杂度不是性能保证。 <a href="https://arxiv.org/abs/2407.01489" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>g1 固定 docs/spec/stories/design/gate 顺序是合理选择；不是因为 agent 少而不专业。</p><p><strong>差距与实验：</strong>要保留直接 pipeline 基线。只有当自适应探索或路由在相同预算下带来收益，才值得增加 agent 自由度。</p></article><article class="paper" id="R03"><div class="paper-meta">R03 / Yao et al. · 2024</div><h3>τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains</h3><p><strong>来源方法：</strong>把领域政策、工具和用户交互放在同一环境；按最终数据库状态判断任务，并用 pass^k 衡量多次都成功的可靠性。 <a href="https://arxiv.org/abs/2406.12045" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>接口状态判据比仅看页面提示更接近任务真值；人的复核也是任务的一部分。</p><p><strong>差距与实验：</strong>当前没有动态用户交互基准；7 条回归一次全过不能代表反复可靠。建议独立统计连续 k 次全部正确，而非只报最好一次。</p></article><article class="paper" id="R04"><div class="paper-meta">R04 / Alshahwan et al. · FSE 2024</div><h3>Automated Unit Test Improvement using Large Language Models at Meta</h3><p><strong>来源方法：</strong>TestGen-LLM 在生成后设置验证过滤，要求测试能构建、可靠通过并带来可测改进。 <a href="https://arxiv.org/abs/2402.09171" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>TestPilot 有 gate、执行与变异机制，适合形成“生成 → 可运行 → 有效 → 被采用”漏斗。</p><p><strong>差距与实验：</strong>单元测试和视觉 E2E 的成本与噪声不同；不能直接套论文收益。应报告每一层淘汰率、误报、净新增缺陷覆盖和人工接受率。</p></article><article class="paper" id="R05"><div class="paper-meta">R05 / Debenedetti et al. · 2024</div><h3>AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents</h3><p><strong>来源方法：</strong>在不可信工具数据与动态任务中评估 prompt injection；安全属性与正常任务能力需要分别检查。 <a href="https://arxiv.org/abs/2406.13352" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>材料围栏、sourceRefs 和 holds 是起点；它们不是已经验证的对抗防御结论。</p><p><strong>差距与实验：</strong>应将恶意材料、shell 写入、伪造 actor、hook 故障做成隔离的安全用例，同时统计合法任务被误拦多少。</p></article><article class="paper" id="R06"><div class="paper-meta">R06 / Shinn et al. · 2023</div><h3>Reflexion: Language Agents with Verbal Reinforcement Learning</h3><p><strong>来源方法：</strong>用任务反馈形成语言反思，保存在 episodic memory 中影响后续尝试，不更新模型权重。 <a href="https://arxiv.org/abs/2303.11366" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>Episode 候选保留运行来源，比无结构自由笔记更便于审计。</p><p><strong>差距与实验：</strong>本项目采用确定性抽取，不能直接称为完整 Reflexion；需要证明经验被下次任务消费，且比相同预算的普通重试更好。</p></article><article class="paper" id="R07"><div class="paper-meta">R07 / Wang et al. · 2023</div><h3>Voyager: An Open-Ended Embodied Agent with Large Language Models</h3><p><strong>来源方法：</strong>自动课程、可执行技能库、环境反馈式迭代共同构成持续技能积累；技能可组合、可迁移。 <a href="https://arxiv.org/abs/2305.16291" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>本项目的 SKILL.md 是提示词资产；它与自动学得的可执行技能库不是同一个层级。</p><p><strong>差距与实验：</strong>可借鉴按任务组织的已验证动作库及跨页面复用，但要补技能前后置条件、过期机制、迁移测试和新任务收益。</p></article><article class="paper" id="R08"><div class="paper-meta">R08 / Zhang et al. · 2025 / ICLR 2026</div><h3>Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models</h3><p><strong>来源方法：</strong>把上下文当成逐步积累的策略手册，通过生成、反思和整理进行结构化增量更新，降低反复重写造成的信息丢失。 <a href="https://arxiv.org/abs/2510.04618" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>REFERENCE + episodic memory 可以成为上下文改进资产；当前尚未形成增量整理与效果反馈链。</p><p><strong>差距与实验：</strong>下一步应记录每条经验的适用范围、证据、冲突、被采用次数和失败后果。不能把 ACE 在其他任务的收益当成本项目收益。</p></article><article class="paper" id="R09"><div class="paper-meta">R09 / Agrawal et al. · 2025 / ICLR 2026</div><h3>GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning</h3><p><strong>来源方法：</strong>利用执行轨迹做反思、提出并测试提示词更新，并结合不同候选的互补优势进行优化。 <a href="https://arxiv.org/abs/2507.19457" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>单 skill 冻结输入与消融结构非常适合作为候选评估底座。</p><p><strong>差距与实验：</strong>当前缺少自动候选搜索与推广机制。可先做受限候选补丁 + 开发集择优 + 独立保留集验证，保留人工接受与回滚。</p></article><article class="paper" id="R10"><div class="paper-meta">R10 / Anthropic Engineering · 2024 / 工程文章</div><h3>Building effective agents</h3><p><strong>来源方法：</strong>区分预定义代码路径的 workflows 与由模型动态控制的 agents，强调从简单可组合模式开始。 <a href="https://www.anthropic.com/engineering/building-effective-agents" target="_blank" rel="noopener noreferrer">原文 ↗</a></p><p><strong>项目映射：</strong>本项目应明确说“agent 宿主 + 固定专业工作流 + 确定性判据”。</p><p><strong>差距与实验：</strong>这是工业设计经验，不是学术实验背书；本报告仅引用其架构分类，不据此推断 TestPilot 的效果。</p></article></div><div class="note"><strong>对“论文级专业性”的判断：</strong>工程组合具有研究价值，尤其是业务判据、运行时可移植性和单组件实验。但现阶段主要是已知方法的有针对性组合。要形成论文贡献，应把贡献写成可证伪的问题、交付复现实验，而不是把 skill/hook/memory/MCP 的存在本身称为创新。</div><div class="table-wrap"><table><thead><tr><th>研究问题（建议）</th><th>可检验假设</th><th>最低可接受证据</th></tr></thead><tbody><tr><td>RQ1 领域知识是否有效？</td><td>加入专业规则能提高真实缺陷检出，并降低无效或表面断言</td><td>同上游、同模型/预算；规则开关与 API schema 固定；人工标准、干净/缺陷对照、保留集</td></tr><tr><td>RQ2 门禁如何跨宿主保持一致？</td><td>工具内校验与受控文件写入能降低违规率，且不显著损害正常任务成功率</td><td>直接 pipeline / 宿主 / 宿主+工具门禁分别比较；任务实际经过被测入口；记录正常完成与被拒原因</td></tr><tr><td>RQ3 经验能否跨任务改进？</td><td>经过验证的经验能减少重复失败，并在未见产品上保持收益</td><td>无记忆 / 原始日志 / 精选经验；多套冻结输入；旧任务回归；计算净改善与总实验成本</td></tr></tbody></table></div></section><section id="evolution" aria-labelledby="h-evolution"><div class="section-head"><span class="sec-no">09</span><div><h2 id="h-evolution">自进化：已经有实验台，还没有完整的改进机器</h2><p>当前能力应描述为“可开展受控演化实验”，而不是“已证明自主持续进化”。关键差别在消费、择优、推广和长期验证。</p></div></div><div class="evolution"><article class="done"><b>E0</b><h4>执行恢复</h4>清缓存、重定位、有限重试。<p>代码与实测存在。属于恢复，不等于跨任务学习。</p></article><article class="partial"><b>E1</b><h4>经验积累</h4>从 gate / holds / scan 抽取结构化候选。<p>记录基础存在，消费与效果尚待验证。</p></article><article class="partial"><b>E2</b><h4>受控改进实验</h4>冻结上游、消融、配对评分。<p>机制存在，领域主实验仍待有效闭环。</p></article><article><b>E3</b><h4>候选搜索与推广</h4>自动提出补丁，验证后选择版本。<p>本轮未见完整控制器，建议建设。</p></article><article><b>E4</b><h4>持续泛化改进</h4>跨产品增益、防遗忘、回滚。<p>尚无多轮长期收益证据。</p></article></div><p class="flow-note">E0～E4 是本报告的分析框架，不是行业统一评级，也不是仓库现有里程碑。</p><h3>当前最合适的“自进化”定义</h3><p><strong>由执行证据驱动、在独立评测保护下进行的 skill / context 改进，推广由人控制。</strong>不要求更新模型权重，也不要求 agent 能修改自己所有代码。应先让一个小组件的改进可验证，再增加自动化范围。<button class="cite" data-source="C19" aria-label="查看代码证据 C19">C19</button> <button class="cite" data-source="C24" aria-label="查看代码证据 C24">C24</button> <button class="cite" data-source="C38" aria-label="查看代码证据 C38">C38</button></p><div class="flow"><div class="step"><b>01 / 收集</b>失败轨迹、缺口、成本<small>绑定版本、SUT 与输入</small></div><div class="step pending"><b>02 / 提案</b>只改一个规则 / REFERENCE<small>生成候选 patch + 假设</small></div><div class="step"><b>03 / 验证</b>固定多份输入，运行对照<small>开发集选，保留集验证</small></div><div class="step pending"><b>04 / 推广</b>证据与差异交给人批准<small>登记版本、预算与回滚点</small></div><div class="step pending"><b>05 / 监测</b>旧任务、成本、误报回归<small>退化时回退基线</small></div></div><div class="table-wrap"><table><thead><tr><th>允许自动改变（建议）</th><th>必须固定或独立审批（建议）</th><th>为什么</th></tr></thead><tbody><tr><td>REFERENCE 候选、检索策略、示例顺序、步骤定位策略</td><td>gold / human labels / held-out、最终评分器、已有 oracle 真值</td><td>优化对象不能同时改变评判标准</td></tr><tr><td>从可核对日志中提取 episode 候选</td><td>凭证、账户标识、未经验证的通用结论</td><td>避免把错误经验或敏感材料变成长期上下文</td></tr><tr><td>生成候选及在开发集淘汰候选</td><td>生产基线推广、权限扩张、预算上调</td><td>把试验能力和发布能力分离</td></tr><tr><td>尝试恢复执行与修复产品代码</td><td>用例删除、oracle 变化、隔离关键失败用例</td><td>通过不能靠删掉失败条件获得</td></tr></tbody></table></div><div class="note warn"><strong>保留集不能反复“偷看”：</strong>当前 score 输出会包含留出覆盖与漏项，若优化器每轮都消费这些反馈，逻辑上的 held-out 就会逐渐成为训练信号。建议将开发集反馈交给优化器，验证集用于选择，最终测试集由独立评分进程在定版时检查；对多候选选择与反复比较控制统计偏差。</div><h3>一轮可解释的实验应该怎么跑</h3><div class="table-wrap"><table><thead><tr><th>环节</th><th>建议方案（非已运行）</th></tr></thead><tbody><tr><td>实验材料</td><td>准备至少 3 份冻结上游，覆盖不同订单/账户场景；开发、验证、测试按场景或产品分组，避免近似样例泄漏</td></tr><tr><td>对照臂</td><td>基础方法；+领域 REFERENCE；+经过验证的记忆。比较领域规则时两臂都保留相同 API schema，避免改两件事</td></tr><tr><td>执行前校验</td><td>确认 ablated、promptsDigest、inputHash、生效配置符合预期；先跑小 canary 检查 API 判据能产出</td></tr><tr><td>重复设计</td><td>每份输入多次运行，预先定预算与停止规则；重复次数按波动和预期效应选，n=3 只适合作探路，不作为充分样本保证</td></tr><tr><td>主要指标</td><td>有效判据比例、独立缺陷检出率、干净版本误报率、unobservable 占比、人工复核耗时、总 tokens / wall time</td></tr><tr><td>统计口径</td><td>清单项配对可用 McNemar；跨运行与同故事相关性需按输入/产品聚类报告差异区间。p 值不替代效应量；p=1 不是等价证明</td></tr><tr><td>防刷分</td><td>有效观察率设下限；不能通过制造 unobservable、删测试或修改 gold 提高命中；保留失败与无效运行清单</td></tr><tr><td>接受条件</td><td>收益达到事先定义的最低实际意义，关键旧任务不退化、成本在预算内；由独立评测结果支持人的推广决定</td></tr></tbody></table></div></section><section id="next" aria-labelledby="h-next"><div class="section-head"><span class="sec-no">10</span><div><h2 id="h-next">下一阶段：把承诺变成可复现事实</h2><p>按依赖顺序推进。这里给验收产物，不对尚未确认的开发资源作工期承诺。</p></div></div><div class="roadmap"><article class="road"><div><h3>先补真实闭环与权限来源</h3><p>处理 g2 承诺、Claude 决定镜像、可信 actor、删除入口与 Stop 故障状态。交付物：两宿主各一份“人批准 → 下一轮读取 → 执行/产物 → 失败接管”证据。不要先增加第三个宿主来放大同一问题。</p></div></article><article class="road"><div><h3>把领域实验跑对，再讨论提升</h3><p>由人复核并冻结 Hyperliquid gold；固定多份上游；验证 schema 与消融参数生效；运行同模型同预算对照。交付物：完整有效/无效运行清单、分布、缺陷检出与误报、明确的统计结论，允许“不显著”。</p></div></article><article class="road"><div><h3>让状态与账本足够可靠</h3><p>复位失败中止后续动作；用例/环境/SUT/模型版本随执行落盘；DB 与文件可靠投影；记分板并发写保护。交付物：复位失败、进程中断、并发评分、审批投影失败的恢复测试。</p></div></article><article class="road"><div><h3>完成一次受控 skill 改进</h3><p>从真实失败提一个小候选，只改一份 REFERENCE；冻结评分器和 oracle；在独立输入上验证，人工接受或拒绝并记录原因。交付物：可重现的候选差异、接受证据、回滚到旧版的记录。</p></div></article><article class="road"><div><h3>最后提升可见性与可迁移性</h3><p>统一 TestPilot 的多宿主任务入口，补完整录屏、复现实验脚本与结果快照；再扩展第二个被测产品或模型族。交付物：外部使用者不依赖作者口述也能跑通一次。</p></div></article></div><div class="note"><strong>适合对外表达：</strong>“一个面向交易前端的测试 Agent 工程平台：将规则转成机器判据，支持人工复核、执行证据与受控评测；已经在指定 demo 和 testnet 场景跑通部分闭环，正在补齐严格门禁和领域效果验证。”<br><strong>暂不使用：</strong>“端到端完全自主”“不可绕过”“已实现持续自进化”“领域知识显著提高准确率”。</div></section><section id="sources" aria-labelledby="h-sources"><div class="section-head"><span class="sec-no">11</span><div><h2 id="h-sources">方法、核验与证据索引</h2><p>评估对象是 923ab0d 之上的本地工作树；未提交内容是报告的重要部分，因此只引用提交号不足以复现本轮观察。</p></div></div><div class="cols"><div><h3>本轮做了什么</h3><p>阅读当前工作树的 runtime、pipeline、contracts、review、DB、oracle、degrade、memory、score 与 UI 导航关键实现；对照 v3 架构、计划、实测记录与评测文件；联网查阅论文原始页面。</p><p><strong>已执行：</strong>全项目 <code>pnpm typecheck</code>；<code>pnpm check:drift</code>；MCP 的 contracts / write / scoreboard-append / ablate-env 四个测试文件，共 30 条；另运行不触发网络的合成行为探针。</p><p><strong>范围限制：</strong>没有重跑付费模型、产品浏览器/testnet 验收、完整测试套件或对抗攻击。未改动产品实现、gold 或既有计划。HTML 的浏览器预览仅验证报告本身。</p></div><div><h3>证据怎么读</h3><p><strong>代码：</strong>源码可证明这一分支存在，不能单独证明生产效果。<br><strong>记录：</strong>历史实测按原范围引用，不包装成当前重测。<br><strong>探针：</strong>在合成输入上执行具体分支，不泛化成系统整体可用。<br><strong>论文：</strong>用于评估方法是否合理，不代替项目实验。</p><p>每份源码保存本轮读取的行号与 SHA-256 前 16 位；后续工作树变更时可以据此识别报告已过期。长段源码可点击 Cxx 或展开下方证据索引。</p></div></div><details><summary>展开本轮合成探针的原始结果</summary><div class="codebox"><pre>{
+  &quot;synthetic&quot;: true,
+  &quot;networkCalls&quot;: 0,
+  &quot;writesToProduct&quot;: 0,
+  &quot;g2&quot;: &quot;stage \&quot;g2\&quot; (regenerate from approved cases) is not implemented yet — phase 1A only ships g1&quot;,
+  &quot;agentSpecified&quot;: {
+    &quot;findings&quot;: [
+      {
+        &quot;kind&quot;: &quot;oracle-weakened&quot;,
+        &quot;detail&quot;: &quot;用例 synthetic-report-only：api 判据从 eq 放宽成 exists&quot;
+      }
+    ],
+    &quot;block&quot;: true,
+    &quot;mark&quot;: false,
+    &quot;actor&quot;: &quot;agent&quot;
+  },
+  &quot;actorOmitted&quot;: {
+    &quot;findings&quot;: [
+      {
+        &quot;kind&quot;: &quot;oracle-weakened&quot;,
+        &quot;detail&quot;: &quot;用例 synthetic-report-only：api 判据从 eq 放宽成 exists&quot;
+      }
+    ],
+    &quot;block&quot;: false,
+    &quot;mark&quot;: true,
+    &quot;actor&quot;: &quot;human&quot;
+  },
+  &quot;sameTierValueChanged&quot;: []
+}</pre></div></details><h3>论文与官方原文</h3><ol class="refs-list"><li><strong>R01</strong> · Yang et al. · 2024 · <a href="https://arxiv.org/abs/2405.15793" target="_blank" rel="noopener noreferrer">SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering</a></li><li><strong>R02</strong> · Xia et al. · 2024 · <a href="https://arxiv.org/abs/2407.01489" target="_blank" rel="noopener noreferrer">Agentless: Demystifying LLM-based Software Engineering Agents</a></li><li><strong>R03</strong> · Yao et al. · 2024 · <a href="https://arxiv.org/abs/2406.12045" target="_blank" rel="noopener noreferrer">τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains</a></li><li><strong>R04</strong> · Alshahwan et al. · FSE 2024 · <a href="https://arxiv.org/abs/2402.09171" target="_blank" rel="noopener noreferrer">Automated Unit Test Improvement using Large Language Models at Meta</a></li><li><strong>R05</strong> · Debenedetti et al. · 2024 · <a href="https://arxiv.org/abs/2406.13352" target="_blank" rel="noopener noreferrer">AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents</a></li><li><strong>R06</strong> · Shinn et al. · 2023 · <a href="https://arxiv.org/abs/2303.11366" target="_blank" rel="noopener noreferrer">Reflexion: Language Agents with Verbal Reinforcement Learning</a></li><li><strong>R07</strong> · Wang et al. · 2023 · <a href="https://arxiv.org/abs/2305.16291" target="_blank" rel="noopener noreferrer">Voyager: An Open-Ended Embodied Agent with Large Language Models</a></li><li><strong>R08</strong> · Zhang et al. · 2025 / ICLR 2026 · <a href="https://arxiv.org/abs/2510.04618" target="_blank" rel="noopener noreferrer">Agentic Context Engineering: Evolving Contexts for Self-Improving Language Models</a></li><li><strong>R09</strong> · Agrawal et al. · 2025 / ICLR 2026 · <a href="https://arxiv.org/abs/2507.19457" target="_blank" rel="noopener noreferrer">GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning</a></li><li><strong>R10</strong> · Anthropic Engineering · 2024 / 工程文章 · <a href="https://www.anthropic.com/engineering/building-effective-agents" target="_blank" rel="noopener noreferrer">Building effective agents</a></li></ol><h3>40 处源码与运行记录快照</h3><p class="flow-note">以下片段内嵌于 HTML，断网或移走仓库仍可查阅。行号以生成报告时的文件为准。</p><div class="source-index"><button data-source="C01"><span>C01</span>MCP 流水线与 g2 未实现</button><button data-source="C02"><span>C02</span>两个服务端运行时</button><button data-source="C03"><span>C03</span>运行时启动与产物投影</button><button data-source="C04"><span>C04</span>七项主导航</button><button data-source="C05"><span>C05</span>复核交互设计</button><button data-source="C06"><span>C06</span>已批准用例结构</button><button data-source="C07"><span>C07</span>执行记录结构</button><button data-source="C08"><span>C08</span>运行来源与输入指纹</button><button data-source="C09"><span>C09</span>六类机器判据</button><button data-source="C10"><span>C10</span>记分板读改写</button><button data-source="C11"><span>C11</span>冻结输入的比较条件</button><button data-source="C12"><span>C12</span>人工决定镜像路径</button><button data-source="C13"><span>C13</span>由请求决定 actor</button><button data-source="C14"><span>C14</span>修改与删除入口</button><button data-source="C15"><span>C15</span>Hook 错误弃权与工具覆盖</button><button data-source="C16"><span>C16</span>运行时允许 Node shell</button><button data-source="C17"><span>C17</span>Stop hook 封顶与故障放行</button><button data-source="C18"><span>C18</span>退化检测的启发式边界</button><button data-source="C19"><span>C19</span>记忆结构与候选来源</button><button data-source="C20"><span>C20</span>覆盖率是文字规则匹配</button><button data-source="C21"><span>C21</span>复位失败仅记日志</button><button data-source="C22"><span>C22</span>执行降本实测</button><button data-source="C23"><span>C23</span>领域评测状态记录</button><button data-source="C24"><span>C24</span>单 skill 进化实验设计</button><button data-source="C25"><span>C25</span>领域评测无效声明</button><button data-source="C26"><span>C26</span>运行时对比的实验配置</button><button data-source="C27"><span>C27</span>Stop hook 真跑记录</button><button data-source="C28"><span>C28</span>复核产物进入数据库</button><button data-source="C29"><span>C29</span>Agent 收到的执行结果</button><button data-source="C30"><span>C30</span>当前服务中间件</button><button data-source="C31"><span>C31</span>记忆写入宿主的位置</button><button data-source="C32"><span>C32</span>旧入口与宿主跳转</button><button data-source="C33"><span>C33</span>标 done 但验收未达</button><button data-source="C34"><span>C34</span>人的复核决定契约</button><button data-source="C35"><span>C35</span>人工金标准冻结</button><button data-source="C36"><span>C36</span>永续合约领域规则</button><button data-source="C37"><span>C37</span>接口路径与按币种选值</button><button data-source="C38"><span>C38</span>清缓存重试型自愈</button><button data-source="C39"><span>C39</span>默认版本印记</button><button data-source="C40"><span>C40</span>接口数字转换与相等比较</button></div><div class="print-sources"><details><summary>C01 · packages/testpilot-mcp/src/pipeline.ts:246 · sha256:b60f5464e84c9131</summary><pre> 246  export async function runPipeline(opts: RunPipelineOptions): Promise&lt;RunPipelineResult&gt; {
+ 247    if (opts.stage === &quot;g2&quot;)
+ 248      throw new Error(&#x27;stage &quot;g2&quot; (regenerate from approved cases) is not implemented yet — phase 1A only ships g1&#x27;);
+ 249    if (opts.stage !== &quot;g1&quot;) throw new Error(`unknown stage: ${opts.stage}`);
+ 250  
+ 251    const outDir = resolve(opts.outDir);
+ 252    mkdirSync(join(outDir, &quot;nodes&quot;), { recursive: true });
+ 253  
+ 254    // 拼错的消融开关会产生一次什么都没改的运行，外加一份声称改了的报告。宁可当场停。
+ 255    const { on: ablatedList, unknown } = parseAblation(opts.ablate?.length ? opts.ablate : ablateFromEnv());
+ 256    if (unknown.length) throw new Error(`unknown ablation switch(es): ${unknown.join(&quot;, &quot;)} — nothing reads them`);
+ 257    const ablated = new Set&lt;string&gt;(ablatedList);
+ 258  
+ 259    const emit: Emit = opts.emit ?? (() =&gt; {});
+ 260    const signal = opts.signal ?? new AbortController().signal;
+ 261    const spend: Spend = { calls: 0, tokens: 0 };
+ 262    const startedAt = new Date().toISOString();
+ 263    const t0 = Date.now();
+ 264  
+ 265    const paths = collectMaterials(opts.materialsDir);
+ 266    if (!paths.length) throw new Error(`no specification documents (*.md/*.txt) under ${opts.materialsDir}`);
+ 267  
+ 268    const nodeOpts: CaseGenNodeOptions = { model: modelFromEnv(), baseDir: resolve(opts.materialsDir) };
+ 269    const lang = opts.lang ?? &quot;zh&quot;;
+ 270  
+ 271    /** 顺序写死。这一行就是 P1 本身。 */
+ 272    const steps: Step[] = [
+ 273      { id: &quot;docs&quot;, node: sourceSpecNode(nodeOpts), params: { paths } },
+ 274      { id: &quot;spec&quot;, node: composeSpecNode(nodeOpts), params: { lang } },
+ 275      { id: &quot;stories&quot;, node: planStoriesNode(nodeOpts), params: { maxStories: opts.limit ?? 12, lang } },
+ 276      { id: &quot;design&quot;, node: designCasesNode(nodeOpts), params: { lang } },
+ 277      { id: &quot;gate&quot;, node: gateTextCaseNode(), params: { minNegativeRatio: 0.3, maxSteps: 8 } },
+ 278    ];
+ 279  </pre></details><details><summary>C02 · server/src/runtimes.ts:8 · sha256:19199e4c0e83b420</summary><pre>   8  export type RuntimeName = &quot;penguin&quot; | &quot;claude-code&quot;;
+   9  
+  10  export interface Runtime {
+  11    name: RuntimeName;
+  12    startRun: typeof penguin.startRun;
+  13    watchRun: typeof penguin.watchRun;
+  14    readRun: typeof penguin.readRun;
+  15    writeDecisions: typeof penguin.writeDecisions;
+  16  }
+  17  
+  18  const RUNTIMES: Record&lt;RuntimeName, Runtime&gt; = {
+  19    penguin: { name: &quot;penguin&quot;, startRun: penguin.startRun, watchRun: penguin.watchRun, readRun: penguin.readRun, writeDecisions: penguin.writeDecisions },
+  20    &quot;claude-code&quot;: { name: &quot;claude-code&quot;, startRun: claudecode.startRun, watchRun: claudecode.watchRun, readRun: claudecode.readRun, writeDecisions: claudecode.writeDecisions },
+  21  };
+  22  
+  23  export const isRuntimeName = (v: unknown): v is RuntimeName =&gt; v === &quot;penguin&quot; || v === &quot;claude-code&quot;;
+  24  
+  25  /** 不认识的名字直接报错，不悄悄退回 Penguin——退回的那次运行会被记成另一个运行时的分数。 */
+  26  export function getRuntime(name: unknown): Runtime {
+  27    if (name === undefined || name === null || name === &quot;&quot;) return RUNTIMES.penguin;
+  28    if (!isRuntimeName(name)) throw new Error(`未知的运行时：${String(name)}（可用：${Object.keys(RUNTIMES).join(&quot; / &quot;)}）`);
+  29    return RUNTIMES[name];
+  30  }
+  31  
+  32  /** 默认运行时：`TP_AGENT_RUNTIME`（不与老的 `TP_RUNTIME=graph|penguin` 开关混用）。 */
+  33  export const defaultRuntimeName = (): RuntimeName =&gt; (isRuntimeName(process.env.TP_AGENT_RUNTIME) ? process.env.TP_AGENT_RUNTIME : &quot;penguin&quot;);</pre></details><details><summary>C03 · server/src/penguinRun.ts:249 · sha256:b6b2f8d7c8e8464e</summary><pre> 249    const rt = getRuntime(input.runtime ?? defaultRuntimeName());
+ 250    const startedAt = new Date().toISOString();
+ 251    const started = await rt.startRun({
+ 252      workspace,
+ 253      ...(materialsDir ? { materialsDir } : {}),
+ 254      ...(limit !== undefined ? { limit } : {}),
+ 255      // 消融开关要真的交到运行时手上（写进 MCP env）；此前只记进了运行记录，工具那头从没收到过。
+ 256      ...(input.ablate?.length ? { ablate: input.ablate } : {}),
+ 257      ...(scopeProjectId ? { scopeProjectId } : {}),
+ 258      ...(target.envRef ? { envRef: target.envRef } : {}),
+ 259      runId,
+ 260    });
+ 261  
+ 262    outputStore.saveRun({
+ 263      id: runId,
+ 264      graphId: PENGUIN_GRAPH_ID,
+ 265      graphVersion: 1,
+ 266      status: &quot;running&quot;,
+ 267      startedAt,
+ 268      detail: {
+ 269        runtime: rt.name,
+ 270        target,
+ 271        // 「看 trace →」的深链就靠这两个。缺了它们，审计台上那一列是死的。
+ 272        penguin: {
+ 273          sessionId: started.sessionId,
+ 274          workspace: started.workspace,
+ 275          outDir: started.outDir,
+ 276          agentId: AGENT_ID,
+ 277          projectId: PROJECT_ID,
+ 278          // Penguin 的深链指它的 server；Claude Code 的「trace」是落在产物目录里的 stream-json。
+ 279          url: rt.name === &quot;penguin&quot; ? `http://127.0.0.1:7364/sessions/${started.sessionId}` : join(started.outDir, &quot;claude-stream.jsonl&quot;),
+ 280        },
+ 281        ...(input.budget ? { budget: input.budget } : {}),
+ 282        ...(input.ablate?.length ? { ablate: input.ablate } : {}),
+ 283        ...(input.params ? { requestedOverrides: input.params, paramOverrides: input.params } : {}),
+ 284        targetSnapshot: {
+ 285          describe: `${rt.name === &quot;penguin&quot; ? `Penguin · ${AGENT_ID}` : &quot;Claude Code&quot;} · ${started.workspace}`,
+ 286        },</pre></details><details><summary>C04 · src/lib/nav.ts:102 · sha256:df912b754b64cf9c</summary><pre> 102  export const NAV: NavGroup[] = [
+ 103    {
+ 104      /** 审计：每天做上百次的事，复核仍在第一位。 */
+ 105      title: &quot;nav.audit&quot;,
+ 106      items: [from(&quot;review&quot;, &quot;◧&quot;), from(&quot;artifacts&quot;, &quot;◇&quot;)],
+ 107    },
+ 108    {
+ 109      /** 执行：被测产品跑出了什么（运行报告），跟上一次比变了什么（基线）。 */
+ 110      title: &quot;nav.exec&quot;,
+ 111      items: [from(&quot;runs&quot;, &quot;▶&quot;), from(&quot;baselines&quot;, &quot;≡&quot;)],
+ 112    },
+ 113    {
+ 114      /** 评测：这一版 harness 好不好（记分板），考卷是谁、动没动过（gold）。 */
+ 115      title: &quot;nav.evals&quot;,
+ 116      items: [from(&quot;scoreboard&quot;, &quot;◑&quot;), from(&quot;gold&quot;, &quot;★&quot;)],
+ 117    },
+ 118    {
+ 119      /** 项目设置必须在任何一屏都进得去；引导（onboard）从设置页与空态进。 */
+ 120      title: &quot;nav.project&quot;,
+ 121      items: [from(&quot;settings&quot;, &quot;⚙&quot;, &quot;nav.settings&quot;)],
+ 122    },
+ 123  ];
+ 124  
+ 125  /** 这个 `?open=` 值在导航里是哪一项。 */
+ 126  export const navItemFor = (openId: string): NavItem | undefined =&gt;
+ 127    NAV.flatMap((g) =&gt; g.items).find((i) =&gt; i.id === openId);
+ 128  
+ 129  /**</pre></details><details><summary>C05 · src/pages/Review.tsx:70 · sha256:3d4425b6dffcc11d</summary><pre>  70   * 三个 tab 共用同一套三栏布局与同一套键盘动线。**这一点是刻意的**：三种来源如果各长
+  71   * 一套操作，人就要记三套；而它们要人做的事本来就是同一件——看一条，说一句话，走下一条。
+  72   */
+  73  
+  74  const API = API_BASE;
+  75  
+  76  /**
+  77   * 产物的形状来自 `src/lib/artifact/types`，不在这里另立一份。
+  78   *
+  79   * 此前这个文件自己声明了一遍 `Finding` / `ReviewItem` / `Story`，只写了它当时想画的键。</pre></details><details><summary>C06 · server/src/db.ts:542 · sha256:d5ef87516f223dd2</summary><pre> 542  export interface TestCase {
+ 543    id: string;
+ 544    projectId: string;
+ 545    title: string;
+ 546    priority: Priority;
+ 547    priorityReason: string;
+ 548    runStatus: RunStatus;
+ 549    hasCode: boolean;
+ 550    precondition?: string;
+ 551    expected?: string; // the functional oracle: what &quot;passed&quot; means for this case
+ 552    type: CaseType; // test-design category (equivalence/boundary/negative/e2e)
+ 553    requirementId?: string; // trace back to a requirement/PRD item
+ 554    envRef?: string; // environment name this case binds to (&quot;&quot; = project default)
+ 555    dataKey?: string; // env array var to iterate — data-driven: one run per row (${row}/${row.col})
+ 556    web3Mode?: Web3Mode; // wallet to inject for dapp runs (&quot;&quot; = none)
+ 557    chainAssertions?: ChainAssertion[]; // on-chain checks evaluated after the steps
+ 558    postSteps: Step[]; // cleanup / teardown actions
+ 559    quarantined: boolean; // flaky → runs but excluded from the CI gate
+ 560    steps: Step[];
+ 561    code?: string;
+ 562    createdAt: string;
+ 563    /* ---- provenance, for a case that came out of a workflow ---- */
+ 564    storyId?: string; // the user story it was designed from
+ 565    activity?: string; // 所属模块。规格里算出来的路由聚类，故事地图的横轴
+ 566    covers?: string[]; // 走了哪些状态转移（`from-&gt;to`）——唯一来自产品本身的追溯线
+ 567    designMethod?: string; // equivalence / boundary / state-transition / decision-table / negative
+ 568    tier?: number; // how hard its verdict is: 1 assert, 2 invariant, 3 judge
+ 569    gateScore?: number; // what gate ① thought of the batch it arrived in
+ 570    sourceRunId?: string; // the workflow run that produced it
+ 571    /** The outcome in a form a program settles — no model, no screenshot, no wobble. */
+ 572    oracle?: MachineOracle;
+ 573    /** Its assertion was weakened (or the case rebuilt) during stage-two repair. */
+ 574    degraded?: boolean;
+ 575  }
+ 576  
+ 577  // A captured browser session (Playwright-compatible storageState shape) — cookies plus
+ 578  // per-origin localStorage. Injected before navigation so runs start authenticated.</pre></details><details><summary>C07 · server/src/db.ts:639 · sha256:d5ef87516f223dd2</summary><pre> 639  export interface RunRecord {
+ 640    id: string;
+ 641    caseId: string;
+ 642    caseTitle: string;
+ 643    priority: Priority;
+ 644    status: Exclude&lt;RunStatus, &quot;notRun&quot;&gt;;
+ 645    durationMs: number;
+ 646    startedAt: string;
+ 647    failureReason?: string;
+ 648    logs: string[];
+ 649    screenshots?: string[];
+ 650    reportPath?: string;
+ 651    tokens?: number;
+ 652    /** 一次运行的账：`RunSpend`（模型调用数、毫秒、缓存命中/未命中/失效）。 */
+ 653    spend?: RunSpend;
+ 654    visual?: VisualDiff[];
+ 655    perf?: unknown; // PerfResult from perf.ts (stored opaque to avoid coupling)
+ 656    oracle?: OracleCheck[];
+ 657    attempts?: number; // how many tries this run took (1 = passed first time)
+ 658    healed?: boolean; // passed only after a self-heal retry → a flake signal
+ 659    infraError?: boolean; // model/network failure — not a real test failure; excluded from flake/MTTR
+ 660    failCode?: string; // wire code, e.g. EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT
+ 661    failKind?: &quot;infra&quot; | &quot;locate&quot; | &quot;assert&quot;; // which bucket the statistics should count it in
+ 662    /**
+ 663     * Which project this execution belongs to.
+ 664     *
+ 665     * Stored, not joined: a workflow execution runs a candidate case that has no board row
+ 666     * to join through, and may never get one.
+ 667     */
+ 668    projectId?: string;
+ 669    /** The workflow run that executed it, when it came from one. */
+ 670    wfRunId?: string;
+ 671    /**
+ 672     * Where the execution came from — the reader needs this to know what a green row means.
+ 673     *
+ 674     * `suite` and `case` both ran a case the board already accepted; `workflow` ran a
+ 675     * candidate during generation, before anyone approved it. Reported by the ledger query;
+ 676     * only `board` vs `workflow` is stored (suite-vs-case is a batch membership question).
+ 677     */
+ 678    origin?: &quot;suite&quot; | &quot;case&quot; | &quot;workflow&quot;;</pre></details><details><summary>C08 · packages/testpilot-mcp/src/contracts.ts:86 · sha256:f7025fa0ffeb5729</summary><pre>  86  export const RunMetaSchema = z.object({
+  87    runId: z.string().min(1),
+  88    stage: z.enum([&quot;g1&quot;, &quot;g2&quot;]),
+  89    /**
+  90     * 哪个运行时跑出来的（07 P2）：Penguin / Claude Code / Codex，或不经 agent 直接跑流水线。
+  91     * 可选，缺省 = 旧条目（那时只有 Penguin）。它进 scoreboard 的 binding——运行时不同的两条分数不可比。
+  92     */
+  93    runtime: z.enum([&quot;penguin&quot;, &quot;claude-code&quot;, &quot;codex&quot;, &quot;pipeline&quot;]).optional(),
+  94    skillVersion: z.string().min(1),
+  95    promptsDigest: TextDigestSchema,
+  96    params: z.record(z.unknown()),
+  97    ablated: z.array(z.string()),
+  98    model: ModelBindingSchema,
+  99    materialsHash: z.string().min(1),
+ 100    startedAt: z.string(),
+ 101    finishedAt: z.string(),
+ 102    spend: z.object({ calls: z.number(), tokens: z.number(), ms: z.number() }),
+ 103    /**
+ 104     * 单条 skill 进化时冻结的上游产物在哪。**可选，缺省表示这次运行没有冻结输入**——
+ 105     * 整条流水线从 `docs/` 起跑，一步不落。
+ 106     *
+ 107     * 加它是因为「按 skill 进化」的两臂只该差 skill 版本一件事：给 design 冻结
+ 108     * `nodes/spec.json` + `nodes/stories.json`，同一份输入喂给多个 design 候选，
+ 109     * 于是候选之间的分差归得到 design 那一版改动身上。这个字段记下那份输入从哪来，
+ 110     * 供 `score_run` 复算 `inputHash`（见下）与审计台回看。
+ 111     */
+ 112    frozenInputsDir: z.string().optional(),
+ 113    /**
+ 114     * 冻结的上游产物的内容指纹（`inputHashOf`，与 `materialsHash` 同一套哈希）。
+ 115     * **可选，缺省即「没有冻结输入」**，与冻结前的旧条目兼容。
+ 116     *
+ 117     * 它进 `ScoreboardEntry`，作为 `goldHash` 之外的第二条谱系判据：两条条目若都带
+ 118     * `inputHash` 且不同，就是**喂了不同上游产物**的两场进化实验，跨实验不可比
+ 119     * （`paired_eval` 拒收）。由 `run_pipeline` 在冻结起跑时算出并写进这里。
+ 120     */
+ 121    inputHash: z.string().optional(),
+ 122  });
+ 123  export type RunMeta = z.infer&lt;typeof RunMetaSchema&gt;;
+ 124  </pre></details><details><summary>C09 · packages/harness-testing/src/exec/oracle.ts:24 · sha256:af301a7e1779575e</summary><pre>  24  export const MachineOracleSchema = z.discriminatedUnion(&quot;kind&quot;, [
+  25    z.object({ kind: z.literal(&quot;text&quot;), value: z.string().min(1) }),
+  26    z.object({ kind: z.literal(&quot;noText&quot;), value: z.string().min(1) }),
+  27    z.object({ kind: z.literal(&quot;url&quot;), value: z.string().min(1) }),
+  28    z.object({
+  29      kind: z.literal(&quot;count&quot;),
+  30      value: z.string().min(1),
+  31      op: z.enum([&quot;eq&quot;, &quot;gte&quot;, &quot;lte&quot;]).default(&quot;eq&quot;),
+  32      n: z.number().int().min(0),
+  33    }),
+  34    z.object({
+  35      kind: z.literal(&quot;delta&quot;),
+  36      /** The label the number sits beside, e.g. &quot;重启次数&quot;. */
+  37      value: z.string().min(1),
+  38      direction: z.enum([&quot;increased&quot;, &quot;decreased&quot;, &quot;unchanged&quot;]),
+  39      /** Optional exact size of the change. */
+  40      by: z.number().optional(),
+  41    }),
+  42    /**
+  43     * api：问一个 JSON 接口，而不是看屏幕。见 `apiOracle.ts`。
+  44     *
+  45     * 交易页的真值（持仓、挂单、余额）在接口里是精确的数，在屏幕上是会随行情变的字。
+  46     * `eq/neq/gte/lte/exists/absent` 是 tier 1；`increased/decreased/unchanged` 比较步骤前后
+  47     * 两次读数，是 tier 2。
+  48     */
+  49    z.object({
+  50      kind: z.literal(&quot;api&quot;),
+  51      /** 接口地址，可含 ${env.*} / ${secret.*}。 */
+  52      url: z.string().min(1),
+  53      method: z.enum([&quot;GET&quot;, &quot;POST&quot;]).default(&quot;GET&quot;),
+  54      /** POST 的 JSON 正文（字符串），可含占位符。 */
+  55      body: z.string().optional(),
+  56      headers: z.record(z.string()).optional(),
+  57      /** 响应 JSON 里的点分路径，数组下标用数字：`assetPositions.0.position.szi`。 */
+  58      path: z.string().min(1),
+  59      op: z.enum([&quot;eq&quot;, &quot;neq&quot;, &quot;gte&quot;, &quot;lte&quot;, &quot;exists&quot;, &quot;absent&quot;, &quot;increased&quot;, &quot;decreased&quot;, &quot;unchanged&quot;]),
+  60      value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  61      /** increased/decreased 时可选的精确变化量。 */
+  62      by: z.number().optional(),
+  63      /** 取值前等多久（毫秒）。交易所接口在下单后有传播延迟。 */
+  64      settleMs: z.number().int().min(0).optional(),
+  65    }),
+  66  ]);
+  67  export type MachineOracle = z.infer&lt;typeof MachineOracleSchema&gt;;
+  68  
+  69  /** What the page looked like at one moment. Text and URL only — no DOM, no selectors. */
+  70  export interface PageSnapshot {
+  71    text: string;
+  72    url: string;
+  73    /** 只有 api 判据会填：对接口的一次观察。见 `apiOracle.ts`。 */
+  74    api?: { value?: unknown; error?: string };
+  75  }
+  76  
+  77  /**
+  78   * Which tier this oracle actually delivers.
+  79   *
+  80   * The point of having it: a case can now be *checked* against its own claim, instead of
+  81   * the claim being taken at face value.
+  82   */
+  83  export function tierOf(oracle: MachineOracle): 1 | 2 {
+  84    if (oracle.kind === &quot;delta&quot;) return 2;
+  85    if (oracle.kind === &quot;api&quot;) return oracle.op === &quot;increased&quot; || oracle.op === &quot;decreased&quot; || oracle.op === &quot;unchanged&quot; ? 2 : 1;</pre></details><details><summary>C10 · packages/testpilot-mcp/src/score.ts:151 · sha256:62b37e51f07dc606</summary><pre> 151  export function appendScoreboard(goldPath: string, entry: ScoreboardEntry): string | undefined {
+ 152    const dir = dirname(resolve(goldPath));
+ 153    const file = join(dir, &quot;scoreboard.yaml&quot;);
+ 154    if (!existsSync(file)) return undefined;
+ 155    const text = readFileSync(file, &quot;utf8&quot;);
+ 156    const m = /entries:\s*(\[[\s\S]*\])\s*$/.exec(text);
+ 157    const head = m ? text.slice(0, m.index) : text.replace(/\s*$/, &quot;\n&quot;);
+ 158    let prev: ScoreboardEntry[] = [];
+ 159    if (m) {
+ 160      try {
+ 161        prev = JSON.parse(m[1]) as ScoreboardEntry[];
+ 162      } catch (e) {
+ 163        throw new Error(`${file} 的 entries 读不出（${(e as Error).message}）——不覆盖一张读不出的记分板`);
+ 164      }
+ 165    }
+ 166    // 同一次运行对着同一份 gold 重打分，换掉旧行而不是堆一行：记分板一行 = 一个 binding 在一条谱系上的分。
+ 167    const next = prev.filter((e) =&gt; !(e.runId === entry.runId &amp;&amp; e.goldHash === entry.goldHash &amp;&amp; !!e.vsPrev === !!entry.vsPrev));
+ 168    next.push(entry);
+ 169    writeFileSync(file, `${head}entries: ${JSON.stringify(next, null, 2)}\n`);
+ 170    return file;
+ 171  }
+ 172  
+ 173  /* ------------------------------------------------------------ 配对评测 */
+ 174  
+ 175  /** 覆盖了哪几条 gold item——配对的单元是**清单项**，不是用例。 */</pre></details><details><summary>C11 · packages/testpilot-mcp/src/score.ts:251 · sha256:62b37e51f07dc606</summary><pre> 251    if (aMeta.inputHash &amp;&amp; bMeta.inputHash &amp;&amp; aMeta.inputHash !== bMeta.inputHash)
+ 252      throw new Held(
+ 253        &quot;lineage&quot;,
+ 254        `run a (${aMeta.runId}) and run b (${bMeta.runId}) were resumed from different frozen inputs ` +
+ 255          `(inputHash ${aMeta.inputHash} vs ${bMeta.inputHash}) — these are different evolution experiments and ` +
+ 256          `cannot be compared. To compare two candidates of one skill, feed both the same frozen upstream products.`,
+ 257      );
+ 258  
+ 259    const aCases = readCases(aDir);
+ 260    const bCases = readCases(bDir);
+ 261    const aCovered = coveredIds(gold, aCases);
+ 262    const bCovered = coveredIds(gold, bCases);</pre></details><details><summary>C12 · server/src/index.ts:2753 · sha256:8a9a3a051d8dc108</summary><pre>2753  function mirrorDecisions(
+2754    wfRunId: string,
+2755    caseIds: string[],
+2756    decision: Decision[&quot;decision&quot;],
+2757    reason?: string,
+2758  ): void {
+2759    if (!caseIds?.length) return;
+2760    if ((runDetail(wfRunId) as { runtime?: string }).runtime !== &quot;penguin&quot;) return;
+2761    try {
+2762      const at = new Date().toISOString();
+2763      writeDecisions(
+2764        penguinWorkspaceOf(wfRunId),
+2765        wfRunId,
+2766        caseIds.map((caseId) =&gt; ({
+2767          caseId,
+2768          decision,
+2769          by: &quot;review&quot;,
+2770          at,
+2771          ...(reason ? { reason: String(reason) } : {}),
+2772        })),
+2773      );
+2774    } catch (e) {
+2775      log(`decisions.json 没写成（${wfRunId}）：${(e as Error).message}`);
+2776    }
+2777  }
+2778  
+2779  /** 404 与 5xx 分开：`src/lib/audit.ts` 的 `get()` 只吞 404，5xx 照抛。 */
+2780  function auditFail(res: express.Response, e: unknown): void {
+2781    if (e instanceof NotFound) {
+2782      res.status(404).json({ error: e.message });</pre></details><details><summary>C13 · server/src/degrade.ts:28 · sha256:d400d080d66a74ee</summary><pre>  28  export function degradeDecision(before: DegradableCaseLike, patch: Record&lt;string, unknown&gt;, actor: unknown): DegradeDecision {
+  29    const who: &quot;agent&quot; | &quot;human&quot; = actor === &quot;agent&quot; ? &quot;agent&quot; : &quot;human&quot;;
+  30    const after = { ...before, ...patch } as DegradableCaseLike;
+  31    const findings = classifyDegrade(
+  32      { id: before.id, expected: before.expected, tier: before.tier, oracle: before.oracle as never },
+  33      { id: after.id, expected: after.expected, tier: after.tier, oracle: after.oracle as never },
+  34    );
+  35    return { findings, block: findings.length &gt; 0 &amp;&amp; who === &quot;agent&quot;, mark: findings.length &gt; 0 &amp;&amp; who === &quot;human&quot;, actor: who };
+  36  }
+  37  
+  38  /** 退化账本：`&lt;DATA_DIR&gt;/degrades.jsonl`，`cost-report` 数它。记不下来不影响本次判决。 */</pre></details><details><summary>C14 · server/src/index.ts:829 · sha256:8a9a3a051d8dc108</summary><pre> 829  app.patch(&quot;/api/cases/:id&quot;, (req, res) =&gt; {
+ 830    const before = getCase(req.params.id);
+ 831    if (!before) return res.status(404).json({ error: &quot;case not found&quot; });
+ 832    const body = (req.body ?? {}) as Record&lt;string, unknown&gt;;
+ 833    /**
+ 834     * 自愈退化（07 T-16）：一次「修复」把判据改弱、层级掉了、expected 变含糊，都要被叫出来。
+ 835     * `__actor: &quot;agent&quot;`（MCP / 自愈路径）改弱一律拒，回到人；人改弱放行但记账并把用例标 `degraded`，
+ 836     * 报表里看得见。规则在 `harness-testing/codegen/degrade.ts`，和代码用例那边的 `assertionWeakened` 同一个思路。
+ 837     */
+ 838    const { __actor: actor, ...patch } = body;
+ 839    const d = degradeDecision(before, patch, actor);
+ 840    const findings = d.findings;
+ 841    if (findings.length) {
+ 842      recordDegrade({ caseId: before.id, projectId: before.projectId, actor: d.actor, blocked: d.block, findings: findings.map((f) =&gt; f.detail) });
+ 843      if (d.block)
+ 844        return res.status(409).json({ error: `自愈不允许改弱判据：${findings.map((f) =&gt; f.detail).join(&quot;；&quot;)}`, code: &quot;DEGRADED&quot;, findings });
+ 845    }
+ 846    const c = updateCase(req.params.id, { ...patch, ...(findings.length ? { degraded: true } : {}) } as Parameters&lt;typeof updateCase&gt;[1]);
+ 847    if (!c) return res.status(404).json({ error: &quot;case not found&quot; });
+ 848    res.json({ case: c, ...(findings.length ? { degraded: findings } : {}) });
+ 849  });
+ 850  app.delete(&quot;/api/cases/:id&quot;, (req, res) =&gt; {
+ 851    deleteCase(req.params.id);
+ 852    res.json({ ok: true });
+ 853  });
+ 854  
+ 855  app.get(&quot;/api/runs&quot;, (req, res) =&gt; {
+ 856    const caseId = req.query.caseId as string | undefined;
+ 857    const projectId = req.query.projectId as string | undefined;
+ 858    const runs = caseId
+ 859      ? listRuns(caseId)</pre></details><details><summary>C15 · plugins/testpilot/hooks/adapters/claude-code.mjs:66 · sha256:c5c8cc91b9c1cc49</summary><pre>  66  function runHook(script, penguinMsg, timeoutS) {
+  67    const r = spawnSync(process.execPath, [path.join(HOOKS, script)], {
+  68      input: JSON.stringify(penguinMsg),
+  69      cwd: HOOKS,
+  70      env: process.env,
+  71      encoding: &quot;utf8&quot;,
+  72      timeout: (timeoutS ?? 60) * 1000,
+  73    });
+  74    // 契约：崩溃 / 超时 / 非 JSON 一律当弃权——但要在 stderr 留痕，别静悄悄地什么都不拦。
+  75    if (r.status !== 0) { process.stderr.write(`[testpilot hook ${script}] 出错，当作弃权：${(r.stderr || &quot;&quot;).slice(-400)}\n`); return null; }
+  76    const text = (r.stdout || &quot;&quot;).trim();
+  77    if (!text) return null;
+  78    try { return JSON.parse(text); } catch { return null; }
+  79  }
+  80  
+  81  if (event === &quot;PreToolUse&quot;) {
+  82    const tool = String(msg.tool_name ?? &quot;&quot;);
+  83    const input = msg.tool_input ?? {};
+  84    let penguinTool = null, args = null;
+  85    if (tool === &quot;Write&quot;) { penguinTool = &quot;write_file&quot;; args = { file_path: input.file_path, content: input.content ?? &quot;&quot; }; }
+  86    else if (tool === &quot;Edit&quot;) { penguinTool = &quot;edit_file&quot;; args = { file_path: input.file_path, old: input.old_string ?? &quot;&quot;, new: input.new_string ?? &quot;&quot; }; }
+  87    else if (tool === &quot;MultiEdit&quot;) { penguinTool = &quot;edit_file&quot;; args = { file_path: input.file_path, edits: input.edits ?? [] }; }
+  88    if (!penguinTool || typeof args.file_path !== &quot;string&quot;) process.exit(0);
+  89    const trace = traceFor();
+  90    const penguinMsg = { hook: &quot;pre_tool_use&quot;, session_id: sessionId, trace_path: trace, tool_name: penguinTool, tool_call_id: `cc-${Date.now()}`, arguments: JSON.stringify(args) };
+  91    for (const h of manifest.hooks?.pre_tool_use ?? []) {
+  92      const out = runHook(h.command, penguinMsg, h.timeout);
+  93      if (out?.decision === &quot;deny&quot;) {
+  94        process.stderr.write(String(out.reason ?? `${h.command} 拒绝了这次写入`));
+  95        process.exit(2);
+  96      }
+  97    }
+  98    process.exit(0);
+  99  }
+ 100  </pre></details><details><summary>C16 · server/src/claudecode.ts:136 · sha256:8b436c66c69116af</summary><pre> 136  export function claudeArgs(message: string, workspace: string, plugin?: string): string[] {
+ 137    return [
+ 138      &quot;-p&quot;,
+ 139      message,
+ 140      &quot;--output-format&quot;,
+ 141      &quot;stream-json&quot;,
+ 142      &quot;--verbose&quot;,
+ 143      &quot;--permission-mode&quot;,
+ 144      &quot;acceptEdits&quot;,
+ 145      &quot;--allowedTools&quot;,
+ 146      &quot;mcp__testpilot__*&quot;,
+ 147      &quot;Read&quot;,
+ 148      &quot;Write&quot;,
+ 149      &quot;Edit&quot;,
+ 150      &quot;Bash(node *)&quot;,
+ 151      &quot;--mcp-config&quot;,
+ 152      join(workspace, &quot;.mcp.json&quot;),
+ 153      ...(plugin ? [&quot;--plugin-dir&quot;, plugin] : []),
+ 154    ];
+ 155  }
+ 156  
+ 157  /**
+ 158   * 起一个 Claude Code 会话，拿到 session id 就返回。</pre></details><details><summary>C17 · fixtures/tier4-demo/.claude/hooks/require-p0.mjs:27 · sha256:86e6108037e1782f</summary><pre>  27  if (n &gt;= 3) { process.stderr.write(`P0 仍未全绿，已拦 ${n} 次，不再拦（看 .claude/holds.jsonl）\n`); process.exit(0); }
+  28  let result;
+  29  try {
+  30    const r = await fetch(`${gateway}/api/projects/${projectId}/suite`, { method: &quot;POST&quot;, headers: { &quot;content-type&quot;: &quot;application/json&quot; }, body: JSON.stringify({ filter: &quot;P0&quot;, retries: 0 }), signal: AbortSignal.timeout(20 * 60_000) });
+  31    result = await r.json();
+  32    if (!r.ok) throw new Error(result.error || `HTTP ${r.status}`);
+  33  } catch (e) {
+  34    // 网关不在 = 没法证明绿，也不能证明红：不拦，但说出来。
+  35    process.stderr.write(`require-p0：跑不了 P0（${e.message}），这次没有门禁\n`); process.exit(0);
+  36  }
+  37  const red = (result.items || []).filter((it) =&gt; it.status !== &quot;passed&quot;);
+  38  if (!red.length) process.exit(0);
+  39  const details = [];
+  40  for (const it of red) {
+  41    let why = it.status;
+  42    if (it.runId) { try { const run = (await (await fetch(`${gateway}/api/runs/${it.runId}`)).json()).run; const o = (run?.oracle || []).find((x) =&gt; x.status !== &quot;pass&quot;); why = o ? `${o.status}：${o.detail}` : (run?.failureReason || it.status).slice(0, 160); } catch {} }
+  43    details.push(`「${it.caseTitle}」${why}`);
+  44  }
+  45  writeFileSync(stateFile, JSON.stringify({ nudges: n + 1 }));
+  46  appendFileSync(join(here, &quot;..&quot;, &quot;holds.jsonl&quot;), JSON.stringify({ at: new Date().toISOString(), hook: &quot;require-p0&quot;, gate: &quot;p0&quot;, session: msg.session_id, red: red.length, details }) + &quot;\n&quot;);
+  47  process.stdout.write(JSON.stringify({ decision: &quot;block&quot;, reason: `P0 有 ${red.length} 条没绿，不能结束：${details.join(&quot;；&quot;)}。修好再试；判决来自接口判据，不是我说的。` }));</pre></details><details><summary>C18 · packages/harness-testing/src/codegen/degrade.ts:36 · sha256:96722b024ac6f3c5</summary><pre>  36  function oracleWeakened(before: MachineOracle, after: MachineOracle): string | null {
+  37    if (strength(after) &gt; strength(before)) return `判据从 tier ${strength(before)} 退到 tier ${strength(after)}`;
+  38    if (before.kind === &quot;api&quot; &amp;&amp; after.kind === &quot;api&quot;) {
+  39      const looser = (b: string, a: string) =&gt; b === &quot;eq&quot; &amp;&amp; (a === &quot;exists&quot; || a === &quot;gte&quot; || a === &quot;lte&quot; || a === &quot;neq&quot;);
+  40      if (looser(before.op, after.op)) return `api 判据从 ${before.op} 放宽成 ${after.op}`;
+  41      if (before.op === after.op &amp;&amp; before.value !== undefined &amp;&amp; after.value === undefined) return &quot;api 判据丢了 value&quot;;
+  42      if (before.path !== after.path &amp;&amp; after.path.split(&quot;.&quot;).length &lt; before.path.split(&quot;.&quot;).length) return `api 判据路径从 ${before.path} 缩短成 ${after.path}`;
+  43    }
+  44    if (before.kind === &quot;api&quot; &amp;&amp; after.kind !== &quot;api&quot;) return `判据从 api 换成 ${after.kind}——不再读接口`;
+  45    if (&quot;value&quot; in before &amp;&amp; &quot;value&quot; in after &amp;&amp; typeof before.value === &quot;string&quot; &amp;&amp; typeof after.value === &quot;string&quot;) {
+  46      if (after.value.trim().length &lt; before.value.trim().length * 0.67) return `判据字面量从「${before.value}」缩成「${after.value}」`;
+  47    }
+  48    return null;
+  49  }
+  50  
+  51  export function classifyDegrade(before: DegradableCase | undefined, after: DegradableCase | undefined): DegradeFinding[] {
+  52    if (before &amp;&amp; !after) return [{ kind: &quot;case-removed&quot;, detail: `用例 ${before.id} 被删除` }];
+  53    if (!before || !after) return [];
+  54    const out: DegradeFinding[] = [];
+  55    if (before.oracle &amp;&amp; !after.oracle) out.push({ kind: &quot;oracle-removed&quot;, detail: `用例 ${after.id} 的机器判据被去掉（原为 ${before.oracle.kind}）` });
+  56    else if (before.oracle &amp;&amp; after.oracle) {</pre></details><details><summary>C19 · packages/testpilot-mcp/src/memory.ts:26 · sha256:5c919530b66987b8</summary><pre>  26  export const EpisodeCategory = z.enum([&quot;gate&quot;, &quot;hold&quot;, &quot;scan&quot;, &quot;infra&quot;, &quot;material&quot;]);
+  27  
+  28  export const EpisodeSchema = z.object({
+  29    key: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9_.-]*$/, &quot;key 用小写字母、数字、_ . -&quot;),
+  30    value: z.string().min(1).max(200),
+  31    category: EpisodeCategory,
+  32    /** 来源运行的 runId 摘要（sha256 前 8 位）：读回来的人知道它是哪次的经验，又不把 runId 当路径。 */
+  33    runTag: z.string().regex(/^[0-9a-f]{8}$/),
+  34    /** 从哪个文件算出来的。候选才有；模型挑了之后照抄。 */
+  35    source: z.string().optional(),
+  36  });
+  37  export type Episode = z.infer&lt;typeof EpisodeSchema&gt;;
+  38  
+  39  export const runTag = (runId: string): string =&gt; createHash(&quot;sha256&quot;).update(runId).digest(&quot;hex&quot;).slice(0, 8);
+  40  
+  41  /* ------------------------------------------------------------ 写过滤 */
+  42  </pre></details><details><summary>C20 · packages/harness-core/src/eval/coverage.ts:85 · sha256:19cd99ffd6ee543d</summary><pre>  85  export function covers(item: { match?: GoldMatch }, c: CoverableCase): boolean {
+  86    const body = caseText(c);
+  87    const assertion = norm(c.expected ?? &quot;&quot;);
+  88    const { anyOf, allOf, assertAnyOf } = item.match ?? {};
+  89    if (anyOf?.length &amp;&amp; !anyOf.some((k) =&gt; body.includes(norm(k)))) return false;
+  90    if (allOf?.length &amp;&amp; !allOf.every((k) =&gt; body.includes(norm(k)))) return false;
+  91    if (assertAnyOf?.length &amp;&amp; !assertAnyOf.some((k) =&gt; assertion.includes(norm(k)))) return false;
+  92    return Boolean(anyOf?.length || allOf?.length || assertAnyOf?.length);
+  93  }
+  94  </pre></details><details><summary>C21 · server/src/index.ts:73 · sha256:8a9a3a051d8dc108</summary><pre>  73  function runEnvReset(cmd: unknown): string[] | null {
+  74    if (typeof cmd !== &quot;string&quot; || !cmd.trim()) return null;
+  75    const r = spawnSync(cmd, { shell: true, cwd: REPO_ROOT, encoding: &quot;utf8&quot;, timeout: 60_000 });
+  76    const tail = `${r.stdout ?? &quot;&quot;}${r.stderr ?? &quot;&quot;}`.trim().split(&quot;\n&quot;).slice(-3).join(&quot; · &quot;);
+  77    return [`reset → ${cmd}`, `  ${r.status === 0 ? &quot;ok&quot; : `exit ${r.status ?? &quot;?&quot;}`}${tail ? ` — ${tail}` : &quot;&quot;}`];
+  78  }
+  79  </pre></details><details><summary>C22 · docs/v3/06-执行层降本.md:207 · sha256:35c56d60696d3614</summary><pre> 207  | 7 条总墙钟 | 583s | 591s | **310s（首跑的 53%）** |
+ 208  | 通过 | 5/7 | 7/7 | 6/7（第 1 条批次起手瞬时失败，无运行记录；单跑 42s 通过） |
+ 209  | 模型调用 / tokens | 50 / 177k | 22 / 77k | 5 / 15k |
+ 210  | 缓存 命中/未命中/失效 | 0/64/0 | 39/26/1（59%） | **56/4/0（93%）** |
+ 211  | 登录态 | 每条 | 只第 1 条 | 只第 1 条 |
+ 212  
+ 213  O 的 26 次未命中是 N 里失败的第 4、5 条在 O 补首跑，所以 P 才是真正的二跑。P 的分段：起浏览器 ~6s（复用时是 goto）· 登录态 0 · settle 4s · 判据 3s，每条地板从 35–50 秒降到 ~13 秒；剩下的全是缓存回放本身（每个动作 1–3 秒）。**「二跑 ≤ 首跑 1/3」仍没到（53%）**：TP/SL 一条 19 次命中要 56 秒，「步骤」占了二跑的六成——那是 Midscene 回放每个动作截图 + DOM 抓取的成本，不在这一层。
+ 214  
+ 215  **归账（T-04）。** 每个 runner 一份 Midscene 目录、缓存共享；P 的 7 次运行 7 次按 runner 目录归账。
+ 216  </pre></details><details><summary>C23 · docs/v3/07-第四档路线-任务与进度.md:236 · sha256:1ac476c79647fcb9</summary><pre> 236  #### T-12 · 第一次有意义的配对评测：装 vs 卸领域 REFERENCE（n≥3，冻结上游）
+ 237  - 状态：blocked
+ 238  - 卡在：两件事。① 打分要 `benchmark/hyperliquid-testnet/gold.json`（人的交付物）——`gold.draft.json` 已从 `rules.md` 机械导出 12 条（`reviewed: false`），gold 屏能读，人复核、标留出、冻结即可打分。② 模型：2026-09-08 16:05 起 DashScope 回 403 `AllocationQuota.FreeTierOnly`（免费额度用尽），修好 schema 与 `ablate` 之后的两臂一次都没跑成。**跑过的六次产物都不算数**（`evals/domain-perp.json` 的 `result.why_invalid`）：消融臂 `ablated: []`、两臂 `kind: api` 全 0——前者是 agent 丢参数（现走 MCP env `TP_ABLATE` 兜底 + skill 明说），后者是 `CASES_SCHEMA` 没有 `api`（T-13 的验收 ① 其实从没过）。充值后重跑命令在 `result.rerun`。
+ 239  - 兑现：#2 #6
+ 240  - 为什么：这是「领域知识让 agent 生成的合约用例 P0 命中率从 X 到 Y」那句话的来源。机制全在：`04-单skill进化.md` 五步、`frozenInputsDir`、`paired_eval`、McNemar。
+ 241  - 改：新增 `evals/domain-perp.json`（两臂只差 `ablate: [&quot;domain-perp&quot;]`，`expect` **跑之前**写）；`benchmark/hyperliquid-testnet/stages/design/frozen-inputs/`；`benchmark/hyperliquid-testnet/gold.json`（**人交付**，从探索草稿复核；`heldOut` 标一半；冻结后记 `goldHash`）。
+ 242  - 做法：先冻结上游（`run_pipeline stopAfter:&quot;stories&quot;`），两臂各 n=3，`paired_eval` 报 McNemar 与两臂覆盖率分布；**先看产物再看报告**：两臂的 `oracle` 分布（tier 1/2 占比、`kind: api` 条数）先数出来。A 臂（pipeline）和 C 臂（Claude Code）都跑一遍——这是 P1 重述之后要的那个比较。
+ 243  - 验收：① `scoreboard.yaml` 新增 ≥ 2 条完整 binding 条目（两臂各一）；② `evals/domain-perp.json` 有 `result` 与预判对错；③ 结论写进 `06`（或新开 `08-领域层.md`），包括「不显著」如果它不显著。
+ 244  - 依赖：T-08 T-10 T-11
+ 245  </pre></details><details><summary>C24 · docs/v3/04-单skill进化.md:59 · sha256:c16cbf5588fc7f7a</summary><pre>  59  ### `inputHash`（`contracts.ts`）
+  60  
+  61  `inputHash` = 对被冻结的上游产物文件做**和 `materialsHash` 同一套哈希**（`inputHashOf`：逐文件
+  62  `相对路径 \0 内容 \0`，排序后 sha256 前 16 位）。由 `run_pipeline` 在冻结起跑时算出，写进
+  63  `meta.json`（`RunMeta.inputHash` / `RunMeta.frozenInputsDir`，两者都 optional），并进
+  64  `ScoreboardEntry.inputHash`。
+  65  
+  66  它是 `goldHash` 之外的**第二条谱系判据**（数据契约 §2 的补充）：
+  67  
+  68  | 两条条目 | 判定 |
+  69  |---|---|
+  70  | `inputHash` 都在、相同 | 同一份冻结输入的两个候选——**可比** |
+  71  | `inputHash` 都在、不同 | 喂了不同上游的两场实验——`paired_eval` **拒收** |
+  72  | 两条都无 `inputHash` | 老路：整条流水线从 docs 起跑，比整条流水线（与冻结机制上线前的旧条目兼容）|
+  73  | 一有一无 | 一臂冻结、一臂没冻结——不硬拒，`note` 里说明是混搭 |
+  74  
+  75  `inputHash` **不进** `agentState`：它是**输入**，不是 agent 版本。`agentState` 仍只由
+  76  skillVersion + promptsDigest + params 定。两条条目要可比，需要 `agentState` 不同（就是那处改动）、
+  77  `goldHash` 相同、`inputHash` 相同。
+  78  
+  79  ## 4. 两个坎
+  80  
+  81  ### 坎一：冻结的是「一份」，不是「分布」</pre></details><details><summary>C25 · evals/domain-perp.json:24 · sha256:4d25c4fc369b64c3</summary><pre>  24      &quot;status&quot;: &quot;两臂各 3 次产物已跑，但**都不算数**；分数仍等人复核的 gold&quot;,
+  25      &quot;runtime&quot;: &quot;claude-code&quot;,
+  26      &quot;materialsHash&quot;: &quot;070839f69ea51bc6&quot;,
+  27      &quot;model&quot;: &quot;qwen3.8-flash@dashscope&quot;,
+  28      &quot;limit&quot;: 3,
+  29      &quot;arms_as_run&quot;: {
+  30        &quot;b_reference_on&quot;: [
+  31          {
+  32            &quot;run&quot;: &quot;20260908T075210&quot;,</pre></details><details><summary>C26 · evals/runtime-compare.json:22 · sha256:5bc70fc3d8ff79c6</summary><pre>  22    &quot;result&quot;: {
+  23      &quot;at&quot;: &quot;2026-09-08&quot;,
+  24      &quot;materialsHash&quot;: &quot;25a3d392b572e2e2&quot;,
+  25      &quot;goldHash&quot;: &quot;2405209c3fe70ac7&quot;,
+  26      &quot;model&quot;: &quot;qwen3.8-flash@dashscope&quot;,
+  27      &quot;skillVersion&quot;: &quot;2026-09-03.1&quot;,
+  28      &quot;limit&quot;: 3,
+  29      &quot;a_penguin&quot;: [
+  30        {
+  31          &quot;run&quot;: &quot;20260908T071737&quot;,
+  32          &quot;cases&quot;: 21,
+  33          &quot;coverage&quot;: 0,
+  34          &quot;heldOut&quot;: 0.25,
+  35          &quot;gate&quot;: 1.0,
+  36          &quot;tokens&quot;: 48308,
+  37          &quot;wallS&quot;: 161
+  38        },
+  39        {</pre></details><details><summary>C27 · docs/v3/07-第四档路线-任务与进度.md:270 · sha256:1ac476c79647fcb9</summary><pre> 270  #### T-15 · Stop hook：「P0 没绿不许结束回合」，在你的合约 UI 仓库里装上
+ 271  - 状态：done
+ 272  - 结果：`fixtures/tier4-demo/`（四控件面板 + mock 清算接口 + 故意的 `Math.round` bug）、`.claude/settings.json` Stop hook → `hooks/require-p0.mjs`（调网关跑 P0，红就 `decision: block`，reason 点名哪条红与判据读数；封顶 3 次；拦截记 `.claude/holds.jsonl`）。验收 ① 2026-09-08 真跑（`docs/v3/evidence/t15-stop-hook-session.jsonl`）：提示词只让 agent 改一个 placeholder → Stop 被挡「`position.szi = 0.002（要求 eq 0.001）`」→ agent 读 `holds.jsonl` 修 `normalizeSize` → 再 Stop，4/4 绿放行；19 轮 2:47，四条 P0 回放 0 次模型调用。录屏是人的事，时间线已落 evidence。② `holds.jsonl` 两条（第一次是缓存过时造成的 `unobservable` 拦截，也算真拦）。③ README 写了复现与两个坑（`--watch`、缓存 xpath 过时）。跑完把 bug 放回去了。
+ 273  - 兑现：#5
+ 274  - 为什么：第四档的字面定义。这是最值钱的一段录屏：Claude Code 改一个下单面板的精度 bug，被 Stop hook 挡下，修好后放行。
+ 275  - 改：新增 `fixtures/tier4-demo/`（一个最小的合约下单面板 React 工程，作为**被 agent 修改的**仓库；它的 `.claude/settings.json` 装 Stop hook；`.mcp.json` 指向 testpilot-mcp）；hook 脚本 `fixtures/tier4-demo/.claude/hooks/require-p0.mjs`（调 `run_p0`，红就 `{&quot;decision&quot;:&quot;block&quot;,&quot;reason&quot;:&lt;哪条红、为什么&gt;}`）。
+ 276  - 做法：demo 面板只做 Size / Price / Leverage / Place Order 四个控件与一个 mock 的清算接口（`/api/clearinghouse`），`kind: api` 判据打在 mock 接口上——**不依赖 testnet，录屏可复现**。故意留一个 bug：数量四舍五入而不是截断。
+ 277  - 验收：① 录屏：让 Claude Code 修「Size 精度」→ 第一次 Stop 被挡（reason 点名哪条 P0 红）→ 修好 → 放行；② `holds.jsonl` 记到这次拦截；③ README 写清复现步骤。</pre></details><details><summary>C28 · server/src/review.ts:599 · sha256:eea0ec116abe8b64</summary><pre> 599      const kase = createCase({
+ 600        projectId,
+ 601        title: edit.title ?? item.title,
+ 602        /**
+ 603         * 人的决定 &gt; 机器的判断 &gt; 默认。
+ 604         *
+ 605         * 中间那一档是补上的：设计节点此前不产出优先级（提示词里根本没这个键），
+ 606         * 于是每一条批准进来的用例都是 P1，看板的三列永远空着，导出的文件名全是 `p1-*`。
+ 607         */
+ 608        priority: edit.priority ?? (item.priority as Priority | undefined) ?? &quot;P1&quot;,
+ 609        priorityReason: `approved from ${input.wfRunId}${item.findings.length ? ` (${item.findings.length} gate findings)` : &quot;&quot;}${
+ 610          // Only content edits are worth saying: setting a priority in the queue is a
+ 611          // decision about the board, not a change to the case, and reporting it as one
+ 612          // makes every batch-prioritised case look rewritten.
+ 613          item.original ? `, edited in review${item.edit?.by === &quot;model&quot; ? &quot; (regenerated)&quot; : &quot;&quot;}` : &quot;&quot;
+ 614        }`,
+ 615        expected: edit.expected ?? item.expected,
+ 616        precondition: item.precondition.join(&quot;; &quot;),
+ 617        requirementId: item.requirementId,
+ 618        activity: storyActivity.get(item.storyId),
+ 619        covers: item.covers,
+ 620        postSteps: (item.postSteps ?? []).map((text, i) =&gt; ({ order: i + 1, text })),
+ 621        type: METHOD_TO_TYPE[item.designMethod] ?? &quot;functional&quot;,
+ 622        /**
+ 623         * 步骤的来源，按优先级：人在队列里的编辑 → **阶段二真的跑过的动作** → 阶段一的文本。
+ 624         *
+ 625         * 中间那一档是补上的。此前它不存在，于是修复循环加的等待、改的措辞一条都到不了看板，
+ 626         * 而看板正是这条用例今晚要跑的地方——它会带着修复循环已经修好的那个毛病重跑一遍。
+ 627         * 人的编辑仍然排在最前：那是唯一一次有人看过这条用例并且表过态。
+ 628         */
+ 629        steps: (edit.steps ?? item.codeSteps ?? item.steps).map((text, i) =&gt; ({ order: i + 1, text })),
+ 630        // Stage-two code rides along when it exists, so an approved case is runnable at once.
+ 631        code: item.code,
+ 632        hasCode: !!item.code,
+ 633        storyId: item.storyId,
+ 634        designMethod: item.designMethod,
+ 635        tier: item.tier,
+ 636        // Without this the board keeps the tier label and loses the thing that backs it.
+ 637        oracle: item.oracle,
+ 638        // A case that only went green after its assertion was weakened arrives marked.
+ 639        degraded: item.degraded,
+ 640        gateScore: batch.gateScore,
+ 641        sourceRunId: input.wfRunId,
+ 642      });
+ 643      recordReviewDecision({
+ 644        wfRunId: input.wfRunId,
+ 645        caseId,</pre></details><details><summary>C29 · packages/testpilot-mcp/src/runcase.ts:23 · sha256:a93d02c62c5035ea</summary><pre>  23  export interface CaseVerdict {
+  24    caseId: string;
+  25    title: string;
+  26    status: &quot;passed&quot; | &quot;failed&quot; | &quot;unobservable&quot;;
+  27    durationMs: number;
+  28    oracle: Array&lt;{ assertion: string; status: string; detail?: string; decidedBy?: string }&gt;;
+  29    failure?: { code?: string; kind?: string; reason?: string };
+  30    spend?: Record&lt;string, unknown&gt;;
+  31    reportPath?: string;
+  32    /** 步骤日志，截到 2KB——完整的在报告里。 */
+  33    logs: string;
+  34  }
+  35  
+  36  const LOG_CAP = 2048;
+  37  const DEFAULT_API = process.env.TP_SERVER_URL || &quot;http://127.0.0.1:5301&quot;;
+  38  </pre></details><details><summary>C30 · server/src/index.ts:304 · sha256:8a9a3a051d8dc108</summary><pre> 304  const app = express();
+ 305  app.use(cors());
+ 306  app.use(express.json({ limit: &quot;2mb&quot; }));
+ 307  // Serve baseline / current / diff images (referenced by VisualDiff.*Ref).
+ 308  app.use(&quot;/api/artifacts&quot;, express.static(ARTIFACT_DIR));
+ 309  </pre></details><details><summary>C31 · plugins/testpilot/skills/testpilot-memory/SKILL.md:43 · sha256:0ffb8eadaf34a9f7</summary><pre>  43  ## 写到哪、什么形状
+  44  
+  45  文件：`&lt;agent_state&gt;/memory/user/testpilot-episodes.md`。一行一条，形状定死：
+  46  
+  47  ```
+  48  - [&lt;8位runTag&gt;] &lt;gate|hold|scan|infra|material&gt;/&lt;key&gt;: &lt;value ≤ 200 字&gt;
+  49  ```
+  50  
+  51  写盘时 hook `validate-memory.mjs` 逐行校验：形状对不上、或 value 里有 token / 邮箱 / cookie / 长串 /
+  52  带凭证的链接，整份拒。被拒就照理由改，不要换文件名写。
+  53  
+  54  写完在 `MEMORY.md` 索引里加**一行**指向这个文件（已有就不加）。索引里最多列 8 条最近的经验；
+  55  更多的留在主题文件里按需读——进上下文的条数封顶，不是越多越好。
+  56  
+  57  ## 写完之后
+  58  
+  59  只说记了几条、runTag 是什么。不评价这次运行。</pre></details><details><summary>C32 · src/components/MigratedToPenguin.tsx:28 · sha256:0488f82da02d7947</summary><pre>  28  export const PENGUIN_BASE: string = import.meta.env.VITE_PENGUIN_BASE ?? &quot;http://127.0.0.1:7364&quot;;
+  29  
+  30  /**
+  31   * 深链的落点。
+  32   *
+  33   * **Penguin 的真实路由形状要等 Phase 0 跑通才知道**，所以先指 `/traces`
+  34   * （session 的事件流是这几屏共同的去处），并且把它单独拎成一个常量：
+  35   * 改一次路由只改这一行，而不是去十处 `${PENGUIN_BASE}/...` 里找。
+  36   */
+  37  export const PENGUIN_TRACES = &quot;/traces&quot;;
+  38  
+  39  export const penguinUrl = (path: string = PENGUIN_TRACES): string =&gt; `${PENGUIN_BASE}${path}`;
+  40  
+  41  /** 在新标签页打开 Penguin。不在本页跳走：人手上这一屏的筛选和光标还在。 */
+  42  export const openPenguin = (path: string = PENGUIN_TRACES): void =&gt; {
+  43    window.open(penguinUrl(path), &quot;_blank&quot;, &quot;noopener,noreferrer&quot;);
+  44  };
+  45  
+  46  /**
+  47   * 一张搬迁空态。</pre></details><details><summary>C33 · docs/v3/07-第四档路线-任务与进度.md:142 · sha256:1ac476c79647fcb9</summary><pre> 142  #### T-28 · 批次级浏览器复用：登录态每批一次，不是每条一次
+ 143  - 状态：done
+ 144  - 结果：`exec/sessionPool.ts`（6 条单测）+ `run.ts` 的 `sessionKey`；套件端点给 `batch.id` 当 key，批次结束 `releaseSessionOnRunners`；复用 = 同页 goto（agent 密钥在 sessionStorage，换标签页会丢）；登录态之后也 goto 一次让起点态唯一；`vars.TP_RESET_CMD` 每条跑前复位；`waitFor:` 步骤前缀；`RunSpend.phases` 六段。数：首跑 N 583s → 二跑 P 310s（**53%**），命中 93%，地板从每条 35–50s 降到 ~13s。验收 ①（≤ 1/3）**没到**：剩下的六成是 Midscene 缓存回放每个动作截图 + 抓 DOM 的成本，不在这一层（`06 §6.3`）。验收 ② 复位命令每条跑前执行并进日志；③ `waitFor:` 已换。
+ 145  - 兑现：#1
+ 146  - 为什么：T-27 之后二跑命中 95%，但 5 条 0 次模型调用的用例仍各要 35–50 秒——起浏览器、登录态（等 5 秒 + Enable Trading + Establish Connection）、web3 settle 4 秒、判据 settleMs，每条一份。这是不走模型的地板，「二跑 ≤ 首跑 1/3」卡在它上面（`06 §6.1`）。agent 授权按浏览器存（不在 localStorage，探针验证过），所以一个批次共用一个浏览器就是登录态只做一次。
+ 147  - 改：`packages/harness-testing/src/exec/run.ts`（`launchSession` 的生命周期）；`server/src/index.ts` 的 `/api/projects/:id/suite`（批次开头建、结尾收）。
+ 148  - 做法：给 `execOnRunner` 加可选的 `sessionKey`：同 key 的连续运行复用同一个页面，只在第一次跑登录态；用例之间 `page.goto(baseUrl)` 回到起点。Midscene 的 cacheId 仍按用例。**先量后改**：把每条的固定开销拆成「起浏览器 / 登录态 / settle / teardown」四段打进 `RunSpend`，看复用能省几段。
+ 149  - 验收：① 二跑 7 条总墙钟 ≤ 首跑 1/3（同一批次、清缓存、背靠背）；② 复用不影响判据的独立性——每条用例前账户仍平（跑前读接口写进日志）；③ 顺手把登录态第一步的「等 5 秒」换成显式等待「出现 Enable Trading 按钮」，消掉 Midscene 那个 undefined 坐标回放 bug 的触发条件（`06 §6.1`）。</pre></details><details><summary>C34 · packages/testpilot-mcp/src/contracts.ts:157 · sha256:f7025fa0ffeb5729</summary><pre> 157  export const DecisionSchema = z.object({
+ 158    caseId: z.string(),
+ 159    decision: z.enum([&quot;approved&quot;, &quot;rejected&quot;, &quot;revised&quot;]),
+ 160    by: z.string(),
+ 161    decidedByKind: DecidedByKind.default(&quot;human&quot;),
+ 162    at: z.string(),
+ 163    edit: z
+ 164      .object({
+ 165        title: z.string().optional(),
+ 166        steps: z.array(z.string()).optional(),
+ 167        expected: z.string().optional(),
+ 168      })
+ 169      .optional(),
+ 170    reason: z.string().optional(),
+ 171  });
+ 172  export type Decision = z.infer&lt;typeof DecisionSchema&gt;;
+ 173  </pre></details><details><summary>C35 · server/src/gold.ts:142 · sha256:c76f405107c464b5</summary><pre> 142  export function freezeGold(cap: string, root = REPO_ROOT): { hash: string; readme: string } {
+ 143    const dir = capDir(cap, root);
+ 144    const path = join(dir, &quot;gold.json&quot;);
+ 145    if (!existsSync(path)) throw new Error(`benchmark/${cap} 还没有 gold.json，先复核再冻结`);
+ 146    const file = readJson&lt;GoldFile&gt;(path)!;
+ 147    const problems = validate(file);
+ 148    if (problems.length) throw new Error(`gold.json 不合格，不能冻结：${problems.join(&quot;；&quot;)}`);
+ 149    if (!file.items.some((i) =&gt; i.heldOut)) throw new Error(&quot;至少标一条 heldOut 再冻结——留出集是覆盖率不被拟合的唯一办法&quot;);
+ 150    const hash = goldHashOfFile(path);
+ 151    const readme = join(dir, &quot;README.md&quot;);
+ 152    const stamp = `goldHash: \`${hash}\`（冻结于 ${new Date().toISOString().slice(0, 10)}，${file.items.length} 条，留出 ${file.items.filter((i) =&gt; i.heldOut).length} 条）`;
+ 153    let text = existsSync(readme) ? readFileSync(readme, &quot;utf8&quot;) : `# 基准：${cap}\n`;
+ 154    if (HASH_LINE.test(text)) text = text.replace(HASH_LINE, `goldHash: \`${hash}\``);
+ 155    else if (/## goldHash/.test(text)) text = text.replace(/## goldHash\n/, `## goldHash\n\n${stamp}\n`);
+ 156    else text += `\n## goldHash\n\n${stamp}\n`;
+ 157    writeFileSync(readme, text);
+ 158    return { hash, readme };
+ 159  }</pre></details><details><summary>C36 · plugins/testpilot/skills/testpilot-design/REFERENCE-domain-perp.md:1 · sha256:e6e9b6956c04e61a</summary><pre>   1  # 合约交易前端的不变量（领域 REFERENCE）
+   2  
+   3  &gt; 这一份对应 `prompts.ts` 里的 `DOMAIN_PERP`。它是**可选的一段**：在 skill 世界里，「可选」= 这份文件在不在。
+   4  &gt; 装上它是一臂，卸掉它是另一臂（`ablate: [&quot;domain-perp&quot;]`）。它存在的目的是被比较：
+   5  &gt; 对着观察写的用例只能发现产品**变了**，对着这些规则写的用例才有资格说产品**错了**。
+   6  &gt;
+   7  &gt; 只写**做过合约前端的人才知道、而且能变成判据**的规则。通用测试方法不在这里（那是 `REFERENCE.md`）。
+   8  &gt; 每条规则附一个判据示例，全部是 `kind: api`（读清算接口）或 `kind: text`（前端的拒绝文案）；
+   9  &gt; **没有一条钉在易变读数上**——有测试扫这份文件（`domain-perp.test.ts`）。
+  10  
+  11  被测对象是合约交易页（下单面板、持仓、挂单）时，设计用例前先读它；不是就跳过。
+  12  
+  13  ## 规则与判据
+  14  
+  15  ### 1. 数量按 stepSize **截断**，不四舍五入
+  16  在 0.001 步长的市场输入 0.0016，成交的是 0.001。四舍五入一档就是十倍仓位那类事故的来源。
+  17  ```json
+  18  {&quot;expected&quot;: &quot;接口里 BTC 持仓的 szi 等于 0.001&quot;, &quot;oracle&quot;: {&quot;kind&quot;: &quot;api&quot;, &quot;url&quot;: &quot;${env.HL_INFO}&quot;, &quot;method&quot;: &quot;POST&quot;, &quot;body&quot;: &quot;{\&quot;type\&quot;:\&quot;clearinghouseState\&quot;,\&quot;user\&quot;:\&quot;${env.HL_ADDRESS}\&quot;}&quot;, &quot;path&quot;: &quot;assetPositions[position.coin=BTC].position.szi&quot;, &quot;op&quot;: &quot;eq&quot;, &quot;value&quot;: 0.001, &quot;settleMs&quot;: 2500}}
+  19  ```
+  20  
+  21  ### 2. 价格按 tickSize 对齐；离参考价超过交易所的带宽（Hyperliquid：80%）的限价单在前端就被拒
+  22  拒绝要**说出来**，判据是那句拒绝文案。
+  23  ```json
+  24  {&quot;expected&quot;: &quot;页面显示「Order price cannot be more than 80% away from the reference price」&quot;, &quot;oracle&quot;: {&quot;kind&quot;: &quot;text&quot;, &quot;value&quot;: &quot;Order price cannot be more than 80% away from the reference price&quot;}}
+  25  ```</pre></details><details><summary>C37 · packages/harness-testing/src/exec/apiOracle.ts:43 · sha256:c2d348b16105caea</summary><pre>  43  export function pick(obj: unknown, path: string): unknown {
+  44    let cur: unknown = obj;
+  45    for (const rawSeg of splitPath(path)) {
+  46      if (rawSeg === &quot;&quot;) continue;
+  47      const sel = rawSeg.match(/^([^[]*)\[([^=\]]+)=([^\]]*)\]$/);
+  48      const seg = sel ? sel[1] : rawSeg;
+  49      if (seg !== &quot;&quot;) {
+  50        if (cur === null || cur === undefined) return undefined;
+  51        if (Array.isArray(cur)) {
+  52          const i = Number(seg);
+  53          if (!Number.isInteger(i)) return undefined;
+  54          cur = cur[i];
+  55        } else if (typeof cur === &quot;object&quot;) {
+  56          cur = (cur as Record&lt;string, unknown&gt;)[seg];
+  57        } else return undefined;
+  58      }
+  59      if (sel) {
+  60        if (!Array.isArray(cur)) return undefined;
+  61        const [, , key, want] = sel;
+  62        cur = cur.find((el) =&gt; String(pick(el, key)) === want);
+  63      }
+  64    }
+  65    return cur;
+  66  }
+  67  
+  68  /** 按 `.` 切段，但方括号里的 `.` 不切（`[position.coin=BTC]` 是一段）。 */
+  69  function splitPath(path: string): string[] {
+  70    const out: string[] = [];
+  71    let buf = &quot;&quot;;
+  72    let depth = 0;</pre></details><details><summary>C38 · server/src/index.ts:1180 · sha256:8a9a3a051d8dc108</summary><pre>1180  async function runCaseWithHeal(
+1181    c: TestCase,
+1182    body: Record&lt;string, any&gt;,
+1183    maxRetries: number,
+1184  ): Promise&lt;{ run: RunRecord; attempts: number; healed: boolean }&gt; {
+1185    updateCase(c.id, { runStatus: &quot;running&quot; as RunStatus });
+1186    let attempts = 0;
+1187    let run: RunRecord;
+1188    for (;;) {
+1189      attempts++;
+1190      run = await runAndPersistCase(c, body);
+1191      if (run.status === &quot;passed&quot; || attempts &gt; maxRetries) break;
+1192      bustCache(c.id + (body?.__cacheSuffix ?? &quot;&quot;)); // self-heal: drop the stale (per-row) plan
+1193    }
+1194    const healed = run.status === &quot;passed&quot; &amp;&amp; attempts &gt; 1;
+1195    updateRunHealing(run.id, attempts, healed);
+1196    run.attempts = attempts;
+1197    run.healed = healed;
+1198    computeFlakiness(c.id);
+1199    updateCase(c.id, { runStatus: run.status });
+1200    return { run, attempts, healed };
+1201  }
+1202  </pre></details><details><summary>C39 · packages/testpilot-mcp/src/pipeline.ts:98 · sha256:b60f5464e84c9131</summary><pre>  98  export const DEFAULT_SKILL_VERSION = &quot;2026-09-03.1&quot;;
+  99  
+ 100  export interface RunPipelineOptions {
+ 101    stage: &quot;g1&quot; | &quot;g2&quot;;
+ 102    materialsDir: string;</pre></details><details><summary>C40 · packages/harness-testing/src/exec/oracle.ts:133 · sha256:af301a7e1779575e</summary><pre> 133  function asNumber(v: unknown): number | undefined {
+ 134    if (typeof v === &quot;number&quot;) return Number.isFinite(v) ? v : undefined;
+ 135    if (typeof v === &quot;string&quot; &amp;&amp; v.trim() !== &quot;&quot; &amp;&amp; Number.isFinite(Number(v))) return Number(v);
+ 136    return undefined;
+ 137  }
+ 138  
+ 139  /** 相等：能当数就按数比（&quot;0.01&quot; 与 0.01 相等），否则按字符串。 */
+ 140  function sameValue(a: unknown, b: unknown): boolean {
+ 141    const na = asNumber(a);
+ 142    const nb = asNumber(b);
+ 143    if (na !== undefined &amp;&amp; nb !== undefined) return na === nb;
+ 144    return String(a) === String(b);
+ 145  }
+ 146  
+ 147  /** Occurrences of a literal, counted on the page&#x27;s visible text. */</pre></details></div></section><footer>TESTPILOT / SYSTEMS & RESEARCH REVIEW<br>2026-09-08 · 离线单文件报告 · 代码事实、历史记录与建议明确区分<br>本轮产物：本 HTML 与合成核验结果 JSON；未提交或发布项目。</footer></main><dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-head"><div><h3 id="source-title"></h3><p id="source-path"></p></div><button id="close-source" autofocus>关闭</button></div><div class="dialog-body"><pre id="source-code"></pre></div></dialog><script>
+const sources=[{"id": "C01", "path": "packages/testpilot-mcp/src/pipeline.ts", "line": 246, "label": "MCP 流水线与 g2 未实现", "hash": "b60f5464e84c9131", "excerpt": " 246  export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipelineResult> {\n 247    if (opts.stage === \"g2\")\n 248      throw new Error('stage \"g2\" (regenerate from approved cases) is not implemented yet — phase 1A only ships g1');\n 249    if (opts.stage !== \"g1\") throw new Error(`unknown stage: ${opts.stage}`);\n 250  \n 251    const outDir = resolve(opts.outDir);\n 252    mkdirSync(join(outDir, \"nodes\"), { recursive: true });\n 253  \n 254    // 拼错的消融开关会产生一次什么都没改的运行，外加一份声称改了的报告。宁可当场停。\n 255    const { on: ablatedList, unknown } = parseAblation(opts.ablate?.length ? opts.ablate : ablateFromEnv());\n 256    if (unknown.length) throw new Error(`unknown ablation switch(es): ${unknown.join(\", \")} — nothing reads them`);\n 257    const ablated = new Set<string>(ablatedList);\n 258  \n 259    const emit: Emit = opts.emit ?? (() => {});\n 260    const signal = opts.signal ?? new AbortController().signal;\n 261    const spend: Spend = { calls: 0, tokens: 0 };\n 262    const startedAt = new Date().toISOString();\n 263    const t0 = Date.now();\n 264  \n 265    const paths = collectMaterials(opts.materialsDir);\n 266    if (!paths.length) throw new Error(`no specification documents (*.md/*.txt) under ${opts.materialsDir}`);\n 267  \n 268    const nodeOpts: CaseGenNodeOptions = { model: modelFromEnv(), baseDir: resolve(opts.materialsDir) };\n 269    const lang = opts.lang ?? \"zh\";\n 270  \n 271    /** 顺序写死。这一行就是 P1 本身。 */\n 272    const steps: Step[] = [\n 273      { id: \"docs\", node: sourceSpecNode(nodeOpts), params: { paths } },\n 274      { id: \"spec\", node: composeSpecNode(nodeOpts), params: { lang } },\n 275      { id: \"stories\", node: planStoriesNode(nodeOpts), params: { maxStories: opts.limit ?? 12, lang } },\n 276      { id: \"design\", node: designCasesNode(nodeOpts), params: { lang } },\n 277      { id: \"gate\", node: gateTextCaseNode(), params: { minNegativeRatio: 0.3, maxSteps: 8 } },\n 278    ];\n 279  "}, {"id": "C02", "path": "server/src/runtimes.ts", "line": 8, "label": "两个服务端运行时", "hash": "19199e4c0e83b420", "excerpt": "   8  export type RuntimeName = \"penguin\" | \"claude-code\";\n   9  \n  10  export interface Runtime {\n  11    name: RuntimeName;\n  12    startRun: typeof penguin.startRun;\n  13    watchRun: typeof penguin.watchRun;\n  14    readRun: typeof penguin.readRun;\n  15    writeDecisions: typeof penguin.writeDecisions;\n  16  }\n  17  \n  18  const RUNTIMES: Record<RuntimeName, Runtime> = {\n  19    penguin: { name: \"penguin\", startRun: penguin.startRun, watchRun: penguin.watchRun, readRun: penguin.readRun, writeDecisions: penguin.writeDecisions },\n  20    \"claude-code\": { name: \"claude-code\", startRun: claudecode.startRun, watchRun: claudecode.watchRun, readRun: claudecode.readRun, writeDecisions: claudecode.writeDecisions },\n  21  };\n  22  \n  23  export const isRuntimeName = (v: unknown): v is RuntimeName => v === \"penguin\" || v === \"claude-code\";\n  24  \n  25  /** 不认识的名字直接报错，不悄悄退回 Penguin——退回的那次运行会被记成另一个运行时的分数。 */\n  26  export function getRuntime(name: unknown): Runtime {\n  27    if (name === undefined || name === null || name === \"\") return RUNTIMES.penguin;\n  28    if (!isRuntimeName(name)) throw new Error(`未知的运行时：${String(name)}（可用：${Object.keys(RUNTIMES).join(\" / \")}）`);\n  29    return RUNTIMES[name];\n  30  }\n  31  \n  32  /** 默认运行时：`TP_AGENT_RUNTIME`（不与老的 `TP_RUNTIME=graph|penguin` 开关混用）。 */\n  33  export const defaultRuntimeName = (): RuntimeName => (isRuntimeName(process.env.TP_AGENT_RUNTIME) ? process.env.TP_AGENT_RUNTIME : \"penguin\");"}, {"id": "C03", "path": "server/src/penguinRun.ts", "line": 249, "label": "运行时启动与产物投影", "hash": "b6b2f8d7c8e8464e", "excerpt": " 249    const rt = getRuntime(input.runtime ?? defaultRuntimeName());\n 250    const startedAt = new Date().toISOString();\n 251    const started = await rt.startRun({\n 252      workspace,\n 253      ...(materialsDir ? { materialsDir } : {}),\n 254      ...(limit !== undefined ? { limit } : {}),\n 255      // 消融开关要真的交到运行时手上（写进 MCP env）；此前只记进了运行记录，工具那头从没收到过。\n 256      ...(input.ablate?.length ? { ablate: input.ablate } : {}),\n 257      ...(scopeProjectId ? { scopeProjectId } : {}),\n 258      ...(target.envRef ? { envRef: target.envRef } : {}),\n 259      runId,\n 260    });\n 261  \n 262    outputStore.saveRun({\n 263      id: runId,\n 264      graphId: PENGUIN_GRAPH_ID,\n 265      graphVersion: 1,\n 266      status: \"running\",\n 267      startedAt,\n 268      detail: {\n 269        runtime: rt.name,\n 270        target,\n 271        // 「看 trace →」的深链就靠这两个。缺了它们，审计台上那一列是死的。\n 272        penguin: {\n 273          sessionId: started.sessionId,\n 274          workspace: started.workspace,\n 275          outDir: started.outDir,\n 276          agentId: AGENT_ID,\n 277          projectId: PROJECT_ID,\n 278          // Penguin 的深链指它的 server；Claude Code 的「trace」是落在产物目录里的 stream-json。\n 279          url: rt.name === \"penguin\" ? `http://127.0.0.1:7364/sessions/${started.sessionId}` : join(started.outDir, \"claude-stream.jsonl\"),\n 280        },\n 281        ...(input.budget ? { budget: input.budget } : {}),\n 282        ...(input.ablate?.length ? { ablate: input.ablate } : {}),\n 283        ...(input.params ? { requestedOverrides: input.params, paramOverrides: input.params } : {}),\n 284        targetSnapshot: {\n 285          describe: `${rt.name === \"penguin\" ? `Penguin · ${AGENT_ID}` : \"Claude Code\"} · ${started.workspace}`,\n 286        },"}, {"id": "C04", "path": "src/lib/nav.ts", "line": 102, "label": "七项主导航", "hash": "df912b754b64cf9c", "excerpt": " 102  export const NAV: NavGroup[] = [\n 103    {\n 104      /** 审计：每天做上百次的事，复核仍在第一位。 */\n 105      title: \"nav.audit\",\n 106      items: [from(\"review\", \"◧\"), from(\"artifacts\", \"◇\")],\n 107    },\n 108    {\n 109      /** 执行：被测产品跑出了什么（运行报告），跟上一次比变了什么（基线）。 */\n 110      title: \"nav.exec\",\n 111      items: [from(\"runs\", \"▶\"), from(\"baselines\", \"≡\")],\n 112    },\n 113    {\n 114      /** 评测：这一版 harness 好不好（记分板），考卷是谁、动没动过（gold）。 */\n 115      title: \"nav.evals\",\n 116      items: [from(\"scoreboard\", \"◑\"), from(\"gold\", \"★\")],\n 117    },\n 118    {\n 119      /** 项目设置必须在任何一屏都进得去；引导（onboard）从设置页与空态进。 */\n 120      title: \"nav.project\",\n 121      items: [from(\"settings\", \"⚙\", \"nav.settings\")],\n 122    },\n 123  ];\n 124  \n 125  /** 这个 `?open=` 值在导航里是哪一项。 */\n 126  export const navItemFor = (openId: string): NavItem | undefined =>\n 127    NAV.flatMap((g) => g.items).find((i) => i.id === openId);\n 128  \n 129  /**"}, {"id": "C05", "path": "src/pages/Review.tsx", "line": 70, "label": "复核交互设计", "hash": "3d4425b6dffcc11d", "excerpt": "  70   * 三个 tab 共用同一套三栏布局与同一套键盘动线。**这一点是刻意的**：三种来源如果各长\n  71   * 一套操作，人就要记三套；而它们要人做的事本来就是同一件——看一条，说一句话，走下一条。\n  72   */\n  73  \n  74  const API = API_BASE;\n  75  \n  76  /**\n  77   * 产物的形状来自 `src/lib/artifact/types`，不在这里另立一份。\n  78   *\n  79   * 此前这个文件自己声明了一遍 `Finding` / `ReviewItem` / `Story`，只写了它当时想画的键。"}, {"id": "C06", "path": "server/src/db.ts", "line": 542, "label": "已批准用例结构", "hash": "d5ef87516f223dd2", "excerpt": " 542  export interface TestCase {\n 543    id: string;\n 544    projectId: string;\n 545    title: string;\n 546    priority: Priority;\n 547    priorityReason: string;\n 548    runStatus: RunStatus;\n 549    hasCode: boolean;\n 550    precondition?: string;\n 551    expected?: string; // the functional oracle: what \"passed\" means for this case\n 552    type: CaseType; // test-design category (equivalence/boundary/negative/e2e)\n 553    requirementId?: string; // trace back to a requirement/PRD item\n 554    envRef?: string; // environment name this case binds to (\"\" = project default)\n 555    dataKey?: string; // env array var to iterate — data-driven: one run per row (${row}/${row.col})\n 556    web3Mode?: Web3Mode; // wallet to inject for dapp runs (\"\" = none)\n 557    chainAssertions?: ChainAssertion[]; // on-chain checks evaluated after the steps\n 558    postSteps: Step[]; // cleanup / teardown actions\n 559    quarantined: boolean; // flaky → runs but excluded from the CI gate\n 560    steps: Step[];\n 561    code?: string;\n 562    createdAt: string;\n 563    /* ---- provenance, for a case that came out of a workflow ---- */\n 564    storyId?: string; // the user story it was designed from\n 565    activity?: string; // 所属模块。规格里算出来的路由聚类，故事地图的横轴\n 566    covers?: string[]; // 走了哪些状态转移（`from->to`）——唯一来自产品本身的追溯线\n 567    designMethod?: string; // equivalence / boundary / state-transition / decision-table / negative\n 568    tier?: number; // how hard its verdict is: 1 assert, 2 invariant, 3 judge\n 569    gateScore?: number; // what gate ① thought of the batch it arrived in\n 570    sourceRunId?: string; // the workflow run that produced it\n 571    /** The outcome in a form a program settles — no model, no screenshot, no wobble. */\n 572    oracle?: MachineOracle;\n 573    /** Its assertion was weakened (or the case rebuilt) during stage-two repair. */\n 574    degraded?: boolean;\n 575  }\n 576  \n 577  // A captured browser session (Playwright-compatible storageState shape) — cookies plus\n 578  // per-origin localStorage. Injected before navigation so runs start authenticated."}, {"id": "C07", "path": "server/src/db.ts", "line": 639, "label": "执行记录结构", "hash": "d5ef87516f223dd2", "excerpt": " 639  export interface RunRecord {\n 640    id: string;\n 641    caseId: string;\n 642    caseTitle: string;\n 643    priority: Priority;\n 644    status: Exclude<RunStatus, \"notRun\">;\n 645    durationMs: number;\n 646    startedAt: string;\n 647    failureReason?: string;\n 648    logs: string[];\n 649    screenshots?: string[];\n 650    reportPath?: string;\n 651    tokens?: number;\n 652    /** 一次运行的账：`RunSpend`（模型调用数、毫秒、缓存命中/未命中/失效）。 */\n 653    spend?: RunSpend;\n 654    visual?: VisualDiff[];\n 655    perf?: unknown; // PerfResult from perf.ts (stored opaque to avoid coupling)\n 656    oracle?: OracleCheck[];\n 657    attempts?: number; // how many tries this run took (1 = passed first time)\n 658    healed?: boolean; // passed only after a self-heal retry → a flake signal\n 659    infraError?: boolean; // model/network failure — not a real test failure; excluded from flake/MTTR\n 660    failCode?: string; // wire code, e.g. EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT\n 661    failKind?: \"infra\" | \"locate\" | \"assert\"; // which bucket the statistics should count it in\n 662    /**\n 663     * Which project this execution belongs to.\n 664     *\n 665     * Stored, not joined: a workflow execution runs a candidate case that has no board row\n 666     * to join through, and may never get one.\n 667     */\n 668    projectId?: string;\n 669    /** The workflow run that executed it, when it came from one. */\n 670    wfRunId?: string;\n 671    /**\n 672     * Where the execution came from — the reader needs this to know what a green row means.\n 673     *\n 674     * `suite` and `case` both ran a case the board already accepted; `workflow` ran a\n 675     * candidate during generation, before anyone approved it. Reported by the ledger query;\n 676     * only `board` vs `workflow` is stored (suite-vs-case is a batch membership question).\n 677     */\n 678    origin?: \"suite\" | \"case\" | \"workflow\";"}, {"id": "C08", "path": "packages/testpilot-mcp/src/contracts.ts", "line": 86, "label": "运行来源与输入指纹", "hash": "f7025fa0ffeb5729", "excerpt": "  86  export const RunMetaSchema = z.object({\n  87    runId: z.string().min(1),\n  88    stage: z.enum([\"g1\", \"g2\"]),\n  89    /**\n  90     * 哪个运行时跑出来的（07 P2）：Penguin / Claude Code / Codex，或不经 agent 直接跑流水线。\n  91     * 可选，缺省 = 旧条目（那时只有 Penguin）。它进 scoreboard 的 binding——运行时不同的两条分数不可比。\n  92     */\n  93    runtime: z.enum([\"penguin\", \"claude-code\", \"codex\", \"pipeline\"]).optional(),\n  94    skillVersion: z.string().min(1),\n  95    promptsDigest: TextDigestSchema,\n  96    params: z.record(z.unknown()),\n  97    ablated: z.array(z.string()),\n  98    model: ModelBindingSchema,\n  99    materialsHash: z.string().min(1),\n 100    startedAt: z.string(),\n 101    finishedAt: z.string(),\n 102    spend: z.object({ calls: z.number(), tokens: z.number(), ms: z.number() }),\n 103    /**\n 104     * 单条 skill 进化时冻结的上游产物在哪。**可选，缺省表示这次运行没有冻结输入**——\n 105     * 整条流水线从 `docs/` 起跑，一步不落。\n 106     *\n 107     * 加它是因为「按 skill 进化」的两臂只该差 skill 版本一件事：给 design 冻结\n 108     * `nodes/spec.json` + `nodes/stories.json`，同一份输入喂给多个 design 候选，\n 109     * 于是候选之间的分差归得到 design 那一版改动身上。这个字段记下那份输入从哪来，\n 110     * 供 `score_run` 复算 `inputHash`（见下）与审计台回看。\n 111     */\n 112    frozenInputsDir: z.string().optional(),\n 113    /**\n 114     * 冻结的上游产物的内容指纹（`inputHashOf`，与 `materialsHash` 同一套哈希）。\n 115     * **可选，缺省即「没有冻结输入」**，与冻结前的旧条目兼容。\n 116     *\n 117     * 它进 `ScoreboardEntry`，作为 `goldHash` 之外的第二条谱系判据：两条条目若都带\n 118     * `inputHash` 且不同，就是**喂了不同上游产物**的两场进化实验，跨实验不可比\n 119     * （`paired_eval` 拒收）。由 `run_pipeline` 在冻结起跑时算出并写进这里。\n 120     */\n 121    inputHash: z.string().optional(),\n 122  });\n 123  export type RunMeta = z.infer<typeof RunMetaSchema>;\n 124  "}, {"id": "C09", "path": "packages/harness-testing/src/exec/oracle.ts", "line": 24, "label": "六类机器判据", "hash": "af301a7e1779575e", "excerpt": "  24  export const MachineOracleSchema = z.discriminatedUnion(\"kind\", [\n  25    z.object({ kind: z.literal(\"text\"), value: z.string().min(1) }),\n  26    z.object({ kind: z.literal(\"noText\"), value: z.string().min(1) }),\n  27    z.object({ kind: z.literal(\"url\"), value: z.string().min(1) }),\n  28    z.object({\n  29      kind: z.literal(\"count\"),\n  30      value: z.string().min(1),\n  31      op: z.enum([\"eq\", \"gte\", \"lte\"]).default(\"eq\"),\n  32      n: z.number().int().min(0),\n  33    }),\n  34    z.object({\n  35      kind: z.literal(\"delta\"),\n  36      /** The label the number sits beside, e.g. \"重启次数\". */\n  37      value: z.string().min(1),\n  38      direction: z.enum([\"increased\", \"decreased\", \"unchanged\"]),\n  39      /** Optional exact size of the change. */\n  40      by: z.number().optional(),\n  41    }),\n  42    /**\n  43     * api：问一个 JSON 接口，而不是看屏幕。见 `apiOracle.ts`。\n  44     *\n  45     * 交易页的真值（持仓、挂单、余额）在接口里是精确的数，在屏幕上是会随行情变的字。\n  46     * `eq/neq/gte/lte/exists/absent` 是 tier 1；`increased/decreased/unchanged` 比较步骤前后\n  47     * 两次读数，是 tier 2。\n  48     */\n  49    z.object({\n  50      kind: z.literal(\"api\"),\n  51      /** 接口地址，可含 ${env.*} / ${secret.*}。 */\n  52      url: z.string().min(1),\n  53      method: z.enum([\"GET\", \"POST\"]).default(\"GET\"),\n  54      /** POST 的 JSON 正文（字符串），可含占位符。 */\n  55      body: z.string().optional(),\n  56      headers: z.record(z.string()).optional(),\n  57      /** 响应 JSON 里的点分路径，数组下标用数字：`assetPositions.0.position.szi`。 */\n  58      path: z.string().min(1),\n  59      op: z.enum([\"eq\", \"neq\", \"gte\", \"lte\", \"exists\", \"absent\", \"increased\", \"decreased\", \"unchanged\"]),\n  60      value: z.union([z.string(), z.number(), z.boolean()]).optional(),\n  61      /** increased/decreased 时可选的精确变化量。 */\n  62      by: z.number().optional(),\n  63      /** 取值前等多久（毫秒）。交易所接口在下单后有传播延迟。 */\n  64      settleMs: z.number().int().min(0).optional(),\n  65    }),\n  66  ]);\n  67  export type MachineOracle = z.infer<typeof MachineOracleSchema>;\n  68  \n  69  /** What the page looked like at one moment. Text and URL only — no DOM, no selectors. */\n  70  export interface PageSnapshot {\n  71    text: string;\n  72    url: string;\n  73    /** 只有 api 判据会填：对接口的一次观察。见 `apiOracle.ts`。 */\n  74    api?: { value?: unknown; error?: string };\n  75  }\n  76  \n  77  /**\n  78   * Which tier this oracle actually delivers.\n  79   *\n  80   * The point of having it: a case can now be *checked* against its own claim, instead of\n  81   * the claim being taken at face value.\n  82   */\n  83  export function tierOf(oracle: MachineOracle): 1 | 2 {\n  84    if (oracle.kind === \"delta\") return 2;\n  85    if (oracle.kind === \"api\") return oracle.op === \"increased\" || oracle.op === \"decreased\" || oracle.op === \"unchanged\" ? 2 : 1;"}, {"id": "C10", "path": "packages/testpilot-mcp/src/score.ts", "line": 151, "label": "记分板读改写", "hash": "62b37e51f07dc606", "excerpt": " 151  export function appendScoreboard(goldPath: string, entry: ScoreboardEntry): string | undefined {\n 152    const dir = dirname(resolve(goldPath));\n 153    const file = join(dir, \"scoreboard.yaml\");\n 154    if (!existsSync(file)) return undefined;\n 155    const text = readFileSync(file, \"utf8\");\n 156    const m = /entries:\\s*(\\[[\\s\\S]*\\])\\s*$/.exec(text);\n 157    const head = m ? text.slice(0, m.index) : text.replace(/\\s*$/, \"\\n\");\n 158    let prev: ScoreboardEntry[] = [];\n 159    if (m) {\n 160      try {\n 161        prev = JSON.parse(m[1]) as ScoreboardEntry[];\n 162      } catch (e) {\n 163        throw new Error(`${file} 的 entries 读不出（${(e as Error).message}）——不覆盖一张读不出的记分板`);\n 164      }\n 165    }\n 166    // 同一次运行对着同一份 gold 重打分，换掉旧行而不是堆一行：记分板一行 = 一个 binding 在一条谱系上的分。\n 167    const next = prev.filter((e) => !(e.runId === entry.runId && e.goldHash === entry.goldHash && !!e.vsPrev === !!entry.vsPrev));\n 168    next.push(entry);\n 169    writeFileSync(file, `${head}entries: ${JSON.stringify(next, null, 2)}\\n`);\n 170    return file;\n 171  }\n 172  \n 173  /* ------------------------------------------------------------ 配对评测 */\n 174  \n 175  /** 覆盖了哪几条 gold item——配对的单元是**清单项**，不是用例。 */"}, {"id": "C11", "path": "packages/testpilot-mcp/src/score.ts", "line": 251, "label": "冻结输入的比较条件", "hash": "62b37e51f07dc606", "excerpt": " 251    if (aMeta.inputHash && bMeta.inputHash && aMeta.inputHash !== bMeta.inputHash)\n 252      throw new Held(\n 253        \"lineage\",\n 254        `run a (${aMeta.runId}) and run b (${bMeta.runId}) were resumed from different frozen inputs ` +\n 255          `(inputHash ${aMeta.inputHash} vs ${bMeta.inputHash}) — these are different evolution experiments and ` +\n 256          `cannot be compared. To compare two candidates of one skill, feed both the same frozen upstream products.`,\n 257      );\n 258  \n 259    const aCases = readCases(aDir);\n 260    const bCases = readCases(bDir);\n 261    const aCovered = coveredIds(gold, aCases);\n 262    const bCovered = coveredIds(gold, bCases);"}, {"id": "C12", "path": "server/src/index.ts", "line": 2753, "label": "人工决定镜像路径", "hash": "8a9a3a051d8dc108", "excerpt": "2753  function mirrorDecisions(\n2754    wfRunId: string,\n2755    caseIds: string[],\n2756    decision: Decision[\"decision\"],\n2757    reason?: string,\n2758  ): void {\n2759    if (!caseIds?.length) return;\n2760    if ((runDetail(wfRunId) as { runtime?: string }).runtime !== \"penguin\") return;\n2761    try {\n2762      const at = new Date().toISOString();\n2763      writeDecisions(\n2764        penguinWorkspaceOf(wfRunId),\n2765        wfRunId,\n2766        caseIds.map((caseId) => ({\n2767          caseId,\n2768          decision,\n2769          by: \"review\",\n2770          at,\n2771          ...(reason ? { reason: String(reason) } : {}),\n2772        })),\n2773      );\n2774    } catch (e) {\n2775      log(`decisions.json 没写成（${wfRunId}）：${(e as Error).message}`);\n2776    }\n2777  }\n2778  \n2779  /** 404 与 5xx 分开：`src/lib/audit.ts` 的 `get()` 只吞 404，5xx 照抛。 */\n2780  function auditFail(res: express.Response, e: unknown): void {\n2781    if (e instanceof NotFound) {\n2782      res.status(404).json({ error: e.message });"}, {"id": "C13", "path": "server/src/degrade.ts", "line": 28, "label": "由请求决定 actor", "hash": "d400d080d66a74ee", "excerpt": "  28  export function degradeDecision(before: DegradableCaseLike, patch: Record<string, unknown>, actor: unknown): DegradeDecision {\n  29    const who: \"agent\" | \"human\" = actor === \"agent\" ? \"agent\" : \"human\";\n  30    const after = { ...before, ...patch } as DegradableCaseLike;\n  31    const findings = classifyDegrade(\n  32      { id: before.id, expected: before.expected, tier: before.tier, oracle: before.oracle as never },\n  33      { id: after.id, expected: after.expected, tier: after.tier, oracle: after.oracle as never },\n  34    );\n  35    return { findings, block: findings.length > 0 && who === \"agent\", mark: findings.length > 0 && who === \"human\", actor: who };\n  36  }\n  37  \n  38  /** 退化账本：`<DATA_DIR>/degrades.jsonl`，`cost-report` 数它。记不下来不影响本次判决。 */"}, {"id": "C14", "path": "server/src/index.ts", "line": 829, "label": "修改与删除入口", "hash": "8a9a3a051d8dc108", "excerpt": " 829  app.patch(\"/api/cases/:id\", (req, res) => {\n 830    const before = getCase(req.params.id);\n 831    if (!before) return res.status(404).json({ error: \"case not found\" });\n 832    const body = (req.body ?? {}) as Record<string, unknown>;\n 833    /**\n 834     * 自愈退化（07 T-16）：一次「修复」把判据改弱、层级掉了、expected 变含糊，都要被叫出来。\n 835     * `__actor: \"agent\"`（MCP / 自愈路径）改弱一律拒，回到人；人改弱放行但记账并把用例标 `degraded`，\n 836     * 报表里看得见。规则在 `harness-testing/codegen/degrade.ts`，和代码用例那边的 `assertionWeakened` 同一个思路。\n 837     */\n 838    const { __actor: actor, ...patch } = body;\n 839    const d = degradeDecision(before, patch, actor);\n 840    const findings = d.findings;\n 841    if (findings.length) {\n 842      recordDegrade({ caseId: before.id, projectId: before.projectId, actor: d.actor, blocked: d.block, findings: findings.map((f) => f.detail) });\n 843      if (d.block)\n 844        return res.status(409).json({ error: `自愈不允许改弱判据：${findings.map((f) => f.detail).join(\"；\")}`, code: \"DEGRADED\", findings });\n 845    }\n 846    const c = updateCase(req.params.id, { ...patch, ...(findings.length ? { degraded: true } : {}) } as Parameters<typeof updateCase>[1]);\n 847    if (!c) return res.status(404).json({ error: \"case not found\" });\n 848    res.json({ case: c, ...(findings.length ? { degraded: findings } : {}) });\n 849  });\n 850  app.delete(\"/api/cases/:id\", (req, res) => {\n 851    deleteCase(req.params.id);\n 852    res.json({ ok: true });\n 853  });\n 854  \n 855  app.get(\"/api/runs\", (req, res) => {\n 856    const caseId = req.query.caseId as string | undefined;\n 857    const projectId = req.query.projectId as string | undefined;\n 858    const runs = caseId\n 859      ? listRuns(caseId)"}, {"id": "C15", "path": "plugins/testpilot/hooks/adapters/claude-code.mjs", "line": 66, "label": "Hook 错误弃权与工具覆盖", "hash": "c5c8cc91b9c1cc49", "excerpt": "  66  function runHook(script, penguinMsg, timeoutS) {\n  67    const r = spawnSync(process.execPath, [path.join(HOOKS, script)], {\n  68      input: JSON.stringify(penguinMsg),\n  69      cwd: HOOKS,\n  70      env: process.env,\n  71      encoding: \"utf8\",\n  72      timeout: (timeoutS ?? 60) * 1000,\n  73    });\n  74    // 契约：崩溃 / 超时 / 非 JSON 一律当弃权——但要在 stderr 留痕，别静悄悄地什么都不拦。\n  75    if (r.status !== 0) { process.stderr.write(`[testpilot hook ${script}] 出错，当作弃权：${(r.stderr || \"\").slice(-400)}\\n`); return null; }\n  76    const text = (r.stdout || \"\").trim();\n  77    if (!text) return null;\n  78    try { return JSON.parse(text); } catch { return null; }\n  79  }\n  80  \n  81  if (event === \"PreToolUse\") {\n  82    const tool = String(msg.tool_name ?? \"\");\n  83    const input = msg.tool_input ?? {};\n  84    let penguinTool = null, args = null;\n  85    if (tool === \"Write\") { penguinTool = \"write_file\"; args = { file_path: input.file_path, content: input.content ?? \"\" }; }\n  86    else if (tool === \"Edit\") { penguinTool = \"edit_file\"; args = { file_path: input.file_path, old: input.old_string ?? \"\", new: input.new_string ?? \"\" }; }\n  87    else if (tool === \"MultiEdit\") { penguinTool = \"edit_file\"; args = { file_path: input.file_path, edits: input.edits ?? [] }; }\n  88    if (!penguinTool || typeof args.file_path !== \"string\") process.exit(0);\n  89    const trace = traceFor();\n  90    const penguinMsg = { hook: \"pre_tool_use\", session_id: sessionId, trace_path: trace, tool_name: penguinTool, tool_call_id: `cc-${Date.now()}`, arguments: JSON.stringify(args) };\n  91    for (const h of manifest.hooks?.pre_tool_use ?? []) {\n  92      const out = runHook(h.command, penguinMsg, h.timeout);\n  93      if (out?.decision === \"deny\") {\n  94        process.stderr.write(String(out.reason ?? `${h.command} 拒绝了这次写入`));\n  95        process.exit(2);\n  96      }\n  97    }\n  98    process.exit(0);\n  99  }\n 100  "}, {"id": "C16", "path": "server/src/claudecode.ts", "line": 136, "label": "运行时允许 Node shell", "hash": "8b436c66c69116af", "excerpt": " 136  export function claudeArgs(message: string, workspace: string, plugin?: string): string[] {\n 137    return [\n 138      \"-p\",\n 139      message,\n 140      \"--output-format\",\n 141      \"stream-json\",\n 142      \"--verbose\",\n 143      \"--permission-mode\",\n 144      \"acceptEdits\",\n 145      \"--allowedTools\",\n 146      \"mcp__testpilot__*\",\n 147      \"Read\",\n 148      \"Write\",\n 149      \"Edit\",\n 150      \"Bash(node *)\",\n 151      \"--mcp-config\",\n 152      join(workspace, \".mcp.json\"),\n 153      ...(plugin ? [\"--plugin-dir\", plugin] : []),\n 154    ];\n 155  }\n 156  \n 157  /**\n 158   * 起一个 Claude Code 会话，拿到 session id 就返回。"}, {"id": "C17", "path": "fixtures/tier4-demo/.claude/hooks/require-p0.mjs", "line": 27, "label": "Stop hook 封顶与故障放行", "hash": "86e6108037e1782f", "excerpt": "  27  if (n >= 3) { process.stderr.write(`P0 仍未全绿，已拦 ${n} 次，不再拦（看 .claude/holds.jsonl）\\n`); process.exit(0); }\n  28  let result;\n  29  try {\n  30    const r = await fetch(`${gateway}/api/projects/${projectId}/suite`, { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify({ filter: \"P0\", retries: 0 }), signal: AbortSignal.timeout(20 * 60_000) });\n  31    result = await r.json();\n  32    if (!r.ok) throw new Error(result.error || `HTTP ${r.status}`);\n  33  } catch (e) {\n  34    // 网关不在 = 没法证明绿，也不能证明红：不拦，但说出来。\n  35    process.stderr.write(`require-p0：跑不了 P0（${e.message}），这次没有门禁\\n`); process.exit(0);\n  36  }\n  37  const red = (result.items || []).filter((it) => it.status !== \"passed\");\n  38  if (!red.length) process.exit(0);\n  39  const details = [];\n  40  for (const it of red) {\n  41    let why = it.status;\n  42    if (it.runId) { try { const run = (await (await fetch(`${gateway}/api/runs/${it.runId}`)).json()).run; const o = (run?.oracle || []).find((x) => x.status !== \"pass\"); why = o ? `${o.status}：${o.detail}` : (run?.failureReason || it.status).slice(0, 160); } catch {} }\n  43    details.push(`「${it.caseTitle}」${why}`);\n  44  }\n  45  writeFileSync(stateFile, JSON.stringify({ nudges: n + 1 }));\n  46  appendFileSync(join(here, \"..\", \"holds.jsonl\"), JSON.stringify({ at: new Date().toISOString(), hook: \"require-p0\", gate: \"p0\", session: msg.session_id, red: red.length, details }) + \"\\n\");\n  47  process.stdout.write(JSON.stringify({ decision: \"block\", reason: `P0 有 ${red.length} 条没绿，不能结束：${details.join(\"；\")}。修好再试；判决来自接口判据，不是我说的。` }));"}, {"id": "C18", "path": "packages/harness-testing/src/codegen/degrade.ts", "line": 36, "label": "退化检测的启发式边界", "hash": "96722b024ac6f3c5", "excerpt": "  36  function oracleWeakened(before: MachineOracle, after: MachineOracle): string | null {\n  37    if (strength(after) > strength(before)) return `判据从 tier ${strength(before)} 退到 tier ${strength(after)}`;\n  38    if (before.kind === \"api\" && after.kind === \"api\") {\n  39      const looser = (b: string, a: string) => b === \"eq\" && (a === \"exists\" || a === \"gte\" || a === \"lte\" || a === \"neq\");\n  40      if (looser(before.op, after.op)) return `api 判据从 ${before.op} 放宽成 ${after.op}`;\n  41      if (before.op === after.op && before.value !== undefined && after.value === undefined) return \"api 判据丢了 value\";\n  42      if (before.path !== after.path && after.path.split(\".\").length < before.path.split(\".\").length) return `api 判据路径从 ${before.path} 缩短成 ${after.path}`;\n  43    }\n  44    if (before.kind === \"api\" && after.kind !== \"api\") return `判据从 api 换成 ${after.kind}——不再读接口`;\n  45    if (\"value\" in before && \"value\" in after && typeof before.value === \"string\" && typeof after.value === \"string\") {\n  46      if (after.value.trim().length < before.value.trim().length * 0.67) return `判据字面量从「${before.value}」缩成「${after.value}」`;\n  47    }\n  48    return null;\n  49  }\n  50  \n  51  export function classifyDegrade(before: DegradableCase | undefined, after: DegradableCase | undefined): DegradeFinding[] {\n  52    if (before && !after) return [{ kind: \"case-removed\", detail: `用例 ${before.id} 被删除` }];\n  53    if (!before || !after) return [];\n  54    const out: DegradeFinding[] = [];\n  55    if (before.oracle && !after.oracle) out.push({ kind: \"oracle-removed\", detail: `用例 ${after.id} 的机器判据被去掉（原为 ${before.oracle.kind}）` });\n  56    else if (before.oracle && after.oracle) {"}, {"id": "C19", "path": "packages/testpilot-mcp/src/memory.ts", "line": 26, "label": "记忆结构与候选来源", "hash": "5c919530b66987b8", "excerpt": "  26  export const EpisodeCategory = z.enum([\"gate\", \"hold\", \"scan\", \"infra\", \"material\"]);\n  27  \n  28  export const EpisodeSchema = z.object({\n  29    key: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9_.-]*$/, \"key 用小写字母、数字、_ . -\"),\n  30    value: z.string().min(1).max(200),\n  31    category: EpisodeCategory,\n  32    /** 来源运行的 runId 摘要（sha256 前 8 位）：读回来的人知道它是哪次的经验，又不把 runId 当路径。 */\n  33    runTag: z.string().regex(/^[0-9a-f]{8}$/),\n  34    /** 从哪个文件算出来的。候选才有；模型挑了之后照抄。 */\n  35    source: z.string().optional(),\n  36  });\n  37  export type Episode = z.infer<typeof EpisodeSchema>;\n  38  \n  39  export const runTag = (runId: string): string => createHash(\"sha256\").update(runId).digest(\"hex\").slice(0, 8);\n  40  \n  41  /* ------------------------------------------------------------ 写过滤 */\n  42  "}, {"id": "C20", "path": "packages/harness-core/src/eval/coverage.ts", "line": 85, "label": "覆盖率是文字规则匹配", "hash": "19cd99ffd6ee543d", "excerpt": "  85  export function covers(item: { match?: GoldMatch }, c: CoverableCase): boolean {\n  86    const body = caseText(c);\n  87    const assertion = norm(c.expected ?? \"\");\n  88    const { anyOf, allOf, assertAnyOf } = item.match ?? {};\n  89    if (anyOf?.length && !anyOf.some((k) => body.includes(norm(k)))) return false;\n  90    if (allOf?.length && !allOf.every((k) => body.includes(norm(k)))) return false;\n  91    if (assertAnyOf?.length && !assertAnyOf.some((k) => assertion.includes(norm(k)))) return false;\n  92    return Boolean(anyOf?.length || allOf?.length || assertAnyOf?.length);\n  93  }\n  94  "}, {"id": "C21", "path": "server/src/index.ts", "line": 73, "label": "复位失败仅记日志", "hash": "8a9a3a051d8dc108", "excerpt": "  73  function runEnvReset(cmd: unknown): string[] | null {\n  74    if (typeof cmd !== \"string\" || !cmd.trim()) return null;\n  75    const r = spawnSync(cmd, { shell: true, cwd: REPO_ROOT, encoding: \"utf8\", timeout: 60_000 });\n  76    const tail = `${r.stdout ?? \"\"}${r.stderr ?? \"\"}`.trim().split(\"\\n\").slice(-3).join(\" · \");\n  77    return [`reset → ${cmd}`, `  ${r.status === 0 ? \"ok\" : `exit ${r.status ?? \"?\"}`}${tail ? ` — ${tail}` : \"\"}`];\n  78  }\n  79  "}, {"id": "C22", "path": "docs/v3/06-执行层降本.md", "line": 207, "label": "执行降本实测", "hash": "35c56d60696d3614", "excerpt": " 207  | 7 条总墙钟 | 583s | 591s | **310s（首跑的 53%）** |\n 208  | 通过 | 5/7 | 7/7 | 6/7（第 1 条批次起手瞬时失败，无运行记录；单跑 42s 通过） |\n 209  | 模型调用 / tokens | 50 / 177k | 22 / 77k | 5 / 15k |\n 210  | 缓存 命中/未命中/失效 | 0/64/0 | 39/26/1（59%） | **56/4/0（93%）** |\n 211  | 登录态 | 每条 | 只第 1 条 | 只第 1 条 |\n 212  \n 213  O 的 26 次未命中是 N 里失败的第 4、5 条在 O 补首跑，所以 P 才是真正的二跑。P 的分段：起浏览器 ~6s（复用时是 goto）· 登录态 0 · settle 4s · 判据 3s，每条地板从 35–50 秒降到 ~13 秒；剩下的全是缓存回放本身（每个动作 1–3 秒）。**「二跑 ≤ 首跑 1/3」仍没到（53%）**：TP/SL 一条 19 次命中要 56 秒，「步骤」占了二跑的六成——那是 Midscene 回放每个动作截图 + DOM 抓取的成本，不在这一层。\n 214  \n 215  **归账（T-04）。** 每个 runner 一份 Midscene 目录、缓存共享；P 的 7 次运行 7 次按 runner 目录归账。\n 216  "}, {"id": "C23", "path": "docs/v3/07-第四档路线-任务与进度.md", "line": 236, "label": "领域评测状态记录", "hash": "1ac476c79647fcb9", "excerpt": " 236  #### T-12 · 第一次有意义的配对评测：装 vs 卸领域 REFERENCE（n≥3，冻结上游）\n 237  - 状态：blocked\n 238  - 卡在：两件事。① 打分要 `benchmark/hyperliquid-testnet/gold.json`（人的交付物）——`gold.draft.json` 已从 `rules.md` 机械导出 12 条（`reviewed: false`），gold 屏能读，人复核、标留出、冻结即可打分。② 模型：2026-09-08 16:05 起 DashScope 回 403 `AllocationQuota.FreeTierOnly`（免费额度用尽），修好 schema 与 `ablate` 之后的两臂一次都没跑成。**跑过的六次产物都不算数**（`evals/domain-perp.json` 的 `result.why_invalid`）：消融臂 `ablated: []`、两臂 `kind: api` 全 0——前者是 agent 丢参数（现走 MCP env `TP_ABLATE` 兜底 + skill 明说），后者是 `CASES_SCHEMA` 没有 `api`（T-13 的验收 ① 其实从没过）。充值后重跑命令在 `result.rerun`。\n 239  - 兑现：#2 #6\n 240  - 为什么：这是「领域知识让 agent 生成的合约用例 P0 命中率从 X 到 Y」那句话的来源。机制全在：`04-单skill进化.md` 五步、`frozenInputsDir`、`paired_eval`、McNemar。\n 241  - 改：新增 `evals/domain-perp.json`（两臂只差 `ablate: [\"domain-perp\"]`，`expect` **跑之前**写）；`benchmark/hyperliquid-testnet/stages/design/frozen-inputs/`；`benchmark/hyperliquid-testnet/gold.json`（**人交付**，从探索草稿复核；`heldOut` 标一半；冻结后记 `goldHash`）。\n 242  - 做法：先冻结上游（`run_pipeline stopAfter:\"stories\"`），两臂各 n=3，`paired_eval` 报 McNemar 与两臂覆盖率分布；**先看产物再看报告**：两臂的 `oracle` 分布（tier 1/2 占比、`kind: api` 条数）先数出来。A 臂（pipeline）和 C 臂（Claude Code）都跑一遍——这是 P1 重述之后要的那个比较。\n 243  - 验收：① `scoreboard.yaml` 新增 ≥ 2 条完整 binding 条目（两臂各一）；② `evals/domain-perp.json` 有 `result` 与预判对错；③ 结论写进 `06`（或新开 `08-领域层.md`），包括「不显著」如果它不显著。\n 244  - 依赖：T-08 T-10 T-11\n 245  "}, {"id": "C24", "path": "docs/v3/04-单skill进化.md", "line": 59, "label": "单 skill 进化实验设计", "hash": "c16cbf5588fc7f7a", "excerpt": "  59  ### `inputHash`（`contracts.ts`）\n  60  \n  61  `inputHash` = 对被冻结的上游产物文件做**和 `materialsHash` 同一套哈希**（`inputHashOf`：逐文件\n  62  `相对路径 \\0 内容 \\0`，排序后 sha256 前 16 位）。由 `run_pipeline` 在冻结起跑时算出，写进\n  63  `meta.json`（`RunMeta.inputHash` / `RunMeta.frozenInputsDir`，两者都 optional），并进\n  64  `ScoreboardEntry.inputHash`。\n  65  \n  66  它是 `goldHash` 之外的**第二条谱系判据**（数据契约 §2 的补充）：\n  67  \n  68  | 两条条目 | 判定 |\n  69  |---|---|\n  70  | `inputHash` 都在、相同 | 同一份冻结输入的两个候选——**可比** |\n  71  | `inputHash` 都在、不同 | 喂了不同上游的两场实验——`paired_eval` **拒收** |\n  72  | 两条都无 `inputHash` | 老路：整条流水线从 docs 起跑，比整条流水线（与冻结机制上线前的旧条目兼容）|\n  73  | 一有一无 | 一臂冻结、一臂没冻结——不硬拒，`note` 里说明是混搭 |\n  74  \n  75  `inputHash` **不进** `agentState`：它是**输入**，不是 agent 版本。`agentState` 仍只由\n  76  skillVersion + promptsDigest + params 定。两条条目要可比，需要 `agentState` 不同（就是那处改动）、\n  77  `goldHash` 相同、`inputHash` 相同。\n  78  \n  79  ## 4. 两个坎\n  80  \n  81  ### 坎一：冻结的是「一份」，不是「分布」"}, {"id": "C25", "path": "evals/domain-perp.json", "line": 24, "label": "领域评测无效声明", "hash": "4d25c4fc369b64c3", "excerpt": "  24      \"status\": \"两臂各 3 次产物已跑，但**都不算数**；分数仍等人复核的 gold\",\n  25      \"runtime\": \"claude-code\",\n  26      \"materialsHash\": \"070839f69ea51bc6\",\n  27      \"model\": \"qwen3.8-flash@dashscope\",\n  28      \"limit\": 3,\n  29      \"arms_as_run\": {\n  30        \"b_reference_on\": [\n  31          {\n  32            \"run\": \"20260908T075210\","}, {"id": "C26", "path": "evals/runtime-compare.json", "line": 22, "label": "运行时对比的实验配置", "hash": "5bc70fc3d8ff79c6", "excerpt": "  22    \"result\": {\n  23      \"at\": \"2026-09-08\",\n  24      \"materialsHash\": \"25a3d392b572e2e2\",\n  25      \"goldHash\": \"2405209c3fe70ac7\",\n  26      \"model\": \"qwen3.8-flash@dashscope\",\n  27      \"skillVersion\": \"2026-09-03.1\",\n  28      \"limit\": 3,\n  29      \"a_penguin\": [\n  30        {\n  31          \"run\": \"20260908T071737\",\n  32          \"cases\": 21,\n  33          \"coverage\": 0,\n  34          \"heldOut\": 0.25,\n  35          \"gate\": 1.0,\n  36          \"tokens\": 48308,\n  37          \"wallS\": 161\n  38        },\n  39        {"}, {"id": "C27", "path": "docs/v3/07-第四档路线-任务与进度.md", "line": 270, "label": "Stop hook 真跑记录", "hash": "1ac476c79647fcb9", "excerpt": " 270  #### T-15 · Stop hook：「P0 没绿不许结束回合」，在你的合约 UI 仓库里装上\n 271  - 状态：done\n 272  - 结果：`fixtures/tier4-demo/`（四控件面板 + mock 清算接口 + 故意的 `Math.round` bug）、`.claude/settings.json` Stop hook → `hooks/require-p0.mjs`（调网关跑 P0，红就 `decision: block`，reason 点名哪条红与判据读数；封顶 3 次；拦截记 `.claude/holds.jsonl`）。验收 ① 2026-09-08 真跑（`docs/v3/evidence/t15-stop-hook-session.jsonl`）：提示词只让 agent 改一个 placeholder → Stop 被挡「`position.szi = 0.002（要求 eq 0.001）`」→ agent 读 `holds.jsonl` 修 `normalizeSize` → 再 Stop，4/4 绿放行；19 轮 2:47，四条 P0 回放 0 次模型调用。录屏是人的事，时间线已落 evidence。② `holds.jsonl` 两条（第一次是缓存过时造成的 `unobservable` 拦截，也算真拦）。③ README 写了复现与两个坑（`--watch`、缓存 xpath 过时）。跑完把 bug 放回去了。\n 273  - 兑现：#5\n 274  - 为什么：第四档的字面定义。这是最值钱的一段录屏：Claude Code 改一个下单面板的精度 bug，被 Stop hook 挡下，修好后放行。\n 275  - 改：新增 `fixtures/tier4-demo/`（一个最小的合约下单面板 React 工程，作为**被 agent 修改的**仓库；它的 `.claude/settings.json` 装 Stop hook；`.mcp.json` 指向 testpilot-mcp）；hook 脚本 `fixtures/tier4-demo/.claude/hooks/require-p0.mjs`（调 `run_p0`，红就 `{\"decision\":\"block\",\"reason\":<哪条红、为什么>}`）。\n 276  - 做法：demo 面板只做 Size / Price / Leverage / Place Order 四个控件与一个 mock 的清算接口（`/api/clearinghouse`），`kind: api` 判据打在 mock 接口上——**不依赖 testnet，录屏可复现**。故意留一个 bug：数量四舍五入而不是截断。\n 277  - 验收：① 录屏：让 Claude Code 修「Size 精度」→ 第一次 Stop 被挡（reason 点名哪条 P0 红）→ 修好 → 放行；② `holds.jsonl` 记到这次拦截；③ README 写清复现步骤。"}, {"id": "C28", "path": "server/src/review.ts", "line": 599, "label": "复核产物进入数据库", "hash": "eea0ec116abe8b64", "excerpt": " 599      const kase = createCase({\n 600        projectId,\n 601        title: edit.title ?? item.title,\n 602        /**\n 603         * 人的决定 > 机器的判断 > 默认。\n 604         *\n 605         * 中间那一档是补上的：设计节点此前不产出优先级（提示词里根本没这个键），\n 606         * 于是每一条批准进来的用例都是 P1，看板的三列永远空着，导出的文件名全是 `p1-*`。\n 607         */\n 608        priority: edit.priority ?? (item.priority as Priority | undefined) ?? \"P1\",\n 609        priorityReason: `approved from ${input.wfRunId}${item.findings.length ? ` (${item.findings.length} gate findings)` : \"\"}${\n 610          // Only content edits are worth saying: setting a priority in the queue is a\n 611          // decision about the board, not a change to the case, and reporting it as one\n 612          // makes every batch-prioritised case look rewritten.\n 613          item.original ? `, edited in review${item.edit?.by === \"model\" ? \" (regenerated)\" : \"\"}` : \"\"\n 614        }`,\n 615        expected: edit.expected ?? item.expected,\n 616        precondition: item.precondition.join(\"; \"),\n 617        requirementId: item.requirementId,\n 618        activity: storyActivity.get(item.storyId),\n 619        covers: item.covers,\n 620        postSteps: (item.postSteps ?? []).map((text, i) => ({ order: i + 1, text })),\n 621        type: METHOD_TO_TYPE[item.designMethod] ?? \"functional\",\n 622        /**\n 623         * 步骤的来源，按优先级：人在队列里的编辑 → **阶段二真的跑过的动作** → 阶段一的文本。\n 624         *\n 625         * 中间那一档是补上的。此前它不存在，于是修复循环加的等待、改的措辞一条都到不了看板，\n 626         * 而看板正是这条用例今晚要跑的地方——它会带着修复循环已经修好的那个毛病重跑一遍。\n 627         * 人的编辑仍然排在最前：那是唯一一次有人看过这条用例并且表过态。\n 628         */\n 629        steps: (edit.steps ?? item.codeSteps ?? item.steps).map((text, i) => ({ order: i + 1, text })),\n 630        // Stage-two code rides along when it exists, so an approved case is runnable at once.\n 631        code: item.code,\n 632        hasCode: !!item.code,\n 633        storyId: item.storyId,\n 634        designMethod: item.designMethod,\n 635        tier: item.tier,\n 636        // Without this the board keeps the tier label and loses the thing that backs it.\n 637        oracle: item.oracle,\n 638        // A case that only went green after its assertion was weakened arrives marked.\n 639        degraded: item.degraded,\n 640        gateScore: batch.gateScore,\n 641        sourceRunId: input.wfRunId,\n 642      });\n 643      recordReviewDecision({\n 644        wfRunId: input.wfRunId,\n 645        caseId,"}, {"id": "C29", "path": "packages/testpilot-mcp/src/runcase.ts", "line": 23, "label": "Agent 收到的执行结果", "hash": "a93d02c62c5035ea", "excerpt": "  23  export interface CaseVerdict {\n  24    caseId: string;\n  25    title: string;\n  26    status: \"passed\" | \"failed\" | \"unobservable\";\n  27    durationMs: number;\n  28    oracle: Array<{ assertion: string; status: string; detail?: string; decidedBy?: string }>;\n  29    failure?: { code?: string; kind?: string; reason?: string };\n  30    spend?: Record<string, unknown>;\n  31    reportPath?: string;\n  32    /** 步骤日志，截到 2KB——完整的在报告里。 */\n  33    logs: string;\n  34  }\n  35  \n  36  const LOG_CAP = 2048;\n  37  const DEFAULT_API = process.env.TP_SERVER_URL || \"http://127.0.0.1:5301\";\n  38  "}, {"id": "C30", "path": "server/src/index.ts", "line": 304, "label": "当前服务中间件", "hash": "8a9a3a051d8dc108", "excerpt": " 304  const app = express();\n 305  app.use(cors());\n 306  app.use(express.json({ limit: \"2mb\" }));\n 307  // Serve baseline / current / diff images (referenced by VisualDiff.*Ref).\n 308  app.use(\"/api/artifacts\", express.static(ARTIFACT_DIR));\n 309  "}, {"id": "C31", "path": "plugins/testpilot/skills/testpilot-memory/SKILL.md", "line": 43, "label": "记忆写入宿主的位置", "hash": "0ffb8eadaf34a9f7", "excerpt": "  43  ## 写到哪、什么形状\n  44  \n  45  文件：`<agent_state>/memory/user/testpilot-episodes.md`。一行一条，形状定死：\n  46  \n  47  ```\n  48  - [<8位runTag>] <gate|hold|scan|infra|material>/<key>: <value ≤ 200 字>\n  49  ```\n  50  \n  51  写盘时 hook `validate-memory.mjs` 逐行校验：形状对不上、或 value 里有 token / 邮箱 / cookie / 长串 /\n  52  带凭证的链接，整份拒。被拒就照理由改，不要换文件名写。\n  53  \n  54  写完在 `MEMORY.md` 索引里加**一行**指向这个文件（已有就不加）。索引里最多列 8 条最近的经验；\n  55  更多的留在主题文件里按需读——进上下文的条数封顶，不是越多越好。\n  56  \n  57  ## 写完之后\n  58  \n  59  只说记了几条、runTag 是什么。不评价这次运行。"}, {"id": "C32", "path": "src/components/MigratedToPenguin.tsx", "line": 28, "label": "旧入口与宿主跳转", "hash": "0488f82da02d7947", "excerpt": "  28  export const PENGUIN_BASE: string = import.meta.env.VITE_PENGUIN_BASE ?? \"http://127.0.0.1:7364\";\n  29  \n  30  /**\n  31   * 深链的落点。\n  32   *\n  33   * **Penguin 的真实路由形状要等 Phase 0 跑通才知道**，所以先指 `/traces`\n  34   * （session 的事件流是这几屏共同的去处），并且把它单独拎成一个常量：\n  35   * 改一次路由只改这一行，而不是去十处 `${PENGUIN_BASE}/...` 里找。\n  36   */\n  37  export const PENGUIN_TRACES = \"/traces\";\n  38  \n  39  export const penguinUrl = (path: string = PENGUIN_TRACES): string => `${PENGUIN_BASE}${path}`;\n  40  \n  41  /** 在新标签页打开 Penguin。不在本页跳走：人手上这一屏的筛选和光标还在。 */\n  42  export const openPenguin = (path: string = PENGUIN_TRACES): void => {\n  43    window.open(penguinUrl(path), \"_blank\", \"noopener,noreferrer\");\n  44  };\n  45  \n  46  /**\n  47   * 一张搬迁空态。"}, {"id": "C33", "path": "docs/v3/07-第四档路线-任务与进度.md", "line": 142, "label": "标 done 但验收未达", "hash": "1ac476c79647fcb9", "excerpt": " 142  #### T-28 · 批次级浏览器复用：登录态每批一次，不是每条一次\n 143  - 状态：done\n 144  - 结果：`exec/sessionPool.ts`（6 条单测）+ `run.ts` 的 `sessionKey`；套件端点给 `batch.id` 当 key，批次结束 `releaseSessionOnRunners`；复用 = 同页 goto（agent 密钥在 sessionStorage，换标签页会丢）；登录态之后也 goto 一次让起点态唯一；`vars.TP_RESET_CMD` 每条跑前复位；`waitFor:` 步骤前缀；`RunSpend.phases` 六段。数：首跑 N 583s → 二跑 P 310s（**53%**），命中 93%，地板从每条 35–50s 降到 ~13s。验收 ①（≤ 1/3）**没到**：剩下的六成是 Midscene 缓存回放每个动作截图 + 抓 DOM 的成本，不在这一层（`06 §6.3`）。验收 ② 复位命令每条跑前执行并进日志；③ `waitFor:` 已换。\n 145  - 兑现：#1\n 146  - 为什么：T-27 之后二跑命中 95%，但 5 条 0 次模型调用的用例仍各要 35–50 秒——起浏览器、登录态（等 5 秒 + Enable Trading + Establish Connection）、web3 settle 4 秒、判据 settleMs，每条一份。这是不走模型的地板，「二跑 ≤ 首跑 1/3」卡在它上面（`06 §6.1`）。agent 授权按浏览器存（不在 localStorage，探针验证过），所以一个批次共用一个浏览器就是登录态只做一次。\n 147  - 改：`packages/harness-testing/src/exec/run.ts`（`launchSession` 的生命周期）；`server/src/index.ts` 的 `/api/projects/:id/suite`（批次开头建、结尾收）。\n 148  - 做法：给 `execOnRunner` 加可选的 `sessionKey`：同 key 的连续运行复用同一个页面，只在第一次跑登录态；用例之间 `page.goto(baseUrl)` 回到起点。Midscene 的 cacheId 仍按用例。**先量后改**：把每条的固定开销拆成「起浏览器 / 登录态 / settle / teardown」四段打进 `RunSpend`，看复用能省几段。\n 149  - 验收：① 二跑 7 条总墙钟 ≤ 首跑 1/3（同一批次、清缓存、背靠背）；② 复用不影响判据的独立性——每条用例前账户仍平（跑前读接口写进日志）；③ 顺手把登录态第一步的「等 5 秒」换成显式等待「出现 Enable Trading 按钮」，消掉 Midscene 那个 undefined 坐标回放 bug 的触发条件（`06 §6.1`）。"}, {"id": "C34", "path": "packages/testpilot-mcp/src/contracts.ts", "line": 157, "label": "人的复核决定契约", "hash": "f7025fa0ffeb5729", "excerpt": " 157  export const DecisionSchema = z.object({\n 158    caseId: z.string(),\n 159    decision: z.enum([\"approved\", \"rejected\", \"revised\"]),\n 160    by: z.string(),\n 161    decidedByKind: DecidedByKind.default(\"human\"),\n 162    at: z.string(),\n 163    edit: z\n 164      .object({\n 165        title: z.string().optional(),\n 166        steps: z.array(z.string()).optional(),\n 167        expected: z.string().optional(),\n 168      })\n 169      .optional(),\n 170    reason: z.string().optional(),\n 171  });\n 172  export type Decision = z.infer<typeof DecisionSchema>;\n 173  "}, {"id": "C35", "path": "server/src/gold.ts", "line": 142, "label": "人工金标准冻结", "hash": "c76f405107c464b5", "excerpt": " 142  export function freezeGold(cap: string, root = REPO_ROOT): { hash: string; readme: string } {\n 143    const dir = capDir(cap, root);\n 144    const path = join(dir, \"gold.json\");\n 145    if (!existsSync(path)) throw new Error(`benchmark/${cap} 还没有 gold.json，先复核再冻结`);\n 146    const file = readJson<GoldFile>(path)!;\n 147    const problems = validate(file);\n 148    if (problems.length) throw new Error(`gold.json 不合格，不能冻结：${problems.join(\"；\")}`);\n 149    if (!file.items.some((i) => i.heldOut)) throw new Error(\"至少标一条 heldOut 再冻结——留出集是覆盖率不被拟合的唯一办法\");\n 150    const hash = goldHashOfFile(path);\n 151    const readme = join(dir, \"README.md\");\n 152    const stamp = `goldHash: \\`${hash}\\`（冻结于 ${new Date().toISOString().slice(0, 10)}，${file.items.length} 条，留出 ${file.items.filter((i) => i.heldOut).length} 条）`;\n 153    let text = existsSync(readme) ? readFileSync(readme, \"utf8\") : `# 基准：${cap}\\n`;\n 154    if (HASH_LINE.test(text)) text = text.replace(HASH_LINE, `goldHash: \\`${hash}\\``);\n 155    else if (/## goldHash/.test(text)) text = text.replace(/## goldHash\\n/, `## goldHash\\n\\n${stamp}\\n`);\n 156    else text += `\\n## goldHash\\n\\n${stamp}\\n`;\n 157    writeFileSync(readme, text);\n 158    return { hash, readme };\n 159  }"}, {"id": "C36", "path": "plugins/testpilot/skills/testpilot-design/REFERENCE-domain-perp.md", "line": 1, "label": "永续合约领域规则", "hash": "e6e9b6956c04e61a", "excerpt": "   1  # 合约交易前端的不变量（领域 REFERENCE）\n   2  \n   3  > 这一份对应 `prompts.ts` 里的 `DOMAIN_PERP`。它是**可选的一段**：在 skill 世界里，「可选」= 这份文件在不在。\n   4  > 装上它是一臂，卸掉它是另一臂（`ablate: [\"domain-perp\"]`）。它存在的目的是被比较：\n   5  > 对着观察写的用例只能发现产品**变了**，对着这些规则写的用例才有资格说产品**错了**。\n   6  >\n   7  > 只写**做过合约前端的人才知道、而且能变成判据**的规则。通用测试方法不在这里（那是 `REFERENCE.md`）。\n   8  > 每条规则附一个判据示例，全部是 `kind: api`（读清算接口）或 `kind: text`（前端的拒绝文案）；\n   9  > **没有一条钉在易变读数上**——有测试扫这份文件（`domain-perp.test.ts`）。\n  10  \n  11  被测对象是合约交易页（下单面板、持仓、挂单）时，设计用例前先读它；不是就跳过。\n  12  \n  13  ## 规则与判据\n  14  \n  15  ### 1. 数量按 stepSize **截断**，不四舍五入\n  16  在 0.001 步长的市场输入 0.0016，成交的是 0.001。四舍五入一档就是十倍仓位那类事故的来源。\n  17  ```json\n  18  {\"expected\": \"接口里 BTC 持仓的 szi 等于 0.001\", \"oracle\": {\"kind\": \"api\", \"url\": \"${env.HL_INFO}\", \"method\": \"POST\", \"body\": \"{\\\"type\\\":\\\"clearinghouseState\\\",\\\"user\\\":\\\"${env.HL_ADDRESS}\\\"}\", \"path\": \"assetPositions[position.coin=BTC].position.szi\", \"op\": \"eq\", \"value\": 0.001, \"settleMs\": 2500}}\n  19  ```\n  20  \n  21  ### 2. 价格按 tickSize 对齐；离参考价超过交易所的带宽（Hyperliquid：80%）的限价单在前端就被拒\n  22  拒绝要**说出来**，判据是那句拒绝文案。\n  23  ```json\n  24  {\"expected\": \"页面显示「Order price cannot be more than 80% away from the reference price」\", \"oracle\": {\"kind\": \"text\", \"value\": \"Order price cannot be more than 80% away from the reference price\"}}\n  25  ```"}, {"id": "C37", "path": "packages/harness-testing/src/exec/apiOracle.ts", "line": 43, "label": "接口路径与按币种选值", "hash": "c2d348b16105caea", "excerpt": "  43  export function pick(obj: unknown, path: string): unknown {\n  44    let cur: unknown = obj;\n  45    for (const rawSeg of splitPath(path)) {\n  46      if (rawSeg === \"\") continue;\n  47      const sel = rawSeg.match(/^([^[]*)\\[([^=\\]]+)=([^\\]]*)\\]$/);\n  48      const seg = sel ? sel[1] : rawSeg;\n  49      if (seg !== \"\") {\n  50        if (cur === null || cur === undefined) return undefined;\n  51        if (Array.isArray(cur)) {\n  52          const i = Number(seg);\n  53          if (!Number.isInteger(i)) return undefined;\n  54          cur = cur[i];\n  55        } else if (typeof cur === \"object\") {\n  56          cur = (cur as Record<string, unknown>)[seg];\n  57        } else return undefined;\n  58      }\n  59      if (sel) {\n  60        if (!Array.isArray(cur)) return undefined;\n  61        const [, , key, want] = sel;\n  62        cur = cur.find((el) => String(pick(el, key)) === want);\n  63      }\n  64    }\n  65    return cur;\n  66  }\n  67  \n  68  /** 按 `.` 切段，但方括号里的 `.` 不切（`[position.coin=BTC]` 是一段）。 */\n  69  function splitPath(path: string): string[] {\n  70    const out: string[] = [];\n  71    let buf = \"\";\n  72    let depth = 0;"}, {"id": "C38", "path": "server/src/index.ts", "line": 1180, "label": "清缓存重试型自愈", "hash": "8a9a3a051d8dc108", "excerpt": "1180  async function runCaseWithHeal(\n1181    c: TestCase,\n1182    body: Record<string, any>,\n1183    maxRetries: number,\n1184  ): Promise<{ run: RunRecord; attempts: number; healed: boolean }> {\n1185    updateCase(c.id, { runStatus: \"running\" as RunStatus });\n1186    let attempts = 0;\n1187    let run: RunRecord;\n1188    for (;;) {\n1189      attempts++;\n1190      run = await runAndPersistCase(c, body);\n1191      if (run.status === \"passed\" || attempts > maxRetries) break;\n1192      bustCache(c.id + (body?.__cacheSuffix ?? \"\")); // self-heal: drop the stale (per-row) plan\n1193    }\n1194    const healed = run.status === \"passed\" && attempts > 1;\n1195    updateRunHealing(run.id, attempts, healed);\n1196    run.attempts = attempts;\n1197    run.healed = healed;\n1198    computeFlakiness(c.id);\n1199    updateCase(c.id, { runStatus: run.status });\n1200    return { run, attempts, healed };\n1201  }\n1202  "}, {"id": "C39", "path": "packages/testpilot-mcp/src/pipeline.ts", "line": 98, "label": "默认版本印记", "hash": "b60f5464e84c9131", "excerpt": "  98  export const DEFAULT_SKILL_VERSION = \"2026-09-03.1\";\n  99  \n 100  export interface RunPipelineOptions {\n 101    stage: \"g1\" | \"g2\";\n 102    materialsDir: string;"}, {"id": "C40", "path": "packages/harness-testing/src/exec/oracle.ts", "line": 133, "label": "接口数字转换与相等比较", "hash": "af301a7e1779575e", "excerpt": " 133  function asNumber(v: unknown): number | undefined {\n 134    if (typeof v === \"number\") return Number.isFinite(v) ? v : undefined;\n 135    if (typeof v === \"string\" && v.trim() !== \"\" && Number.isFinite(Number(v))) return Number(v);\n 136    return undefined;\n 137  }\n 138  \n 139  /** 相等：能当数就按数比（\"0.01\" 与 0.01 相等），否则按字符串。 */\n 140  function sameValue(a: unknown, b: unknown): boolean {\n 141    const na = asNumber(a);\n 142    const nb = asNumber(b);\n 143    if (na !== undefined && nb !== undefined) return na === nb;\n 144    return String(a) === String(b);\n 145  }\n 146  \n 147  /** Occurrences of a literal, counted on the page's visible text. */"}],layers=[["L1", "交互与展示", "React · Zustand · ?open= 路由", "src/pages · src/lib/{api,ws,nav,surfaces}", "接收人的目标与决定；展示候选、执行证据、成本和评测。", "不应让 UI 自己成为独立判官；页面文案应跟实际运行时对应。", ["输入：用户动作、当前项目、筛选条件", "输出：API 请求、复核决定、目标任务", "交互债：旧 trace 入口仍绑定 Penguin"], "C04"], ["L2", "应用服务与运行协调", "Express gateway · 领域服务", "server/src/{index,review,audit,graphs,penguinRun,runtimes}", "项目与环境绑定、套件并发、审计、数据库投影；将两种宿主的结果统一。", "依赖接口有抽象，但 index.ts 仍有 3,344 行；旧 graph 路径仍留在仓库。", ["输入：生成、复核、执行、评测请求", "输出：运行状态、领域对象、runner 调度", "风险：数据库与 decisions 文件双写不是原子事务"], "C03"], ["L3", "会话与宿主运行时", "Penguin / Claude Code", "server/src/{penguin,claudecode,runtimes}.ts", "启动会话、装载插件、流式 trace、停止与读取产物。", "getRuntime 注册两个后端；Codex 只在契约与外部 MCP 配置层预留，不是第三个已接入服务端后端。", ["接口：startRun / watchRun / readRun / writeDecisions", "宿主模型与 MCP 内生成模型可能不是同一个模型", "runtime 不同不自动证明生成能力不同"], "C02"], ["L4", "专业资产与工具边界", "skills · hooks · stdio MCP", "plugins/testpilot · packages/testpilot-mcp", "领域材料检索、写入校验、g1、评分、配对、P0 执行桥接。", "skill 是指令资产；hook 是特定工具入口的检查；MCP 只强制自己处理的调用。", ["输入：schema 化工具参数、材料、冻结产物", "输出：结构化结果 / blocked / 产物", "风险：Bash 与内部写盘不等价于 Write hook 路径"], "C15"], ["L5", "测试领域与执行引擎", "casegen · gate · oracle · runner", "packages/harness-testing · apps/runner", "规格整理、故事设计、用例生成、质量门、浏览器执行、变异检测、接口判据与会话复用。", "UI 动作由视觉模型完成；判据求值尽量无模型。规则依然要由领域专家确认。", ["主 g1：docs → spec → stories → design → gate", "执行：会话 → 动作 → oracle → report", "基础能力来自 harness-core：模型、事件、摘要、打分、进程工具"], "C09"], ["L6", "证据与持久化", "SQLite + JSON / JSONL + YAML", "server/.data · runs/ · benchmark/ · midscene_run/", "业务状态、生成快照、实验谱系、运行 trace、缓存和成本日志。", "逻辑分层不是物理隔离；冻结文件和 judge 的读取权限要在宿主/操作系统层真正落实。", ["DB：当前可执行用例、环境、批次、执行历史", "文件：不可变实验输入与输出应独立保存", "建议：原子落盘、写入锁、actor 身份、数据契约版本"], "C07"]],entities={"case": {"name": "TextCase / 合成接口判据示例", "note": "仅示意数据结构，不代表新生成或已验收的真实用例。sourceRefs 应来自真实检索；步骤前账户复位、账户/币种绑定必须独立验证。", "code": {"id": "demo-case", "storyId": "demo-story", "designMethod": "boundary", "key": "size.precision:0.001:position.eq", "precondition": ["测试账户 BTC 仓位为 0，复位已验证"], "priority": "P0", "title": "按合法数量下单后持仓准确", "steps": ["输入合法数量 0.001", "点击买入"], "expected": "BTC 持仓等于 0.001", "tier": 1, "sourceRefs": ["rules.md#precision"], "oracle": {"kind": "api", "url": "https://example.invalid/info", "method": "POST", "body": "{\"type\":\"clearinghouseState\",\"user\":\"${env.TEST_ACCOUNT}\"}", "path": "assetPositions[position.coin=BTC].position.szi", "op": "eq", "value": "0.001", "settleMs": 1000}}}, "meta": {"name": "RunMeta / 字段示意", "note": "runtime 在当前 schema 中可选；默认 skillVersion 仍有历史回退值。因此“类型通过”只说明形状正确，不能说明版本、运行时与所有生效规则都被完全绑定。", "code": {"runId": "demo-run", "stage": "g1", "runtime": "claude-code", "skillVersion": "<实际版本>", "promptsDigest": {"entries": {"design": "<摘要>"}, "combined": "<摘要>"}, "params": {"limit": 3}, "ablated": ["domain-perp"], "model": {"baseUrl": "https://example.invalid/v1", "model": "<生成模型>", "thinking": true}, "materialsHash": "<材料内容哈希>", "inputHash": "<冻结上游哈希>", "startedAt": "2026-09-08T00:00:00Z", "finishedAt": "2026-09-08T00:01:00Z", "spend": {"calls": 0, "tokens": 0, "ms": 0}}}, "outcome": {"name": "执行结果 / 合成失败示例", "note": "工具调用的 blocked、浏览器执行的 failed、oracle 的 fail 属于不同层级。不要只保留一个 success 布尔值。infra 也应作为原始运行状态旁边的独立维度。", "code": {"caseId": "demo-case", "status": "failed", "oracle": [{"status": "fail", "detail": "position.szi = 0.002; expected eq 0.001", "decidedBy": "machine"}], "failure": {"kind": "assert", "code": "EXEC_ASSERT"}, "reportPath": "<本次报告路径>", "spend": {"modelCalls": 0}, "synthetic": true}}, "proposal": {"name": "EvolutionCandidate / 建议新增", "note": "这是建议的数据结构，仓库尚未实现此候选推广契约。应与当前 RunMeta 并列，而不是偷偷向旧字段塞状态。", "code": {"candidateId": "cand-001", "baseVersion": "<基线>", "changedComponent": "design.domain-perp", "patchDigest": "<差异哈希>", "hypothesis": "减少精度边界的漏测", "trainingRunIds": ["<开发集失败轨迹>"], "frozenInputHashes": ["<输入1>", "<输入2>", "<输入3>"], "evaluationSpecId": "domain-perp-v2", "status": "proposed | evaluated | accepted | rejected | rolled-back", "promotion": {"approvedBy": "<可信主体>", "evidenceRunIds": ["<验证运行>"], "rollbackTo": "<基线>"}}}};
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let sourceTrigger=null;
+function showSource(id,trigger){const s=sources.find(s=>s.id===id);if(!s)return;sourceTrigger=trigger;$('#source-title').textContent=s.id+' · '+s.label;$('#source-path').textContent=s.path+':'+s.line+' · SHA-256 '+s.hash;$('#source-code').textContent=s.excerpt;$('#source-dialog').showModal()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-source]');if(b)showSource(b.dataset.source,b)});
+$('#close-source').onclick=()=>$('#source-dialog').close();$('#source-dialog').addEventListener('close',()=>sourceTrigger?.focus());$('#source-dialog').addEventListener('click',e=>{if(e.target===$('#source-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});
+function activateTab(group,key){$$(`[data-tabs="${group}"] button`).forEach(b=>{const sel=b.dataset.panel===key;b.setAttribute('aria-selected',sel);b.tabIndex=sel?0:-1});$$(`[data-tab-group="${group}"]`).forEach(p=>p.hidden=p.id!=='panel-'+key)}
+$$('[data-tabs]').forEach(t=>{t.querySelectorAll('button').forEach((b,i)=>{b.onclick=()=>activateTab(t.dataset.tabs,b.dataset.panel);b.onkeydown=e=>{const bs=[...t.querySelectorAll('button')];let n;if(e.key==='ArrowRight')n=(i+1)%bs.length;if(e.key==='ArrowLeft')n=(i-1+bs.length)%bs.length;if(e.key==='Home')n=0;if(e.key==='End')n=bs.length-1;if(n!==undefined){e.preventDefault();bs[n].click();bs[n].focus()}}});activateTab(t.dataset.tabs,t.querySelector('button').dataset.panel)});
+function chooseLayer(i){const [n,title,short,path,role,limit,points,src]=layers[i];$('#layer-detail').innerHTML='<div class="eyebrow">'+n+' / '+short+'</div><h3>'+title+'</h3><p><code>'+path+'</code></p><p>'+role+'</p><ul>'+points.map(p=>'<li>'+p+'</li>').join('')+'</ul><div class="note warn">'+limit+'</div><button class="cite" data-source="'+src+'">'+src+' · 查看依据</button>';$$('[data-layer]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.layer===String(i)))}
+$$('[data-layer]').forEach(b=>b.onclick=()=>chooseLayer(Number(b.dataset.layer)));chooseLayer(0);
+function chooseEntity(){const item=entities[$('#entity').value];$('#entity-note').textContent=item.note;$('#entity-code').textContent=JSON.stringify(item.code,null,2)}$('#entity').onchange=chooseEntity;chooseEntity();
+function filterFindings(){const q=$('#finding-query').value.trim().toLowerCase(),filter=$('#finding-filter').value;let n=0;$$('.finding').forEach(f=>{const show=f.textContent.toLowerCase().includes(q)&&(filter==='all'||f.dataset.kind===filter||f.dataset.level===filter);f.hidden=!show;if(show)n++});$('#finding-count').textContent=n+' / '+$$('.finding').length+' 项'}$('#finding-query').oninput=filterFindings;$('#finding-filter').onchange=filterFindings;filterFindings();
+$('#print-btn').onclick=()=>window.print();
+const anchors=$$('nav a');function updateNav(){const y=window.scrollY+170;let current='verdict';for(const a of anchors){const el=$(a.getAttribute('href'));if(el&&el.offsetTop<=y)current=el.id}anchors.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+current));const max=document.documentElement.scrollHeight-innerHeight;$('#reading-progress').style.width=(max>0?Math.min(100,window.scrollY/max*100):0)+'%'}addEventListener('scroll',updateNav,{passive:true});updateNav();
+</script><style>@media print{.print-sources pre{display:none!important}.print-sources summary{font:9px/1.5 var(--mono)}} </style></body></html>
