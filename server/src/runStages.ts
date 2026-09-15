@@ -15,7 +15,12 @@ import { frozenModules } from './moduleStage.js';
 import { checkModulePlan } from "@testpilot/harness-testing/domain";
 import { acceptanceIndex, checkStories } from "./acceptanceIndex.js";
 
-const policy = Object.freeze({ version: "design-gate-v1", minGateScore: 0.6, minNegativeRatio: 0.3 });
+/**
+ * v2（2026-09-15）：分数从「没被点名的用例占比」变成它 × 「有人真做了的动作型准则占比」。
+ * 算法变了而阈值没变，所以版本号必须跳——v1 的 0.8 和 v2 的 0.8 不是同一把尺子量出来的。
+ * 已收尾的运行不受影响（finalizeRun 不重判）；门禁过了但还没收尾的，收尾时会要求重跑门禁。
+ */
+const policy = Object.freeze({ version: "design-gate-v2", minGateScore: 0.6, minNegativeRatio: 0.3 });
 type Stage = "instructions" | "stories" | "cases" | "gate" | "finalize";
 const principal = { kind: "system" as const, id: "stage-validator" };
 function store() {
@@ -250,7 +255,8 @@ export function gateRun(runId: string, projectId: string) {
     const verdict = verifyCases(runId, projectId, cases.content);
     if (!verdict.ok) return { status: "blocked", ...verdict };
     const pinnedPolicy = (current(runId, projectId, "instructions").content as { policy: typeof policy }).policy;
-    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio });
+    // 账本路径：故事已编号、acRefs 是契约的一部分，所以准则覆盖进分数（见 GateOptions.acceptanceInScore）。
+    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true });
     const passed = report.score >= pinnedPolicy.minGateScore;
     /**
      * 不通过时，把门禁的话按单元送回规划器（docs/v3/23 F-11）。
@@ -291,7 +297,7 @@ export function finalizeRun(runId: string, projectId: string) {
      */
     const previous = receipt(runId, "finalize");
     if (previous) return { ...(current(runId, projectId, "finalize").content as object), revisionId: previous.revisionId };
-    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio });
+    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true });
     if (!passed || fresh.score < pinnedPolicy.minGateScore || canonicalJSON(fresh) !== canonicalJSON(report)) throw new LedgerError(409, "gate_not_passed");
     const summary = { runId, projectId, status: "waiting_review", stories: verdict.data.stories.length, cases: verdict.data.cases.length,
       gateScore: report.score, binding: run.binding, storiesRevision: stories.revision.id, casesRevision: cases.revision.id, gateRevision: gate.revision.id,

@@ -125,7 +125,7 @@ interface Batch {
   projectId?: string;
   gateScore?: number;
   /** 分是怎么算出来的：分母、把分拖下来的那几条、算式。 */
-  gateBasis?: { cases: number; flagged: string[]; formula: string };
+  gateBasis?: { cases: number; flagged: string[]; formula: string; acceptance?: { actionable: number; uncovered: string[] } };
   editedGateScore?: number;
   edited: number;
   stories?: Story[];
@@ -2197,6 +2197,19 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
             }
           >
             {t("review.gateDrag", { n: batch.gateBasis.flagged.length, total: batch.gateBasis.cases })}
+          </button>
+        )}
+        {/* 分数的另一半：没有用例真去做的动作型准则。它们挂在故事上、不挂在用例上，
+            所以上面那个「被点到的用例」按钮数不到它们——而此前分数也数不到，漏一半照样满分。 */}
+        {!!batch?.gateBasis?.acceptance?.uncovered.length && (
+          <button
+            className="inline-flex min-h-[1.5625rem] flex-none items-center rounded border border-warn bg-warn-soft px-[0.625rem] py-[0.1875rem] text-[0.8125rem] leading-[1.35] text-warn hover:brightness-95"
+            title={batch.gateBasis.acceptance.uncovered.join(" · ")}
+            onClick={() =>
+              setFilters({ ...EMPTY_FILTERS, finding: filters.finding === "warn" ? "" : "warn" })
+            }
+          >
+            {t("review.gateAcceptance", { n: batch.gateBasis.acceptance.uncovered.length, total: batch.gateBasis.acceptance.actionable })}
           </button>
         )}
 

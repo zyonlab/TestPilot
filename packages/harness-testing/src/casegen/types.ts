@@ -246,6 +246,14 @@ export const AssertionSchema = z.object({
   ruleRefs: z.array(z.string().min(1)).default([]),
   oracle: MachineOracleSchema.optional(),
   unit: z.string().optional(),
+  /**
+   * 在第几步（从 1 数）**做完之后**判这一条；不写就在全部步骤做完之后判。
+   *
+   * 2026-09-15 Vikunja C-S03-04：步骤是「进标签页 → 点空态里的『新建标签.』」，第一条断言
+   * 「标签页显示『当前没有标签』」描述的是**第 2 步之后、第 3 步之前**那一屏——而断言统一在
+   * 最后一步之后判，那时页面已经进了新建表单。一条正确的断言，因为判的时机不对而恒红。
+   */
+  afterStep: z.number().int().positive().optional(),
 }).strict();
 
 /**
@@ -591,6 +599,11 @@ export const GateReportSchema = z.object({
       cases: z.number(),
       /** 分子那一半：被至少一条 warn 点到的用例 id。它们就是把分拖下来的那几条。 */
       flagged: z.array(z.string()),
+      /**
+       * 另一个因子：动作型验收准则有几条、其中哪几条没有用例真的去做。
+       * 可选是为了读得动 design-gate-v1 时期存下来的报告——那时分数里没有这一半。
+       */
+      acceptance: z.object({ actionable: z.number(), uncovered: z.array(z.string()) }).optional(),
       /** 算式，写成人能念出来的一句。 */
       formula: z.string(),
     })

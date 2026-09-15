@@ -37,6 +37,18 @@ export const ExplorationCharterSchema = z
         entryUrl: z.string().url(),
         /** 允许走到的路由（正则）。空数组 = 只在入口路由上工作，不让全局导航把预算带走。 */
         routes: z.array(z.string()).default([]),
+        /**
+         * 允许走到的**完整地址**（正则），抄自规则包的 `appliesTo.urlPatterns`。
+         *
+         * 2026-09-15 拿 Vikunja 跑带规则包的探索：登录之后 7 屏全停在 `/`，`/projects`
+         * `/labels` `/teams` 一个没去，规则包里指向那几页的目标全记 not_found。原因是
+         * `routes` 从来没人填——`sourceKnowledge` 建 charter 时不传——于是「空数组 = 只在
+         * 入口路由上工作」对每个产品都成立。那条默认是给 Hyperliquid `/trade` 这种业务全在
+         * 一页里的产品定的，换成多页应用就把探索关在门口。
+         *
+         * 范围本来就写在包里：包说自己覆盖哪些地址，探索就能去哪些地址。没写的包行为不变。
+         */
+        urlPatterns: z.array(z.string()).default([]),
       })
       .strict(),
     entryStates: z.array(z.string()).default(["logged-out"]),
@@ -97,7 +109,7 @@ export function charterFromRulePack(
     schemaVersion: "exploration-charter.v1",
     id: opts.id ?? `charter-${pack.id}-${pack.version}`,
     rulePack: { id: pack.id, version: pack.version, hash: packHash },
-    scope: { entryUrl: opts.entryUrl, routes: opts.routes ?? [] },
+    scope: { entryUrl: opts.entryUrl, routes: opts.routes ?? [], urlPatterns: pack.appliesTo.urlPatterns },
     featureTargets: pack.targets,
     ruleRefs: pack.rules.map((r) => r.id),
     actionsPolicy: { forbidLabels: [...DEFAULT_FORBID_LABELS, ...pack.forbidLabels], ...(opts.allowStateChange ? { allowStateChange: true } : {}) },
@@ -213,5 +225,13 @@ export function activationBlocker(
   return undefined;
 }
 
-export const routeAllowed = (charter: ExplorationCharter | undefined, entryRoute: string, route: string): boolean =>
-  !charter || route === entryRoute || charter.scope.routes.some((r) => { try { return new RegExp(r).test(route); } catch { return false; } });
+/**
+ * 这个地址探索能不能去。路由正则对路径判，`urlPatterns` 对完整地址判（它们在包里就是这么写的）。
+ * 不给 `url` 时只看路由——调用方拿不到完整地址的地方，宁可保守。
+ */
+export const routeAllowed = (charter: ExplorationCharter | undefined, entryRoute: string, route: string, url?: string): boolean => {
+  if (!charter || route === entryRoute) return true;
+  const hits = (patterns: readonly string[] | undefined, subject: string) =>
+    (patterns ?? []).some((r) => { try { return new RegExp(r).test(subject); } catch { return false; } });
+  return hits(charter.scope.routes, route) || (url !== undefined && hits(charter.scope.urlPatterns, url));
+};

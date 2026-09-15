@@ -94,7 +94,7 @@ export const RULE_PACK_EXAMPLE = {
   product: "Example App",
   network: "local",
   accountMode: "password",
-  appliesTo: { urlPatterns: ["^http://localhost:3000/"], note: "只覆盖探索走到过的那几屏" },
+  appliesTo: { urlPatterns: ["^http://localhost:3000/"], note: "整个站点：探索能去哪些地址由这一栏决定" },
   sources: [
     { id: "SRC-OBSERVED", kind: "observation", locator: "run cc-host-… 的探索材料", fetchedAt: "2026-09-15", note: "第 1–8 屏" },
   ],
@@ -112,11 +112,13 @@ export const RULE_PACK_EXAMPLE = {
   targets: [
     { id: "T-EXAMPLE", featureId: "example.area.do", ruleRefs: ["R-EXAMPLE"],
       match: { label: ["^新建$"], roles: [], within: [] },
-      action: "activate", sideEffect: "ui-only", requires: [], provides: ["example-created"] },
+      action: "activate", sideEffect: "ui-only", requires: ["session"], provides: ["example-created"] },
   ],
   roles: [{ id: "example.newcomer", name: "第一次用的人", goal: "把一件事从头做完", sourceRefs: ["SRC-OBSERVED"] }],
   lifecycle: [{ id: "lc.example", name: "做完一件事", order: 0, featureIds: ["example.area.do"], sourceRefs: ["SRC-OBSERVED"] }],
-  externalCapabilities: [],
+  // 登录由环境配好的步骤做，产出的前提就叫 session——2026-09-15 Vikunja 那份包写成 authenticated、
+  // 挂在登录按钮上，而登录是 state-change，探索永远不点，四个目标全被挡。样例得把这件事演一遍。
+  externalCapabilities: ["session"],
   forbidLabels: [],
   gateLabels: [],
 };
@@ -149,6 +151,15 @@ export const FIELDS: Record<FieldId, FieldSpec> = {
       "has — do not label an observation as one of those to make a normative rule pass.",
       "Every rule needs a `verification` the code can check on screen: controls that must be",
       "present, state that must change, text that must appear.",
+      "",
+      "LOGGING IN is not a target. The environment's configured login steps run before exploration,",
+      "and they provide the capability named exactly \"session\". A target that needs a logged-in user",
+      "writes requires: [\"session\"], and the pack lists \"session\" in externalCapabilities.",
+      "Never make a login button provide a capability: submitting a login is state-change, exploration",
+      "never clicks state-change targets, so every target waiting on it stays blocked forever.",
+      "appliesTo.urlPatterns is the set of addresses exploration may navigate to. Cover every page the",
+      "material shows (e.g. the site origin), not only the entry page — a pattern that matches one page",
+      "confines exploration to that page.",
       "",
       "THIS IS THE EXACT SHAPE. Copy the shape, not the content — the product, the ids and the",
       "words below are meaningless placeholders, and none of it says anything about your product:",

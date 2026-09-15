@@ -184,6 +184,12 @@
   {
    "source": "index.ts",
    "method": "GET",
+   "path": "/api/chat/fields",
+   "uiOnly": "Web UI 字段起草抽屉的开场数据（可起草的字段 + 哪几次运行有材料）。和 POST /api/chat 同一个理由：宿主自己就是那个对话方，材料它用 tp_artifact 读，起草完的规则包走 tp_project.add_rule_pack 落地。"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
    "path": "/api/config",
    "host": "tp_system.config"
   },

@@ -122,7 +122,8 @@ export function generateApprovedCode(runId: string, projectId: string, raw: unkn
      * 把编译方式、入口策略与这次运行的基址一起写进名字：编译器变了就是**另一份产物**，
      * 冲突消失，而「你批准的代码不是现在这个编译器产出的代码」这件事仍然拦得住（见下面那条）。
      */
-    const compilation = "approved-midscene-actions-v2", entryPolicy = "explicit-page-precondition-v1";
+    // v2（2026-09-15）：前提里的完整同源地址、「已打开」与后半句也算入口声明（caseEntry.ts）。入口取法变了，编译器身份就得变。
+    const compilation = "approved-midscene-actions-v2", entryPolicy = "explicit-page-precondition-v2";
     const compilerHash = contentHash(canonicalJSON({ compilation, entryPolicy, base: runBaseUrl })).slice(0, 12);
     const artifactName = `g2/v2/${approvalsHash}-${compilerHash}`;
     const artifact = ledger().putRevision({ runId, projectId, name: artifactName, kind: "code", content: { ...bundle, gate, approvedRevisions: refs, approvalsHash,

@@ -17,6 +17,7 @@ import type { ChainAssertion, OracleCheck, StorageState } from "../types.js";
 import { describeOracle, evaluateOracle, type MachineOracle, type PageSnapshot } from "./oracle.js";
 import { classifyFailure, isInfraError, type Failure } from "../failure.js";
 import { observeApi } from "./apiOracle.js";
+import { isOpenQuestion, navigationTarget } from "./stepSemantics.js";
 import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
 import { executorConnectionFromEnv, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
 
@@ -141,7 +142,7 @@ export async function executeRun(
      * 「% 控件算不算在 Size 输入框『旁边』」——而一条 `{kind:"text",value:"%"}`
      * 根本不会有这个问题。**声明了程序能判，就该让程序判。**
      */
-    assertions?: Array<{ id?: string; statement: string; oracle?: MachineOracle }>;
+    assertions?: Array<{ id?: string; statement: string; oracle?: MachineOracle; afterStep?: number }>;
     /**
      * 变异体：把一个人造缺陷注进这一次执行看到的 DOM，看这条用例会不会叫。
      * 被测应用不动——见 `mutate/inject.ts`。
@@ -224,6 +225,14 @@ export async function executeRun(
   const act = async (t: string) => {
     checkCancelled();
     if (t.startsWith("waitFor:")) return session!.agent.aiWaitFor(t.slice("waitFor:".length).trim(), { timeoutMs: 30_000 });
+    // 纯导航步骤直接跳转——交给 aiAction 会被规划成 Midscene 没有的 `Navigate` 动作（见 stepSemantics.ts）。
+    const navTo = navigationTarget(t, session!.page.url());
+    if (navTo) {
+      rlog(`  直接跳转（纯导航步骤，不交给模型）：${navTo}`);
+      await session!.page.goto(navTo, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(navTo, { waitUntil: "domcontentloaded", timeout: 45000 }));
+      await settleOn(session!.page, { minMs: 600, maxMs: 12_000 });
+      return;
+    }
     if (await byLocator(t)) return;
     try {
       await session!.agent.aiAction(t);
@@ -265,7 +274,8 @@ export async function executeRun(
       : { wallet, cacheId: opts.cacheId, ...dataOpts };
     // 池的指纹：什么都一样才算同一个浏览器能接着用。storageState/cacheId 不进指纹——前者复用时本来就在浏览器里，后者按用例换 agent。
     const modelFingerprint = createHash("sha256").update(JSON.stringify(dataOpts.executorModel)).digest("hex");
-    const fingerprint = JSON.stringify({ url, injected, wallet, rpcUrl: opts.rpcUrl, chainId: opts.chainId, viewport: opts.viewport, sutProfileDir: opts.sutProfileDir, extraHeaders: opts.extraHeaders, query: opts.query, modelFingerprint, modelBudget: opts.modelBudget });
+    // loggedIn 进指纹：复用会话会跳过登录，一条从未登录开始的用例不能接一个已登录的浏览器，反之亦然。
+    const fingerprint = JSON.stringify({ url, injected, wallet, rpcUrl: opts.rpcUrl, chainId: opts.chainId, viewport: opts.viewport, sutProfileDir: opts.sutProfileDir, extraHeaders: opts.extraHeaders, query: opts.query, modelFingerprint, modelBudget: opts.modelBudget, loggedIn: (opts.login?.length ?? 0) > 0 || !!opts.storageState });
     if (poolKey) {
       const got = await acquireSession(poolKey, fingerprint, () => launchSession(url, launchOpts), (sess) => sess.cleanup());
       session = got.session;
@@ -322,9 +332,15 @@ export async function executeRun(
      * 见 `opts.assertions` 上的注释——不收它，声明的 tier 1 在执行时就是一个标签。
      * 在步骤**之前**算出来：「前」读数取不取，取决于这份清单里有没有关系型判据。
      */
+    /**
+     * 挂在某一步之后判的断言（`afterStep`，从 1 数）。它们在步骤循环里当场判，不进最后那一轮。
+     * api 判据要前后读接口，仍放到最后判。
+     */
+    const stepBound = (a: { oracle?: MachineOracle; afterStep?: number }) =>
+      a.afterStep !== undefined && a.afterStep >= 1 && a.afterStep <= steps.length && a.oracle?.kind !== "api";
     const machineChecks: Array<{ statement: string; oracle: MachineOracle }> = [
       ...(opts.oracle ? [{ statement: expected || describeOracle(opts.oracle), oracle: opts.oracle }] : []),
-      ...(opts.assertions ?? []).flatMap((a) => (a.oracle ? [{ statement: a.statement, oracle: a.oracle }] : [])),
+      ...(opts.assertions ?? []).flatMap((a) => (a.oracle && !stepBound(a) && !isOpenQuestion(a.statement) ? [{ statement: a.statement, oracle: a.oracle }] : [])),
     ];
     /**
      * 「前」读数一律取，不再只为 `delta` 取。
@@ -343,7 +359,7 @@ export async function executeRun(
      * 让报告能说出「这条绿是免费的」。一次 `page.evaluate`，不花模型调用。
      */
     let snapBefore: PageSnapshot | undefined;
-    if (machineChecks.length) snapBefore = await snapshotPage(session.page);
+    if (machineChecks.length || (opts.assertions ?? []).some((a) => a.oracle && stepBound(a))) snapBefore = await snapshotPage(session.page);
     // 接口判据的「前」读数：只有关系型判据需要（increased/decreased/unchanged）。
     // 步骤前不等 settleMs——那是给「后」读数留的传播时间。
     for (const { oracle: o } of machineChecks) {
@@ -359,10 +375,46 @@ export async function executeRun(
       rlog(`chain snapshot (before) — ${chainBefore.length} balance(s)`);
     }
     mark("settleMs");
+    // Functional oracle: verify the case's expected outcome and record it structurally.
+    const oracle: OracleCheck[] = [];
+    let assertFailed: string | undefined;
+    let unobservable: string | undefined;
+    let infraError = false;
+    /**
+     * 在第 n 步之后当场判一条断言：机器判据取此刻的快照，没有判据的交给判官，开放问题只记不判。
+     * 2026-09-15 Vikunja：两条描述「途经那一屏」的断言在最后一步之后判，页面早已换了，恒红。
+     */
+    const checkNow = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
+      if (isOpenQuestion(a.statement)) {
+        oracle.push({ assertion: a.statement, status: "unobservable", detail: "开放问题：记下，不下判决" });
+        rlog(`assert ∅ (after step ${n}) 开放问题——不判`);
+        return;
+      }
+      if (a.oracle) {
+        const snap = await snapshotPage(session!.page);
+        const verdict = evaluateOracle(a.oracle, snap, snapBefore);
+        const detail = redact(verdict.detail, secretVals);
+        oracle.push({ assertion: a.statement, status: verdict.status, detail, decidedBy: "machine" });
+        if (verdict.status === "fail") assertFailed = detail;
+        else if (verdict.status === "unobservable" && !unobservable) unobservable = detail;
+        rlog(`assert ${verdict.status === "pass" ? "✓" : verdict.status === "unobservable" ? "∅" : "✗"} (after step ${n}) — ${detail}`);
+        return;
+      }
+      rlog(`assert (judge, after step ${n}): ${a.statement}`);
+      try {
+        await withModel(() => session!.agent.aiAssert(resolveText(a.statement, ctx)));
+        oracle.push({ assertion: a.statement, status: "pass", decidedBy: "judge" });
+      } catch (e) {
+        const detail = redact((e as Error).message, secretVals);
+        if (isInfraError(detail)) { infraError = true; assertFailed = detail; }
+        else { oracle.push({ assertion: a.statement, status: "fail", detail, decidedBy: "judge" }); assertFailed = detail; }
+      }
+    };
     for (const [i, step] of steps.entries()) {
       rlog(`step ${i + 1}: ${step}`);
       await withModel(() => act(resolveText(step, ctx)));
       await shot();
+      for (const a of (opts.assertions ?? []).filter((x) => stepBound(x) && x.afterStep === i + 1)) await checkNow(a, i + 1);
     }
     mark("stepsMs");
     /**
@@ -384,11 +436,6 @@ export async function executeRun(
       mutationApplied = applied;
       rlog(`变异体 ${opts.mutation.id}：改了 ${applied} 处${applied ? "" : "——没生效，这一次不算数"}`);
     }
-    // Functional oracle: verify the case's expected outcome and record it structurally.
-    const oracle: OracleCheck[] = [];
-    let assertFailed: string | undefined;
-    let unobservable: string | undefined;
-    let infraError = false;
     // A machine-checkable oracle decides on its own and costs no model call. The judge is
     // the fallback, not the default: a case that says a program can settle it should be
     // settled by one, or the tier it carries is decoration.
@@ -442,7 +489,13 @@ export async function executeRun(
        * 81 条里只有 1 条是这种「一半有一半没有」，所以这条路很少走。
        */
       for (const a of opts.assertions ?? []) {
-        if (a.oracle) continue;
+        if (a.oracle || stepBound(a)) continue;
+        // 作者明说「不作为失败判据」的，不交给判官（stepSemantics.ts 的 isOpenQuestion）。
+        if (isOpenQuestion(a.statement)) {
+          oracle.push({ assertion: a.statement, status: "unobservable", detail: "开放问题：记下，不下判决" });
+          rlog(`assert ∅ 开放问题——不判：${a.statement.slice(0, 60)}`);
+          continue;
+        }
         rlog(`assert (judge): ${a.statement}`);
         try {
           await withModel(() => session!.agent.aiAssert(resolveText(a.statement, ctx)));

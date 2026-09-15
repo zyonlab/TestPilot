@@ -262,7 +262,7 @@ export const ORACLE_STRICT = [
   "that passes against the backend while the screen shows something else has verified the wrong thing.",
   "State that the UI owns: after an action, the record it created appears in the table that lists such records,",
   "with the values the user typed. Assert THAT: `count` over the row label, `text` over the value in the row,",
-  "`delta` over a number that must move. Where a number is volatile (price, funding, countdown, 24h volume),",
+  "`delta` over a number that must move. Where a number is volatile (a count, a countdown, a live price, a timestamp),",
   "assert existence or a relation between two readings — never a pinned value.",
 ].join("\n");
 
@@ -619,13 +619,13 @@ export const COMPOSE_STABLE = [
   // 两条"规则"，用例跟着断言它们——下一次跑必然失败，而门禁给了满分。
   // 上面那三条（逐字引用、近似会变成假失败、把现状写成规则）合起来正是在鼓励这件事，
   // 所以必须有一条反向约束。
-  "- **A reading is data, not behaviour.** Prices, countdowns, funding rates, balances,",
+  "- **A reading is data, not behaviour.** Counts, countdowns, live prices, balances,",
   "  volumes, timestamps — anything that changes on its own between two visits — must never",
   "  become a rule about its value. You may write that the field exists, where it sits, what",
   "  it is expressed in, and what it changes with. You may not write that it equals what it",
   "  happened to say when the material was captured.",
-  "  Wrong: \"the entry page shows 0.01000%\" / \"Countdown reads 05:40:16\".",
-  "  Right: \"the entry page shows a funding rate and the countdown to the next settlement\".",
+  "  Wrong: \"the overview shows 6 open tasks\" / \"Updated 3 minutes ago\".",
+  "  Right: \"the overview shows how many tasks are open and when the list was last updated\".",
   "  If the material marks a fragment as volatile, treat that marking as binding.",
 ].join("\n");
 

@@ -76,7 +76,9 @@ async function staged(id: string) {
 }
 const stories = { stories: [{ id: "s1", title: "Increment count", role: "visitor", benefit: "count clicks", acceptance: ["Given count 0, when Increment is clicked, then count is 1"] }] };
 function cases(ref: string) {
-  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", tier: 3, designMethod: "boundary", key: "zero-one", sourceRefs: [ref] }] };
+  // acRefs：账本路径上认领准则是契约的一部分，门禁分数也算它（design-gate-v2）。不填的话这条用例
+  // 明明点了 Increment，却不算做过 s1/AC-1，分数直接归零。
+  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", tier: 3, designMethod: "boundary", key: "zero-one", sourceRefs: [ref], acRefs: ["s1/AC-1"] }] };
 }
 it("serves frozen skills and material chunks; refuses stage skipping and untrusted imported cases", async () => {
   const r = await staged("skip-stages");
@@ -195,7 +197,7 @@ it("stops downstream work and resumes only a verified immutable checkpoint", asy
 it('g2 compilation is independent of requested approval revision order', async () => {
   const r = await staged('ordered-g2'); await r.call('instructions');
   const ref = (await r.call('retrieve', { query: 'count', budgetTokens: 2000 })).body.chunks[0].id;
-  const content = cases(ref); content.cases.push({ ...content.cases[0], id: 'c2', key: 'reset-zero', title: 'Reset at zero', steps: ['Click Reset'], expected: 'Count equals 0' });
+  const content = cases(ref); content.cases.push({ ...content.cases[0], id: 'c2', key: 'reset-zero', title: 'Reset at zero', steps: ['Click Reset'], expected: 'Count equals 0', acRefs: [] });
   await r.call('stories', { content: stories }); await r.call('cases', { content }); await r.call('gate'); await r.call('finalize');
   const approvals = await import('../src/approvedRuns.js'); const reviewed = approvals.reviewRevisions(r.runId, projectId);
   approvals.decideRevisions(r.runId, projectId, { items: reviewed.map(c => ({ caseId: c.caseId, revisionId: c.revision.id, decision: 'approved' })) }, { kind: 'human', id: 'synthetic-review' });

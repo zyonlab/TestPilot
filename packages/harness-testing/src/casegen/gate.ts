@@ -1,5 +1,6 @@
 import { tierOf } from "../exec/oracle.js";
 import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from "./types.js";
+import { isOpenQuestion } from "../exec/stepSemantics.js";
 
 /**
  * Gate ① — does this batch of text cases meet the test-design rules?
@@ -14,6 +15,16 @@ import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from
  */
 
 export interface GateOptions {
+  /**
+   * 分数里算不算「有人真做了的动作型准则占比」这个因子（见 runGate 文末）。
+   *
+   * **只有账本那条路径该开。** 那边故事被编号（`acceptanceIndex.ts`）、编号交给了模型、
+   * `acRefs` 填不出编号就拒收——认领准则是契约的一部分。进程内的 `design.cases` 节点与
+   * MCP `run_pipeline` 的契约里一个字都没提 `acRefs`，那边的用例天生不认领任何准则；
+   * 默认开的话，每一次画布运行只要故事里有一条「点击」就是 0 分。2026-09-15 改的时候
+   * 就是 `run-routes.test.ts` 先红，回头一查才发现节点臂根本不产出这一栏。
+   */
+  acceptanceInScore?: boolean;
   /** Below this share of negative/boundary cases, an all-happy-path suite is called out. */
   minNegativeRatio?: number;
   /** A case that verifies one thing has few steps; a case with twenty verifies nothing. */
@@ -25,7 +36,7 @@ export interface GateOptions {
   dedupe?: boolean;
 }
 
-const DEFAULTS: Required<GateOptions> = {
+const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false,
   minNegativeRatio: 0.3,
   maxSteps: 8,
   minSteps: 1,
@@ -272,6 +283,20 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
           args: { step: s.slice(0, 50) },
           field: "steps",
         });
+    /**
+     * 断言挂在第几步之后判（`afterStep`），得落在步骤范围里——超出去执行器就只能在最后判，等于没写。
+     * 开放问题写进断言里判不出结果（执行器只记不判）：记 info，让它挪进 readiness.reason。
+     */
+    for (const a of c.assertions ?? []) {
+      if (a.afterStep !== undefined && a.afterStep > c.steps.length)
+        add("assertion-after-step-out-of-range", `assertion ${a.id} is pinned after step ${a.afterStep}, but the case has ${c.steps.length} step(s)`, c.id, "warn", {
+          args: { assertion: a.id, afterStep: a.afterStep, steps: c.steps.length },
+        });
+      if (isOpenQuestion(a.statement))
+        add("assertion-open-question", `assertion ${a.id} is an open question, not a check — it can neither pass nor fail; move it to readiness.reason`, c.id, "info", {
+          args: { assertion: a.id },
+        });
+    }
   }
 
   // 3. Duplicates — same key, same case in different words.
@@ -344,17 +369,24 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    */
   const coveredBy = new Map<string, string>();
   for (const s of bundle.stories) for (const id of s.subsumes ?? []) coveredBy.set(id, s.id);
+  /** 动作型准则的分母与没人真做的那几条——分数要用（见文末 score）。 */
+  let actionable = 0;
+  const uncoveredAc: string[] = [];
   for (const s of bundle.stories) {
     const owner = coveredBy.get(s.id) ?? s.id;
     const mine = cases.filter((c) => c.storyId === s.id || c.storyId === owner);
     (s.acceptance ?? []).forEach((text, i) => {
       if (!ACCEPTANCE_ACTION.test(whenClause(text) || text)) return;
+      actionable += 1;
       const id = `${s.id}/AC-${i + 1}`;
       const claimed = mine.filter((c) => (c.acRefs ?? []).some((r) => r === id || normalizeRef(r) === normalizeRef(text)));
-      if (!claimed.length)
+      if (!claimed.length) {
+        uncoveredAc.push(id);
         add("acceptance-uncovered", `${id} 要求用户动手（When ${(whenClause(text) || text).slice(0, 34)}），却没有任何用例认领它`, undefined, "warn", { args: { storyId: s.id, acId: id } });
-      else if (!claimed.some(caseHasAction))
+      } else if (!claimed.some(caseHasAction)) {
+        uncoveredAc.push(id);
         add("acceptance-uncovered", `${id} 要求用户动手，而认领它的 ${claimed.map((c) => c.id).join("/")} 步骤里只有导航和查看——没有人真的做过这个动作`, undefined, "warn", { args: { storyId: s.id, acId: id } });
+      }
     });
   }
 
@@ -629,16 +661,42 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   const flagged = [
     ...new Set(findings.filter((f) => f.severity === "warn" && f.caseId).map((f) => f.caseId as string)),
   ];
-  const score = cases.length ? Math.max(0, 1 - flagged.length / cases.length) : 0;
+  /**
+   * **分数是两个比例的乘积：没被警告点到的用例占比 × 有人真做了的动作型准则占比。**
+   *
+   * 此前只有前一半。`acceptance-uncovered` 按故事记、不带 caseId，于是**永远进不了
+   * `flagged`**——漏掉的准则再多，分数一分不扣。一个用例量小的运行最容易撞上：
+   * 用例少，被点名的用例就少，而没人认领的准则反而多。2026-09-15 回查已存的门禁报告：
+   *
+   *   | 运行                               | 旧分 | 动作型准则 | 没人真做 | 新分  |
+   *   | Vikunja · Claude Code 宿主（19 条）| 1.0  | 16         | 4        | 0.75  |
+   *   | Hyperliquid · Claude Code（11 条） | 1.0  | 14         | 6        | 0.571 |
+   *   | Hyperliquid · Web（86 条）         | 0.814| 53         | 1        | 0.799 |
+   *
+   * 前两次拿的是满分，而其中一次有 43% 的动作型准则没有任何用例去做——
+   * 门禁在这类运行上说的「完美」恰好是它最没看住的时候。第三行几乎不动：
+   * 覆盖好的运行不会被这个改动误伤。
+   *
+   * 乘而不是加权平均：两件事都得成立，任一半塌了分数就该跟着塌，不该被另一半的高分垫起来。
+   * 没有动作型准则时第二个因子取 1——没有要做的动作，就谈不上漏做。
+   * 这个因子只在 `acceptanceInScore` 打开时生效，理由写在 GateOptions 上。
+   */
+  const caseShare = cases.length ? Math.max(0, 1 - flagged.length / cases.length) : 0;
+  const acceptanceCounts = cfg.acceptanceInScore === true && actionable > 0;
+  const acceptanceShare = acceptanceCounts ? (actionable - uncoveredAc.length) / actionable : 1;
+  const score = caseShare * acceptanceShare;
 
   return {
-    // The score is a blunt instrument on purpose: a share of cases with no warning against
-    // them. It is meant to move between versions, not to be a certificate.
+    // The score is a blunt instrument on purpose. It is meant to move between versions, not to be a certificate.
     score,
     scoreBasis: {
       cases: cases.length,
       flagged,
-      formula: `1 − ${flagged.length}/${cases.length}（被警告点到的用例 ÷ 全部用例）`,
+      // 只在它真的进了分数时才写出来——界面会照着它说「分数的另一半掉在这里」，没算进去就不能这么说。
+      ...(cfg.acceptanceInScore === true ? { acceptance: { actionable, uncovered: uncoveredAc } } : {}),
+      formula: acceptanceCounts
+        ? `(1 − ${flagged.length}/${cases.length}) × (1 − ${uncoveredAc.length}/${actionable})（被警告点到的用例 ÷ 全部用例；没人真做的动作型准则 ÷ 全部动作型准则）`
+        : `1 − ${flagged.length}/${cases.length}（被警告点到的用例 ÷ 全部用例）`,
     },
     findings,
     stats: {

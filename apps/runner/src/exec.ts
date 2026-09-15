@@ -64,7 +64,7 @@ export interface ExecSpec {
     /** A check a program settles. When present the model is never asked for the verdict. */
     oracle?: MachineOracle;
     /** v2 把判据挂在每条断言上；不带过来的话 tier 1 在执行时只是一个标签。见 run.ts。 */
-    assertions?: Array<{ id?: string; statement: string; oracle?: MachineOracle }>;
+    assertions?: Array<{ id?: string; statement: string; oracle?: MachineOracle; afterStep?: number }>;
     /** 这个被测对象要多大的视口。不给用执行器默认的 1024×720。 */
     viewport?: { width?: number; height?: number };
     /**

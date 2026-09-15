@@ -156,7 +156,7 @@ export async function askForScenarios(
     "2. stories：人在这一屏上可能要完成的**具体的事**，每条给出它要用到的控件编号。",
     "",
     "写故事的要求：",
-    "- 一条故事是一件**能做完的事**（「用限价单买入」「查看当前持仓」），不是一个静态观察（「页面显示资金费率」）。",
+    "- 一条故事是一件**能做完的事**（「提交一张表单并看到新记录出现」「把一条记录改成另一种状态」），不是一个静态观察（「页面显示一个数字」）。",
     "- 只能引用上面出现过的编号。编不出编号的故事不要写。",
     "- 同一个控件组里的不同选项，往往对应不同的故事——那正是这个产品的业务分支。",
     "- 优先级按「不做这件事这个产品就没意义」来排。",
@@ -1725,7 +1725,7 @@ export async function runObserve(
         if (offsiteSection(c.href)) continue;
         if (deadHref.has(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
-        if (!routeAllowed(spec.charter, entryRoute, pathOf(new URL(c.href, screen.url).toString()))) continue;
+        { const to = new URL(c.href, screen.url).toString(); if (!routeAllowed(spec.charter, entryRoute, pathOf(to), to)) continue; }
         return { key: c.href, kind: "goto", href: c.href };
       }
 
@@ -1822,7 +1822,7 @@ export async function runObserve(
           continue;
         }
         if (sfgStates.some((st) => st.route === route)) continue;
-        if (!routeAllowed(spec.charter, entryRoute, route)) continue;
+        if (!routeAllowed(spec.charter, entryRoute, route, new URL(href, screen.url).toString())) continue;
         return { key: href, kind: "goto", href };
       }
 
@@ -1842,7 +1842,7 @@ export async function runObserve(
         if (c.href && c.href !== here && !deadHref.has(c.href)) {
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           if (offsiteSection(c.href)) continue;
-          if (!routeAllowed(spec.charter, entryRoute, pathOf(new URL(c.href, screen.url).toString()))) continue;
+          { const to = new URL(c.href, screen.url).toString(); if (!routeAllowed(spec.charter, entryRoute, pathOf(to), to)) continue; }
           return { key: c.href, kind: "goto", href: c.href };
         }
         /**

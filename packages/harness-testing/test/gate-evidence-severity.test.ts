@@ -195,3 +195,69 @@ it("覆盖了却没人真去做那个动作，仍然点名", () => {
   ss.push({ id: "US-2", title: "看到价格读数", role: "r", benefit: "b", acceptance: ["Given 页面打开 / When 用户点击 Limit / Then 出现 Price"] });
   expect(runGate(b).findings.some((x) => x.rule === "acceptance-uncovered")).toBe(true);
 });
+
+/**
+ * 2026-09-15 回查已存的门禁报告量出来的盲区：`acceptance-uncovered` 按故事记、不带 caseId，
+ * 于是它**永远进不了扣分口径**。Vikunja 那次 16 条动作型准则漏了 4 条，门禁给 1.0；
+ * Hyperliquid 那次 Claude Code 小批量运行 14 条漏了 6 条，也是 1.0。
+ */
+it("没人真做的动作型准则会把分数拉下来——不再是满分", () => {
+  const b = bundle([base({ acRefs: ["US-1/AC-2"], steps: ["打开 https://example.test/", "点击计价单位切换"] } as never)]);
+  (b.stories as never as Array<{ acceptance: string[] }>)[0]!.acceptance = [
+    "Given 面板打开 / When 用户点击 Limit / Then 出现 Price 输入框",
+    "Given 面板打开 / When 用户切换计价单位 / Then 数量按新单位换算",
+    "Given 面板打开 / When 用户查看面板 / Then 看得到 Price",
+  ];
+  const r = runGate(b, { acceptanceInScore: true });
+  // 唯一的用例没被 warn 点到，所以旧口径是 1.0；动作型准则两条漏一条，新口径减半。
+  expect(r.scoreBasis?.flagged).toEqual([]);
+  expect(r.scoreBasis?.acceptance).toEqual({ actionable: 2, uncovered: ["US-1/AC-1"] });
+  expect(r.score).toBe(0.5);
+  expect(r.scoreBasis?.formula).toContain("× (1 − 1/2)");
+});
+
+it("「认领了但只导航和看」也算没做，同样扣分", () => {
+  const b = bundle([base({ acRefs: ["US-1/AC-1"], steps: ["打开 https://example.test/", "查看面板"] } as never)]);
+  (b.stories as never as Array<{ acceptance: string[] }>)[0]!.acceptance = ["Given 面板打开 / When 用户点击 Limit / Then 出现 Price"];
+  const r = runGate(b, { acceptanceInScore: true });
+  expect(r.scoreBasis?.acceptance?.uncovered).toEqual(["US-1/AC-1"]);
+  // 用例本身也被 case-without-action 点到了——两个因子各扣各的，都是 0。
+  expect(r.score).toBe(0);
+});
+
+it("没有动作型准则时第二个因子取 1，算式也不多写那一半", () => {
+  const b = bundle([base({ steps: ["打开 https://example.test/", "点击 Limit 标签"] })]);
+  (b.stories as never as Array<{ acceptance: string[] }>)[0]!.acceptance = ["Given 页面打开 / When 用户查看页头 / Then 看得到价格"];
+  const r = runGate(b, { acceptanceInScore: true });
+  expect(r.scoreBasis?.acceptance).toEqual({ actionable: 0, uncovered: [] });
+  expect(r.score).toBe(1);
+  expect(r.scoreBasis?.formula).not.toContain("×");
+});
+
+it("节点臂不开这个因子：它的契约里没有 acRefs，不能因此归零", () => {
+  // 进程内 design.cases 与 MCP run_pipeline 的用例天生不带 acRefs。
+  const b = bundle([base({ steps: ["打开 https://example.test/", "点击 Limit 标签"] })]);
+  (b.stories as never as Array<{ acceptance: string[] }>)[0]!.acceptance = ["Given 面板打开 / When 用户点击 Limit / Then 出现 Price"];
+  const r = runGate(b);
+  // 发现照样报（让人看得见），分数不动，basis 里也不写那一半——界面不能说「分数掉在这里」。
+  expect(r.findings.some((x) => x.rule === "acceptance-uncovered")).toBe(true);
+  expect(r.score).toBe(1);
+  expect(r.scoreBasis?.acceptance).toBeUndefined();
+});
+
+/**
+ * 2026-09-15 Vikunja：描述「途经那一屏」的断言要写 afterStep，否则在最后一步之后判、页面早已换了；
+ * 开放问题写进断言判不出结果。门禁把两件事都点出来。
+ */
+it("afterStep 超出步骤数记 warn——那样写等于没写", () => {
+  const r = runGate(bundle([base({ steps: ["点击 A"], assertions: [{ id: "A-1", statement: "出现 B", ruleRefs: [], afterStep: 3 }] } as never)]));
+  const f = r.findings.find((x) => x.rule === "assertion-after-step-out-of-range");
+  expect(f?.severity).toBe("warn");
+  expect(runGate(bundle([base({ steps: ["点击 A", "点击 B"], assertions: [{ id: "A-1", statement: "出现 B", ruleRefs: [], afterStep: 2 }] } as never)]))
+    .findings.some((x) => x.rule === "assertion-after-step-out-of-range")).toBe(false);
+});
+
+it("断言里写开放问题记 info：它判不出结果，该挪进 readiness.reason", () => {
+  const r = runGate(bundle([base({ assertions: [{ id: "A-9", statement: "开放问题：规则包称有 6 条任务，这里只有 5 条——不作为失败判据", ruleRefs: [] }] } as never)]));
+  expect(r.findings.find((x) => x.rule === "assertion-open-question")?.severity).toBe("info");
+});

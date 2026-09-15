@@ -1,4 +1,4 @@
-import {caseEntryUrl} from './caseEntry.js';
+import {caseEntryUrl, caseStartsLoggedOut} from './caseEntry.js';
 import { recordModelRequests } from './roleSpend.js';
 import { caseRunBudget, configuredRunBudget } from "./runBudget.js";
 import { randomUUID } from "node:crypto";
@@ -35,7 +35,23 @@ export function listWorkflowExecutions(runId: string, projectId: string) {
 }
 function phase(row: ExecutionRow, status: string, revisionId?: string, message?:string) {
   ledger().db.prepare("UPDATE workflow_executions SET status=?,resultRevision=COALESCE(?,resultRevision) WHERE id=?").run(status, revisionId ?? null, row.id);
-  ledger().db.prepare("UPDATE wf_runs SET status=? WHERE id=?").run(status === "running" ? "executing" : status === "passed" ? "completed" : status, row.runId);
+  /**
+   * **用例没全过，不等于这条运行失败了。**
+   *
+   * 此前批次状态原样写进 `wf_runs.status`：20 条里有一条用例红，整条运行就是 `failed`，
+   * 而 `beginStage` 见 `failed` 就拦——g2 要求「用户显式恢复」。2026-09-15 Vikunja：修完执行器、
+   * 补完 afterStep 想重编重跑，g2 被挡；重跑结束又被写回 `failed`。界面那边一直在绕
+   * （`ExecutionControls` 发起执行前见 failed 就先自动 resume），这份测试文件里几乎每条都先手动
+   * `UPDATE wf_runs SET status='waiting_review'`——**所有人都知道这里错了，只是都绕过去了**。
+   *
+   * 执行是挂在运行上的一次活动：判决（有用例失败 / 判定不了）记在执行行里，运行回到它本来的
+   * 状态——能执行的运行一定已经定稿、用例已批准，那就是 `waiting_review`。
+   * 其余照旧：`passed` 记 `completed`；`cancelled` 仍要显式恢复（人按了停，是有意的）；
+   * `infra_error` / `budget_exhausted` 说的是这次没跑完，不挡 g2 与执行。
+   */
+  const runStatus = status === "running" ? "executing" : status === "passed" ? "completed"
+    : status === "failed" || status === "unobservable" ? "waiting_review" : status;
+  ledger().db.prepare("UPDATE wf_runs SET status=? WHERE id=?").run(runStatus, row.runId);
   const sequence = (ledger().db.prepare("SELECT COALESCE(MAX(sequence),-1)+1 AS n FROM workflow_events WHERE runId=? AND node='execution' AND attempt=0").get(row.runId) as { n: number }).n;
   ledger().appendEvent({ id: `execution-${randomUUID()}`, runId: row.runId, node: "execution", attempt: 0, sequence, at: new Date().toISOString(),
     ...(message?{message}:{}), phase: status === "passed" ? "done" : status === "running" ? "running" : status === "cancelled" ? "cancelled" : "failed", ...(revisionId ? { revisionId } : {}) }, row.projectId);
@@ -131,7 +147,9 @@ async function perform(row: ExecutionRow) {
       const execId = `${row.id}-${contentHash(kase.id).slice(0, 12)}`; active.set(row.id, execId);
       const attempt = () => execOnRunner({ execId, scopeProjectId: row.projectId, modelSnapshotRunId: row.runId, url: caseEntryUrl(kase.precondition,env.url),
         steps: kase.steps, expected: kase.expected, artifactDir: ARTIFACT_DIR,
-        opts: { modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps, login: env.login, storageState: env.storageState,
+        opts: { modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,
+          // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
+          ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState }),
           resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locators: env.locators,
           /**
            * **带钱包探索出来的用例，执行时也要带钱包。**

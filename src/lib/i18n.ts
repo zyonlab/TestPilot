@@ -1935,6 +1935,11 @@ export const dict: Record<string, Entry> = {
     en: "{n} of {total} cases carry a warning — that is where the score went. Click to see just those",
     ja: "{total} 件中 {n} 件に警告——スコアはここで落ちています。クリックで絞り込み",
   },
+  "review.gateAcceptance": {
+    zh: "{total} 条要动手的验收准则里有 {n} 条没有用例真去做——分数的另一半掉在这里",
+    en: "{n} of {total} action criteria have no case that actually performs them — the other half of the score",
+    ja: "操作を要する受入基準 {total} 件中 {n} 件を実行するケースがありません",
+  },
   "review.noFindingsNow": {
     zh: "修改后门禁①对这条已无意见",
     en: "gate ① has nothing against it now",
