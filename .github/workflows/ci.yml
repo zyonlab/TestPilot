@@ -1,3 +1,18 @@
+# ⚠️ 2026-09-15：这个工作流被**手动关掉了**（`gh workflow disable ci`），用户的决定。
+#
+# 关的时候它是红的：`apps/runner` 三条测试在 CI 上失败而本机四条全绿——
+#   captures a screenshot and perf metrics   拿到 'failed'
+#   streams a debug session's frames         拿到 'step' 而不是 'navigated'
+#   cancels while page navigation is pending 45 秒超时
+# **原因没有定位到**。第二条和当时改的缓存键毫无关系（一个 debug 会话的帧类型
+# 不是 cacheId 能影响的事），所以「是那次改动弄坏的」这个结论并不成立，只是时间上相邻。
+#
+# 关掉 ≠ 这些检查没用。本地这一串仍然是验收口径（见 CLAUDE.md）：
+#   pnpm typecheck && pnpm test && pnpm check:drift && pnpm check:host-parity
+#
+# 开回去：`gh workflow enable ci`。开之前先把上面三条弄清楚，
+# 否则每个 PR 都会带着一片红，而红久了就没人看了——那比没有 CI 更糟。
+#
 # 借 commerce-agents 的分层：无 API key 的检查跑在每次 PR 上；真跑模型的评测由人触发。
 #
 # 三件事：
