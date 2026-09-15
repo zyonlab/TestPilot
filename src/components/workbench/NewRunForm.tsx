@@ -3,6 +3,7 @@ import { API_BASE } from '@/lib/base';
 import { useT } from '@/lib/prefs';
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui';
+import { FieldChatDrawer } from '@/components/FieldChatDrawer';
 import { workflowBase, workflowRequest, workflowRequestId } from '@/lib/workflowRuns';
 const field='w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary';
 export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCreated:(id:string)=>void;onClose:()=>void}) {
@@ -32,7 +33,15 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
      * 六个单元之后，故事从 26 条涨到 44 条。而这个开关此前只有 API 打得开，
      * 界面上建的运行永远撞在那个天花板上。
      */
-    [workUnits,setWorkUnits]=useState(true);
+    [workUnits,setWorkUnits]=useState(true),
+    /**
+     * 正在聊哪个字段。
+     *
+     * 领域知识和规则包是这张表单里仅有的两个「要自己写一大段」的框，也是最常空着的两个。
+     * 空着不报错，只是下游少了一整层领域约束——所以入口就摆在那个框的标签旁边，
+     * 点开的抽屉产出什么就填回哪个框，人还能接着改。
+     */
+    [drafting,setDrafting]=useState<null|'rulePack'|'domainKnowledge'>(null);
   const intent=useRef<{hash:string;key:string}>();
   useEffect(()=>{const c=new AbortController();
     void fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}/rule-packs`,{signal:c.signal})
@@ -44,16 +53,16 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
   async function start(e:FormEvent) {e.preventDefault();setBusy(true);setError('');const chosen=packHash?await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}/rule-packs/${packHash}`).then(r=>r.json()).then((d:{pack?:unknown})=>d.pack):undefined;
     const payload={sourceKind,outputLanguage,maxScreens,sourceUrl:sourceKind==='explore'?sourceUrl:undefined,
       ...(sourceKind==='explore'?{exploreWallet,exploreActions:exploreInteract?'interact':'observe'}:{}),materials:[...materials,...(text.trim()?[{name:'requirements.md',text}]:[])],knowledge:knowledge.trim()?[{name:'domain-knowledge.md',text:knowledge,roles:['source','stories','cases','gate']}]:[],rulePacks:chosen?[chosen]:parsedPack?[parsedPack]:[],workUnits,limit};const hash=JSON.stringify(payload);if(intent.current?.hash!==hash)intent.current={hash,key:workflowRequestId()};try{const run=await workflowRequest<{wfRunId:string}>(workflowBase(projectId),{...payload,idempotencyKey:intent.current.key});onCreated(run.wfRunId);}catch(e){setError(e instanceof Error?e.message:'request_failed');}finally{setBusy(false);}}
-  return <form onSubmit={e=>void start(e)} className="mx-auto w-full max-w-2xl space-y-5 p-6" aria-label={t('workflow.new')}><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{t('workflow.new')}</h2><Button onClick={onClose}>{t('bench.close')}</Button></div>
+  return <form onSubmit={e=>void start(e)} className="mx-auto w-full max-w-2xl space-y-5 p-6" aria-label={t('workflow.new')}><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{t('workflow.new')}</h2><Button type="button" onClick={onClose}>{t('bench.close')}</Button></div>
     <div className="grid grid-cols-3 gap-2">{(['spec','explore','code'] as const).map(k=><button key={k} type="button" disabled={k==='code'||busy} aria-pressed={sourceKind===k} className={`rounded-md border p-3 text-sm disabled:opacity-40 ${sourceKind===k?'border-primary bg-primary/10 text-primary':'border-border'}`} onClick={()=>k!=='code'&&setSourceKind(k)}>{t(`bench.source.${k}`)}</button>)}</div>
     {sourceKind==='explore'?<label className="block space-y-2 text-sm"><span>{t('bench.target')}</span><input type="url" required className={field} value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} /></label>:<><label className="block space-y-2 text-sm"><span>{t('workflow.requirements')}</span><textarea rows={6} className={field} required={!materials.length} value={text} onChange={e=>setText(e.target.value)}/></label><label className="block space-y-2 text-sm"><span>{t('bench.upload')}</span><input type="file" multiple accept=".md,.txt" onChange={e=>{const files=[...e.target.files??[]];if(files.length>20){setError(t('bench.tooManyFiles'));return;}void Promise.all(files.map(async f=>{if(!/\.(md|txt)$/i.test(f.name))throw new Error(t('bench.textOnly'));if(f.size>2_000_000)throw new Error(t('bench.fileTooLarge'));return {name:f.name,text:await f.text()};})).then(setMaterials).catch(e=>setError(String(e.message)));}}/></label><ul className="text-xs text-muted-foreground">{materials.map((f,i)=><li key={i}>{f.name} · {f.text.length} chars</li>)}</ul></>}
-    <label className="block space-y-2 text-sm"><span>{t('bench.knowledge')}</span><textarea className={field} rows={3} value={knowledge} onChange={e=>setKnowledge(e.target.value)} placeholder={t('bench.knowledgeHint')}/></label>
+    <label className="block space-y-2 text-sm"><span className="flex items-center gap-2">{t('bench.knowledge')}<Button type="button" size="sm" onClick={()=>setDrafting('domainKnowledge')}>{t('field.chat')}</Button></span><textarea className={field} rows={3} value={knowledge} onChange={e=>setKnowledge(e.target.value)} placeholder={t('bench.knowledgeHint')}/></label>
     {sourceKind==='explore'&&projectPacks.length>0&&<label className="block space-y-2 text-sm"><span>{t('bench.rulePackVersion')}</span>
       <select className={field} value={packHash} onChange={e=>setPackHash(e.target.value)}>
         <option value="">{t('bench.rulePackLatest')}</option>
         {projectPacks.map(p=><option key={p.hash} value={p.hash}>{p.packId} · v{p.version} · {p.hash.slice(0,8)}</option>)}
       </select><span className="block text-xs text-muted-foreground">{t('bench.rulePackVersionHint')}</span></label>}
-    {sourceKind==='explore'&&<label className="block space-y-2 text-sm"><span>{t('bench.rulePack')}</span><textarea className={field} rows={3} value={rulePack} onChange={e=>setRulePack(e.target.value)} placeholder={t('bench.rulePackHint')} aria-invalid={packError}/><input type="file" accept=".json" onChange={e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>2_000_000){setError(t('bench.fileTooLarge'));return;}void f.text().then(setRulePack).catch(err=>setError(String(err.message)));}}/>{packError&&<span className="text-xs text-bad">{t('bench.rulePackInvalid')}</span>}</label>}
+    {sourceKind==='explore'&&<label className="block space-y-2 text-sm"><span className="flex items-center gap-2">{t('bench.rulePack')}<Button type="button" size="sm" onClick={()=>setDrafting('rulePack')}>{t('field.chat')}</Button></span><textarea className={field} rows={3} value={rulePack} onChange={e=>setRulePack(e.target.value)} placeholder={t('bench.rulePackHint')} aria-invalid={packError}/><input type="file" accept=".json" onChange={e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>2_000_000){setError(t('bench.fileTooLarge'));return;}void f.text().then(setRulePack).catch(err=>setError(String(err.message)));}}/>{packError&&<span className="text-xs text-bad">{t('bench.rulePackInvalid')}</span>}</label>}
     <div className="flex flex-wrap gap-4"><label className="flex items-center gap-3 text-sm">{t('bench.outputLanguage')}<select className={field} value={outputLanguage} onChange={e=>setOutputLanguage(e.target.value)}><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>{sourceKind==='explore'&&<label className="flex items-center gap-3 text-sm">{t('bench.maxScreens')}<input className={`${field} max-w-24`} type="number" min={1} max={50} value={maxScreens} onChange={e=>setMaxScreens(Number(e.target.value))}/></label>}</div>
     <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={workUnits} onChange={e=>setWorkUnits(e.target.checked)}/>
       <span><span className="font-medium">{t('bench.workUnits')}</span><span className="mt-1 block text-xs text-muted-foreground">{t('bench.workUnitsHint')}</span></span></label>
@@ -67,5 +76,9 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
     </fieldset>}
     <label className="flex items-center gap-3 text-sm">{t('workflow.limit')}<input className={`${field} max-w-24`} type="number" min={1} max={50} value={limit} onChange={e=>setLimit(Number(e.target.value))}/></label>
     {error&&<p role="alert" className="text-sm text-bad">{error}</p>}<div className="flex justify-end"><Button type="submit" variant="primary" disabled={busy||packError}>{t(busy?'workflow.starting':'workflow.start')}</Button></div>
+    {/* 填回框里，不直接提交：这张表单的每一栏最后都要由按下开始的那个人过目。 */}
+    {drafting&&<FieldChatDrawer field={drafting} title={t(drafting==='rulePack'?'bench.rulePack':'bench.knowledge')} projectId={projectId}
+      onApply={v=>{if(drafting==='rulePack')setRulePack(JSON.stringify(v,null,2));else setKnowledge(String(v));}}
+      onClose={()=>setDrafting(null)}/>}
   </form>;
 }

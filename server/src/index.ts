@@ -102,7 +102,7 @@ import {
   supervisor,
   takenProcessIds, eventStore, setChildAsk,
   midsceneDirFor } from "./procs.js";
-import { applyGraphDraft, chat, checkPrompt, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
+import { applyGraphDraft, chat, checkPrompt, fieldSources, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
 import { changes, codeLine, codeProvenance } from "./codeline.js";
 import { traceability, traceabilityOfRun } from "./trace.js";
 import { allProjectOverviews, projectOverview } from "./overview.js";
@@ -3276,6 +3276,10 @@ app.post("/api/chat", async (req, res) => {
       intent?: ChatIntent;
       graphId?: string;
       promptKey?: string;
+      /** 起草哪个复杂字段（intent "field"）。 */
+      field?: string;
+      /** 上一轮的草稿：这一轮是改它，不是重写。 */
+      previous?: unknown;
       context?: ChatContext;
       projectId?: string;
     };
@@ -3286,6 +3290,8 @@ app.post("/api/chat", async (req, res) => {
         intent: body.intent ?? "ask",
         graphId: body.graphId,
         promptKey: body.promptKey,
+        field: body.field,
+        previous: body.previous,
         projectId: body.projectId,
         // What the person has selected on the canvas. Read server-side into the prompt, so a
         // question about "this step" is answered against that step's real parameters and output.
@@ -3295,6 +3301,23 @@ app.post("/api/chat", async (req, res) => {
     );
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * 起草面开场：有哪些字段可以聊出来，以及这个项目哪几次运行手里有材料。
+ *
+ * 只读。**没有「应用」这一路**——一个字段聊出来之后走的是它自己本来那条保存路径
+ * （规则包走 `POST /api/projects/:id/rule-packs`，那里有 `validateRulePack`），
+ * 而不是另开一个专给聊天用的入口。多一条入口就多一份会和主路径走岔的校验。
+ */
+app.get("/api/chat/fields", (req, res) => {
+  const projectId = String(req.query.projectId ?? "");
+  if (!projectId) return res.status(400).json({ error: "projectId is required" });
+  try {
+    res.json(fieldSources(projectId));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
   }
 });
 
