@@ -48,3 +48,20 @@ it("标签过长时截断，但截断点之前的差异仍然区分得开", () =
   expect(long("X")).not.toBe(long("Y"));
   expect(structureOf([{ tag: "BUTTON", label: "A".repeat(80) }])).toBe(structureOf([{ tag: "BUTTON", label: "A".repeat(60) }]));
 });
+
+/**
+ * 采不到结构就不缓存——而不是带垮这次执行，也不是退回一个凑合的键。
+ *
+ * 2026-09-15：给缓存键加结构指纹之后，本机四条 runner 测试全绿，CI 上三条红，
+ * 其中一条正是「导航还没完成就取消」。页面正在导航时执行上下文已经销毁，
+ * `page.evaluate` 会抛；CI 慢，正好撞进那个窗口。
+ *
+ * 这里钉的是那条判断本身：`structure` 没拿到，就没有 cacheId。
+ */
+it("结构采不到就没有缓存键——宁可这次不缓存，也不拿别的屏的计划来用", () => {
+  const ctx = { model: "m1", intent: "r1" };
+  expect(scopedCacheId(undefined, ctx, { url: "https://x.test", structure: "s" })).toBeUndefined();
+  // 键的三个输入任意一个变了就是另一个键；没有「差不多就算命中」这回事。
+  const base = scopedCacheId("c1", ctx, { url: "https://x.test", structure: "s" });
+  expect(scopedCacheId("c2", ctx, { url: "https://x.test", structure: "s" })).not.toBe(base);
+});
