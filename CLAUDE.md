@@ -28,13 +28,20 @@
   本机链配置 `chainId 421614`（Arbitrum Sepolia）、`fixtures/hyperliquid-testnet/`、注入钱包用的账户，
   说的都是这一条链。测试网上随便点是对的。
 - **主网 `app.hyperliquid.xyz` 不作为被测对象**。同一个钱包在那边有真钱（2026-09-12 实测
-  `Portfolio Value $6.77`），同一串点击就是在花钱，而两者只差一个域名。它在 `guard.allowHosts`
-  里也永远不该出现——代码与测试里出现的主网地址是「不在白名单的那个例子」，别顺手改掉。
-- 探索要点会改状态的东西（`exploreActions:"interact"`）时，服务端只认 `config.guard.allowHosts`。
-  测试网域名**已经在 `server/harness.config.ts` 的 allowHosts 里**（2026-09-07 加的，理由写在那儿），
-  所以不需要 `ALLOW_HOSTS` 环境变量——2026-09-12 实测：不给这个变量，测试网 interact 照样放行，
-  主网照样 403。要给别的域名开这个口子，走那份配置并在旁边写清理由。
+  `Portfolio Value $6.77`），同一串点击就是在花钱，而两者只差一个域名。它在
+  `server/harness.config.ts` 的 `guard.denyHosts` 里，永远不该被移出——代码与测试里出现的主网地址是「被禁止的那个例子」，别顺手改掉。
+- **没有主机白名单了**（2026-09-15 用户决定）。探索要点会改状态的东西，要这次运行声明 `exploreActions:"interact"`，**且**所用环境勾过 `allowIrreversible`、探索地址就是该环境地址；
+  执行时能不能跑删除、支付、下单这类不可逆步骤，看这个项目环境里人勾选的「允许执行不可逆步骤」（`allowIrreversible`）。
+  全局只留禁止名单 `guard.denyHosts`（环境怎么勾都不放行），主网在上面。
 - `fixtures/hyperliquid-mainnet/` 这个目录名是历史，里面的规则包对测试网同样适用（已实测）。
+
+## 领域内容一律是项目数据（2026-09-15 用户决定）
+- 非通用的部分**不许写进代码**（也不许写成 `if (某个领域)`）：只能是项目数据，由用户用对话抽屉聊出来或自己指定。
+  载体三个：**规则包**（`actionVocabulary` / `sideEffectLabels` / `volatileReadings` 等）、**领域参考**（「领域参考」页，
+  按版本存、运行开始时冻结绑定）、**环境画像**（前提名 `capabilities`、`injectWallet`、`allowIrreversible`）。
+- `benchmark/hyperliquid-testnet/domain-reference.md` 是评测数据集，只给 `evals/domain-perp.json` 按路径绑定
+  （消融开关叫 `domain-reference`），不出现在界面，也不导入新项目。没有「预设」，不做旧数据兼容。
+- `pnpm check:domain-neutral` 必须绿：产品源码非注释代码与 skill 里不许有写死的领域词。
 
 ## 不做的事（除非用户当轮明说）
 - 本会话用户已授权本地真实模型/浏览器联调，不需要再次索要 `.env` 或确认这类验收。新会话按其授权范围执行；不得把旧默认限制当成本会话的额外审批。`git commit` / `git push` / 对外发布仍未授权。
@@ -48,6 +55,7 @@
 pnpm typecheck && pnpm test          # 各包 tsc + vitest + hook 子进程测试
 pnpm check:drift                     # 两臂提示词逐条认领
 pnpm check:host-parity               # 宿主入口对 UI 操作的覆盖；加了 UI 路由必须同步分类
+pnpm check:domain-neutral            # 发给每个产品的代码与 skill 里没有写死的领域内容
 node scripts/replay.mjs              # 冻结运行确定性重打分
 node scripts/cost-report.mjs         # 每条用例的账（跑过用例之后）
 ```
