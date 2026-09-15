@@ -1,3 +1,4 @@
+import { boundRulePack } from "./rulePacks.js";
 import { requireStageStarted } from './workflowControls.js';
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -95,7 +96,7 @@ function verifyCases(runId: string, projectId: string, content: unknown) {
    * 只关一边的话，换条路写进来的用例照样可以自己编一条验收准则——2026-09-13 实测 85 条里
    * 21 条就是这么来的。旧写法（逐字的 Given/When/Then 原文）仍然认，认不出来的才算改写。
    */
-  const entries = acceptanceIndex(bundle.stories);
+  const entries = acceptanceIndex(bundle.stories, boundRulePack(runId, projectId)?.actionVocabulary);
   const known = new Set(entries.map(e => e.id));
   const norm = (x: string) => x.replace(/[\s“”"'（）()、,，。.]/g, "");
   const bad = bundle.cases.flatMap((c, i) => (c.acRefs ?? []).map((r, j) => ({ c, i, j, r }))
@@ -233,10 +234,10 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
         if ((byId.get(id)!.subsumes ?? []).length) throw new LedgerError(400, `story_subsume_chain:${st.id}->${id}`);
         if (covers.has(st.id)) throw new LedgerError(400, `story_subsume_chain:${st.id}`);
       }
-      acceptance = checkStories(stories);
+      acceptance = checkStories(stories, boundRulePack(runId, projectId)?.actionVocabulary);
       const priorIndex = store().listRevisions(projectId, runId).filter(r => r.name === "report/acceptance-index").sort((a, b) => a.revision - b.revision).at(-1);
       store().putRevision({ runId, projectId, name: "report/acceptance-index", kind: "report",
-        content: { entries: acceptanceIndex(stories), findings: acceptance }, parentRevision: priorIndex?.id ?? null }, principal);
+        content: { entries: acceptanceIndex(stories, boundRulePack(runId, projectId)?.actionVocabulary), findings: acceptance }, parentRevision: priorIndex?.id ?? null }, principal);
 
       const prior = receipt(runId, "stories");
       if (receipt(runId, "cases") && prior && canonicalJSON(current(runId, projectId, "stories").content) !== canonicalJSON(verdict.data))
@@ -256,7 +257,9 @@ export function gateRun(runId: string, projectId: string) {
     if (!verdict.ok) return { status: "blocked", ...verdict };
     const pinnedPolicy = (current(runId, projectId, "instructions").content as { policy: typeof policy }).policy;
     // 账本路径：故事已编号、acRefs 是契约的一部分，所以准则覆盖进分数（见 GateOptions.acceptanceInScore）。
-    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true });
+    // 这个产品特有的动作词与易变读数名，来自这次运行绑定的规则包；没有就只用通用规则。
+    const pack = boundRulePack(runId, projectId);
+    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings });
     const passed = report.score >= pinnedPolicy.minGateScore;
     /**
      * 不通过时，把门禁的话按单元送回规划器（docs/v3/23 F-11）。
@@ -297,7 +300,8 @@ export function finalizeRun(runId: string, projectId: string) {
      */
     const previous = receipt(runId, "finalize");
     if (previous) return { ...(current(runId, projectId, "finalize").content as object), revisionId: previous.revisionId };
-    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true });
+    const pack = boundRulePack(runId, projectId);
+    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings });
     if (!passed || fresh.score < pinnedPolicy.minGateScore || canonicalJSON(fresh) !== canonicalJSON(report)) throw new LedgerError(409, "gate_not_passed");
     const summary = { runId, projectId, status: "waiting_review", stories: verdict.data.stories.length, cases: verdict.data.cases.length,
       gateScore: report.score, binding: run.binding, storiesRevision: stories.revision.id, casesRevision: cases.revision.id, gateRevision: gate.revision.id,

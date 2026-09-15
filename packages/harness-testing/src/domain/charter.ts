@@ -12,11 +12,11 @@ export const ActionsPolicySchema = z
     /** 探索里允许的动作只有「激活 UI」：切 tab、勾选、开面板。 */
     allow: z.array(z.enum(["activate-ui"])).default(["activate-ui"]),
     /**
-     * **沙箱模式**：允许探索点会改状态的目标（下单、平仓、撤单、连接钱包）。
+     * **沙箱模式**：允许探索点会改状态的目标（提交、删除、确认、连接账户）。
      *
-     * 默认 false，而且它不是探索器自己能开的开关——由运行显式声明，且服务端只在
-     * 被测地址处在 `guard.allowHosts` 白名单里时才允许（`workflowOps`）。理由和执行层
-     * 那道守卫是同一条：**判断「这个域名下可不可以做不可逆的事」的人是操作者，不是模型**。
+     * 默认 false，而且它不是探索器自己能开的开关——由运行显式声明 `exploreActions:"interact"`，
+     * 服务端再用禁止名单与所用环境的 `allowIrreversible` 把关（`workflowOps`）。理由和执行层
+     * 那道守卫是同一条：**判断「这个地址下可不可以做不可逆的事」的是人，不是模型**。
      * 打开之后 `forbidLabels` 与 `neverSubmit` 一并让位——半开的沙箱比不开更难解释。
      */
     allowStateChange: z.boolean().default(false),

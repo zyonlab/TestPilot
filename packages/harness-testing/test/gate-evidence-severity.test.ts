@@ -261,3 +261,25 @@ it("断言里写开放问题记 info：它判不出结果，该挪进 readiness.
   const r = runGate(bundle([base({ assertions: [{ id: "A-9", statement: "开放问题：规则包称有 6 条任务，这里只有 5 条——不作为失败判据", ruleRefs: [] }] } as never)]));
   expect(r.findings.find((x) => x.rule === "assertion-open-question")?.severity).toBe("info");
 });
+
+/**
+ * 2026-09-15：通用动作词表里原来焊着「下单 / 平仓 / 转账……」。挪进规则包 `actionVocabulary` 之后，
+ * 待办应用的门禁不再认它们；交易所的包把它们写回来，行为和原来一样。
+ */
+it("行业动作词来自规则包：没给就不认，给了就认", () => {
+  const b = bundle([base({ acRefs: ["US-1/AC-1"], steps: ["打开 https://example.test/", "在面板里平仓"] } as never)]);
+  (b.stories as never as Array<{ acceptance: string[] }>)[0]!.acceptance = ["Given 有一笔持仓 / When 用户平仓 / Then 持仓表不再列出它"];
+  const plain = runGate(b, { acceptanceInScore: true });
+  expect(plain.scoreBasis?.acceptance?.actionable).toBe(0);
+  const withPack = runGate(b, { acceptanceInScore: true, actionVocabulary: ["平仓"] });
+  expect(withPack.scoreBasis?.acceptance).toEqual({ actionable: 1, uncovered: [] });
+});
+
+it("易变读数名来自规则包：名字加一个数才算钉住，只说字段存在不算", () => {
+  const pinned = runGate(bundle([base({ expected: "标头显示 Funding 0.0100" })]), { volatileReadings: ["Funding"] });
+  expect(pinned.findings.some((f) => f.rule === "oracle-volatile")).toBe(true);
+  const exists = runGate(bundle([base({ expected: "标头显示 Funding 字段" })]), { volatileReadings: ["Funding"] });
+  expect(exists.findings.some((f) => f.rule === "oracle-volatile")).toBe(false);
+  // 没有规则包的名字，同一句不报——通用规则只认数字的形状。
+  expect(runGate(bundle([base({ expected: "标头显示 Funding 0.0100" })])).findings.some((f) => f.rule === "oracle-volatile")).toBe(false);
+});

@@ -1,3 +1,4 @@
+import { currentDomainReference } from "./domainReferences.js";
 import { recordHostSummary } from './roleSpend.js';
 /**
  * 第二个运行时：Claude Code（07 T-05）。与 `penguin.ts` 同形——往上只暴露
@@ -146,7 +147,16 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   mkdirSync(workspace, { recursive: true });
   mkdirSync(outDir, { recursive: true });
 
-  const stageEnv = input.generationMode === "pipeline" ? { TP_GENERATION_MODE: "pipeline" } : prepareSkillLaunch({ runId, scopeProjectId: input.scopeProjectId, materialsDir, runtime: "claude-code", limit: input.limit, ablate: input.ablate });
+  /**
+   * 流水线模式（run_pipeline）读项目当前的领域参考：写成工作区里的一个文件，经 TP_DOMAIN_REFERENCE_FILE 交给 MCP。
+   * 没有就不写——流水线不替任何产品补一段。
+   */
+  const domainRef = input.generationMode === "pipeline" && input.scopeProjectId ? currentDomainReference(input.scopeProjectId) : undefined;
+  const domainFile = domainRef ? join(workspace, "domain-reference.md") : undefined;
+  if (domainRef && domainFile) writeFileSync(domainFile, domainRef.text);
+  const stageEnv = input.generationMode === "pipeline"
+    ? { TP_GENERATION_MODE: "pipeline", ...(domainFile ? { TP_DOMAIN_REFERENCE_FILE: domainFile } : {}) }
+    : prepareSkillLaunch({ runId, scopeProjectId: input.scopeProjectId, materialsDir, runtime: "claude-code", limit: input.limit, ablate: input.ablate });
 
   writeMcpConfig(workspace, {
     ...stageEnv,

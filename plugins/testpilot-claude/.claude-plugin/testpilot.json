@@ -3,25 +3,25 @@
   "version": "2026-09-10.1",
   "skillVersions": {
     "testpilot-generate": "2026-09-10.1",
-    "testpilot-explore": "2026-09-15.1",
+    "testpilot-explore": "2026-09-15.3",
     "testpilot-stories": "2026-09-14.1",
-    "testpilot-design": "2026-09-15.1",
+    "testpilot-design": "2026-09-15.3",
     "testpilot-run-c": "2026-09-14.1",
     "testpilot-evaluation": "2026-09-03.1",
     "testpilot-benchmark-design": "2026-09-04.1",
-    "testpilot-scanner": "2026-09-03.1",
+    "testpilot-scanner": "2026-09-15.1",
     "testpilot-memory": "2026-09-09.3",
     "testpilot-onboard-sut": "2026-09-04.1"
   },
   "skillDigests": {
     "testpilot-generate": "12ee15239b74568a",
-    "testpilot-explore": "1db5565ec42aa76a",
+    "testpilot-explore": "9a186817751f8708",
     "testpilot-stories": "0e71db20690374b0",
-    "testpilot-design": "17734a1342ef759e",
+    "testpilot-design": "201f34bace347b4d",
     "testpilot-run-c": "5f7d0a92ddf947b2",
     "testpilot-evaluation": "3d1bc1c2aaeae65e",
     "testpilot-benchmark-design": "e864d158ad34baf6",
-    "testpilot-scanner": "10e35f7f7a7ada73",
+    "testpilot-scanner": "62ae2e9aad43bba6",
     "testpilot-memory": "41b7b032023da7a8",
     "testpilot-onboard-sut": "cd302c44eb146513"
   }

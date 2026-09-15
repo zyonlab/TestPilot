@@ -75,7 +75,8 @@ export function saveRulePack(projectId: string, raw: unknown): RulePackVersion &
   const existing = table().prepare("SELECT * FROM rule_packs WHERE projectId=? AND packId=? AND hash=?")
     .get(projectId, v.pack.id, v.hash) as Parameters<typeof rowToVersion>[0] | undefined;
   if (existing) return { ...rowToVersion(existing), created: false };
-  const row = { id: `rp-${v.hash.slice(0, 12)}`, projectId, packId: v.pack.id, version: v.pack.version,
+  // id 带上项目：同一份包装进两个项目是两行。
+  const row = { id: `rp-${projectId}-${v.hash.slice(0, 12)}`, projectId, packId: v.pack.id, version: v.pack.version,
     hash: v.hash, json: JSON.stringify(v.pack), createdAt: new Date().toISOString() };
   table().prepare("INSERT INTO rule_packs (id,projectId,packId,version,hash,json,createdAt) VALUES (@id,@projectId,@packId,@version,@hash,@json,@createdAt)").run(row);
   return { ...rowToVersion(row), created: true };
@@ -91,4 +92,33 @@ export function deleteRulePack(projectId: string, hash: string): void {
 export function currentRulePack(projectId: string): ProductRulePack | undefined {
   const row = table().prepare("SELECT json FROM rule_packs WHERE projectId=? ORDER BY createdAt DESC LIMIT 1").get(projectId) as { json: string } | undefined;
   return row ? (JSON.parse(row.json) as ProductRulePack) : undefined;
+}
+
+/**
+ * 这次运行**绑定的**规则包（账本里最新那条 `knowledge/rulepack/*`）；没绑定返回 undefined。
+ * 执行守卫、门禁、验收准则索引从这里取这个产品特有的词——不是从代码里。
+ */
+/**
+ * 把一份规则包冻结绑定进这次运行（`knowledge/rulepack/<id>`）。Web 建的运行和宿主登记的运行走同一个写法，
+ * 否则宿主运行的 `boundRulePack` 是空的，项目的行业词表到不了验收索引、门禁与守卫。
+ */
+export function bindRulePack(runId: string, projectId: string, pack: ProductRulePack, hash: string, principal: { kind: "system" | "agent"; id: string }): void {
+  runLedger().putRevision({ projectId, runId, name: `knowledge/rulepack/${pack.id}`, kind: "report",
+    content: { name: `rulepack/${pack.id}`, roles: ["source", "stories", "cases", "gate"], trust: "user-provided", executable: false, rulePack: pack, rulePackHash: hash } }, principal as never);
+}
+
+/** 项目当前那份规则包绑定进运行；项目没有就什么都不写。 */
+export function bindCurrentRulePack(runId: string, projectId: string, principal: { kind: "system" | "agent"; id: string }): void {
+  const current = currentRulePack(projectId);
+  if (!current) return;
+  const v = validateRulePack(current);
+  if (v.ok) bindRulePack(runId, projectId, v.pack, v.hash, principal);
+}
+
+export function boundRulePack(runId: string, projectId: string): ProductRulePack | undefined {
+  const l = runLedger();
+  const rev = l.listRevisions(projectId, runId).filter((r) => r.name.startsWith("knowledge/rulepack/")).sort((a, b) => a.revision - b.revision).at(-1);
+  if (!rev) return undefined;
+  const v = validateRulePack((l.readRevision(rev.id, projectId).content as { rulePack?: unknown }).rulePack);
+  return v.ok ? v.pack : undefined;
 }

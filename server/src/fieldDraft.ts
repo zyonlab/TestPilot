@@ -30,7 +30,7 @@ import { validateRulePack } from "@testpilot/harness-testing/domain";
  * 这不是靠嘱咐，是 `validateRulePack` 强制的：没有 product 级来源的 normative 会被拒。
  */
 
-export type FieldId = "rulePack" | "domainKnowledge";
+export type FieldId = "rulePack" | "domainKnowledge" | "domainReference";
 
 export interface FieldSpec {
   id: FieldId;
@@ -157,6 +157,10 @@ export const FIELDS: Record<FieldId, FieldSpec> = {
       "writes requires: [\"session\"], and the pack lists \"session\" in externalCapabilities.",
       "Never make a login button provide a capability: submitting a login is state-change, exploration",
       "never clicks state-change targets, so every target waiting on it stays blocked forever.",
+      "Words that belong to THIS product go into the pack, never assumed elsewhere: actionVocabulary (verbs that",
+      "mean a user did something here, beyond everyday ones like click/fill/submit), sideEffectLabels (actions that",
+      "cannot be undone here, beyond delete/pay/refund), volatileReadings (names of readings that change on their own).",
+      "Leave them empty rather than guess.",
       "appliesTo.urlPatterns is the set of addresses exploration may navigate to. Cover every page the",
       "material shows (e.g. the site origin), not only the entry page — a pattern that matches one page",
       "confines exploration to that page.",
@@ -177,6 +181,32 @@ export const FIELDS: Record<FieldId, FieldSpec> = {
       return v.ok
         ? { ok: true, errors: [] }
         : { ok: false, errors: v.errors.map((e) => `${e.jsonPointer || "/"}：${e.message}`) };
+    },
+  },
+  domainReference: {
+    id: "domainReference",
+    title: "领域参考",
+    instruction: [
+      "Draft a DOMAIN REFERENCE for the product under test: the invariants a test case can contradict — what the",
+      "product must refuse, what must stay unchanged, what appears after an action and where. Write each as one",
+      "short bullet that names what a person would SEE on screen when it holds (a row that appears, a refusal text,",
+      "a count that does not change). Readings that change on their own may only be asserted to exist or to relate.",
+      "Say only what the observations or the person support. Mark anything you are inferring as 【假设】 — a",
+      "hypothesis may only become an open question downstream, never a failing check.",
+      "Do not describe the product's internal API; verdicts are read from the screen.",
+    ].join("\n"),
+    needs: ["exploration"],
+    valueKey: "text",
+    schema: {
+      type: "object",
+      properties: { reply: { type: "string" }, text: { type: "string" } },
+      required: ["reply"],
+    },
+    validate: (draft) => {
+      if (typeof draft !== "string" || !draft.trim()) return { ok: false, errors: ["草稿是空的"] };
+      if (draft.length > 60_000) return { ok: false, errors: [`太长了（${draft.length} 字符），领域参考是给规划器读一遍的`] };
+      if (!/^\s*[-*•]\s+\S/m.test(draft)) return { ok: false, errors: ["要写成逐条的不变量（每条以 - 开头），一整段散文下游引用不了"] };
+      return { ok: true, errors: [] };
     },
   },
   domainKnowledge: {

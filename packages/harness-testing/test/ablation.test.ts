@@ -96,7 +96,7 @@ describe("the ablation list", () => {
 
   it("lists exactly the switches this harness can prove", () => {
     expect(ALL_ABLATABLE.sort()).toEqual(
-      ["case-cleanup", "case-priority", "dedupe", "design-methods", "domain-perp", "fragments", "oracle-grading", "repair"].sort(),
+      ["case-cleanup", "case-priority", "dedupe", "design-methods", "domain-reference", "fragments", "oracle-grading", "repair"].sort(),
     );
   });
 });

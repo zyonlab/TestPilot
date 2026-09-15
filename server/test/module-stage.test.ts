@@ -154,18 +154,23 @@ it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是�
 });
 
 /**
- * 沙箱探索的闸门（docs/v3/24 §14）：只有守卫白名单里的域名才允许探索去点会改状态的东西。
+ * 沙箱探索的闸门（docs/v3/24 §14）：禁止名单先拦；
+ * 其余要这次的环境由人勾过「允许不可逆操作」，且探索地址就是那个环境的地址。
  * 同一个钱包，测试网上随便点是对的，主网上同样的点击是在花真钱——两者只差一个域名。
  */
-it("探索要 interact：白名单外的域名直接拒，白名单内才放行", async () => {
+it("探索要 interact：禁止名单直接拒；环境没勾允许不可逆就拒；勾了且地址对得上才放行", async () => {
   const ops = await import("../src/workflowOps.js");
+  const { config } = await import("../src/procs.js");
   const base = { idempotencyKey: `ex-${Date.now()}`, sourceKind: "explore" as const, exploreActions: "interact" as const };
-  await expect(ops.createWebWorkflow(project, { ...base, sourceUrl: "https://app.hyperliquid.xyz/trade" }))
-    .rejects.toThrow(/explore_interact_host_not_allowlisted/);
-  // 白名单里默认有 localhost：同样的参数就过得去（这里只验闸门，不真起浏览器）。
-  const ok = await ops.createWebWorkflow(project, { ...base, idempotencyKey: `ex2-${Date.now()}`, sourceUrl: "http://localhost:5391/trade" })
+  const denied = config.guard.denyHosts[0];
+  if (denied) await expect(ops.createWebWorkflow(project, { ...base, sourceUrl: `https://${denied}/trade` })).rejects.toThrow(/explore_host_denied/);
+  const attempt = (key: string, sourceUrl: string) => ops.createWebWorkflow(project, { ...base, idempotencyKey: `${key}-${Date.now()}`, sourceUrl })
     .then(() => "created").catch((e: Error) => e.message);
-  expect(String(ok)).not.toMatch(/host_not_allowlisted/);
+  expect(await attempt("ex-noenv", "http://127.0.0.1:5391/trade")).toMatch(/explore_interact_not_allowed:environment/);
+  db.upsertEnvironment({ projectId: project, name: "sandbox", baseUrl: "http://127.0.0.1:5391/", allowIrreversible: true });
+  expect(await attempt("ex-otherhost", "http://localhost:5392/trade")).toMatch(/explore_interact_not_allowed:host/);
+  // 同一个地址就过得去（这里只验闸门，不真起浏览器）。
+  expect(await attempt("ex-ok", "http://127.0.0.1:5391/trade")).not.toMatch(/explore_interact_not_allowed|explore_host_denied/);
 });
 
 /**

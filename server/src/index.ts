@@ -130,7 +130,8 @@ import {
 } from "./config.js";
 import { probeModel, generateCode, refineCase } from "./model.js";
 import { describeModelConfig, saveModelConfig } from "./modelconfig.js";
-import { listRulePacks, readRulePack, saveRulePack, deleteRulePack } from "./rulePacks.js";
+import { listRulePacks, readRulePack, saveRulePack, deleteRulePack, currentRulePack } from "./rulePacks.js";
+import { listDomainReferences, readDomainReference, saveDomainReference, deleteDomainReference } from "./domainReferences.js";
 import { modelProfilesRouter } from "./modelProfilesRoutes.js";
 import { projectPlannerModel } from "./modelProfiles.js";
 // The executor moved to the domain package (it runs in the runner process now). The
@@ -743,6 +744,27 @@ app.delete("/api/projects/:id/rule-packs/:hash", (req, res) => {
   try { deleteRulePack(req.params.id, req.params.hash); res.json({ ok: true }); }
   catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
 });
+
+/**
+ * 项目级领域参考：和规则包一个待遇——按内容哈希存版本、运行开始时冻结绑定、用过的版本不能删。
+ */
+app.get("/api/projects/:id/domain-references", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  res.json({ references: listDomainReferences(req.params.id) });
+});
+app.get("/api/projects/:id/domain-references/:hash", (req, res) => {
+  try { res.json({ reference: readDomainReference(req.params.id, req.params.hash) }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
+app.post("/api/projects/:id/domain-references", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  try { res.json(saveDomainReference(req.params.id, req.body ?? {})); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message) }); }
+});
+app.delete("/api/projects/:id/domain-references/:hash", (req, res) => {
+  try { res.json(deleteDomainReference(req.params.id, req.params.hash)); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
 app.delete("/api/projects/:id", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   deleteProject(req.params.id);
@@ -1079,7 +1101,7 @@ async function runAndPersistCase(
         }
       : undefined;
 
-  guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)]);
+  guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)], { allowIrreversible: env?.allowIrreversible, sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
   /**
    * 环境级复位（07 T-28 验收 ②）：`vars.TP_RESET_CMD` 在每条用例跑之前执行一次，输出记进这次运行的日志。
    * teardown 是模型做的、会失手；失手一次，后面每条的判据都被残留状态带偏（实测一次连带三条）。
@@ -1362,7 +1384,7 @@ app.get("/api/cases/:id/debug", async (req, res) => {
 
   try {
     if (!url) throw new Error("no url (set an environment baseUrl or project targetUrl)");
-    guardRun(url, plan.map((p) => p.text));
+    guardRun(url, plan.map((p) => p.text), { allowIrreversible: env?.allowIrreversible, sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
     await live.debug(
       { url, plan, expected: c.expected || "", hint: hint || undefined, resolve: ctx, launch },
       ARTIFACT_DIR,
@@ -1610,6 +1632,8 @@ setAgentObserver(async (input) => {
        * 不会把密码印在登录页上。而凭证一直在环境里，执行用例时也一直在用。
        */
       ...(projectId ? observeLogin(projectId, envRef) : {}),
+      // 这个环境提供的前提名（人在环境设置里填的）；没填就由探索器按「配了登录就有 session」推。
+      ...(env?.capabilities?.length ? { capabilities: env.capabilities } : {}),
       launch: {
         cacheId: `observe-${projectId ?? "adhoc"}`,
         ...(projectId ? observeLaunch(projectId, envRef) : {}),
@@ -1729,7 +1753,7 @@ app.get("/api/projects/:id/environments", (req, res) => {
   res.json({ environments: listEnvironments(req.params.id).map(sanitizeEnv) });
 });
 app.post("/api/projects/:id/environments", (req, res) => {
-  const { name, baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct } = req.body ?? {};
+  const { name, baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct, capabilities, injectWallet, allowIrreversible } = req.body ?? {};
   if (!name) return res.status(400).json({ error: "name is required" });
   /*
    * 视口一直被这里丢掉：界面（SutPanel）发了 `viewport`，`upsertEnvironment` 也收，
@@ -1758,6 +1782,10 @@ app.post("/api/projects/:id/environments", (req, res) => {
     // No `session` key here → upsert preserves any captured session.
     login: login ?? {},
     isDefault: !!isDefault,
+    // 环境画像（2026-09-15）：前提名、默认注入钱包、允许不可逆操作。都由人在环境设置里填，不给就沿用已存的。
+    ...(Array.isArray(capabilities) ? { capabilities: capabilities.map(String).map((c: string) => c.trim()).filter(Boolean) } : {}),
+    ...(typeof injectWallet === "boolean" ? { injectWallet } : {}),
+    ...(typeof allowIrreversible === "boolean" ? { allowIrreversible } : {}),
   });
   res.json({ environment: sanitizeEnv(environment) });
 });
@@ -3056,7 +3084,7 @@ app.get("/api/ablatable", (_req, res) => res.json({ ablatable: ALL_ABLATABLE }))
 /**
  * 接入就绪清单：**从零到第一批可复核用例，还差哪几条。**
  *
- * 在服务端算而不是让前端拼六次请求，理由是真相在这一侧——守卫的白名单、环境的登录态、
+ * 在服务端算而不是让前端拼六次请求，理由是真相在这一侧——守卫的禁止名单与环境开关、环境的登录态、
  * 能力的健康检查、预算的默认值，四样都只有网关知道。前端拼的话会长出第二套口径，
  * 而两套口径最后总会给出两个不同的答案。
  *
@@ -3169,9 +3197,7 @@ app.get("/api/readiness", (req, res) => {
   );
 
   /**
-   * 守卫白名单：被测地址在不在名单里。
-   *
-   * 不在名单里**不拦运行**（`allowlistOnly` 是关的），但这个域名下命中删除/支付/结账
+   * 守卫：被测地址在禁止名单上就什么都不跑；环境没勾「允许不可逆」时，命中删除/支付/结账
    * 等词的步骤会被一律拒绝。这件事必须在跑之前说出来，否则人会在执行报告里
    * 看到一堆没有理由的失败。
    */
@@ -3185,7 +3211,9 @@ app.get("/api/readiness", (req, res) => {
   items.push(
     !host
       ? { id: "guard", state: "none", detail: { key: "ready.guardNoHost" } }
-      : config.guard.allowHosts.includes(host)
+      : config.guard.denyHosts.includes(host)
+        ? { id: "guard", state: "broken", detail: { key: "ready.guardDenied", params: { host } } }
+        : env?.allowIrreversible
         ? { id: "guard", state: "ok", detail: { key: "ready.guardOk", params: { host } } }
         : {
             id: "guard",

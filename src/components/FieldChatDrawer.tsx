@@ -41,7 +41,7 @@ export function FieldChatDrawer({
   onApply,
   onClose,
 }: {
-  field: "rulePack" | "domainKnowledge";
+  field: "rulePack" | "domainKnowledge" | "domainReference";
   /** 抽屉标题里那个字段名。给了就用给的——页面比这里更清楚它把这个字段叫什么。 */
   title?: string;
   projectId: string;

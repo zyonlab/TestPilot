@@ -41,19 +41,19 @@
 
 ```json
 {
-  "acRefs": ["AC-RO-PARTIAL"],
-  "conditionRefs": ["COND-REDUCE-LONG"],
+  "acRefs": ["AC-TITLE-MAX"],
+  "conditionRefs": ["COND-SIGNED-IN"],
   "scenarioType": "positive",
   "design": {
     "technique": "boundary",
-    "ruleId": "R-SIZE-PRECISION", "dimension": "数量", "unit": "BTC",
-    "bound": "0.001", "inclusivity": "inclusive", "step": "0.001",
-    "points": [{ "at": "below", "value": "0.0009" }, { "at": "at", "value": "0.001" }]
+    "ruleId": "R-TITLE-LENGTH", "dimension": "标题长度", "unit": "字符",
+    "bound": "250", "inclusivity": "inclusive", "step": "1",
+    "points": [{ "at": "at", "value": "250" }, { "at": "above", "value": "251" }]
   },
-  "risk": { "impact": "funds-and-exposure", "reason": "数量取整错误会改变实际敞口", "ruleRefs": ["R-SIZE-PRECISION"] },
-  "testData": { "fixtureRef": "perp-deterministic-v1", "values": [{ "name": "size", "value": "0.001", "unit": "BTC", "source": "R-SIZE-PRECISION" }] },
-  "assertions": [{ "id": "A-SIZE", "statement": "仓位表里 BTC 那一行的数量列显示 0.001", "ruleRefs": ["R-SIZE-PRECISION"], "oracle": { "kind": "text", "value": "0.001" } }],
-  "readiness": { "design": "candidate", "execution": "requires-fixture", "reason": "缺一条可控的前置数据 fixture" }
+  "risk": { "impact": "data-integrity", "reason": "超长标题被静默截断会丢掉用户输入", "ruleRefs": ["R-TITLE-LENGTH"] },
+  "testData": { "fixtureRef": "seeded-project-v1", "values": [{ "name": "title", "value": "250 个字符的标题", "unit": "字符", "source": "R-TITLE-LENGTH" }] },
+  "assertions": [{ "id": "A-TITLE", "statement": "任务列表里新建的那一行显示完整的 250 个字符标题，结尾没有被截掉", "ruleRefs": ["R-TITLE-LENGTH"], "oracle": { "kind": "text", "value": "标题末尾-250" } }],
+  "readiness": { "design": "candidate", "execution": "requires-fixture", "reason": "缺一个预置好的项目 fixture" }
 }
 ```
 

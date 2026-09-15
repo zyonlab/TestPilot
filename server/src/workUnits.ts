@@ -1,3 +1,4 @@
+import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
 import { acceptanceIndex } from "./acceptanceIndex.js";
 import { z } from "zod";
@@ -284,7 +285,7 @@ export function unitMaterials(runId: string, projectId: string, unit: WorkUnit) 
    * 只发和这个单元有关的那几段生命周期，加上全部角色（角色是全局的，就那么几个）。
    */
   const lifecycle = (model.lifecycle ?? []).filter((l) => !l.featureIds.length || l.featureIds.some((f) => featureIds.includes(f)));
-  return { productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
+  return { domainReference: boundDomainReference(runId, projectId), actionVocabulary: pack?.pack.actionVocabulary ?? [], volatileReadings: pack?.pack.volatileReadings ?? [], productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
 }
 
 function manifestFor(runId: string, projectId: string, unit: WorkUnit, materials: ReturnType<typeof unitMaterials>, claimedBy: string): ContextManifest {
@@ -324,7 +325,7 @@ export function claimUnit(runId: string, projectId: string, raw: unknown, claime
     const manifest = manifestFor(runId, projectId, next, materials, claimedBy);
     next.manifestId = manifest.manifestId;
     save(next);
-    const contract = unitContract(next, materials.modules, materials.features, materials.story, materials.subsumed);
+    const contract = unitContract(next, materials.modules, materials.features, materials.story, materials.subsumed, materials.actionVocabulary);
     return { unit: { ...next, runId: undefined }, manifest, materials, contract,
       ...(next.repair ? { repair: repairBrief(next.repair) } : {}),
       remaining: units.filter((u) => u.status !== "done").length - 1 };
@@ -457,7 +458,7 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
     const parsed = UnitCasesSchema.safeParse(typeof content === "string" ? JSON.parse(content) : content);
     if (!parsed.success) return { status: "blocked", gate: "schema", errors: parsed.error.issues.slice(0, 20).map((i) => ({ code: "schema", jsonPointer: "/" + i.path.join("/"), message: i.message })) };
     const storyId = (unit.scope as { storyId: string }).storyId;
-    const acceptanceIds = acceptanceIndex(materials.story ? [materials.story, ...materials.subsumed] : []);
+    const acceptanceIds = acceptanceIndex(materials.story ? [materials.story, ...materials.subsumed] : [], materials.actionVocabulary);
     const norm = (x: string) => x.replace(/[\s“”"'（）()、,，。.]/g, "");
     parsed.data.cases.forEach((c, i) => {
       // 覆盖方的用例仍然挂在覆盖方的故事上；被覆盖故事的准则通过 acRefs 引用，不换 storyId。
@@ -627,6 +628,8 @@ export function unitContract(
   features: Array<{ id: string; moduleId: string }> = [],
   story?: { id: string; title?: string; acceptance?: string[] },
   subsumed: Array<{ id: string; title?: string; acceptance?: string[] }> = [],
+  /** 这个产品特有的动作词（规则包 actionVocabulary）；判哪条准则要人动手时接在通用词后面。 */
+  vocabulary: readonly string[] = [],
 ): string {
   const leaves = leavesOf(next, modules);
   /**
@@ -673,10 +676,10 @@ export function unitContract(
    * 变成一张需要传递闭包的图，而人在界面上看不懂它。
    */
   const subsumeAdvice = next.node === "stories" && next.scope.kind === "journeys"
-    ? ` A journey that walks through what a shorter story already covers SHOULD say so: subsumes:["<storyId>", ...]. A subsumed story gets no cases of its own — this journey's cases discharge its criteria as checks along the way. Use it for short display-only stories ("the header shows mark price") that a real journey passes through anyway; that is how a suite stops being a pile of two-step cases. Only journeys may subsume, only one level deep, and never a story that itself subsumes.`
+    ? ` A journey that walks through what a shorter story already covers SHOULD say so: subsumes:["<storyId>", ...]. A subsumed story gets no cases of its own — this journey's cases discharge its criteria as checks along the way. Use it for short display-only stories ("the header shows the page title") that a real journey passes through anyway; that is how a suite stops being a pile of two-step cases. Only journeys may subsume, only one level deep, and never a story that itself subsumes.`
     : "";
   const acs = story?.acceptance ?? [];
-  const entries = acceptanceIndex(story ? [story, ...subsumed] : []);
+  const entries = acceptanceIndex(story ? [story, ...subsumed] : [], vocabulary);
   const actionable = entries.filter((e) => e.actionable);
   /**
    * 覆盖别人的故事：那几条短故事的准则也归这个单元。
@@ -759,6 +762,7 @@ export function unitContract(
           "  • risk: {impact, reason, ruleRefs}. impact is one of funds-and-exposure | authorization | data-integrity | availability | information | cosmetic — a category, NOT a sentence. reason is the sentence: why this priority, not a restatement of it.",
           "  • testData is an OBJECT: {fixtureRef?, accountRef?, values:[{name, value, unit?, source?}]} — not a bare array. Every value carries where it came from (a rule id or the asset metadata). Never invent a constant.",
           "  • assertions: one entry per independently checkable expectation, each {id, statement, ruleRefs[], oracle?, afterStep?} — the field is `statement`, not `expected`. Do not fold two checks into one sentence. Assertions are checked after the LAST step unless you set afterStep: n (1-based) — if an assertion describes a screen the case passes THROUGH (「the labels page shows the empty state」 before the step that opens the form), set afterStep to the step that reaches that screen, or it will be judged on the wrong page. An open question is not an assertion: never put 「待确认 / 开放问题 / not a failure criterion」 text into assertions[] — it cannot pass or fail; put it in readiness.reason.",
+          "  • materials.domainReference, when present, is THIS product's own list of invariants (supplied by the project): a case may be written to contradict one; anything it marks as a hypothesis may only become an open question. materials.volatileReadings names readings that change on their own — assert they exist or relate, never pin their value.",
           "  • readiness: {design, execution, reason?}. design ∈ candidate | reviewed. execution ∈ ready | requires-fixture | requires-session | blocked | not-executable. When execution is not `ready` you MUST give reason and say what is missing.",
           "A bound, a step or a constant you cannot trace to a rule or to the asset metadata does not belong in the case. Leave the field out rather than fabricate it — the server treats a missing field and a fabricated one differently.",
           "steps are ACTIONS a browser agent performs, one per line, in order. They are not narration: never put a cross-reference (\"as in S-MKT-01\"), a precondition (\"on an account with no balance\"), or an API call into a step — the agent will try to perform it and the case dies before its oracle is checked. Preconditions go in precondition[], cross-references stay in the story, API checks stay in the oracle.",
@@ -773,7 +777,7 @@ export function unitContract(
            * 一条措辞问题被记成产品缺陷。门禁的 `step-not-an-action` 现在会拦，
            * 但拦住之前先把话说清楚：模型没被告知过这个形状不行。
            */
-          "  NEVER write a step that begins 确认/验证/检查/assert/verify/ensure and then describes what the screen shows (\"确认右侧区域显示任务列表\", \"verify the panel shows the list\"). That is a state, not an action: the browser agent can only DO things, so it gives up and the case dies before any oracle runs. A state the case starts from goes in precondition[]; a state the case ends in goes in assertions[]. If you need the product to be in that state, write the ACTION that puts it there (\"点击 Order Book 标签\").",
+          "  NEVER write a step that begins 确认/验证/检查/assert/verify/ensure and then describes what the screen shows (\"确认右侧区域显示任务列表\", \"verify the panel shows the list\"). That is a state, not an action: the browser agent can only DO things, so it gives up and the case dies before any oracle runs. A state the case starts from goes in precondition[]; a state the case ends in goes in assertions[]. If you need the product to be in that state, write the ACTION that puts it there (\"点击「已完成」标签\").",
           "  Nor a step that is pure looking (\"查看面板方向按钮区域\", \"observe the Size input area\"). Looking is not an operation the browser can perform; if the case only needs to know what is on screen, that belongs in the oracle and in assertions[], and the case may legitimately have just one step: the navigation.",
           "Name a control the way the page shows it AND where it sits when the label is not unique — \"click Balances in the tab row of the account panel in the lower half of the page\", not \"switch to Balances\". One observation per step; a step that asks for four things at once makes the planner give up.",
           "postSteps put the product back. Any case that changes state — an order placed, a toggle flipped, a mode switched, a tab left somewhere else — MUST say how it undoes that, or its second run faces a different product than its first and nobody sees the difference. A read-only case leaves postSteps empty.",

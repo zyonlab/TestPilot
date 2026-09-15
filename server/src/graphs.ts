@@ -1,3 +1,4 @@
+import { currentDomainReference } from "./domainReferences.js";
 import { dataPath } from "./datadir.js";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -641,6 +642,18 @@ export async function startRun(input: {
       continue;
     }
     if (projectMaterials.length) injected[n.id] = { paths: projectMaterials };
+  }
+  /**
+   * 项目当前的领域参考，就是这次运行 design.cases 的领域段。
+   * 和材料同一条规矩：图上或请求里已经说了的不改；注入了什么跟着 paramOverrides 记进运行。没有就不注入。
+   */
+  const domainRef = input.target?.projectId ? currentDomainReference(input.target.projectId) : undefined;
+  for (const n of base.nodes) {
+    if (!domainRef || n.type !== "design.cases") continue;
+    const own = (n.params ?? {}) as { domainReference?: unknown; domainReferencePath?: unknown };
+    const req = (injected[n.id] ?? {}) as { domainReference?: unknown; domainReferencePath?: unknown };
+    if (own.domainReference || own.domainReferencePath || req.domainReference || req.domainReferencePath) continue;
+    injected[n.id] = { ...(injected[n.id] ?? {}), domainReference: domainRef.text };
   }
   const params = Object.keys(injected).length ? injected : input.params;
   const def = applyParamOverrides(base, params);

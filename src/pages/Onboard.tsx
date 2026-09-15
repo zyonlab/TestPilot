@@ -23,7 +23,7 @@ import { SutPanel } from "@/components/SutPanel";
  * 两句话都很确定，互相矛盾。所以这里把两件事一起说出来，
  * 而且**空态是队列自己的空态，不是盖在别的东西上的一张卡**。
  *
- * 判定全部由服务端算（`/api/readiness`）：守卫的白名单、环境的登录态、能力的健康检查、
+ * 判定全部由服务端算（`/api/readiness`）：守卫的禁止名单与环境开关、环境的登录态、能力的健康检查、
  * 预算的默认值，四样都只有网关知道。前端另算一套，最后一定会给出两个不同的答案。
  */
 /** 一句可本地化的话：要么本来就没有需要翻译的字（项目名 · 地址），要么是一个词条。 */
@@ -54,9 +54,9 @@ interface Item {
 const GOES: Record<string, { surface: string; section?: string; penguin?: boolean }> = {
   project: { surface: "settings", section: "projects" },
   sut: { surface: "settings", section: "env" },
-  // 运行时（能力进程）与守卫白名单现在都由 Penguin 那边管，按钮直接把人送过去。
+  // 运行时（能力进程）由 Penguin 那边管，按钮直接把人送过去；守卫看的是环境里的「允许不可逆」。
   runtime: { surface: "settings", penguin: true },
-  guard: { surface: "settings", penguin: true },
+  guard: { surface: "settings", section: "env" },
   budget: { surface: "settings", section: "env" },
 };
 

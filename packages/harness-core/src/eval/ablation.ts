@@ -21,8 +21,12 @@ export const ABLATABLE = {
   casePriority: "case-priority",
   /** design.cases stops asking for cleanup steps; write cases leave their records behind. */
   caseCleanup: "case-cleanup",
-  /** design.cases stops carrying the perpetual-futures domain invariants (07 T-10): the "domain REFERENCE" arm. */
-  domainPerp: "domain-perp",
+  /**
+   * design.cases stops carrying the domain reference bound to this run — the project's own data, never a
+   * built-in text (2026-09-15: the old `domain-perp` switch removed a perpetual-futures block baked into the
+   * code and sent to every product). With nothing bound this switch changes nothing, which is the honest answer.
+   */
+  domainReference: "domain-reference",
 } as const;
 
 export type Ablatable = (typeof ABLATABLE)[keyof typeof ABLATABLE];

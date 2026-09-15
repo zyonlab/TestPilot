@@ -2,7 +2,7 @@ import { defineHarnessConfig } from "@testpilot/harness-core";
 
 /**
  * The knobs, in one place. Environment variables still override everything here
- * (MODEL_CONCURRENCY, RUN_CONCURRENCY, RUNNER_COUNT, EVENTS_KEEP, ABLATE, ALLOW_HOSTS…),
+ * (MODEL_CONCURRENCY, RUN_CONCURRENCY, RUNNER_COUNT, EVENTS_KEEP, ABLATE, DENY_HOSTS…),
  * so this file is the map of what exists rather than a lock on the values.
  */
 export default defineHarnessConfig({
@@ -21,25 +21,16 @@ export default defineHarnessConfig({
   ablate: [],
   guard: {
     /**
-     * 基准应用全部跑在本机，所以白名单回到只有 localhost。
+     * 「这个被测对象允许做不可逆的事」是**环境的属性**，由人在环境设置里勾选（`allowIrreversible`），跟着项目走。
      *
-     * `www.saucedemo.com` 曾经在这里——那时它是基准，而基准的重头是结账，
-     * 「checkout / pay」正是 `blockIrreversible` 在白名单外要拦的东西。
-     * 2026-08-27 撤下它之后这条豁免也就没有理由了：**一条没有理由的白名单条目，
-     * 下一次有人对着生产环境跑套件时会替他放行。**
+     * 这里只有一张**禁止名单**：绝不能碰的地址，环境怎么勾都不放行。主网 `app.hyperliquid.xyz` 在上面——
+     * 同一个钱包在那边有真钱（2026-09-12 实测 Portfolio Value $6.77），同一串点击就是在花钱，
+     * 而它和测试网只差一个域名。这是运营方的安全配置，不是领域逻辑。
      */
-    /**
-     * `app.hyperliquid-testnet.xyz`（2026-09-07）：执行层降本那一档的被测对象（`docs/v3/06`）。
-     * 它是 testnet，钱是 mock USDC；而它的 P0 全是「Enable Trading / Place Order / Close /
-     * Cancel」这种在白名单外必拦的词——第一次真跑就被 `GUARD_IRREVERSIBLE` 拦在第 1 条。
-     * 理由到此为止：主网 `app.hyperliquid.xyz` **不在**这里，也不该在。
-     */
-    allowHosts: ["localhost", "127.0.0.1", "::1", "app.hyperliquid-testnet.xyz"],
-    // Irreversible-looking steps (delete / pay / transfer …) are refused outside the
-    // allowlist. This is the "someone ran the whole suite against production" guard,
-    // not a security boundary.
+    denyHosts: ["app.hyperliquid.xyz"],
+    // Irreversible-looking steps (delete / pay / transfer …) are refused unless the environment allows
+    // them. This is the "someone ran the whole suite against production" guard, not a security boundary.
     blockIrreversible: true,
-    allowlistOnly: false,
   },
 
   // External services the harness can start and supervise. Declarative on purpose: a

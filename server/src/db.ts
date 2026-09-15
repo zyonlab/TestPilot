@@ -432,6 +432,13 @@ if (envCols.size && !envCols.has("viewportJson"))
   db.exec("ALTER TABLE environments ADD COLUMN viewportJson TEXT NOT NULL DEFAULT '{}'");
 if (envCols.size && !envCols.has("visualThresholdPct"))
   db.exec("ALTER TABLE environments ADD COLUMN visualThresholdPct REAL");
+// 环境画像：前提名、默认注入钱包、允许不可逆操作。
+if (envCols.size && !envCols.has("capabilitiesJson"))
+  db.exec("ALTER TABLE environments ADD COLUMN capabilitiesJson TEXT NOT NULL DEFAULT '[]'");
+if (envCols.size && !envCols.has("injectWallet"))
+  db.exec("ALTER TABLE environments ADD COLUMN injectWallet INTEGER NOT NULL DEFAULT 0");
+if (envCols.size && !envCols.has("allowIrreversible"))
+  db.exec("ALTER TABLE environments ADD COLUMN allowIrreversible INTEGER NOT NULL DEFAULT 0");
 
 export type Priority = "P0" | "P1" | "P2";
 /** `unobservable`：判据没量到——没有判决，不是通过也不是失败（harness-testing/exec/oracle.ts）。 */
@@ -666,6 +673,18 @@ export interface Environment {
    * 全是行情在跳。把阈值调成全局的会让静态应用跟着变迟钝；不给出口则这一页没法用。
    */
   visualThresholdPct?: number;
+  /**
+   * 这个环境提供的前提名（规则包目标的 `requires` 对照它），例如 `session`、`wallet-session`。
+   * 由人在环境设置里填；不填时探索按老规矩：配了登录步骤就提供 `session`。
+   */
+  capabilities?: string[];
+  /** 探索时默认注入本机钱包（运行参数可以覆盖）。 */
+  injectWallet?: boolean;
+  /**
+   * **这个被测对象允许执行不可逆步骤**（删除、支付……）。由人勾选，默认不允许。
+   * 它是被测对象的属性，跟着环境走；全局禁止名单优先。
+   */
+  allowIrreversible?: boolean;
   login: LoginFlow;
   isDefault: boolean;
   createdAt: string;
@@ -1170,6 +1189,9 @@ type EnvRow = {
   sessionEnc: string;
   isDefault: number;
   createdAt: string;
+  capabilitiesJson?: string;
+  injectWallet?: number;
+  allowIrreversible?: number;
 };
 const rowToEnv = (r: EnvRow): Environment => {
   const login: LoginFlow = JSON.parse(r.loginJson || "{}");
@@ -1195,6 +1217,12 @@ const rowToEnv = (r: EnvRow): Environment => {
       return vp.width || vp.height ? { viewport: vp } : {};
     })(),
     ...(typeof r.visualThresholdPct === "number" ? { visualThresholdPct: r.visualThresholdPct } : {}),
+    ...(() => {
+      const caps = JSON.parse(r.capabilitiesJson || "[]") as string[];
+      return caps.length ? { capabilities: caps } : {};
+    })(),
+    injectWallet: !!r.injectWallet,
+    allowIrreversible: !!r.allowIrreversible,
     login,
     isDefault: !!r.isDefault,
     createdAt: r.createdAt,
@@ -1242,6 +1270,9 @@ export function upsertEnvironment(
               : existing?.login?.session ?? null,
         }
       : existing?.login ?? {},
+    ...(input.capabilities ?? existing?.capabilities ? { capabilities: input.capabilities ?? existing?.capabilities } : {}),
+    injectWallet: input.injectWallet ?? existing?.injectWallet ?? false,
+    allowIrreversible: input.allowIrreversible ?? existing?.allowIrreversible ?? false,
     isDefault: input.isDefault ?? existing?.isDefault ?? false,
     createdAt: existing?.createdAt || new Date().toISOString(),
   };
@@ -1252,9 +1283,9 @@ export function upsertEnvironment(
   if (env.isDefault)
     db.prepare("UPDATE environments SET isDefault=0 WHERE projectId=?").run(env.projectId);
   db.prepare(
-    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,viewportJson,visualThresholdPct,sessionEnc,isDefault,createdAt)
-     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@viewportJson,@visualThresholdPct,@sessionEnc,@isDefault,@createdAt)
-     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,viewportJson=@viewportJson,visualThresholdPct=@visualThresholdPct,sessionEnc=@sessionEnc,isDefault=@isDefault`,
+    `INSERT INTO environments (id,projectId,name,baseUrl,varsJson,loginJson,headersJson,queryJson,viewportJson,visualThresholdPct,capabilitiesJson,injectWallet,allowIrreversible,sessionEnc,isDefault,createdAt)
+     VALUES (@id,@projectId,@name,@baseUrl,@varsJson,@loginJson,@headersJson,@queryJson,@viewportJson,@visualThresholdPct,@capabilitiesJson,@injectWallet,@allowIrreversible,@sessionEnc,@isDefault,@createdAt)
+     ON CONFLICT(id) DO UPDATE SET name=@name,baseUrl=@baseUrl,varsJson=@varsJson,loginJson=@loginJson,headersJson=@headersJson,queryJson=@queryJson,viewportJson=@viewportJson,visualThresholdPct=@visualThresholdPct,capabilitiesJson=@capabilitiesJson,injectWallet=@injectWallet,allowIrreversible=@allowIrreversible,sessionEnc=@sessionEnc,isDefault=@isDefault`,
   ).run({
     id: env.id,
     projectId: env.projectId,
@@ -1266,6 +1297,9 @@ export function upsertEnvironment(
     queryJson: JSON.stringify(env.query),
     viewportJson: JSON.stringify(env.viewport ?? {}),
     visualThresholdPct: env.visualThresholdPct ?? null,
+    capabilitiesJson: JSON.stringify(env.capabilities ?? []),
+    injectWallet: env.injectWallet ? 1 : 0,
+    allowIrreversible: env.allowIrreversible ? 1 : 0,
     sessionEnc,
     isDefault: env.isDefault ? 1 : 0,
     createdAt: env.createdAt,

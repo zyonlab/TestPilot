@@ -27,7 +27,7 @@ import {
   CASES_STABLE_NO_PRIORITY,
   CASES_STABLE_PLAIN,
   COMPOSE_STABLE,
-  DOMAIN_PERP,
+  domainReferenceBlock,
   ORACLE_STRICT,
   STORIES_STABLE,
   composeSpecNode,
@@ -124,6 +124,12 @@ export interface RunPipelineOptions {
   /** 关掉哪些组件。名字必须是 `ABLATABLE` 里有的——拼错的开关会产生一次什么都没改的运行。 */
   ablate?: string[];
   /**
+   * 这次运行绑定的领域参考（项目数据）。正文或文件路径二选一；都不给时读 `TP_DOMAIN_REFERENCE_FILE`
+   * （起跑器按项目当前那一版写的），再没有就没有领域段——流水线不替任何产品补一段。
+   */
+  domainReference?: string;
+  domainReferencePath?: string;
+  /**
    * 调用方是哪一版 skill。
    *
    * **工具自己编不出这个数。** 编出来的版本号是一个看起来合法的印记，比没有印记更坏：
@@ -195,7 +201,7 @@ export function ablateFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
   return (env.TP_ABLATE ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-export function promptsDigestFor(ablated: Set<string>, oracleGuidance: "default" | "strict" = "default") {
+export function promptsDigestFor(ablated: Set<string>, oracleGuidance: "default" | "strict" = "default", domainReference = "") {
   const designStable = ablated.has(ABLATABLE.designMethods)
     ? CASES_STABLE_PLAIN
     : ablated.has(ABLATABLE.casePriority)
@@ -209,7 +215,7 @@ export function promptsDigestFor(ablated: Set<string>, oracleGuidance: "default"
     // 领域 REFERENCE 臂（07 T-10）也是提示词的一部分：装 / 卸它，指纹必须不同——
     // 2026-09-08 两臂 `ablated` 一个有一个没有，`promptsDigest.combined` 却都是 556e2d1d。
     "design.cases":
-      designStable + (oracleGuidance === "strict" ? ORACLE_STRICT : "") + (ablated.has(ABLATABLE.domainPerp) ? "" : DOMAIN_PERP),
+      designStable + (oracleGuidance === "strict" ? ORACLE_STRICT : "") + (ablated.has(ABLATABLE.domainReference) ? "" : domainReferenceBlock(domainReference)),
   });
 }
 
@@ -263,6 +269,8 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   if (!paths.length) throw new Error(`no specification documents (*.md/*.txt) under ${opts.materialsDir}`);
 
   const nodeOpts: CaseGenNodeOptions = { model: { chat: request => plannerModel(plannerConnection).chat(request) }, baseDir: resolve(opts.materialsDir) };
+  const domainFile = opts.domainReferencePath ?? process.env.TP_DOMAIN_REFERENCE_FILE;
+  const domainReference = opts.domainReference?.trim() ? opts.domainReference : domainFile ? readFileSync(resolve(domainFile), "utf8") : "";
   const lang = opts.lang ?? "zh";
 
   /** 顺序写死。这一行就是 P1 本身。 */
@@ -270,7 +278,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     { id: "docs", node: sourceSpecNode(nodeOpts), params: { paths } },
     { id: "spec", node: composeSpecNode(nodeOpts), params: { lang } },
     { id: "stories", node: planStoriesNode(nodeOpts), params: { maxStories: opts.limit ?? 12, lang } },
-    { id: "design", node: designCasesNode(nodeOpts), params: { lang } },
+    { id: "design", node: designCasesNode(nodeOpts), params: { lang, ...(domainReference.trim() ? { domainReference } : {}) } },
     { id: "gate", node: gateTextCaseNode(), params: { minNegativeRatio: 0.3, maxSteps: 8 } },
   ];
 
@@ -488,7 +496,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     // 由起跑的接缝通过 env 告诉 MCP 子进程；工具自己不猜。没告诉就不写（旧条目的样子）。
     ...(runtime === "penguin" || runtime === "claude-code" || runtime === "codex" || runtime === "pipeline" ? { runtime } : {}),
     skillVersion: opts.skillVersion ?? DEFAULT_SKILL_VERSION,
-    promptsDigest: promptsDigestFor(ablated),
+    promptsDigest: promptsDigestFor(ablated, "default", domainReference),
     params,
     ablated: [...ablated].sort(),
     model: { baseUrl: modelRoles?.planner.source === "configured" ? modelRoles.planner.endpoint : plannerConnection.endpoint, model: plannerConnection.model, thinking: plannerConnection.thinking },

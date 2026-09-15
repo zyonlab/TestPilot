@@ -1,3 +1,5 @@
+import { bindDomainReference } from "./domainReferences.js";
+import { bindCurrentRulePack } from "./rulePacks.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -73,6 +75,9 @@ export function registerHostRun(projectId: string, input: HostRegisterInput, res
     .run(registered.runId, projectId, canonicalJSON(binding.models), encryptSecret(JSON.stringify({ executor })), new Date().toISOString());
   const revisions = input.materials.map(m => runLedger().putRevision({ projectId, runId: registered.runId, name: m.name, kind: "material", content: m.text, mediaType: "text/markdown" }, { kind: "agent", id: runtime }));
   runLedger().sealInputs(registered.runId, projectId, revisions.map(r => r.id));
+  // 领域参考：项目当前那一版冻结绑定进这次运行（宿主登记的运行和 Web 建的一个待遇）。
+  bindDomainReference(registered.runId, projectId);
+  bindCurrentRulePack(registered.runId, projectId, { kind: "agent", id: runtime });
   return { ...registered, writeToken: grant(registered.runId), run: runLedger().getRun(registered.runId, projectId) };
   })();
 }

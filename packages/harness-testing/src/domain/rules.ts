@@ -235,6 +235,23 @@ export const ProductRulePackSchema = z
      * 文案按产品走（连钱包、二次确认、短信验证码各行各业长得都不一样），所以写在规则包里。
      */
     gateLabels: z.array(z.string()).default([]),
+    /**
+     * **这个产品特有的动作词**，接在通用动作词后面（门禁与验收准则索引用来判「这条准则要人动手」）。
+     *
+     * 通用表里原来混着「下单 / 撤单 / 平仓 / 开仓 / 转账 / 充值 / 提现 / 划转」——只有交易类产品才有的词，
+     * 焊在对每个产品都生效的正则里。2026-09-15 挪到这里：交易所的包写它们，待办应用的包不写。
+     */
+    actionVocabulary: z.array(z.string().min(1)).default([]),
+    /**
+     * **这个产品特有的不可逆操作**，接在通用那张（删除 / 支付 / 退款…）后面，执行守卫用。
+     * 每条是正则（和 `forbidLabels` 一样），才写得出「动作要拦、名词别误伤」：`下单(?!面板|区)`。
+     */
+    sideEffectLabels: z.array(z.string().min(1)).default([]),
+    /**
+     * **这个产品会自己变的读数叫什么**（比如某个价格、某个倒计时）。门禁看到断言把它们钉在一个数上就报；
+     * 通用规则只认数字的形状（时刻、长小数百分比、大额数字），认不出名字。
+     */
+    volatileReadings: z.array(z.string().min(1)).default([]),
   })
   .strict();
 export type ProductRulePack = z.infer<typeof ProductRulePackSchema>;

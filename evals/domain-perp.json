@@ -6,14 +6,24 @@
   "goldPath": "benchmark/hyperliquid-testnet/gold.json",
   "casesNode": "gate",
   "a": {
-    "label": "卸掉领域 REFERENCE",
+    "label": "卸掉领域参考（domain-reference）",
     "ablate": [
-      "domain-perp"
-    ]
+      "domain-reference"
+    ],
+    "params": {
+      "design": {
+        "domainReferencePath": "benchmark/hyperliquid-testnet/domain-reference.md"
+      }
+    }
   },
   "b": {
-    "label": "装着领域 REFERENCE（现状）",
-    "ablate": []
+    "label": "装着领域参考（同一份冻结数据集）",
+    "ablate": [],
+    "params": {
+      "design": {
+        "domainReferencePath": "benchmark/hyperliquid-testnet/domain-reference.md"
+      }
+    }
   },
   "expect": {
     "direction": "b-better",

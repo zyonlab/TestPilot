@@ -24,9 +24,9 @@ describe("penguinRun.startRun 把 ablate 交给运行时", () => {
   it("body.ablate → rt.startRun({ ablate })", async () => {
     const rt = await import("../src/runtimes.js");
     const { startRun } = await import("../src/penguinRun.js");
-    await startRun({ runtime: "penguin", materialsDir: "/tmp/m", limit: 1, ablate: ["domain-perp"], workspace: "/tmp/ws" } as never);
+    await startRun({ runtime: "penguin", materialsDir: "/tmp/m", limit: 1, ablate: ["domain-reference"], workspace: "/tmp/ws" } as never);
     const call = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(call?.ablate).toEqual(["domain-perp"]);
+    expect(call?.ablate).toEqual(["domain-reference"]);
   });
   it("rejects a Web adapter that cannot honor the configured planner", async () => {
     const { startRun } = await import("../src/penguinRun.js");

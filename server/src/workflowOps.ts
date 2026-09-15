@@ -1,3 +1,5 @@
+import { resolveEnvironment } from "./db.js";
+import { bindDomainReference } from "./domainReferences.js";
 import { captureWebModels } from './modelSnapshots.js';
 import { observeProduct } from './procs.js';
 import { partialObservationPath } from "@testpilot/harness-testing/exec";
@@ -9,7 +11,7 @@ import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { config } from "./procs.js";
-import { currentRulePack } from "./rulePacks.js";
+import { bindRulePack, currentRulePack } from "./rulePacks.js";
 import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
 import { contentHash, LedgerError } from "./runLedger.js";
 import { registerWebRun, runLedger } from "./runService.js";
@@ -24,23 +26,31 @@ import { buildProductModel, charterFromRulePack, describeProductModel, validateR
 
 export async function createWebWorkflow(projectId: string, raw: unknown) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
-  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(1).max(50).default(8),sourceUrl:z.string().url().optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().default(false),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional()}).parse(raw);
+  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(1).max(50).default(8),sourceUrl:z.string().url().optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional()}).parse(raw);
+  /**
+   * 禁止名单上的地址什么都不跑（`config.guard.denyHosts`，运营方配置）。环境与运行参数都放不开它。
+   * 探索不带钱包、不点会改状态的东西也不行：观察本身会带着登录态与会话去访问那个地址。
+   */
+  if(input.sourceKind==='explore'){const target=(()=>{try{return new URL(input.sourceUrl!).hostname;}catch{return '';}})();if(config.guard.denyHosts.includes(target))throw new LedgerError(403,`explore_host_denied:${target}`);}
+  // 探索要不要带钱包：运行没说，就按这个项目环境的画像（人勾选的 injectWallet）。
+  if(input.exploreWallet===undefined)input.exploreWallet=!!resolveEnvironment(projectId,input.envRef)?.injectWallet;
   if(new Set(input.materials.map(m=>basename(m.name).toLowerCase())).size!==input.materials.length)throw new LedgerError(400,'duplicate_material_name');
   if([...input.materials,...input.knowledge].reduce((sum,m)=>sum+Buffer.byteLength(m.text,'utf8'),0)>40_000_000)throw new LedgerError(400,'total_materials_too_large');
   if(input.materials.some(m=>!(/\.(md|txt)$/i.test(m.name))||m.text.includes('\u0000')))throw new LedgerError(400,'text_material_required');
   if (input.sourceKind==='spec'&&!input.materials.length) throw new LedgerError(400,'spec_materials_required');
   if (input.sourceKind==='explore'&&(!input.sourceUrl||!/^https?:/.test(input.sourceUrl))) throw new LedgerError(400,'explore_url_required');
   /**
-   * **沙箱探索的唯一闸门**：只有在守卫白名单里的域名才允许探索去点会改状态的东西。
+   * **沙箱探索的闸门**：探索要去点会改状态的东西，这次的环境必须由人勾过「允许不可逆操作」，
+   * 而且探索的地址就是那个环境的地址。
    *
-   * 和执行层那道守卫是同一条规矩、同一份名单（`config.guard.allowHosts`，由 `ALLOW_HOSTS` 给）：
-   * 判断「这个域名下可不可以做不可逆的事」的是操作者，不是模型，也不是这段代码。
-   * 2026-09-12 的教训就摆在这儿——同一个钱包，测试网上随便点是对的，
-   * 主网上同样的点击是在花真钱，而两者只差一个域名。
+   * 和执行层那道守卫是同一条规矩：判断「这个地址下可不可以做不可逆的事」的是人，不是模型，也不是这段代码。
+   * 禁止名单上的地址在上面那条就拦下了，环境怎么勾都不放行。
    */
   if(input.exploreActions==='interact'){
-    const host=(()=>{try{return new URL(input.sourceUrl!).hostname;}catch{return '';}})();
-    if(!config.guard.allowHosts.includes(host))throw new LedgerError(403,`explore_interact_host_not_allowlisted:${host}`);
+    const host=(u:string)=>{try{return new URL(u).hostname;}catch{return '';}};
+    const env=resolveEnvironment(projectId,input.envRef);
+    if(!env?.allowIrreversible)throw new LedgerError(403,'explore_interact_not_allowed:environment');
+    if(env.baseUrl&&host(env.baseUrl)!==host(input.sourceUrl!))throw new LedgerError(403,`explore_interact_not_allowed:host:${host(input.sourceUrl!)}`);
   }
   // 规则包在创建时就校验：悬空引用、无来源的要求、无依据的 P0 在这里被拒，不是等到模型用了才发现。
   /**
@@ -92,7 +102,9 @@ export async function createWebWorkflow(projectId: string, raw: unknown) {
   registerWebRun(runId,projectId,models.binding,params);
   for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
   // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。
-  for(const {pack,hash} of packs) ledger.putRevision({projectId,runId,name:`knowledge/rulepack/${pack.id}`,kind:'report',content:{name:`rulepack/${pack.id}`,roles:['source','stories','cases','gate'],trust:'user-provided',executable:false,rulePack:pack,rulePackHash:hash}}, {kind:'system',id:'web'});
+  for(const {pack,hash} of packs) bindRulePack(runId,projectId,pack,hash,{kind:'system',id:'web'});
+  // 领域参考：项目当前那一版冻结绑定进这次运行；没有就没有（domainReferences.ts）。
+  bindDomainReference(runId,projectId);
   if(imported)ledger.putRevision({projectId,runId,name:'product/model-candidate',kind:'report',content:imported},{kind:'system',id:'web'});
   if(importedStories)ledger.putRevision({projectId,runId,name:'validated/stories',kind:'stories',content:importedStories},{kind:'system',id:'stage-validator'});
   // Acknowledge creation immediately; the source node owns exploration and its failures.

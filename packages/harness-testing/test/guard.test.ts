@@ -1,61 +1,70 @@
 import { describe, expect, it } from "vitest";
 import { checkRun } from "../src/guard.js";
 
-const guard = {
-  allowHosts: ["localhost", "127.0.0.1"],
-  blockIrreversible: true,
-  allowlistOnly: false,
-};
+/**
+ * 「允许不可逆操作」是环境的属性（人勾选），全局只有禁止名单。
+ * 行业特有的副作用词跟着那个产品的规则包走（`sideEffectLabels`），通用表里不放。
+ */
+const guard = { denyHosts: ["prod.example.com"], blockIrreversible: true };
 
 describe("guard", () => {
-  it("lets anything through on an allowlisted host — that is what a test environment is for", () => {
-    const v = checkRun("http://localhost:5301/app", ["删除当前账号", "确认删除"], guard);
-    expect(v.allow).toBe(true);
+  it("环境允许不可逆操作时照过——那正是测试环境的用处", () => {
+    expect(checkRun("http://localhost:5301/app", ["删除当前账号", "确认删除"], guard, { allowIrreversible: true }).allow).toBe(true);
   });
 
   it("allows ordinary steps anywhere: it is not a lockdown", () => {
     expect(checkRun("https://shop.example.com", ["搜索 T 恤", "加入购物车"], guard).allow).toBe(true);
   });
 
-  it("blocks an irreversible step on a host nobody allowlisted", () => {
+  it("环境没有允许时拦下不可逆步骤，并说清楚", () => {
     const v = checkRun("https://shop.example.com", ["登录", "删除收货地址"], guard);
     expect(v.allow).toBe(false);
     expect(v.code).toBe("GUARD_IRREVERSIBLE");
     expect(v.why).toContain("删除收货地址");
+    expect(v.why).toContain("shop.example.com");
   });
 
   it("catches it in a teardown step too — cleanup is where the deletes live", () => {
-    const v = checkRun("https://shop.example.com", ["浏览订单", "checkout with the saved card"], guard);
-    expect(v.allow).toBe(false);
+    expect(checkRun("https://shop.example.com", ["浏览订单", "checkout with the saved card"], guard).allow).toBe(false);
   });
 
-  it("can refuse unknown hosts outright when a team opts in", () => {
-    const v = checkRun("https://prod.example.com", ["查看首页"], { ...guard, allowlistOnly: true });
+  it("禁止名单上的地址什么都不跑——环境怎么勾都没用", () => {
+    const v = checkRun("https://prod.example.com", ["查看首页"], guard, { allowIrreversible: true });
     expect(v.allow).toBe(false);
     expect(v.code).toBe("GUARD_HOST");
   });
 
   it("can be switched off entirely", () => {
-    const v = checkRun("https://prod.example.com", ["删除账号"], { ...guard, blockIrreversible: false });
-    expect(v.allow).toBe(true);
-  });
-
-  it("explains itself — a refusal without a reason just gets disabled", () => {
-    const v = checkRun("https://shop.example.com", ["退款该订单"], guard);
-    expect(v.why).toMatch(/irreversible/);
-    expect(v.why).toContain("shop.example.com");
+    expect(checkRun("https://shop.example.com", ["删除账号"], { ...guard, blockIrreversible: false }).allow).toBe(true);
   });
 });
 
-it("永续合约上的副作用动词也要拦：平仓、撤单、开仓、授权", () => {
-  const guard = { allowHosts: ["localhost"], blockIrreversible: true, allowlistOnly: false };
-  for (const step of ["全量平仓并等待成交", "撤掉其中一笔挂单", "以 Reduce Only 提交开仓方向的订单", "连接钱包并完成授权"]) {
-    const v = checkRun("https://app.hyperliquid.xyz/trade", [step], guard);
-    expect(v.allow).toBe(false);
-    expect(v.code).toBe("GUARD_IRREVERSIBLE");
-  }
-  expect(checkRun("https://app.hyperliquid.xyz/trade", ["点击下单按钮提交"], guard).allow).toBe(false);
-  // 只读步骤照过——「下单面板」「开仓价」是界面上的名字，不是要做的事。
-  for (const step of ["打开交易页并读取行情条", "查看下单面板", "打开交易页，确认下单面板停在 Market", "读取该行的开仓价与强平价", "展开下单面板的 Pro", "走到提交入口，确认其不处于可下单状态"])
-    expect(checkRun("https://app.hyperliquid.xyz/trade", [step], guard).allow).toBe(true);
+describe("行业副作用词来自规则包，不来自代码", () => {
+  const steps = ["全量平仓并等待成交", "撤掉其中一笔挂单", "以 Reduce Only 提交开仓方向的订单"];
+
+  it("没有规则包的词时，通用表不认交易动词——换个产品它们什么都不是", () => {
+    for (const step of steps) expect(checkRun("https://trade.example.test/", [step], guard).allow).toBe(true);
+  });
+
+  it("规则包声明了就拦", () => {
+    const labels = ["平仓", "撤掉", "开仓"];
+    for (const step of steps) {
+      const v = checkRun("https://trade.example.test/", [step], guard, { sideEffectLabels: labels });
+      expect(v.allow).toBe(false);
+      expect(v.code).toBe("GUARD_IRREVERSIBLE");
+    }
+  });
+
+  it("通用的动钱动作不需要规则包：授权、转账、提现", () => {
+    for (const step of ["连接钱包并完成授权", "向另一个账户转账", "提现到银行卡"])
+      expect(checkRun("https://any.example.test/", [step], guard).allow).toBe(false);
+  });
+});
+
+it("规则包的副作用条目按正则解释：动作要拦，名词别误伤", () => {
+  const labels = ["下单(?!面板|区|表单|页|入口|状态)", "开仓(?!价)"];
+  expect(checkRun("https://trade.example.test/", ["点击下单按钮提交"], guard, { sideEffectLabels: labels }).allow).toBe(false);
+  expect(checkRun("https://trade.example.test/", ["查看下单面板", "读取该行的开仓价"], guard, { sideEffectLabels: labels }).allow).toBe(true);
+  // 写坏的正则跳过，不让守卫整条炸掉。
+  expect(checkRun("https://trade.example.test/", ["删除账号"], guard, { sideEffectLabels: ["(unclosed"] }).code).toBe("GUARD_IRREVERSIBLE");
 });

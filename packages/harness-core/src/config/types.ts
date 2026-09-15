@@ -78,12 +78,14 @@ export interface HarnessConfig {
   /** Components switched off for an ablation run. Reported alongside every result. */
   ablate: string[];
   guard: {
-    /** Hosts a destructive step is allowed to touch. */
-    allowHosts: string[];
-    /** Block irreversible-looking steps outside the allowlist. */
+    /**
+     * Hosts nothing may run against, whatever an environment says (operator config, not domain logic).
+     * 2026-09-15: there is no host allowlist any more — whether a target may take irreversible steps is
+     * a property of its environment, ticked by a person (`Environment.allowIrreversible`).
+     */
+    denyHosts: string[];
+    /** Block irreversible-looking steps unless the environment allows them. */
     blockIrreversible: boolean;
-    /** Refuse to run against a host that is not on the allowlist at all. Off by default. */
-    allowlistOnly: boolean;
   };
   capabilities: CapabilityRecipe[];
 }

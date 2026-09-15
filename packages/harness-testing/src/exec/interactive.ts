@@ -493,6 +493,11 @@ export interface ObserveSpec {
    * `${env.*}` / `${secret.*}` 在这里解析后执行，日志里只留模板——和执行用例同一条规矩。
    */
   login?: string[];
+  /**
+   * 这个环境提供的前提名（环境设置里由人填，例如 `session`、`wallet-session`）。
+   * 规则包里目标的 `requires` 对照的就是它。不给时按老规矩：配了登录步骤就提供 `session`。
+   */
+  capabilities?: string[];
   resolve?: ResolveContext;
   launch: LaunchOpts;
 }
@@ -1199,7 +1204,7 @@ export async function runObserve(
      * charter 记账。有 charter 时不再问模型猜故事：候选任务来自规则包，真正的故事
      * 等产品模型出来之后才写。`session` 这个前提只在环境配了登录步骤时算满足。
      */
-    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.login?.length ? ["session"] : []) : undefined;
+    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.capabilities ?? (spec.login?.length ? ["session"] : [])) : undefined;
     if (spec.charter) note(`charter ${spec.charter.id}：${spec.charter.featureTargets.length} 个目标，规则包 ${spec.charter.rulePack.id}@${spec.charter.rulePack.version}`);
     let charterShots = 0;
     const charterShot = async (): Promise<string | undefined> => {

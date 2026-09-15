@@ -1,5 +1,6 @@
 vi.mock("../src/runService.js", () => ({ registerWebRun: () => undefined, freezeGraphSources: () => undefined, runLedger: () => ({ registration: () => undefined }) }));
 vi.mock("../src/modelSnapshots.js", () => import("./helpers/model-snapshot.js"));
+vi.mock("../src/domainReferences.js", () => ({ currentDomainReference: () => undefined }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**

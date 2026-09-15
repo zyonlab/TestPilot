@@ -50,3 +50,17 @@ it("没用过的版本能删", () => {
   packs.deleteRulePack(project, packs.listRulePacks(project)[0]!.hash);
   expect(packs.listRulePacks(project)).toHaveLength(before - 1);
 });
+
+/**
+ * 2026-09-15：宿主登记的运行也要绑定项目当前那份规则包。之前只有 Web 那条路绑定，
+ * 宿主运行的 `boundRulePack` 永远为空，项目的行业词表（actionVocabulary 等）到不了验收索引、门禁与守卫。
+ */
+it("宿主登记的运行冻结绑定项目当前那份规则包", async () => {
+  const service = await import("../src/runService.js");
+  const latest = packs.saveRulePack(project, { ...RAW, version: `${String(RAW.version)}-vocab`, actionVocabulary: ["结算"] });
+  const { runId } = service.registerHostRun(project, { runtime: "codex", externalId: "host-pack", idempotencyKey: "host-pack", materials: [{ name: "m.md", text: "# m\n\n## a\nx\n" }] });
+  const bound = packs.boundRulePack(runId, project);
+  expect(bound?.version).toBe(`${String(RAW.version)}-vocab`);
+  expect(bound?.actionVocabulary).toEqual(["结算"]);
+  expect(packs.listRulePacks(project).find((v) => v.hash === latest.hash)!.usedByRuns).toContain(runId);
+});

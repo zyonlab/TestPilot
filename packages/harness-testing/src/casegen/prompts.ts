@@ -267,39 +267,27 @@ export const ORACLE_STRICT = [
 ].join("\n");
 
 /**
- * Domain invariants of a perpetual-futures trading front-end (07 T-10). Optional on purpose — it is the
- * "domain REFERENCE" arm of a paired evaluation: with it, cases can contradict the product; without it, they
- * can only notice that it changed. Skill-world equivalent: `testpilot-design/REFERENCE-domain-perp.md` present or not.
- * Conditional in its own text, so a login page does not get perp rules pushed at it.
+ * 领域参考：**这一次运行绑定的那份**，由项目提供，不是代码里的一段。
+ *
+ * 此前这里是一段写死的永续合约不变量，进程内 design.cases 与 MCP run_pipeline 对每个产品都默认发送——
+ * Vikunja 那样的待办应用也收到 26 行合约散文。2026-09-15 起它是项目数据：用户在「领域参考」页聊出来
+ * 或上传，运行开始时冻结绑定；没绑定就没有这一段。原文现在是评测数据集
+ * `benchmark/hyperliquid-testnet/domain-reference.md`。
+ * 这里只留**怎么用**一份领域参考的通用说明，内容一个字都不属于某个领域。
  */
-export const DOMAIN_PERP = [
-  "",
-  "IF THE PRODUCT UNDER TEST IS A PERPETUAL-FUTURES TRADING FRONT-END, these invariants are what a case can",
-  "contradict. Each one names the check; write the oracle against what the front-end itself shows — the row that",
-  "appears, the value in it, the refusal text — never against the exchange's own API. Apply only rules supported",
-  "by this product/version specification; missing venue rules are unobservable, never invented:",
-  "- Resolve the venue lot size and documented UI normalization first. Only a product that explicitly TRUNCATES",
-  "  0.0016 at step 0.001 must place 0.001. Rejection is also valid for other venues; never infer normalization from decimal limits.",
-  "- Price is aligned to the tick size; a limit price outside the exchange's band around the reference price is",
-  "  refused before it reaches the book. Oracle: the refusal text the front-end shows, quoted exactly.",
-  "- Max leverage falls with notional value (tiers); the leverage the account ends up with is what the position",
-  "  row shows. Oracle: the leverage badge / the position row's leverage cell reads the chosen value.",
-  "- Switching isolated/cross recomputes available balance and liquidation price — assert the MODE the panel now",
-  "  shows, not the numbers, which move with the market.",
-  "- A take-profit trigger sits above the entry for a long and below for a short; stop-loss the other way.",
-  "  Oracle: after placing, a row for that trigger order appears in the open-orders table naming that market.",
-  "- Closing a position removes it: after Market Close the positions table no longer lists that market (the empty",
-  "  state text appears when it was the only one).",
-  "- An order larger than available margin is refused: the front-end shows its refusal, and no new row appears in",
-  "  the open-orders table (tier 2: the row count is unchanged).",
-  "- Funding rate, countdown, 24h volume, mark/oracle price are VOLATILE readings: never pin them in an",
-  "  assertion. Assert that the field exists, or assert a relation, never a value.",
-  "- After a disconnect/reconnect the open-orders table must still list the same rows it listed before.",
-  "Assertions about money or position state are made on the table that displays them, with the identifiers the",
-  "user chose (market, price, size) — so a reader can reproduce the check by looking at the screen.",
-  "Use decimal strings for financial values, explicit base/quote units, uniquely selected coin/order IDs, fresh state and reset preconditions.",
-  "Mode existence does not prove balance recomputation, and order existence does not prove trigger price or UI/API equality. Split these obligations or report unobservable.",
-].join("\n");
+export function domainReferenceBlock(text: string): string {
+  if (!text.trim()) return "";
+  return [
+    "",
+    "DOMAIN REFERENCE for this product (supplied by the project, not by the harness). It lists invariants a case",
+    "can contradict. Apply only what this product and version actually supports; anything the reference marks as a",
+    "hypothesis may only become an open question, never a failing assertion. Write every oracle against what the",
+    "front-end itself shows — the row that appears, the value in it, the refusal text — never against the product's API.",
+    "--- reference begins ---",
+    text.trim(),
+    "--- reference ends ---",
+  ].join("\n");
+}
 
 /**
  * Language: the artifact is read and maintained by the same people who wrote the spec, so

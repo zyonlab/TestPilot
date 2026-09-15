@@ -34,9 +34,22 @@ export interface GateOptions {
   gradeOracles?: boolean;
   /** Ablation: stop collapsing cases that share a dedupe key. */
   dedupe?: boolean;
+  /**
+   * 这个产品特有的动作词（规则包 `actionVocabulary`），接在通用动作词后面。
+   * 通用表里不放行业词：「下单 / 平仓」只有交易类产品才是动作，由它们自己的包提供。
+   */
+  actionVocabulary?: string[];
+  /** 这个产品会自己变的读数名（规则包 `volatileReadings`）：断言把它们钉在一个数上就报 oracle-volatile。 */
+  volatileReadings?: string[];
 }
 
-const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false,
+/** 一串字面词拼成一个正则；空表返回 undefined——没有数据就没有这一条，不回落到任何内置词。 */
+function wordsPattern(words: readonly string[] | undefined): RegExp | undefined {
+  const list = (words ?? []).map((w) => w.trim()).filter(Boolean);
+  return list.length ? new RegExp(list.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i") : undefined;
+}
+
+const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [],
   minNegativeRatio: 0.3,
   maxSteps: 8,
   minSteps: 1,
@@ -99,7 +112,7 @@ const STEP_IS_ASSERTION = {
  * 全是 `用户查看X` / `页面加载完成` / `订单成交` / `行情触及 TP 价` 这类观察与系统事件。
  */
 const ACCEPTANCE_ACTION =
-  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|下单|撤单|撤掉|撤销|取消|平仓|开仓|转账|充值|提现|划转|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
+  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|撤销|取消|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
   // 只认子句开头的 When（句首，或 `/ ， ; 换行` 之后）——2026-09-14 实测模型两种分隔都用。服务端同义实现见 acceptanceIndex.ts。
@@ -109,9 +122,9 @@ function normalizeRef(x: string): string {
   return x.replace(/[\s“”"'（）()、,，。.]/g, "");
 }
 /** 步骤里有没有一个既不是导航、也不是「看一眼」的真实动作。 */
-function caseHasAction(c: { steps?: string[] }): boolean {
+function caseHasAction(c: { steps?: string[] }, isAction: (text: string) => boolean = (t) => ACCEPTANCE_ACTION.test(t)): boolean {
   return (c.steps ?? []).some(
-    (step) => !NAV_STEP.test(step) && ACCEPTANCE_ACTION.test(step) && !STEP_IS_ASSERTION.test(step),
+    (step) => !NAV_STEP.test(step) && isAction(step) && !STEP_IS_ASSERTION.test(step),
   );
 }
 
@@ -149,6 +162,9 @@ const CONCRETE =
 
 export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport {
   const cfg = { ...DEFAULTS, ...opts };
+  const extraAction = wordsPattern(cfg.actionVocabulary);
+  const isAction = (text: string) => ACCEPTANCE_ACTION.test(text) || !!extraAction?.test(text);
+  const volatileNames = wordsPattern(cfg.volatileReadings);
   const findings: GateFinding[] = [];
   const storyIds = new Set(bundle.stories.map((s) => s.id));
   const cases = bundle.cases;
@@ -207,7 +223,8 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
      * 报 warn 而不是 info：它不是"写得不够好"，而是"它一定会红，而红的原因和产品无关"。
      * 一条必然失败的用例比没有这条用例更糟，因为它会把真实失败淹掉。
      */
-    if (cfg.gradeOracles && VOLATILE_ORACLE.test(c.expected))
+    // 通用规则只认数字的形状；规则包给了读数名时，「名字 + 一个数」也算钉住了。
+    if (cfg.gradeOracles && (VOLATILE_ORACLE.test(c.expected) || (!!volatileNames?.test(c.expected) && /\d/.test(c.expected))))
       add(
         "oracle-volatile",
         `assertion is pinned to a value that changes on its own: "${c.expected.slice(0, 60)}"`,
@@ -376,14 +393,14 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     const owner = coveredBy.get(s.id) ?? s.id;
     const mine = cases.filter((c) => c.storyId === s.id || c.storyId === owner);
     (s.acceptance ?? []).forEach((text, i) => {
-      if (!ACCEPTANCE_ACTION.test(whenClause(text) || text)) return;
+      if (!isAction(whenClause(text) || text)) return;
       actionable += 1;
       const id = `${s.id}/AC-${i + 1}`;
       const claimed = mine.filter((c) => (c.acRefs ?? []).some((r) => r === id || normalizeRef(r) === normalizeRef(text)));
       if (!claimed.length) {
         uncoveredAc.push(id);
         add("acceptance-uncovered", `${id} 要求用户动手（When ${(whenClause(text) || text).slice(0, 34)}），却没有任何用例认领它`, undefined, "warn", { args: { storyId: s.id, acId: id } });
-      } else if (!claimed.some(caseHasAction)) {
+      } else if (!claimed.some((x) => caseHasAction(x, isAction))) {
         uncoveredAc.push(id);
         add("acceptance-uncovered", `${id} 要求用户动手，而认领它的 ${claimed.map((c) => c.id).join("/")} 步骤里只有导航和查看——没有人真的做过这个动作`, undefined, "warn", { args: { storyId: s.id, acId: id } });
       }
@@ -398,7 +415,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    * 展示型需求确实存在，所以是 `warn` 不是 `error`；但它得被数出来。
    */
   for (const c of cases)
-    if ((c.steps ?? []).length && !caseHasAction(c))
+    if ((c.steps ?? []).length && !caseHasAction(c, isAction))
       add("case-without-action", `除了导航之外没有任何动作，步骤只是看：${(c.steps ?? []).join(" | ").slice(0, 70)}`, c.id, "warn", { field: "steps" });
 
   /**
