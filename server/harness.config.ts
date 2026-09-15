@@ -1,4 +1,9 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { defineHarnessConfig } from "@testpilot/harness-core";
+
+/** 本机基准应用放在哪。不设就是 `~/bench`；仓库里不写死任何人的主目录。 */
+const benchDir = process.env.TP_BENCH_DIR ?? join(homedir(), "bench");
 
 /**
  * The knobs, in one place. Environment variables still override everything here
@@ -98,7 +103,7 @@ export default defineHarnessConfig({
       // node22_darwin_arm64——原生直跑，还省掉一层 amd64 模拟。md5 校验过。
       command: "node",
       args: ["build/app.js"],
-      cwd: "/Users/admin/bench/juice-shop_20.2.0",
+      cwd: join(benchDir, "juice-shop_20.2.0"),
       env: { PORT: "8084" },
       autostart: false,
       healthcheck: { kind: "http", url: "http://localhost:8084/" },

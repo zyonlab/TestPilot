@@ -28,9 +28,16 @@ describe("penguinRun.startRun 把 ablate 交给运行时", () => {
     const call = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(call?.ablate).toEqual(["domain-reference"]);
   });
-  it("rejects a Web adapter that cannot honor the configured planner", async () => {
+  it("Web 发起的 Claude Code 运行不带托管规划模型、工作区按运行分开；Codex 仍拒绝", async () => {
+    const rt = await import("../src/runtimes.js");
     const { startRun } = await import("../src/penguinRun.js");
-    await expect(startRun({ runtime: "claude-code", workspace: "/tmp/ws" })).rejects.toThrow("managed_planner_unsupported (claude-code)");
+    const calls = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls;
+    const before = calls.length;
+    await startRun({ runtime: "claude-code", materialsDir: "/tmp/m", wfRunId: "run-web-claude" } as never);
+    const call = calls[before]?.[0] as Record<string, unknown> | undefined;
+    expect(call?.models).toBeUndefined();
+    expect(String(call?.workspace)).toMatch(/host-workspaces[\\/]run-web-claude$/);
+    await expect(startRun({ runtime: "codex", workspace: "/tmp/ws" } as never)).rejects.toThrow("managed_planner_unsupported (codex)");
   });
 });
 

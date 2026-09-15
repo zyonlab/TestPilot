@@ -1,4 +1,5 @@
 import { readActiveEvolution } from './evolution/bridge.js';
+import { defaultRuntimeName, plannerRuntimeAvailable } from './runtimes.js';
 import {storedScoreboard} from 'testpilot-mcp/score-store';
 import {reviewCorsOptions} from './corsOptions.js';
 import { intentPolicy, requestPrincipal } from "./intentPolicy.js";
@@ -3195,6 +3196,18 @@ app.get("/api/readiness", (req, res) => {
         ? { id: "runtime", state: "ok", detail: { key: "ready.runtimeOk", params: { a: alive.length, n: capabilities.length } } }
         : { id: "runtime", state: "none", detail: { key: "ready.runtimeNone", params: { n: capabilities.length } } },
   );
+
+  /**
+   * 规划：Web 发起生成时由谁写故事和用例（`TP_AGENT_RUNTIME`，不设是 Claude Code）。
+   * 只查本机起不起得来、不查登录态；起不来时建运行会被当场拒绝，所以要在第一屏就说出来。
+   */
+  {
+    const planner = defaultRuntimeName();
+    items.push(plannerRuntimeAvailable(planner)
+      ? { id: "planner", state: "ok", detail: { key: "ready.plannerOk", params: { runtime: planner } } }
+      : { id: "planner", state: "broken", detail: { key: "ready.plannerMissing", params: { runtime: planner } },
+          hint: planner === "claude-code" ? "claude --version" : "TP_PENGUIN_BIN" });
+  }
 
   /**
    * 守卫：被测地址在禁止名单上就什么都不跑；环境没勾「允许不可逆」时，命中删除/支付/结账

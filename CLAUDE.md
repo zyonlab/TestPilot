@@ -43,6 +43,14 @@
   （消融开关叫 `domain-reference`），不出现在界面，也不导入新项目。没有「预设」，不做旧数据兼容。
 - `pnpm check:domain-neutral` 必须绿：产品源码非注释代码与 skill 里不许有写死的领域词。
 
+## 初步交付：开源发布（2026-09-16 用户决定）
+- 对象：**开源 / 公开发布**，许可 MIT；**新建公开仓库、不带提交历史**（从整理后的快照做第一个提交），现有私有仓库原样保留。建公开仓库、push、发布仍要当轮确认。
+- 入口：**Web + Claude Code**。Web 发起的生成默认由本机 Claude Code 规划（`TP_AGENT_RUNTIME` 不设即 `claude-code`，新建运行表单可选）；
+  Penguin（需 Node 24 与 Penguin 服务）与 Codex 标实验性。运行登记时定下规划运行时，续跑用同一个。
+- 验收被测对象：Vikunja（本地）+ Hyperliquid 测试网。
+- **冻结不做**：自进化、经验与反例库、子 agent 并行、去不去掉 Penguin、Gold 与记分板、论文研究线（台账 P-13～P-24）。新需求先问「初步交付需不需要」。
+- 本机基准应用目录由 `TP_BENCH_DIR` 给（默认 `~/bench`），仓库里不写死任何人的主目录。
+
 ## 不做的事（除非用户当轮明说）
 - 本会话用户已授权本地真实模型/浏览器联调，不需要再次索要 `.env` 或确认这类验收。新会话按其授权范围执行；不得把旧默认限制当成本会话的额外审批。`git commit` / `git push` / 对外发布仍未授权。
 - 不改 `benchmark/*/gold.json`、`human-labels.json`、`held-out/`、`rubric/`；不把它们放进任何提示词。
