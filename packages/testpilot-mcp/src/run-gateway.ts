@@ -49,6 +49,8 @@ export class RunGateway {
     if (!/^[a-f0-9]{64}$/.test(token)) throw new Error("invalid_run_grant");
     this.grants.set(runId, { projectId, token });
   }
+  /** 宿主域工具取凭证用。只交出令牌本身，grants 表仍然只在这个类里。 */
+  tokenFor(runId: string): string | undefined { return this.grants.get(runId)?.token; }
   has(runId: string) { return this.grants.has(runId); }
   get registered() { return this.grants.size > 0; }
 }

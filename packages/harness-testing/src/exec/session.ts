@@ -1,4 +1,4 @@
-import { cacheDigest, scopedCacheId } from './cache.js';
+import { STRUCTURE_PROBE, cacheDigest, scopedCacheId, structureOf } from './cache.js';
 import { visibleContextTree } from './visibleContext.js';
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -227,7 +227,22 @@ export function newAgent(page: Page, cacheId?: string, executorModel?: RoleModel
 }
 
 async function contextualAgent(page:Page,opts:LaunchOpts,connection?:RoleModelConnection) {
- const cacheId=opts.cacheId ? scopedCacheId(opts.cacheId,opts.cacheContext,{url:page.url(),dom:await page.content(),scene:cacheDigest(Buffer.from(await page.screenshot({type:'png'})).toString('base64'))}) : undefined;
+ /**
+  * 结构指纹而不是 DOM+截图：见 cache.ts 的注释。实时行情页上后者几乎必然每次不同。
+  *
+  * **采不到就不缓存，而不是带垮这次执行。** 这一步可能赶上页面正在导航——那时执行上下文
+  * 已经销毁，`page.evaluate` 会抛。2026-09-15 实测：本机四条 runner 测试全绿，CI 上三条红，
+  * 其中一条正是「导航还没完成就取消」——CI 慢，正好撞进那个窗口。
+  *
+  * 抛了就返回 `undefined`：这一次不读也不写缓存。诚实的做法是「这一屏是什么我没看清，
+  * 那就别拿别的屏的计划来用」——退回一个凑合的键，换来的是照着过时计划去点不存在的元素，
+  * 而那种失败看起来像产品坏了。
+  */
+ const structure = opts.cacheId ? await page.evaluate(STRUCTURE_PROBE)
+   .then((controls) => structureOf(controls as Array<{tag:string;role?:string|null;label?:string|null}>))
+   .catch(() => undefined) : undefined;
+ const cacheId = structure === undefined ? undefined
+   : scopedCacheId(opts.cacheId, opts.cacheContext, { url: page.url(), structure });
  return newAgent(page,cacheId,connection??opts.executorModel);
 }
 

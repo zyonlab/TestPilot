@@ -1,0 +1,1108 @@
+{
+ "note": "宿主入口对 Web UI 操作的覆盖清单。每条路由必须被分类；见 scripts/host-parity.mjs 的注释。",
+ "routes": [
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/ablatable",
+   "host": "tp_graph.ablatable"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/calibration",
+   "host": "tp_audit.calibration"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/diff",
+   "host": "tp_audit.diff"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/holds",
+   "host": "tp_audit.holds"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/audit/:runId/labels",
+   "host": "tp_audit.label"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/audit/:runId/scan",
+   "host": "tp_audit.scan"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/batches/:id/cancel",
+   "host": "tp_report.cancel_batch"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/batches/:id",
+   "host": "tp_report.batch"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/capabilities/:id/cwd",
+   "host": "tp_system.set_capability_cwd"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/capabilities",
+   "host": "tp_settings.capabilities"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/capabilities",
+   "host": "tp_system.start_capability"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/baseline-verdict",
+   "host": "tp_case.baseline_verdict"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/baselines/approve",
+   "host": "tp_case.approve_visual_baseline"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases/:id/code",
+   "host": "tp_case.code"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/cases/:id/code",
+   "host": "tp_case.set_code"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases/:id/data-binding",
+   "host": "tp_case.data_binding"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases/:id/debug",
+   "host": "tp_case.debug"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/generate-code",
+   "host": "tp_case.generate_code"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/perf-baseline/approve",
+   "host": "tp_case.approve_perf_baseline"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/quarantine",
+   "host": "tp_case.quarantine"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/recompute-flakiness",
+   "host": "tp_case.recompute_flakiness"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/refine",
+   "host": "tp_case.refine"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases/:id/run",
+   "host": "tp_case.run"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/cases/:id",
+   "host": "tp_case.remove"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/cases/:id",
+   "host": "tp_case.update"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/cases",
+   "host": "tp_case.list"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/cases",
+   "host": "tp_case.create"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/chat/apply-graph",
+   "host": "tp_audit.apply_graph"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/chat/apply-prompt",
+   "host": "tp_audit.apply_prompt"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/chat",
+   "uiOnly": "Web UI 自己的对话框——它做的事（跟人商量、再调工具）正是宿主本身在做的。把它暴露给宿主等于让 agent 去驱动另一个 agent，多一层没有意义。议定之后的落地走 tp_audit.apply_graph / apply_prompt。"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/config",
+   "host": "tp_system.config"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/config",
+   "host": "tp_system.set_config"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/critic",
+   "host": "tp_audit.critic"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/critic",
+   "host": "tp_audit.run_critic"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/dapp/verify",
+   "host": "tp_system.verify_dapp"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/datasets/:id",
+   "host": "tp_project.remove_dataset"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/datasets/preview",
+   "host": "tp_project.preview_dataset"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/defects",
+   "host": "tp_report.defects"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/environments/:id/api-login",
+   "host": "tp_settings.api_login"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/environments/:id/capture-session",
+   "host": "tp_settings.capture_session"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/environments/:id/session",
+   "host": "tp_settings.clear_session"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/environments/:id/set-session",
+   "host": "tp_settings.set_session"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/environments/:id",
+   "host": "tp_settings.remove_environment"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals/:id",
+   "host": "tp_eval.eval"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/detection",
+   "host": "tp_eval.detection"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/paired",
+   "host": "tp_eval.paired"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/score",
+   "host": "tp_eval.score"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/specs/:id/run",
+   "host": "tp_eval.run_spec"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evals/specs/from-critique",
+   "host": "tp_eval.spec_from_critique"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals/specs",
+   "host": "tp_eval.specs"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals/subject/:graphId",
+   "host": "tp_eval.subject"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evals",
+   "host": "tp_eval.evals"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/events",
+   "uiOnly": "服务端推事件流（SSE）。宿主是请求-响应的，订阅不了一条长连接；进度改用 tp_run.checkpoint / tp_unit.status 轮询，拿到的是同一份状态。"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/examples/uniswap",
+   "host": "tp_system.load_example"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/generate-code",
+   "host": "tp_case.generate_batch"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/gold/:capability",
+   "host": "tp_eval.gold"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/gold/:capability",
+   "host": "tp_eval.set_gold"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id/diff",
+   "host": "tp_graph.diff"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id/versions/:version",
+   "host": "tp_graph.version"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id/versions",
+   "host": "tp_graph.versions"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs/:id",
+   "host": "tp_graph.get"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/graphs",
+   "host": "tp_graph.list"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/graphs",
+   "host": "tp_graph.create"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/health",
+   "host": "tp_system.health"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/llm-debug",
+   "host": "tp_system.llm_debug"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/materials",
+   "host": "tp_project.materials"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/model/config",
+   "host": "tp_settings.model_config"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/model/config",
+   "host": "tp_settings.set_model_config"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/model/test",
+   "host": "tp_settings.test_model"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/mutation/:wfRunId",
+   "host": "tp_audit.mutations"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/mutation/:wfRunId",
+   "host": "tp_audit.mutate"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/node-types",
+   "host": "tp_graph.node_types"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/processes/:id/:action",
+   "host": "tp_system.process_action"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/processes/:id/cancel-work",
+   "host": "tp_system.cancel_work"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/processes",
+   "host": "tp_system.processes"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/batches",
+   "host": "tp_report.batches"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/changes",
+   "host": "tp_report.changes"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/code-line",
+   "host": "tp_report.code_line"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/cost",
+   "host": "tp_report.cost"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/datasets",
+   "host": "tp_project.datasets"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/datasets",
+   "host": "tp_project.add_dataset"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/environments",
+   "host": "tp_project.environments"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/environments",
+   "host": "tp_project.add_environment"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/export-preflight",
+   "host": "tp_export.preflight"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/export",
+   "host": "tp_export.export"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/flakiness",
+   "host": "tp_report.flakiness"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/overview",
+   "host": "tp_project.overview"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/pending-baselines",
+   "host": "tp_report.pending_baselines"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/quarantine-log",
+   "host": "tp_report.quarantine_log"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id/rule-packs/:hash",
+   "host": "tp_project.remove_rule_pack"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/rule-packs/:hash",
+   "host": "tp_project.rule_pack"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/rule-packs",
+   "host": "tp_project.rule_packs"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/rule-packs",
+   "host": "tp_project.add_rule_pack"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id/secrets/:key",
+   "host": "tp_project.remove_secret"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/secrets",
+   "host": "tp_project.secrets"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/secrets",
+   "host": "tp_project.set_secret"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/suite",
+   "host": "tp_export.suite"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/traceability",
+   "host": "tp_report.traceability"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/trends",
+   "host": "tp_report.trends"
+  },
+  {
+   "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id",
+   "host": "tp_project.remove"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/projects/:id",
+   "host": "tp_project.update"
+  },
+  {
+   "source": "modelProfilesRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/model-profiles/:role/probe",
+   "host": "tp_settings.probe_profile"
+  },
+  {
+   "source": "modelProfilesRoutes.ts",
+   "method": "PUT",
+   "path": "/api/projects/:projectId/model-profiles/:role",
+   "host": "tp_settings.set_profile"
+  },
+  {
+   "source": "modelProfilesRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/model-profiles",
+   "host": "tp_settings.profiles"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/diff",
+   "host": "tp_artifact.diff"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/export",
+   "host": "tp_artifact.export"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/lineage",
+   "host": "tp_artifact.lineage"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId",
+   "host": "tp_artifact.read"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/artifacts",
+   "host": "tp_artifact.import"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/begin-stage",
+   "host": "tp_stage.begin"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/cancel",
+   "host": "tp_run.cancel"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/checkpoint",
+   "host": "tp_run.checkpoint"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/controls",
+   "host": "tp_wf.controls"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/controls",
+   "host": "tp_wf.set_controls"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/events",
+   "host": "tp_run.events"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
+   "host": "tp_execution.baseline"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
+   "host": "tp_execution.set_baseline"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/compare",
+   "host": "tp_execution.compare"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions",
+   "host": "tp_execution.list"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/modules/freeze",
+   "host": "tp_stage.freeze_modules"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/resume",
+   "host": "tp_run.resume"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review-history",
+   "host": "tp_review.history"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review",
+   "host": "tp_review.list"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "PATCH",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review",
+   "host": "tp_review.amend"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/review",
+   "host": "tp_review.decide"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/spend",
+   "host": "tp_run.spend"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/cases",
+   "host": "tp_stage.cases"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/decisions",
+   "host": "tp_stage.decisions"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/execute",
+   "host": "tp_stage.execute"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/finalize",
+   "host": "tp_stage.finalize"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/g2",
+   "host": "tp_stage.g2"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/gate",
+   "host": "tp_stage.gate"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/instructions",
+   "host": "tp_stage.instructions"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/modules/state",
+   "host": "tp_stage.modules_state"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/modules",
+   "host": "tp_stage.modules"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/retrieve",
+   "host": "tp_stage.retrieve"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/status",
+   "host": "tp_stage.status"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/stories",
+   "host": "tp_stage.stories"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/claim",
+   "host": "tp_unit.claim"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/merge",
+   "host": "tp_unit.merge"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/status",
+   "host": "tp_unit.status"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/write",
+   "host": "tp_unit.write"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId",
+   "host": "tp_run.get"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/artifacts",
+   "host": "tp_artifact.list"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/register",
+   "host": "tp_run.register"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs",
+   "host": "tp_run.list"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs",
+   "host": "tp_run.start"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects",
+   "host": "tp_project.list"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects",
+   "host": "tp_project.create"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/queue",
+   "host": "tp_report.queue"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/readiness",
+   "host": "tp_report.readiness"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/approve",
+   "host": "tp_queue.approve"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/batch",
+   "host": "tp_queue.batch"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/review/:wfRunId/cases/:caseId",
+   "host": "tp_queue.amend_case"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/gap-case",
+   "host": "tp_queue.gap_case"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/regenerate",
+   "host": "tp_queue.regenerate"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/review/:wfRunId/reject",
+   "host": "tp_queue.reject"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/review/:wfRunId",
+   "host": "tp_queue.get"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/review",
+   "host": "tp_queue.list"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/run",
+   "host": "tp_case.run_adhoc"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/runs/:id/report",
+   "host": "tp_report.report"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/runs/:id",
+   "host": "tp_report.run"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/runs",
+   "host": "tp_report.runs"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/scoreboard/paired",
+   "host": "tp_eval.paired_scoreboard"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/scoreboard",
+   "host": "tp_eval.scoreboard"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/settings/reset-prompts",
+   "host": "tp_settings.reset_prompts"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/settings",
+   "host": "tp_settings.get"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/settings",
+   "host": "tp_settings.set"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wallet/check",
+   "host": "tp_system.check_wallet"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wallet/dapp-test",
+   "host": "tp_system.dapp_test"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/wf/runs/:id/breakpoints",
+   "host": "tp_run.breakpoints"
+  },
+  {
+   "source": "index.ts",
+   "method": "PATCH",
+   "path": "/api/wf/runs/:id/budget",
+   "host": "tp_run.budget"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/cancel",
+   "host": "tp_wf.cancel"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/continuations",
+   "host": "tp_wf.continuations"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/continue",
+   "host": "tp_wf.continue_from"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/nodes/:nodeId/run",
+   "host": "tp_run.run_node"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/nodes/:nodeId",
+   "host": "tp_run.node"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/resume-point",
+   "host": "tp_run.resume_point"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs/:id/resume",
+   "host": "tp_wf.resume"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id/traceability",
+   "host": "tp_run.traceability"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs/:id",
+   "host": "tp_wf.get"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/wf/runs",
+   "host": "tp_wf.list"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/wf/runs",
+   "host": "tp_wf.start"
+  }
+ ],
+ "baseline": {
+  "covered": 181,
+  "reachable": 181,
+  "rate": 1
+ }
+}

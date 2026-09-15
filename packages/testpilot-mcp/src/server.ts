@@ -15,6 +15,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { RunGateway } from "./run-gateway.js";
+import { HostApi } from "./host/api.js";
+import { registerHostDomains } from "./host/tools.js";
 import {
   CalibrateJudgeInput,
   DriveSutInput,
@@ -71,6 +73,15 @@ function progressMessage(e: ProgressEvent): string | undefined {
 
 const server = new McpServer({ name: "testpilot", version: "0.2.0" });
 const runs = new RunGateway();
+/**
+ * 宿主入口：UI 能做的操作，这里逐域暴露给宿主（docs/v3 的 host-parity）。
+ *
+ * 它走的是 UI 同一套 HTTP 接口，不复制任何服务端逻辑——「入口从 UI 换成宿主」
+ * 要成立，两条入口就必须共用一份实现。需要运行写入凭证的动作从 RunGateway 取，
+ * 凭证留在 MCP 进程内存里，不经过模型。
+ */
+const hostApi = new HostApi({ tokenFor: (runId) => runs.tokenFor(runId) });
+registerHostDomains(server, hostApi);
 
 /**
  * 一次工具调用的回复。
