@@ -79,9 +79,9 @@ export interface HarnessConfig {
   ablate: string[];
   guard: {
     /**
-     * Hosts nothing may run against, whatever an environment says (operator config, not domain logic).
-     * 2026-09-15: there is no host allowlist any more — whether a target may take irreversible steps is
-     * a property of its environment, ticked by a person (`Environment.allowIrreversible`).
+     * Hosts nothing may run against, whatever a run asks for (operator config, not domain logic).
+     * There is no host allowlist and no per-environment opt-in: deleting, paying and cleaning up are
+     * product features under test, so they run by default. This list is the one line that never opens.
      */
     denyHosts: string[];
     /** Block irreversible-looking steps unless the environment allows them. */

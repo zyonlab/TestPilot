@@ -2044,9 +2044,7 @@ export const dict: Record<string, Entry> = {
   "ready.plannerOk": {"zh": "由 {runtime} 规划，本机起得来", "en": "Planned by {runtime}, available on this machine", "ja": "{runtime} が計画、このマシンで起動可能"},
   "ready.plannerMissing": {"zh": "默认规划运行时 {runtime} 在本机起不来，Web 发起的运行会被拒绝", "en": "The default planner {runtime} cannot start on this machine; runs started from Web will be refused", "ja": "既定のプランナー {runtime} を起動できません"},
   "ready.guardNoHost": { zh: "还没有可检查的地址", en: "no address to check yet", ja: "確認できるアドレスがありません" },
-  "ready.guardOk": { zh: "{host} 的环境允许执行不可逆步骤", en: "The environment for {host} allows irreversible steps", ja: "{host} は不可逆操作を許可済み" },
-  "ready.guardNo": { zh: "{host} 的环境没有允许不可逆步骤", en: "The environment for {host} does not allow irreversible steps", ja: "{host} は不可逆操作を許可していません" },
-  "ready.guardWhy": { zh: "删除、支付、下单这类步骤会被拦下。是测试环境的话，在环境设置里勾选「允许执行不可逆步骤」。", en: "Delete, pay and similar steps will be refused. If this is a test environment, tick “Allow irreversible steps” in the environment settings.", ja: "テスト環境なら環境設定で許可してください。" },
+  "ready.guardOk": { zh: "{host} 不在禁止名单上", en: "{host} is not on the deny list", ja: "{host} は拒否リストにありません" },
   "ready.budget": {
     zh: "{calls} 次调用 · {usd} 美元 · {min} 分钟",
     en: "{calls} calls · ${usd} · {min} min",
@@ -3393,11 +3391,6 @@ export const dict: Record<string, Entry> = {
   "sut.capabilitiesWhy": { zh: "规则包里目标的 requires 对照这里（逗号分隔，比如 session）。不填时：配了登录步骤就算提供 session。", en: "Rule pack targets' requires are matched against these (comma separated, e.g. session). Empty: login steps provide session.", ja: "ルールパックの requires と照合します（例: session）。" },
   "sut.injectWallet": { zh: "探索时默认注入本机钱包", en: "Inject this machine's wallet when exploring by default", ja: "探索時にウォレットを注入" },
   "sut.injectWalletWhy": { zh: "只对需要连接钱包才看得到完整界面的产品有用；新建运行时仍可单独改。", en: "Only useful for products that show their full UI after a wallet connects; a new run can still override it.", ja: "ウォレット接続後にのみ全画面が見える製品向け。" },
-  "sut.allowIrreversible": { zh: "允许执行不可逆步骤", en: "Allow irreversible steps", ja: "不可逆操作を許可" },
-  "sut.allowIrreversibleWhy": { zh: "删除、支付、提交会改状态的表单这类步骤，默认一律拦下。只对测试环境打开；运营方禁止名单上的地址怎么勾都不放行。", en: "Delete, pay and other state-changing steps are refused by default. Turn on for test environments only; hosts on the operator deny list are never allowed.", ja: "テスト環境のみで有効にしてください。" },
-  "sut.allowIrreversibleConfirm": { zh: "确认：{host} 是测试环境，用例在这里执行删除、支付、下单这类步骤不会造成真实损失？", en: "Confirm: {host} is a test environment where deleting, paying or placing orders causes no real loss?", ja: "{host} はテスト環境で、実損は発生しませんか？" },
-  "sut.allowIrreversibleYes": { zh: "是测试环境，允许", en: "It is a test environment — allow", ja: "許可する" },
-  "sut.allowIrreversibleNo": { zh: "先不开", en: "Not now", ja: "やめる" },
   "ready.guardDenied": { zh: "{host} 在运营方的禁止名单上，什么都不会在这里跑", en: "{host} is on the operator deny list — nothing runs against it", ja: "{host} は禁止リストにあります" },
 
   /* 字段起草抽屉。文案要说清两件事：证据从哪来，以及它不保存。 */

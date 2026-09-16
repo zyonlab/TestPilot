@@ -10,8 +10,8 @@ export function runEnvReset(cmd: unknown): string[] | null {
   return ["environment reset completed"];
 }
 /**
- * 跑之前过一道守卫。`context` 来自这个被测对象的环境（人勾选的 `allowIrreversible`）与这次运行
- * 绑定的规则包（`sideEffectLabels`）。
+ * 跑之前过一道守卫：禁止名单上的地址什么都不跑。不可逆步骤默认放行（它们是被测产品的功能），
+ * 规则包的 `sideEffectLabels` 只在整机打开 `GUARD_STRICT` 时才用得上。
  */
 export function guardRun(url: string, steps: string[], context: GuardContext = {}) {
   const verdict = checkRun(url, steps, config.guard, context);

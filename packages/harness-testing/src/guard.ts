@@ -12,8 +12,9 @@ import type { HarnessConfig } from "@testpilot/harness-core";
  *   is this target denied outright                (`guard.denyHosts` — operator config)
  *   does this case contain an irreversible step   (blocked unless the environment allows it)
  *
- * 「这个被测对象允许做不可逆的事」是**这个环境的属性**，由人在环境设置里勾选（`allowIrreversible`）。
- * 全局只有禁止名单，挡住绝不能碰的地址。
+ * **删除、支付、清理本来就是被测产品的功能**，用例要测的正是它们——所以默认放行
+ * （`blockIrreversible` 默认 false）。运营方要整机拦截可以打开它，但那是全局开关，
+ * 不是每个被测对象勾一次。绝不能碰的地址走禁止名单，那条线在上面，谁也放不开。
  *
  * What it is NOT: a security boundary. Reading step text cannot tell whether "confirm"
  * confirms a delete or a cancel. It stops "someone pointed the whole suite at production",
@@ -40,9 +41,7 @@ export interface Verdict {
 }
 
 export interface GuardContext {
-  /** 这个环境由人勾选了「允许不可逆操作」。 */
-  allowIrreversible?: boolean;
-  /** 这个产品的规则包声明的额外不可逆操作词。 */
+  /** 这个产品的规则包声明的额外不可逆操作词（只在 `blockIrreversible` 打开时才用得上）。 */
   sideEffectLabels?: readonly string[];
 }
 
@@ -76,7 +75,6 @@ export function checkRun(url: string, steps: string[], guard: HarnessConfig["gua
     };
   }
   if (!guard.blockIrreversible) return { allow: true, why: "irreversible-step guard is off" };
-  if (context.allowIrreversible) return { allow: true, why: `the environment for ${host} allows irreversible steps` };
 
   const extra = compileLabels((context.sideEffectLabels ?? []).map((l) => l.trim()).filter(Boolean));
   const hit = steps.find((s) => IRREVERSIBLE.test(s) || extra.some((re) => re.test(s)));

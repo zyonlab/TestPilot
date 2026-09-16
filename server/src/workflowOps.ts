@@ -40,19 +40,6 @@ export async function createWebWorkflow(projectId: string, raw: unknown) {
   if(input.materials.some(m=>!(/\.(md|txt)$/i.test(m.name))||m.text.includes('\u0000')))throw new LedgerError(400,'text_material_required');
   if (input.sourceKind==='spec'&&!input.materials.length) throw new LedgerError(400,'spec_materials_required');
   if (input.sourceKind==='explore'&&(!input.sourceUrl||!/^https?:/.test(input.sourceUrl))) throw new LedgerError(400,'explore_url_required');
-  /**
-   * **沙箱探索的闸门**：探索要去点会改状态的东西，这次的环境必须由人勾过「允许不可逆操作」，
-   * 而且探索的地址就是那个环境的地址。
-   *
-   * 和执行层那道守卫是同一条规矩：判断「这个地址下可不可以做不可逆的事」的是人，不是模型，也不是这段代码。
-   * 禁止名单上的地址在上面那条就拦下了，环境怎么勾都不放行。
-   */
-  if(input.exploreActions==='interact'){
-    const host=(u:string)=>{try{return new URL(u).hostname;}catch{return '';}};
-    const env=resolveEnvironment(projectId,input.envRef);
-    if(!env?.allowIrreversible)throw new LedgerError(403,'explore_interact_not_allowed:environment');
-    if(env.baseUrl&&host(env.baseUrl)!==host(input.sourceUrl!))throw new LedgerError(403,`explore_interact_not_allowed:host:${host(input.sourceUrl!)}`);
-  }
   // 规则包在创建时就校验：悬空引用、无来源的要求、无依据的 P0 在这里被拒，不是等到模型用了才发现。
   /**
    * 没显式给规则包时，用**项目当前那一份**。

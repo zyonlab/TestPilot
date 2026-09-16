@@ -30,15 +30,15 @@
 - **主网 `app.hyperliquid.xyz` 不作为被测对象**。同一个钱包在那边有真钱（2026-09-12 实测
   `Portfolio Value $6.77`），同一串点击就是在花钱，而两者只差一个域名。它在
   `server/harness.config.ts` 的 `guard.denyHosts` 里，永远不该被移出——代码与测试里出现的主网地址是「被禁止的那个例子」，别顺手改掉。
-- **没有主机白名单了**（2026-09-15 用户决定）。探索要点会改状态的东西，要这次运行声明 `exploreActions:"interact"`，**且**所用环境勾过 `allowIrreversible`、探索地址就是该环境地址；
-  执行时能不能跑删除、支付、下单这类不可逆步骤，看这个项目环境里人勾选的「允许执行不可逆步骤」（`allowIrreversible`）。
-  全局只留禁止名单 `guard.denyHosts`（环境怎么勾都不放行），主网在上面。
+- **没有主机白名单，也没有「允许不可逆」这个开关**（2026-09-15 / 2026-09-16 用户决定）。删除、完成、清理是被测产品的功能，用例要测的正是这一段生命周期，所以**默认放行**；
+  探索要点会改状态的东西，声明 `exploreActions:"interact"` 即可。全局只留禁止名单 `guard.denyHosts`，主网在上面，谁也放不开；
+  运营方要整机拦截不可逆步骤，把 `guard.blockIrreversible` 设回 true 或给 `GUARD_STRICT=1`（那时规则包的 `sideEffectLabels` 才起作用）。
 - `fixtures/hyperliquid-mainnet/` 这个目录名是历史，里面的规则包对测试网同样适用（已实测）。
 
 ## 领域内容一律是项目数据（2026-09-15 用户决定）
 - 非通用的部分**不许写进代码**（也不许写成 `if (某个领域)`）：只能是项目数据，由用户用对话抽屉聊出来或自己指定。
   载体三个：**规则包**（`actionVocabulary` / `sideEffectLabels` / `volatileReadings` 等）、**领域参考**（「领域参考」页，
-  按版本存、运行开始时冻结绑定）、**环境画像**（前提名 `capabilities`、`injectWallet`、`allowIrreversible`）。
+  按版本存、运行开始时冻结绑定）、**环境画像**（前提名 `capabilities`、`injectWallet`）。
 - `benchmark/hyperliquid-testnet/domain-reference.md` 是评测数据集，只给 `evals/domain-perp.json` 按路径绑定
   （消融开关叫 `domain-reference`），不出现在界面，也不导入新项目。没有「预设」，不做旧数据兼容。
 - `pnpm check:domain-neutral` 必须绿：产品源码非注释代码与 skill 里不许有写死的领域词。

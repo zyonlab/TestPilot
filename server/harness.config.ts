@@ -26,16 +26,19 @@ export default defineHarnessConfig({
   ablate: [],
   guard: {
     /**
-     * 「这个被测对象允许做不可逆的事」是**环境的属性**，由人在环境设置里勾选（`allowIrreversible`），跟着项目走。
+     * **不可逆步骤默认放行**（2026-09-16 用户决定）：删除一条任务、完成一条任务、跑完清理，
+     * 都是被测产品的功能，用例要测的正是这一段生命周期。为它设一个每个环境勾一次的开关，
+     * 拦的是自己人——第一次真跑就被自己的收尾步骤挡住了。
      *
      * 这里只有一张**禁止名单**：绝不能碰的地址，环境怎么勾都不放行。主网 `app.hyperliquid.xyz` 在上面——
      * 同一个钱包在那边有真钱（2026-09-12 实测 Portfolio Value $6.77），同一串点击就是在花钱，
      * 而它和测试网只差一个域名。这是运营方的安全配置，不是领域逻辑。
      */
     denyHosts: ["app.hyperliquid.xyz"],
-    // Irreversible-looking steps (delete / pay / transfer …) are refused unless the environment allows
-    // them. This is the "someone ran the whole suite against production" guard, not a security boundary.
-    blockIrreversible: true,
+    // 不可逆步骤（删除 / 支付 / 转账……）默认放行：它们是被测产品的功能。
+    // 运营方要整机拦回来就把这一项设成 true（或设 `GUARD_STRICT=1`），那时规则包的
+    // `sideEffectLabels` 才起作用。禁止名单不受它影响，永远优先。
+    blockIrreversible: false,
   },
 
   // External services the harness can start and supervise. Declarative on purpose: a

@@ -126,7 +126,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
     query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locators, visualThresholdPct: env?.visualThresholdPct };
-  // 守卫的豁免与额外词：环境（人勾选的 allowIrreversible）+ 这次运行绑定的规则包（sideEffectLabels）。
+  // 不可逆步骤默认放行；额外词来自这次运行绑定的规则包，只有整机打开 GUARD_STRICT 时才生效。
   /**
    * **占位符没解析就不要跑。**
    *
@@ -138,7 +138,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const texts = [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps, ...(typeof c.expected === "string" ? [c.expected] : [])])];
   const missing = missingPlaceholders(texts, context);
   if (missing.length) throw new LedgerError(400, `unresolved_placeholders:${missing.slice(0, 8).join(",")}`);
-  guardRun(url, [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { allowIrreversible: env?.allowIrreversible, sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
+  guardRun(url, [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
   const row: ExecutionRow = { id: `exec-${randomUUID()}`, runId, projectId, codeRevision: input.codeRevision, requestHash, status: "running",
     // 选择集不进 environmentHash：跑哪几条不改变「在什么环境里跑」。它在 requestHash 里，也写进产物。
     environmentHash: contentHash(canonicalJSON({ ...snapshot, budget: undefined, caseIds: undefined })), environmentEnc: encryptSecret(JSON.stringify(snapshot)), resultRevision: null, startedAt: new Date().toISOString() };

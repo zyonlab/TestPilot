@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 import { checkRun } from "../src/guard.js";
 
 /**
- * 「允许不可逆操作」是环境的属性（人勾选），全局只有禁止名单。
+ * 2026-09-16 起不可逆步骤**默认放行**：删除、完成、清理是被测产品的功能，用例要测的就是它们。
+ * 全局只有禁止名单；运营方要拦回来是 `blockIrreversible`（整机开关，不是每个环境勾一次）。
  * 行业特有的副作用词跟着那个产品的规则包走（`sideEffectLabels`），通用表里不放。
  */
 const guard = { denyHosts: ["prod.example.com"], blockIrreversible: true };
+const relaxed = { denyHosts: ["prod.example.com"], blockIrreversible: false };
 
 describe("guard", () => {
-  it("环境允许不可逆操作时照过——那正是测试环境的用处", () => {
-    expect(checkRun("http://localhost:5301/app", ["删除当前账号", "确认删除"], guard, { allowIrreversible: true }).allow).toBe(true);
+  it("默认放行：删除自己刚建的东西正是用例要做的事", () => {
+    expect(checkRun("http://localhost:5301/app", ["删除当前账号", "确认删除"], relaxed).allow).toBe(true);
   });
 
   it("allows ordinary steps anywhere: it is not a lockdown", () => {
@@ -29,7 +31,7 @@ describe("guard", () => {
   });
 
   it("禁止名单上的地址什么都不跑——环境怎么勾都没用", () => {
-    const v = checkRun("https://prod.example.com", ["查看首页"], guard, { allowIrreversible: true });
+    const v = checkRun("https://prod.example.com", ["查看首页"], relaxed);
     expect(v.allow).toBe(false);
     expect(v.code).toBe("GUARD_HOST");
   });

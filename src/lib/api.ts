@@ -237,7 +237,7 @@ export const api = {
       headers: Record<string, string>;
       query: Record<string, string>;
       login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null };
-      isDefault: boolean; capabilities?: string[]; injectWallet?: boolean; allowIrreversible?: boolean;
+      isDefault: boolean; capabilities?: string[]; injectWallet?: boolean;
       viewport?: {width?:number;height?:number};
     },
   ) => post<{ environment: Environment }>(`/api/projects/${projectId}/environments`, env, 8000),

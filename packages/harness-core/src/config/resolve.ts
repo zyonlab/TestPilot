@@ -8,7 +8,8 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   // 与 harness-testing/src/baselines/perf.ts 的 DEFAULT_BUDGETS 一致。
   perfBudget: { ttfbMs: 800, fcpMs: 1800, domContentLoadedMs: 3000, loadMs: 5000 },
   ablate: [],
-  guard: { denyHosts: [], blockIrreversible: true },
+  // 不可逆步骤默认放行：删除、完成、清理是被测产品的功能，用例要测的就是它们（`GUARD_STRICT=1` 可整机拦回来）。
+  guard: { denyHosts: [], blockIrreversible: false },
   capabilities: [],
 };
 
@@ -50,7 +51,7 @@ export function resolveHarnessConfig(
   merged.events.trimMs = num(env.EVENTS_TRIM_MS, merged.events.trimMs);
   if (env.ABLATE !== undefined) merged.ablate = list(env.ABLATE);
   if (env.DENY_HOSTS) merged.guard.denyHosts = [...merged.guard.denyHosts, ...list(env.DENY_HOSTS)];
-  if (env.GUARD_OFF === "1") merged.guard.blockIrreversible = false;
+  if (env.GUARD_STRICT === "1") merged.guard.blockIrreversible = true;
 
   return merged;
 }

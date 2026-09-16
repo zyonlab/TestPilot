@@ -28,11 +28,9 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
   /** 视口。空 = 沿用默认，不是 0。 */
   const [vpW, setVpW] = useState("");
   const [vpH, setVpH] = useState("");
-  /** 环境画像：前提名（逗号分隔）、默认注入钱包、允许不可逆操作（打勾后要再确认一次）。 */
+  /** 环境画像：前提名（逗号分隔）、默认注入钱包。 */
   const [caps, setCaps] = useState("");
   const [injectWallet, setInjectWallet] = useState(false);
-  const [allowIrreversible, setAllowIrreversible] = useState(false);
-  const [confirmingIrreversible, setConfirmingIrreversible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [log, setLog] = useState<string[]>([]);
@@ -48,8 +46,6 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
     setVpH(e?.viewport?.height ? String(e.viewport.height) : "");
     setCaps((e?.capabilities ?? []).join(", "));
     setInjectWallet(!!e?.injectWallet);
-    setAllowIrreversible(!!e?.allowIrreversible);
-    setConfirmingIrreversible(false);
   }, [projectId]);
 
   useEffect(() => {
@@ -90,7 +86,6 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
         isDefault: env.isDefault,
         capabilities: caps.split(/[,，\s]+/).map((c) => c.trim()).filter(Boolean),
         injectWallet,
-        allowIrreversible,
       });
       await load();
       onChanged?.();
@@ -214,29 +209,6 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
         <input id="sut-inject-wallet" type="checkbox" className="mt-1" checked={injectWallet} onChange={(e) => setInjectWallet(e.target.checked)} />
         <span><span className="font-medium">{t("sut.injectWallet")}</span><span className="mt-0.5 block text-[0.75rem] text-muted-foreground">{t("sut.injectWalletWhy")}</span></span>
       </label>
-      <label className="mt-3 flex items-start gap-2 text-[0.8125rem]">
-        <input
-          id="sut-allow-irreversible"
-          type="checkbox"
-          className="mt-1"
-          checked={allowIrreversible || confirmingIrreversible}
-          onChange={(e) => {
-            if (e.target.checked) setConfirmingIrreversible(true);
-            else { setAllowIrreversible(false); setConfirmingIrreversible(false); }
-          }}
-        />
-        <span><span className="font-medium">{t("sut.allowIrreversible")}</span><span className="mt-0.5 block text-[0.75rem] text-muted-foreground">{t("sut.allowIrreversibleWhy")}</span></span>
-      </label>
-      {confirmingIrreversible && !allowIrreversible && (
-        <div role="alert" className="mt-2 rounded-md border border-warn bg-warn-soft p-2.5 text-[0.75rem] text-warn">
-          <p>{t("sut.allowIrreversibleConfirm", { host: (() => { try { return new URL(baseUrl).host; } catch { return baseUrl; } })() })}</p>
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" variant="primary" onClick={() => { setAllowIrreversible(true); setConfirmingIrreversible(false); }}>{t("sut.allowIrreversibleYes")}</Button>
-            <Button size="sm" onClick={() => setConfirmingIrreversible(false)}>{t("sut.allowIrreversibleNo")}</Button>
-          </div>
-        </div>
-      )}
-
       <h3 className="mt-5 text-[0.8125rem] font-semibold">{t("sut.carried")}</h3>
       <p className="mt-1 text-[0.75rem] leading-relaxed text-muted-foreground">{t("sut.carriedWhy")}</p>
       <table className="mt-2 w-full text-[0.8125rem]">

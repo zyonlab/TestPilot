@@ -29,9 +29,9 @@ describe("环境保存：没说的字段不出现在 patch 里", () => {
     expect("visualThresholdPct" in environmentPatch({ visualThresholdPct: 101 })).toBe(false);
   });
 
-  it("环境画像三项：给了才带，前提名去空白", () => {
-    expect(environmentPatch({ capabilities: [" session ", "", "wallet"], injectWallet: true, allowIrreversible: false }))
-      .toMatchObject({ capabilities: ["session", "wallet"], injectWallet: true, allowIrreversible: false });
+  it("环境画像：给了才带，前提名去空白", () => {
+    expect(environmentPatch({ capabilities: [" session ", "", "wallet"], injectWallet: true }))
+      .toMatchObject({ capabilities: ["session", "wallet"], injectWallet: true });
     expect(environmentPatch({ name: "x" } as never)).toEqual({});
   });
 });

@@ -51,13 +51,13 @@ describe("领域参考是项目数据", () => {
 describe("环境画像", () => {
   it("前提名、注入钱包、允许不可逆写得进读得回，默认都是关的", () => {
     const plain = db.upsertEnvironment({ projectId, name: "plain", baseUrl: "http://127.0.0.1:9877" });
-    expect(db.resolveEnvironment(projectId, "plain")).toMatchObject({ injectWallet: false, allowIrreversible: false });
+    expect(db.resolveEnvironment(projectId, "plain")).toMatchObject({ injectWallet: false });
     expect(plain.capabilities).toBeUndefined();
-    db.upsertEnvironment({ projectId, name: "plain", capabilities: ["session", "wallet-session"], injectWallet: true, allowIrreversible: true });
-    expect(db.resolveEnvironment(projectId, "plain")).toMatchObject({ capabilities: ["session", "wallet-session"], injectWallet: true, allowIrreversible: true });
+    db.upsertEnvironment({ projectId, name: "plain", capabilities: ["session", "wallet-session"], injectWallet: true });
+    expect(db.resolveEnvironment(projectId, "plain")).toMatchObject({ capabilities: ["session", "wallet-session"], injectWallet: true });
     // 只改别的字段时，已存的画像不被冲掉。
     db.upsertEnvironment({ projectId, name: "plain", baseUrl: "http://127.0.0.1:9878" });
-    expect(db.resolveEnvironment(projectId, "plain")).toMatchObject({ allowIrreversible: true, baseUrl: "http://127.0.0.1:9878" });
+    expect(db.resolveEnvironment(projectId, "plain")).toMatchObject({ injectWallet: true, baseUrl: "http://127.0.0.1:9878" });
   });
 });
 
@@ -71,13 +71,11 @@ describe("行业词来自规则包，不来自代码", () => {
     expect(acceptanceIsActionable("Given 列表页 / When 用户点击「新建」 / Then 出现表单")).toBe(true);
   });
 
-  it("执行守卫：允许不可逆是环境给的；运营方禁止名单优先", async () => {
+  it("执行守卫：不可逆步骤默认放行；运营方禁止名单仍然优先", async () => {
     const { guardRun } = await import("../src/executionPolicy.js");
     const { config } = await import("../src/procs.js");
-    expect(() => guardRun("http://127.0.0.1:9877/", ["删除这个项目"])).toThrow(/irreversible/);
-    expect(() => guardRun("http://127.0.0.1:9877/", ["删除这个项目"], { allowIrreversible: true })).not.toThrow();
-    expect(() => guardRun("http://127.0.0.1:9877/", ["点击下单"], { sideEffectLabels: ["下单(?!面板)"] })).toThrow(/irreversible/);
+    expect(() => guardRun("http://127.0.0.1:9877/", ["删除这个项目"])).not.toThrow();
     const denied = config.guard.denyHosts[0];
-    if (denied) expect(() => guardRun(`https://${denied}/`, ["查看首页"], { allowIrreversible: true })).toThrow(/denyHosts/);
+    if (denied) expect(() => guardRun(`https://${denied}/`, ["查看首页"])).toThrow(/denyHosts/);
   });
 });

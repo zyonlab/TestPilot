@@ -1103,7 +1103,7 @@ async function runAndPersistCase(
         }
       : undefined;
 
-  guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)], { allowIrreversible: env?.allowIrreversible, sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
+  guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)], { sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
   /**
    * 环境级复位（07 T-28 验收 ②）：`vars.TP_RESET_CMD` 在每条用例跑之前执行一次，输出记进这次运行的日志。
    * teardown 是模型做的、会失手；失手一次，后面每条的判据都被残留状态带偏（实测一次连带三条）。
@@ -1386,7 +1386,7 @@ app.get("/api/cases/:id/debug", async (req, res) => {
 
   try {
     if (!url) throw new Error("no url (set an environment baseUrl or project targetUrl)");
-    guardRun(url, plan.map((p) => p.text), { allowIrreversible: env?.allowIrreversible, sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
+    guardRun(url, plan.map((p) => p.text), { sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
     await live.debug(
       { url, plan, expected: c.expected || "", hint: hint || undefined, resolve: ctx, launch },
       ARTIFACT_DIR,
@@ -3159,19 +3159,27 @@ app.get("/api/readiness", (req, res) => {
     const s = supervisor.statusOf(c.id);
     return !!s?.lastError && s.state !== "alive";
   });
-  items.push(
-    bad.length
-      ? {
-          id: "runtime",
-          state: "broken",
-          detail: { key: "ready.runtimeBroken", params: { id: bad[0]!.id } },
-          // lastError 是子进程自己说的话，原样带出去：它是给人拿去搜的那一截。
-          hint: String(supervisor.statusOf(bad[0]!.id)?.lastError ?? "").slice(0, 160),
-        }
-      : alive.length
-        ? { id: "runtime", state: "ok", detail: { key: "ready.runtimeOk", params: { a: alive.length, n: capabilities.length } } }
-        : { id: "runtime", state: "none", detail: { key: "ready.runtimeNone", params: { n: capabilities.length } } },
-  );
+  /**
+   * **没声明能力就没有这一项。**
+   *
+   * 这里数的是本机声明的外部服务（基准应用、模型代理这些）。一份干净安装一个都没有，
+   * 而清单上却写着「6 个能力，一个都没起」——2026-09-16 看这一屏时，它像是装坏了，
+   * 其实什么都不缺。有声明才问它们起没起。
+   */
+  if (capabilities.length)
+    items.push(
+      bad.length
+        ? {
+            id: "runtime",
+            state: "broken",
+            detail: { key: "ready.runtimeBroken", params: { id: bad[0]!.id } },
+            // lastError 是子进程自己说的话，原样带出去：它是给人拿去搜的那一截。
+            hint: String(supervisor.statusOf(bad[0]!.id)?.lastError ?? "").slice(0, 160),
+          }
+        : alive.length
+          ? { id: "runtime", state: "ok", detail: { key: "ready.runtimeOk", params: { a: alive.length, n: capabilities.length } } }
+          : { id: "runtime", state: "none", detail: { key: "ready.runtimeNone", params: { n: capabilities.length } } },
+    );
 
   /**
    * 规划：Web 发起生成时由谁写故事和用例（`TP_AGENT_RUNTIME`，不设是 Claude Code）。
@@ -3202,14 +3210,7 @@ app.get("/api/readiness", (req, res) => {
       ? { id: "guard", state: "none", detail: { key: "ready.guardNoHost" } }
       : config.guard.denyHosts.includes(host)
         ? { id: "guard", state: "broken", detail: { key: "ready.guardDenied", params: { host } } }
-        : env?.allowIrreversible
-        ? { id: "guard", state: "ok", detail: { key: "ready.guardOk", params: { host } } }
-        : {
-            id: "guard",
-            state: "unverified",
-            detail: { key: "ready.guardNo", params: { host } },
-            hint: { key: "ready.guardWhy" },
-          },
+        : { id: "guard", state: "ok", detail: { key: "ready.guardOk", params: { host } } },
   );
 
   const b = config.budget;

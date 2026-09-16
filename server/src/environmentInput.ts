@@ -11,11 +11,11 @@
 export interface EnvironmentBody {
   baseUrl?: unknown; vars?: unknown; headers?: unknown; query?: unknown; login?: unknown;
   isDefault?: unknown; viewport?: unknown; visualThresholdPct?: unknown;
-  capabilities?: unknown; injectWallet?: unknown; allowIrreversible?: unknown;
+  capabilities?: unknown; injectWallet?: unknown;
 }
 
 export function environmentPatch(body: EnvironmentBody) {
-  const { baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct, capabilities, injectWallet, allowIrreversible } = body;
+  const { baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct, capabilities, injectWallet } = body;
   /*
    * 视口曾经一直被丢掉：界面发了 `viewport`，`upsertEnvironment` 也收，而路由的解构没有它。
    * 只收合法的数：一个 `{}` 或字符串会让 `viewportJson` 看起来像配过了，而它什么都没说。
@@ -36,9 +36,8 @@ export function environmentPatch(body: EnvironmentBody) {
     // 没有 `session` 这一项 → upsert 保留已抓到的会话。
     ...(login && typeof login === "object" ? { login: login as Record<string, unknown> } : {}),
     ...(typeof isDefault === "boolean" ? { isDefault } : {}),
-    // 环境画像：前提名、默认注入钱包、允许不可逆操作。都由人在环境设置里填，不给就沿用已存的。
+    // 环境画像：前提名、默认注入钱包。都由人在环境设置里填，不给就沿用已存的。
     ...(Array.isArray(capabilities) ? { capabilities: capabilities.map(String).map((c: string) => c.trim()).filter(Boolean) } : {}),
     ...(typeof injectWallet === "boolean" ? { injectWallet } : {}),
-    ...(typeof allowIrreversible === "boolean" ? { allowIrreversible } : {}),
   };
 }
