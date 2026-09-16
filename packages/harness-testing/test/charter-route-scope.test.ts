@@ -57,3 +57,16 @@ describe("charter 的路由范围来自规则包", () => {
     expect(routeAllowed(undefined, "/", "/anything", "http://x.test/anything")).toBe(true);
   });
 });
+
+/**
+ * charter 的 id 有 120 字上限（`DomainIdSchema`）。版本号的字符集已经在规则包那一层收紧，
+ * 这里兜的是长度与意外字符：宁可截断，也不要在探索开始的第 4 毫秒抛一条看不出因果的正则错。
+ */
+it("charter id：非法字符规整、超长截断", async () => {
+  const { charterId } = await import("../src/domain/charter.js");
+  expect(charterId("perp-lab", "2026-09-16.1-testnet")).toBe("charter-perp-lab-2026-09-16.1-testnet");
+  expect(charterId("perp lab", "1.0+x")).toBe("charter-perp-lab-1.0-x");
+  const long = charterId("p".repeat(100), "v".repeat(100));
+  expect(long).toHaveLength(120);
+  expect(long).toMatch(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,119}$/);
+});

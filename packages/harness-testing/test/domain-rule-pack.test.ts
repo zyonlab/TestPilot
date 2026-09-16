@@ -588,3 +588,17 @@ function emptyReport() {
     coverage: {}, budget: {}, completion: {}, stopReason: "exhausted",
   } as never;
 }
+
+/**
+ * 2026-09-16：迁移时把版本号写成 `2026-09-13.3+domain-data`，存得下，真拿去建 charter 时才炸——
+ * 探索节点开始 4 毫秒就失败，错误是一条 `path:["id"]` 的正则错，看不出跟版本号有关。
+ * 版本号会被拼进 charter 的 id，所以字符集要在存的时候就对齐。
+ */
+it("版本号带 + 存不进去：它要拼进 charter 的 id", async () => {
+  const { validateRulePack } = await import("../src/domain/rules.js");
+  const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../fixtures/perp-lab/rules.json"), "utf8")) as Record<string, unknown>;
+  const bad = validateRulePack({ ...base, version: "2026-09-13.3+domain-data" });
+  expect(bad.ok).toBe(false);
+  expect(JSON.stringify(bad.ok ? [] : bad.errors)).toMatch(/version/);
+  expect(validateRulePack({ ...base, version: "2026-09-16.1-testnet" }).ok).toBe(true);
+});

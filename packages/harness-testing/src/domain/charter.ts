@@ -100,6 +100,18 @@ export const DEFAULT_FORBID_LABELS = [
  * 不管现在为哪个目标激活它，一律拒绝。声明比词表准，交叉检查比词表安全。
  */
 
+/**
+ * charter 的 id：`charter-<packId>-<version>`，但要保证它过得了 `DomainIdSchema`。
+ *
+ * 规则包的 `version` 已经在 schema 那一层收紧过字符集；这里再兜一层长度——id 上限 120 字，
+ * 而包 id 与版本号都是人写的，拼起来超长不是不可能。宁可截断，也不要在探索开始的
+ * 第 4 毫秒抛一条看不出因果的正则错（2026-09-16 真撞过一次）。
+ */
+export function charterId(packId: string, version: string): string {
+  const safe = (s: string) => s.replace(/[^A-Za-z0-9_.:/-]/g, "-");
+  return `charter-${safe(packId)}-${safe(version)}`.slice(0, 120);
+}
+
 export function charterFromRulePack(
   pack: ProductRulePack,
   packHash: string,
@@ -107,7 +119,7 @@ export function charterFromRulePack(
 ): ExplorationCharter {
   return ExplorationCharterSchema.parse({
     schemaVersion: "exploration-charter.v1",
-    id: opts.id ?? `charter-${pack.id}-${pack.version}`,
+    id: opts.id ?? charterId(pack.id, pack.version),
     rulePack: { id: pack.id, version: pack.version, hash: packHash },
     scope: { entryUrl: opts.entryUrl, routes: opts.routes ?? [], urlPatterns: pack.appliesTo.urlPatterns },
     featureTargets: pack.targets,

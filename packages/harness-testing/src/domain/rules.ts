@@ -166,7 +166,15 @@ export const ProductRulePackSchema = z
   .object({
     schemaVersion: z.literal("product-rule-pack.v1"),
     id: DomainIdSchema,
-    version: z.string().min(1),
+    /**
+     * 版本号会被**拼进 charter 的 id**（`charter-<packId>-<version>`，见 `charter.ts`），
+     * 而那个 id 受 `DomainIdSchema` 约束。所以这里跟着用同一套字符集。
+     *
+     * 2026-09-16 实测：迁移时把版本写成 `2026-09-13.3+domain-data`，存得下（当时只校验
+     * 非空），真拿去建 charter 时才炸——探索节点开始 4 毫秒就失败，错误是一条
+     * `path: ["id"]` 的 zod 正则错，看不出跟版本号有关。存的时候拒，错误才指得到字段。
+     */
+    version: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,63}$/, "version 只能用字母数字与 _ . : / -（它会拼进 charter 的 id）"),
     domain: z.string().min(1),
     product: z.string().min(1),
     network: z.string().min(1),
