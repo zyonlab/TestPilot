@@ -1,4 +1,5 @@
 import { boundRulePack } from "./rulePacks.js";
+import { referencedKeys } from "@testpilot/harness-core";
 import {caseEntryUrl, caseStartsLoggedOut} from './caseEntry.js';
 import { recordModelRequests } from './roleSpend.js';
 import { caseRunBudget, configuredRunBudget } from "./runBudget.js";
@@ -57,6 +58,17 @@ function phase(row: ExecutionRow, status: string, revisionId?: string, message?:
   ledger().appendEvent({ id: `execution-${randomUUID()}`, runId: row.runId, node: "execution", attempt: 0, sequence, at: new Date().toISOString(),
     ...(message?{message}:{}), phase: status === "passed" ? "done" : status === "running" ? "running" : status === "cancelled" ? "cancelled" : "failed", ...(revisionId ? { revisionId } : {}) }, row.projectId);
 }
+/** 这批文字引用了、而环境变量与密钥里没有的占位符（`env.X` / `secret.X`，排序去重）。 */
+export function missingPlaceholders(texts: string[], context: { env: Record<string, unknown>; secrets: Record<string, unknown> }): string[] {
+  const missing = new Set<string>();
+  for (const text of texts) {
+    const { env, secret } = referencedKeys(text);
+    for (const key of env) if (!(key in context.env)) missing.add(`env.${key}`);
+    for (const key of secret) if (!(key in context.secrets)) missing.add(`secret.${key}`);
+  }
+  return [...missing].sort();
+}
+
 export function startWorkflowExecution(runId: string, projectId: string, raw: unknown) {
   /**
    * **可以只跑一部分。**
@@ -115,6 +127,17 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
     query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locators, visualThresholdPct: env?.visualThresholdPct };
   // 守卫的豁免与额外词：环境（人勾选的 allowIrreversible）+ 这次运行绑定的规则包（sideEffectLabels）。
+  /**
+   * **占位符没解析就不要跑。**
+   *
+   * 2026-09-16 实测（Vikunja）：用例引用 `${env.BASE_URL}` 与 `${secret.VIKUNJA_PASSWORD}`，而环境里
+   * 只有 `USERNAME`。认不出的键被原样留下，于是浏览器收到的动作是「打开 ${env.BASE_URL}/login」——
+   * Midscene 规划出一个它没有的 Navigate 动作，用例红得看不出原因；而「密码」那条填进去的字面量
+   * 恰好是个错密码，真正的判决被掩盖了。缺什么，跑之前就说出来。
+   */
+  const texts = [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps, ...(typeof c.expected === "string" ? [c.expected] : [])])];
+  const missing = missingPlaceholders(texts, context);
+  if (missing.length) throw new LedgerError(400, `unresolved_placeholders:${missing.slice(0, 8).join(",")}`);
   guardRun(url, [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { allowIrreversible: env?.allowIrreversible, sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
   const row: ExecutionRow = { id: `exec-${randomUUID()}`, runId, projectId, codeRevision: input.codeRevision, requestHash, status: "running",
     // 选择集不进 environmentHash：跑哪几条不改变「在什么环境里跑」。它在 requestHash 里，也写进产物。

@@ -1,4 +1,5 @@
 import { readActiveEvolution } from './evolution/bridge.js';
+import { environmentPatch } from "./environmentInput.js";
 import { defaultRuntimeName, plannerRuntimeAvailable } from './runtimes.js';
 import {storedScoreboard} from 'testpilot-mcp/score-store';
 import {reviewCorsOptions} from './corsOptions.js';
@@ -1754,39 +1755,14 @@ app.get("/api/projects/:id/environments", (req, res) => {
   res.json({ environments: listEnvironments(req.params.id).map(sanitizeEnv) });
 });
 app.post("/api/projects/:id/environments", (req, res) => {
-  const { name, baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct, capabilities, injectWallet, allowIrreversible } = req.body ?? {};
-  if (!name) return res.status(400).json({ error: "name is required" });
-  /*
-   * 视口一直被这里丢掉：界面（SutPanel）发了 `viewport`，`upsertEnvironment` 也收，
-   * 但路由的解构没有它——于是「配过了」的视口从没进过库，探索和真跑都用默认的 1024×720。
-   * 只收合法的数：一个 `{}` 或字符串会让 `viewportJson` 看起来像配过了，而它什么都没说。
-   */
-  const vp =
-    viewport && typeof viewport === "object"
-      ? {
-          ...(Number(viewport.width) > 0 ? { width: Math.round(Number(viewport.width)) } : {}),
-          ...(Number(viewport.height) > 0 ? { height: Math.round(Number(viewport.height)) } : {}),
-        }
-      : undefined;
-  // 视觉阈值：只收 0–100 的数，`0` 有意义（逐像素必须相同），所以不能用真值判断。
-  const vt = Number(visualThresholdPct);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (!body.name) return res.status(400).json({ error: "name is required" });
+  // 只把**这次真的说了**的字段交下去；没说的由 upsertEnvironment 沿用已存的（见 environmentInput.ts）。
   const environment = upsertEnvironment({
     projectId: req.params.id,
-    ...(Number.isFinite(vt) && vt >= 0 && vt <= 100 ? { visualThresholdPct: vt } : {}),
-    id: req.body?.id,
-    name,
-    baseUrl: baseUrl ?? "",
-    vars: vars ?? {},
-    headers: headers ?? {},
-    query: query ?? {},
-    ...(vp && (vp.width || vp.height) ? { viewport: vp } : {}),
-    // No `session` key here → upsert preserves any captured session.
-    login: login ?? {},
-    isDefault: !!isDefault,
-    // 环境画像（2026-09-15）：前提名、默认注入钱包、允许不可逆操作。都由人在环境设置里填，不给就沿用已存的。
-    ...(Array.isArray(capabilities) ? { capabilities: capabilities.map(String).map((c: string) => c.trim()).filter(Boolean) } : {}),
-    ...(typeof injectWallet === "boolean" ? { injectWallet } : {}),
-    ...(typeof allowIrreversible === "boolean" ? { allowIrreversible } : {}),
+    id: body.id as string | undefined,
+    name: String(body.name),
+    ...environmentPatch(body),
   });
   res.json({ environment: sanitizeEnv(environment) });
 });

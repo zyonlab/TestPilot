@@ -19,7 +19,18 @@ export function runRouter() {
   const router = Router({ mergeParams: true });
   const wrap = (fn: (req: any, res: any) => unknown) => async (req: any, res: any) => {
     try { assertProject(req.params.projectId); await fn(req, res); }
-    catch (error) { const e = error instanceof LedgerError ? error : new LedgerError(400, "run_request_invalid"); res.status(e.status).json({ code: e.code }); }
+    catch (error) {
+      /**
+       * **守卫拒绝时要说出理由。**
+       *
+       * 2026-09-16 实测：一条用例的收尾步骤是「点删除并确认」，环境没勾「允许不可逆」，
+       * 执行被守卫挡下——而这里把它压成了 `run_request_invalid`，界面上只有这一个词。
+       * 人看不出是哪一步、为什么、该去勾哪个开关。守卫的 `why` 本来就是写给人看的。
+       */
+      const code = (error as { code?: string }).code;
+      if (typeof code === "string" && code.startsWith("GUARD_")) return res.status(403).json({ code, message: (error as Error).message });
+      const e = error instanceof LedgerError ? error : new LedgerError(400, "run_request_invalid"); res.status(e.status).json({ code: e.code });
+    }
   };
   router.get("/", wrap((req, res) => res.json({ runs: runLedger().listRuns(req.params.projectId) })));
   router.post("/", wrap(async (req, res) => res.status(202).json(await createWebWorkflow(req.params.projectId, req.body))));
