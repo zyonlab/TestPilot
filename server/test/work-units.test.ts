@@ -407,8 +407,14 @@ it("claim_unit 不重发整跑级材料，load_run_instructions 发一次", () =
   for (const arrayField of ["actionVocabulary", "volatileReadings", "roles"]) expect(Array.isArray(scope[arrayField])).toBe(true);
 
   const claimed = units.claimUnit(runId, project, { node: "stories" }) as { materials?: Record<string, unknown>; runScope?: string };
-  for (const gone of ["domainReference", "actionVocabulary", "volatileReadings", "roles", "rulePack", "productModelRevision"])
-    expect(claimed.materials).not.toHaveProperty(gone);
-  for (const kept of ["features", "rules", "modules"]) expect(claimed.materials).toHaveProperty(kept);
+  // 只剔大的：领域参考全文占被剔总量的 91.5%，它整跑发一次就够。
+  for (const gone of ["domainReference", "productModelRevision"]) expect(claimed.materials).not.toHaveProperty(gone);
+  /*
+   * 词表必须留在单元材料里。2026-09-16 的 A/B 把它一起剔掉过，同项目同模块树下
+   * 动作型验收准则从 64.3% 掉到 37.7%、`story_has_no_actionable_criterion` 从 0 变 5：
+   * 词表既是判定动作型的尺子，也是模型写单元时眼前唯一的动词来源。它只有 46 字符。
+   */
+  for (const kept of ["features", "rules", "modules", "actionVocabulary", "volatileReadings", "roles", "rulePack"])
+    expect(claimed.materials).toHaveProperty(kept);
   expect(claimed.runScope).toMatch(/load_run_instructions/);
 });

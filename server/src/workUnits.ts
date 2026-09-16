@@ -330,21 +330,27 @@ export function claimUnit(runId: string, projectId: string, raw: unknown, claime
      * **整跑不变的东西不随每个单元重发。**
      *
      * 2026-09-16 实测：40 个单元的 `claim_unit` 返回合计 110 万字符，其中 `domainReference`
-     * 40 次完全相同（16.8 万）、`storyIndex` 只有两种取值（17.2 万）、`roles` / `rulePack` /
-     * 词表各只有一种。它们每一轮都进 `cache_read`——那一跑 7,780 万 token 缓存读、$36，
-     * 而 output 只有 3,200 token。服务端内部照常用（`manifestFor` 要 rulePack、
-     * `unitContract` 要词表、`writeUnit` 要 roles），只是**不再交给模型重读**：
-     * 它们在 `load_run_instructions` 的 `runScope` 里，整跑发一次。
+     * 40 次完全相同（16.8 万）、`storyIndex` 只有两种取值（17.2 万）。它们每一轮都进
+     * `cache_read`——那一跑 7,780 万 token 缓存读、$36，而 output 只有 3,200 token。
+     *
+     * **但第一版剔多了，当天就量出了代价。** 同项目、同 16 个模块、同一份 9 词词表的 A/B：
+     * 动作型验收准则从 74/115（64.3%）掉到 49/130（37.7%），`checkStories` 的
+     * `story_has_no_actionable_criterion` 从 0 条变 5 条，逐模块看多数模块都降
+     * （提交与挂单管理 11/12 → 7/13，持仓与风控 7/13 → 2/11）。故事从写「用户做什么」
+     * 漂成写「屏幕上有什么」——而词表（下单/撤单/平仓/转账…）既是判定动作型的那把尺，
+     * 也是模型写单元时眼前唯一的动词来源。**把词表从眼前拿走，它就不写动作了。**
+     *
+     * 所以只剔大的：`domainReference` 一个字段占被剔总量的 91.5%（4,207 / 4,598 字符），
+     * 其余四样合计 391 字符——40 个单元也才 1.6 万，放回去等于不要钱。
      *
      * `storyIndex` 例外：它按节点固定（stories 阶段为空，cases 阶段一份），
      * 所以只在这个节点的**第一个**单元发一次。
      */
     const firstOfNode = units.every((u) => u.unitId === next.unitId || u.status === "pending");
-    const { domainReference: _dr, actionVocabulary: _av, volatileReadings: _vr, roles: _ro,
-      rulePack: _rp, productModelRevision: _pm, storyIndex, ...perUnit } = materials;
+    const { domainReference: _dr, productModelRevision: _pm, storyIndex, ...perUnit } = materials;
     const slim = { ...perUnit, ...(firstOfNode && storyIndex.length ? { storyIndex } : {}) };
     return { unit: { ...next, runId: undefined }, manifest, materials: slim, contract,
-      runScope: "load_run_instructions() 已发过整跑级材料（领域参考、角色、行业词表、易变读数、规则包）；这里不重发。",
+      runScope: "领域参考全文在 load_run_instructions() 的 runScope 里，整跑发一次；这里不重发。词表、易变读数、角色、规则包照常随每个单元发。",
       ...(next.repair ? { repair: repairBrief(next.repair) } : {}),
       remaining: units.filter((u) => u.status !== "done").length - 1 };
   })();
