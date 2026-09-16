@@ -1,4 +1,5 @@
 import { boundRulePack } from "./rulePacks.js";
+import { boundDomainReference } from "./domainReferences.js";
 import { requireStageStarted } from './workflowControls.js';
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -109,6 +110,25 @@ function verifyCases(runId: string, projectId: string, content: unknown) {
 }
 
 /** Serving these bytes proves delivery to the host context, not attention or obedience. */
+/**
+ * 整跑级材料：领域参考、行业词表、易变读数、角色、规则包摘要。
+ * 它们不随单元变化，所以不该出现在每个 `claim_unit` 的返回里（见下面的注释）。
+ */
+export function runScopeMaterials(runId: string, projectId: string) {
+  const pack = boundRulePack(runId, projectId);
+  // 用本文件的 store()：workUnits 已经反向 import 了 runStages，引它的 latestByName 会成环。
+  const l = store();
+  const modelRev = l.listRevisions(projectId, runId).filter((r) => r.name === "product/model-candidate").sort((x, y) => x.revision - y.revision).at(-1);
+  const model = modelRev ? (l.readRevision(modelRev.id, projectId).content as { roles?: unknown[] }) : undefined;
+  return {
+    domainReference: boundDomainReference(runId, projectId),
+    actionVocabulary: pack?.actionVocabulary ?? [],
+    volatileReadings: pack?.volatileReadings ?? [],
+    roles: model?.roles ?? [],
+    ...(pack ? { rulePack: { id: pack.id, version: pack.version } } : {}),
+  };
+}
+
 export function loadRunInstructions(runId: string, projectId: string) {
   return store().db.transaction(() => {
     requireStageStarted(runId,projectId,"instructions");
@@ -123,7 +143,18 @@ export function loadRunInstructions(runId: string, projectId: string) {
     const loadedDigest = contentHash(canonicalJSON(files.map(({ path, hash }) => ({ path, hash }))));
     const memory = selectRunMemory(store(), runId, projectId, getProject(projectId)?.targetUrl ?? 'http://localhost',
       process.env.TP_MEMORY_ENABLED !== '0' && run.input.parameters?.memoryEnabled !== false && run.binding.contextPolicy?.memory !== 'off');
-    const content = { files, loadedDigest, memory, skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
+    /**
+      * **整跑不变的材料只发一次。**
+      *
+      * 2026-09-16 实测（Hyperliquid，40 个工作单元）：`claim_unit` 每次回 2.6 万字符，
+      * 其中 `domainReference` 40 次一模一样（16.8 万字符）、`roles` / `rulePack` / 词表
+      * 各只有一种取值——整跑级的事实被逐单元重发了 39 遍。而这些字符每一轮都算进
+      * `cache_read`：那一跑 7,780 万 token 的缓存读、$36，output 只有 3,200 token。
+      * 真正贵的不是「写用例」，是「把用过的东西一遍遍重读」。
+      *
+      * 它们挂在这里：这个工具幂等（第二次调用返回同一份回执），天然只发一次。
+      */
+    const content = { files, loadedDigest, memory, runScope: runScopeMaterials(runId, projectId), skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
     const r = save(runId, projectId, "instructions", content, memory.entries.map(e => e.sourceRevision));
     store().db.prepare("UPDATE wf_run_registrations SET bindingJson=? WHERE runId=?").run(canonicalJSON({ ...run.binding, loadedDigest, memoryDigest: memory.digest }), runId);
     return { ...content, revisionId: r.revisionId };

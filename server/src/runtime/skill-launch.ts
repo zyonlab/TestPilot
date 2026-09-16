@@ -24,7 +24,7 @@ export function unitGenerationMessage(input: GenerationMessageInput): string {
     "Use TestPilot skill mode with WORK UNITS. You are the planning model, but you never write a whole bundle: the server splits the work and merges it.",
     `This run is already registered: runId=${JSON.stringify(runId)}. Use that exact ID in every tool.`,
     "Before each node call begin_stage (node=modules, then instructions, then stories, then cases, then gate, then finalize). If it returns paused/cancelled/failed, STOP this turn immediately.",
-    "Call load_run_instructions once and read the returned skills and domain references.",
+    "Call load_run_instructions once and read the returned skills plus `runScope` — the domain reference, roles, action vocabulary, volatile readings and rule pack summary for the WHOLE run. claim_unit never repeats them; keep them from this one call.",
     /**
      * 产品规划这一步此前**不在这份清单里**，于是 Web 臂从来没跑过它（2026-09-12 实测：
      * 一次完整运行里 source → instructions → stories，账本上没有任何 `modules` 回执，

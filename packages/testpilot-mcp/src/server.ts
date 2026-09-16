@@ -174,7 +174,7 @@ for (const [name, action, description] of [
  */
 server.registerTool("claim_unit", {
   title: "Claim the next work unit",
-  description: "Returns ONE bounded unit of a node (a module subtree for stories, a single story for cases) with its scope, ContextManifest, and only the features, rules, observations and conflicts in that scope. Reason about this unit alone, then call write_unit. A null unit means the node is finished and the server has merged it. The split is computed by the server from the product model; agents cannot widen it.",
+  description: "Returns ONE bounded unit of a node (a module subtree for stories, a single story for cases) with its scope, ContextManifest, and only the features, rules, observations and conflicts in that scope. Run-wide materials (domain reference, roles, action vocabulary, volatile readings, rule pack) are NOT repeated here — they come once from load_run_instructions as `runScope`. Reason about this unit alone, then call write_unit. A null unit means the node is finished and the server has merged it. The split is computed by the server from the product model; agents cannot widen it.",
   inputSchema: { runId: z.string(), node: z.enum(["stories", "cases"]) },
 }, async ({ runId, ...body }) => { try { return ok(await runs.call(runId, "stages/units/claim", body)); } catch (e) { return fail(e); } });
 server.registerTool("write_unit", {

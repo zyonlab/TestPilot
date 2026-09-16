@@ -326,7 +326,25 @@ export function claimUnit(runId: string, projectId: string, raw: unknown, claime
     next.manifestId = manifest.manifestId;
     save(next);
     const contract = unitContract(next, materials.modules, materials.features, materials.story, materials.subsumed, materials.actionVocabulary);
-    return { unit: { ...next, runId: undefined }, manifest, materials, contract,
+    /**
+     * **整跑不变的东西不随每个单元重发。**
+     *
+     * 2026-09-16 实测：40 个单元的 `claim_unit` 返回合计 110 万字符，其中 `domainReference`
+     * 40 次完全相同（16.8 万）、`storyIndex` 只有两种取值（17.2 万）、`roles` / `rulePack` /
+     * 词表各只有一种。它们每一轮都进 `cache_read`——那一跑 7,780 万 token 缓存读、$36，
+     * 而 output 只有 3,200 token。服务端内部照常用（`manifestFor` 要 rulePack、
+     * `unitContract` 要词表、`writeUnit` 要 roles），只是**不再交给模型重读**：
+     * 它们在 `load_run_instructions` 的 `runScope` 里，整跑发一次。
+     *
+     * `storyIndex` 例外：它按节点固定（stories 阶段为空，cases 阶段一份），
+     * 所以只在这个节点的**第一个**单元发一次。
+     */
+    const firstOfNode = units.every((u) => u.unitId === next.unitId || u.status === "pending");
+    const { domainReference: _dr, actionVocabulary: _av, volatileReadings: _vr, roles: _ro,
+      rulePack: _rp, productModelRevision: _pm, storyIndex, ...perUnit } = materials;
+    const slim = { ...perUnit, ...(firstOfNode && storyIndex.length ? { storyIndex } : {}) };
+    return { unit: { ...next, runId: undefined }, manifest, materials: slim, contract,
+      runScope: "load_run_instructions() 已发过整跑级材料（领域参考、角色、行业词表、易变读数、规则包）；这里不重发。",
       ...(next.repair ? { repair: repairBrief(next.repair) } : {}),
       remaining: units.filter((u) => u.status !== "done").length - 1 };
   })();
@@ -762,7 +780,7 @@ export function unitContract(
           "  • risk: {impact, reason, ruleRefs}. impact is one of funds-and-exposure | authorization | data-integrity | availability | information | cosmetic — a category, NOT a sentence. reason is the sentence: why this priority, not a restatement of it.",
           "  • testData is an OBJECT: {fixtureRef?, accountRef?, values:[{name, value, unit?, source?}]} — not a bare array. Every value carries where it came from (a rule id or the asset metadata). Never invent a constant.",
           "  • assertions: one entry per independently checkable expectation, each {id, statement, ruleRefs[], oracle?, afterStep?} — the field is `statement`, not `expected`. Do not fold two checks into one sentence. Assertions are checked after the LAST step unless you set afterStep: n (1-based) — if an assertion describes a screen the case passes THROUGH (「the labels page shows the empty state」 before the step that opens the form), set afterStep to the step that reaches that screen, or it will be judged on the wrong page. An open question is not an assertion: never put 「待确认 / 开放问题 / not a failure criterion」 text into assertions[] — it cannot pass or fail; put it in readiness.reason.",
-          "  • materials.domainReference, when present, is THIS product's own list of invariants (supplied by the project): a case may be written to contradict one; anything it marks as a hypothesis may only become an open question. materials.volatileReadings names readings that change on their own — assert they exist or relate, never pin their value.",
+          "  • The domain reference from load_run_instructions (runScope.domainReference), when present, is THIS product's own list of invariants (supplied by the project): a case may be written to contradict one; anything it marks as a hypothesis may only become an open question. materials.volatileReadings names readings that change on their own — assert they exist or relate, never pin their value.",
           "  • readiness: {design, execution, reason?}. design ∈ candidate | reviewed. execution ∈ ready | requires-fixture | requires-session | blocked | not-executable. When execution is not `ready` you MUST give reason and say what is missing.",
           "A bound, a step or a constant you cannot trace to a rule or to the asset metadata does not belong in the case. Leave the field out rather than fabricate it — the server treats a missing field and a fabricated one differently.",
           "steps are ACTIONS a browser agent performs, one per line, in order. They are not narration: never put a cross-reference (\"as in S-MKT-01\"), a precondition (\"on an account with no balance\"), or an API call into a step — the agent will try to perform it and the case dies before its oracle is checked. Preconditions go in precondition[], cross-references stay in the story, API checks stay in the oracle.",

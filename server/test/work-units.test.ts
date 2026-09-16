@@ -389,3 +389,26 @@ it("判据引了材料里不存在的段 → 这一单元打回", () => {
   const ok = units.writeUnit(runId, project, { unitId: c.unit!.unitId, content: story("前置：无 / 触发：点 / 结果：变（依据 sections.md#2）") }) as { status: string };
   expect(ok.status).toBe("validated");
 });
+
+/**
+ * 2026-09-16：40 个单元的 claim 返回合计 110 万字符，其中领域参考 40 次完全相同、
+ * storyIndex 只有两种取值、角色与词表各只有一种——整跑级事实被逐单元重发了 39 遍，
+ * 而每一轮都算进 cache_read（那一跑 7,780 万 token 缓存读、$36，output 只有 3,200）。
+ * 它们现在只在 load_run_instructions 发一次。
+ */
+it("claim_unit 不重发整跑级材料，load_run_instructions 发一次", () => {
+  const { runId } = newRun("slim-claim");
+  // newRun 内部已经调过一次 load_run_instructions；它幂等，第二次返回同一份回执。
+  const instructions = stages.loadRunInstructions(runId, project) as { runScope?: Record<string, unknown> };
+  expect(instructions.runScope).toBeTruthy();
+  const scope = instructions.runScope!;
+  // 这份夹具本来就没有领域参考、角色与词表，所以只验形状：字段在、类型对。
+  expect(typeof scope.domainReference).toBe("string");
+  for (const arrayField of ["actionVocabulary", "volatileReadings", "roles"]) expect(Array.isArray(scope[arrayField])).toBe(true);
+
+  const claimed = units.claimUnit(runId, project, { node: "stories" }) as { materials?: Record<string, unknown>; runScope?: string };
+  for (const gone of ["domainReference", "actionVocabulary", "volatileReadings", "roles", "rulePack", "productModelRevision"])
+    expect(claimed.materials).not.toHaveProperty(gone);
+  for (const kept of ["features", "rules", "modules"]) expect(claimed.materials).toHaveProperty(kept);
+  expect(claimed.runScope).toMatch(/load_run_instructions/);
+});
