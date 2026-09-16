@@ -8,13 +8,15 @@ import { join } from "node:path";
  * 冻结之后按它切单元；没冻结就回落到规则包里那棵树。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"),
-  db: typeof import("../src/db.js"), stage: typeof import("../src/moduleStage.js");
+  db: typeof import("../src/db.js"), stage: typeof import("../src/moduleStage.js"),
+  controlsModule: typeof import("../src/workflowControls.js");
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tp-modstage-"));
   vi.stubEnv("TP_DATA_DIR", dir);
   vi.stubEnv("MIDSCENE_MODEL_NAME", "fixture"); vi.stubEnv("MIDSCENE_MODEL_BASE_URL", "https://fixture.test/v1"); vi.stubEnv("MIDSCENE_MODEL_API_KEY", "fixture-key");
   db = await import("../src/db.js"); service = await import("../src/runService.js"); stage = await import("../src/moduleStage.js");
+  controlsModule = await import("../src/workflowControls.js");
   project = db.createProject("mod-stage", "http://127.0.0.1:5391/").id;
 });
 afterAll(() => { service.runLedger().close(); db.db.close(); vi.unstubAllEnvs(); rmSync(dir, { recursive: true, force: true }); });
@@ -196,4 +198,40 @@ it("新树一个功能都没认领 → 整份拒收；认领了就放行", () =>
 
   const ok = stage.writeModulePlan(runId, project, tree(["f.one", "f.two"])) as { status: string };
   expect(ok.status).toBe("validated");
+});
+
+/**
+ * 2026-09-16：Hyperliquid 那一跑里 Claude 用了 43 次 Bash、25 次 Read，其中 15 次在读服务端源码
+ * （`moduleStage.ts` / `modulePlan.ts` / `workflowControls.ts`），为的是搞清模块树要交什么、
+ * 机检会怎么拒——因为 `modules` 这一步当时只发 `sections`，契约、规则、功能清单一样都没发。
+ * 一跑 $6.39，而没有模块节点的那跑 $3.14。这三样现在当数据交出去。
+ */
+it("begin_stage(modules) 把契约、机检规则与功能清单一并交出去", () => {
+  const runId = newRun("modules-contract");
+  service.runLedger().putRevision({ runId, projectId: project, name: "product/model-candidate", kind: "report", content: {
+    modules: [{ id: "m", name: "模块", parentId: null }],
+    features: [{ id: "f.one", moduleId: "m", name: "功能一" }, { id: "f.two", moduleId: "m", name: "功能二" }],
+  } }, { kind: "system", id: "test" });
+
+  const begun = stage.beginStage ? stage.beginStage(runId, project, { node: "modules" }) : undefined;
+  const out = (begun ?? controlsModule.beginStage(runId, project, { node: "modules" })) as {
+    sections?: string[]; structureContract?: string; features?: Array<{ id: string; name?: string }>;
+    checks?: Array<{ code: string; severity: string; means: string }>;
+  };
+  expect(out.sections).toEqual(["m.md#1", "m.md#2", "m.md#3"]);
+  expect(out.structureContract).toMatch(/parentId/);
+  expect(out.structureContract).toMatch(/EVERY FEATURE MUST BE CLAIMED BY A LEAF/);
+  expect(out.features).toEqual([{ id: "f.one", name: "功能一", moduleId: "m" }, { id: "f.two", name: "功能二", moduleId: "m" }]);
+  const codes = (out.checks ?? []).map((c) => c.code);
+  expect(codes).toContain("module_fake_hierarchy");
+  expect(codes).toContain("module_tree_drops_all_features");
+  expect(codes).toContain("material_section_unclaimed");
+  expect((out.checks ?? []).every((c) => ["error", "warn", "info"].includes(c.severity) && c.means.length > 0)).toBe(true);
+});
+
+it("没有产品模型时功能清单是空的，不报错", () => {
+  const runId = newRun("modules-no-model");
+  const out = controlsModule.beginStage(runId, project, { node: "modules" }) as { features?: unknown[]; structureContract?: string };
+  expect(out.features).toEqual([]);
+  expect(out.structureContract).toMatch(/AT LEAST TWO LEVELS/);
 });
