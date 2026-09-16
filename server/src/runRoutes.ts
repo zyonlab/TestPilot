@@ -115,7 +115,7 @@ export function runRouter() {
       kind: kind as ArtifactRevision["kind"], content, mediaType, sourceRefs, parentRevision }, { kind: "agent", id: "host-import" }));
   }));
   // 冻结模块树：和 gold 一样，这一笔必须由人落。带 run 令牌调会被 reviewerPrincipal 拒。
-  router.post("/:runId/modules/freeze", wrap((req, res) => res.json(freezeModulePlan(req.params.runId, req.params.projectId, reviewerPrincipal(req)))));
+  router.post("/:runId/modules/freeze", wrap((req, res) => res.json(freezeModulePlan(req.params.runId, req.params.projectId, reviewerPrincipal(req), typeof req.body?.note === "string" ? req.body.note : undefined))));
   router.get("/:runId/review-history", wrap((req, res) => res.json({ events: approvalHistory(req.params.runId, req.params.projectId) })));
   for (const action of ["lineage", "diff", "export"]) router.get(`/:runId/artifacts/:revisionId/${action}`, wrap((req, res) => {
     const revision = runLedger().revision(req.params.revisionId, req.params.projectId);

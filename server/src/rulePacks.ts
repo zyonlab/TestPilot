@@ -23,6 +23,15 @@ export interface RulePackVersion {
   hash: string;
   createdAt: string;
   counts: { modules: number; features: number; rules: number; targets: number };
+  /**
+   * 这一版现在还过得了校验吗。
+   *
+   * 2026-09-16：schema 收紧（版本号要能拼进 charter 的 id）之后，我自己早先存的两版
+   * 带 `+` 的包读不出来了——而列表只读行、不校验，于是它们照样列在界面上，
+   * 选中之后要等到建运行那一刻才 400。**列表就该说清哪一版已经不能用了。**
+   */
+  valid: boolean;
+  invalidReason?: string;
 }
 
 function table() {
@@ -33,14 +42,19 @@ function table() {
   return db;
 }
 const countsOf = (p: ProductRulePack) => ({ modules: p.modules.length, features: p.features.length, rules: p.rules.length, targets: p.targets.length });
-const rowToVersion = (r: { id: string; projectId: string; packId: string; version: string; hash: string; json: string; createdAt: string }): RulePackVersion =>
+const rowToVersion = (r: { id: string; projectId: string; packId: string; version: string; hash: string; json: string; createdAt: string }): Omit<RulePackVersion, "valid"> =>
   ({ id: r.id, projectId: r.projectId, packId: r.packId, version: r.version, hash: r.hash, createdAt: r.createdAt,
      counts: countsOf(JSON.parse(r.json) as ProductRulePack) });
 
 export function listRulePacks(projectId: string): Array<RulePackVersion & { usedByRuns: string[] }> {
   const rows = table().prepare("SELECT * FROM rule_packs WHERE projectId=? ORDER BY createdAt DESC").all(projectId) as never[];
   const used = usageByHash(projectId);
-  return (rows as Array<Parameters<typeof rowToVersion>[0]>).map((r) => ({ ...rowToVersion(r), usedByRuns: used.get(r.hash) ?? [] }));
+  return (rows as Array<Parameters<typeof rowToVersion>[0]>).map((r) => {
+    // 校验放在这里而不是只在建运行时：早先存下、后来被 schema 收紧判为无效的版本，要在列表上就看得出来。
+    const v = validateRulePack(JSON.parse(r.json));
+    return { ...rowToVersion(r), usedByRuns: used.get(r.hash) ?? [],
+      valid: v.ok, ...(v.ok ? {} : { invalidReason: v.errors.slice(0, 2).map((e) => `${e.code}@${e.jsonPointer}`).join("; ") }) };
+  });
 }
 
 /** 哪一版被哪些运行用过。运行里那条 `knowledge/rulepack/*` 修订记着哈希，从那儿反查。 */
@@ -74,12 +88,13 @@ export function saveRulePack(projectId: string, raw: unknown): RulePackVersion &
   if (!v.ok) throw new LedgerError(400, `invalid_rule_pack:${JSON.stringify(v.errors.slice(0, 8))}`);
   const existing = table().prepare("SELECT * FROM rule_packs WHERE projectId=? AND packId=? AND hash=?")
     .get(projectId, v.pack.id, v.hash) as Parameters<typeof rowToVersion>[0] | undefined;
-  if (existing) return { ...rowToVersion(existing), created: false };
+  // 走到这里说明 validateRulePack 已经过了，所以这一版按定义就是合法的。
+  if (existing) return { ...rowToVersion(existing), valid: true, created: false };
   // id 带上项目：同一份包装进两个项目是两行。
   const row = { id: `rp-${projectId}-${v.hash.slice(0, 12)}`, projectId, packId: v.pack.id, version: v.pack.version,
     hash: v.hash, json: JSON.stringify(v.pack), createdAt: new Date().toISOString() };
   table().prepare("INSERT INTO rule_packs (id,projectId,packId,version,hash,json,createdAt) VALUES (@id,@projectId,@packId,@version,@hash,@json,@createdAt)").run(row);
-  return { ...rowToVersion(row), created: true };
+  return { ...rowToVersion(row), valid: true, created: true };
 }
 
 /** 删一版。**用过的那一版不许删**：运行的回执指着它，删了之后那次运行就说不清自己按什么跑的。 */

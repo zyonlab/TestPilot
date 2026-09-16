@@ -235,3 +235,27 @@ it("没有产品模型时功能清单是空的，不报错", () => {
   expect(out.features).toEqual([]);
   expect(out.structureContract).toMatch(/AT LEAST TWO LEVELS/);
 });
+
+/**
+ * 2026-09-16：Hyperliquid 那一跑的模块树冻结是 Claude 按用户当轮授权代按的，
+ * 而账本里所有冻结都写成同一行 `frozenBy: local-operator`——事后看不出是人按还是代理代按。
+ * 冻结现在收一条 note，并把「谁按的、什么时候、什么说明」一起回出去。
+ */
+it("冻结留下的痕迹要分得清人和代理", () => {
+  const runId = newRun("freeze-note");
+  service.runLedger().putRevision({ runId, projectId: project, name: "product/model-candidate", kind: "report", content: {
+    modules: [{ id: "m", name: "模块", parentId: null }], features: [{ id: "f.one", moduleId: "m" }],
+  } }, { kind: "system", id: "test" });
+  stage.writeModulePlan(runId, project, { modules: [
+    { id: "m-a", name: "甲", parentId: null, purpose: "用户在这里做甲事", evidence: ["m.md#1"], featureIds: ["f.one"] },
+    { id: "m-a.one", name: "甲之一", parentId: "m-a", purpose: "甲的第一件事", evidence: ["m.md#2"] },
+  ] });
+
+  expect(stage.modulePlanState(runId, project)).toMatchObject({ exists: true, frozen: false });
+  stage.freezeModulePlan(runId, project, { kind: "human", id: "local-operator" }, "由 Claude 代按：用户 2026-09-16 在对话中明确授权");
+  const state = stage.modulePlanState(runId, project) as { frozen: boolean; frozenBy?: string; frozenNote?: string; frozenAt?: string };
+  expect(state.frozen).toBe(true);
+  expect(state.frozenBy).toBe("local-operator");
+  expect(state.frozenNote).toMatch(/代按/);
+  expect(state.frozenAt).toBeTruthy();
+});

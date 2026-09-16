@@ -64,3 +64,27 @@ it("宿主登记的运行冻结绑定项目当前那份规则包", async () => {
   expect(bound?.actionVocabulary).toEqual(["结算"]);
   expect(packs.listRulePacks(project).find((v) => v.hash === latest.hash)!.usedByRuns).toContain(runId);
 });
+
+/**
+ * 2026-09-16：schema 收紧（版本号要能拼进 charter 的 id）之后，早先存下的带 `+` 的版本读不出来了，
+ * 而列表只读行不校验，于是它们照样列在界面上，选中后要等到建运行那一刻才 400。列表就该说清。
+ */
+it("列表标出已经过不了校验的旧版本", () => {
+  const project2 = db.createProject("packs-legacy", "http://127.0.0.1:5391/").id;
+  packs.saveRulePack(project2, RAW);
+  // 绕过保存时的校验，直接写一行「历史遗留」的非法版本号，模拟收紧 schema 之前存下的数据。
+  const row = db.db.prepare("SELECT * FROM rule_packs WHERE projectId=?").get(project2) as Record<string, unknown>;
+  const legacy = JSON.parse(String(row.json)) as Record<string, unknown>;
+  legacy.version = `${String(RAW.version)}+legacy`;
+  db.db.prepare("INSERT INTO rule_packs (id,projectId,packId,version,hash,json,createdAt) VALUES (?,?,?,?,?,?,?)")
+    .run(`rp-${project2}-legacy`, project2, String(row.packId), String(legacy.version), `${"f".repeat(64)}`, JSON.stringify(legacy), new Date(Date.now() + 1000).toISOString());
+
+  const list = packs.listRulePacks(project2);
+  expect(list).toHaveLength(2);
+  const bad = list.find((v) => v.version.endsWith("+legacy"))!;
+  const good = list.find((v) => !v.version.endsWith("+legacy"))!;
+  expect(bad.valid).toBe(false);
+  expect(bad.invalidReason).toMatch(/version|invalid/i);
+  expect(good.valid).toBe(true);
+  expect(good.invalidReason).toBeUndefined();
+});
