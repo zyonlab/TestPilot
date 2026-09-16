@@ -44,7 +44,7 @@ export interface WorkUnit {
   outputRevision?: string;
   reason?: string;
   /**
-   * 门禁对这个单元里的用例说了什么（docs/v3/23 F-11）。
+   * 门禁对这个单元里的用例说了什么（docs/v3/history/23 F-11）。
    *
    * 门禁把整批判为不通过之后，规划器原来拿不到「该改哪几条」——两次实测它都是就地停住。
    * 而门禁其实什么都说了：`scoreBasis.flagged` 是被扣分的用例 id，每条 finding 都带 `caseId`。
@@ -106,7 +106,7 @@ function productModel(runId: string, projectId: string): { model: UnitBasis; rev
     /**
      * 没有产品模型，但有一棵**人冻结过的**模块树：照样能切单元。
      *
-     * 2026-09-12 实测的直接原因（docs/v3/24 §12）：这条链路上没跑探索，于是整个 stories 节点
+     * 2026-09-12 实测的直接原因（docs/v3/history/24 §12）：这条链路上没跑探索，于是整个 stories 节点
      * 退回「一次调用写完整份」——26 条故事、46 条验收，全部挤在一次 7k token 的可见输出里。
      * 不是模型不想写，是一次答复里写不下。而那棵冻结的树本身就是最好的切分依据。
      */
@@ -124,7 +124,7 @@ function productModel(runId: string, projectId: string): { model: UnitBasis; rev
    * **冻结过的模块树压过规则包里那一棵。**
    *
    * 在此之前模块树只能是 `pack.modules`——人手写在规则包里，模型一个字没参与，
-   * 于是「产品模块规划」这件事在流程里根本不存在（docs/v3/24 §0）。现在 `modules`
+   * 于是「产品模块规划」这件事在流程里根本不存在（docs/v3/history/24 §0）。现在 `modules`
    * 节点可以提议一棵、由人冻结；冻结了就按它切单元，没冻结就照旧回落到规则包。
    *
    * 只换 `modules`，不动 `features` 与 `ruleBindings`：功能与规则的归属仍由规则包说了算，
@@ -357,7 +357,7 @@ export function claimUnit(runId: string, projectId: string, raw: unknown, claime
 }
 
 /**
- * 故事单元的写入可以带 `moduleAmendments`：**只提议，不生效**（docs/v3/24 §6.4）。
+ * 故事单元的写入可以带 `moduleAmendments`：**只提议，不生效**（docs/v3/history/24 §6.4）。
  *
  * 模块树冻结之后故事节点碰不得它，于是会出现「一条故事装不下、模型默默挂到最近的模块上」——
  * 那条挂错的边没人看得见。这个出口不改变本次拆分、不进 validated/stories，
@@ -439,7 +439,7 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
        * 我第一版只比对了分节数，于是把合法的 `exploration.md#35`（第 35 个检索块）
        * 判成了「引了不存在的段」——**误伤**。所以这里取两者的上界：
        * 只有两套编号都容不下的号才是真的不存在。
-       * 两套编号共用一个写法这件事本身是设计债，记在 docs/v3/24 §33。
+       * 两套编号共用一个写法这件事本身是设计债，记在 docs/v3/history/24 §33。
        */
       for (const [j, a] of s.acceptance.entries())
         for (const m of String(a).matchAll(/([\w.-]+\.md)#(\d+)/g)) {
@@ -753,7 +753,11 @@ export function unitContract(
           "tier and oracle move together. tier 1 or 2 REQUIRES a machine-checkable oracle on the case or on at least one assertion; a tier claimed without one is a label with nothing behind it. Write one of these shapes verbatim:",
           '    {"kind":"text","value":"<a literal the page shows>"}   {"kind":"noText","value":"<a literal the page must NOT show>"}',
           '    {"kind":"count","value":"<a literal>","op":"eq|gte|lte","n":<int>}   {"kind":"delta","value":"<label a number sits beside>","direction":"increased|decreased|unchanged"}   ← tier 2',
-          '    {"kind":"api","url":"<endpoint>","method":"GET|POST","body":"<json string, for POST>","path":"<dotted path into the response>","op":"eq|neq|gte|lte|exists|absent|increased|decreased|unchanged","value":<optional>}',
+          /**
+           * 这里原来是一行 `{"kind":"api",…}` 的写法——紧接着的下一句却说「永远不要对产品自己的接口下判断」。
+           * 契约先教一种写法再禁止它，门禁（`oracle-offsite`）又会把照写的用例点名扣分。换成 tier 3 的 judge。
+           */
+          '    {"kind":"judge","criteria":["<one yes/no statement about the screen>", ...],"samples":3,"minPass":2}   ← tier 3, for GENERATED content only (an image, a summary, a caption, a translation)',
           /**
            * **判决从屏幕读**（CLAUDE.md 红线，2026-09-12 用户口径）。
            *
@@ -767,6 +771,7 @@ export function unitContract(
           "  The verdict is read from the SCREEN. This product generates end-to-end UI tests: a case drives the interface and then judges what the interface shows. Never assert against the product's own API — an API that says the order was placed while the screen shows nothing means the case passes on a broken product.",
           "  Numbers that move (counts, countdowns, live prices, balances, timestamps) are not a reason to reach for the API: assert that the field EXISTS, or a RELATION between two readings (kind=delta), or a literal the product itself renders — a label, a status word, a count.",
           "  If nothing can decide it by program, say tier 3 and leave oracle out — and in readiness.reason say what judge or capability is missing.",
+          "  Exception: when the outcome is generated content that differs on every run, give tier 3 a judge oracle. Each criterion is ONE statement a reader answers yes or no by looking (\"the image shows a cat\", \"the title is at most 20 characters\") — never \"looks good\" or \"is reasonable\" (the gate flags those). samples ≥ 3 and minPass ≤ samples; the case passes when at least minPass samples hold every criterion.",
           "covers must be exactly the transition ids in design.transitionIds — the edges this case walks. A rule id (R-…) is NOT a transition and must never appear there; neither is a human-readable summary line. A case that walks no edge leaves covers empty.",
           "Carry the design evidence, not just the method label. The server checks these deterministically and rejects contradictions:",
           /**

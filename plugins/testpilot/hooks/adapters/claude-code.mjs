@@ -7,7 +7,7 @@
  *           tool_name: "Write"|"Edit"|…, tool_input: {file_path, content | old_string,new_string}}
  *   拦截   PreToolUse：退出码 2 + stderr（stderr 进模型上下文）；
  *          Stop：stdout `{"decision":"block","reason":…}`（reason 成为下一轮的 user 消息）。
- * Penguin 的（`docs/v3/03`）：stdin `{hook:"pre_tool_use", tool_name:"write_file", arguments:"<json 字符串>", trace_path}`，
+ * Penguin 的（`docs/v3/history/03`）：stdin `{hook:"pre_tool_use", tool_name:"write_file", arguments:"<json 字符串>", trace_path}`，
  *   stdout `{decision:"deny", reason}`；`stop` 用 `{decision:"continue", input}`。
  *
  * 两处不是改名就能对上的：

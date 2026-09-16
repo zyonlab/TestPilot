@@ -18,7 +18,7 @@ function check(name, fn) {fn();checks.push(name);}
 function event(node, name) {node.dispatchEvent(new w.Event(name,{bubbles:true}));}
 async function verify() {
   const cards = [...d.querySelectorAll('details.task')];
-  const source = fs.readFileSync(path.join(root,'docs/v3/13-UI与论文路线任务台账.md'),'utf8');
+  const source = fs.readFileSync(path.join(root,'docs/v3/history/13-UI与论文路线任务台账.md'),'utf8');
   const blocks = source.split(/(?=^#### P-\d+ · )/m).slice(1);
   const ids = blocks.map(b=>b.match(/^#### (P-\d+)/)[1]);
   check('28 unique task IDs and required implementation fields',()=>{

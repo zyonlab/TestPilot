@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * 节点上下文清单（ContextManifest v2，docs/v3/21 §3）。
+ * 节点上下文清单（ContextManifest v2，docs/v3/history/21 §3）。
  *
  * 由服务构建，记录**实际下发**了什么：知识包的 revision 与哈希、规则 ID、输入版本、
  * 工具授权、预算。模型回显 manifestId；它不能自签「已加载」。

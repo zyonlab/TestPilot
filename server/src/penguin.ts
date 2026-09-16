@@ -1,7 +1,7 @@
 /**
  * PenguinHarness 适配层——领域服务与 harness 之间的**唯一**接缝。
  *
- * v3 把 TestPilot 切两半（`docs/v3/00-架构.md` §2）：产品层留下，harness 层换成 Penguin。
+ * v3 把 TestPilot 切两半（`docs/v3/history/00-架构.md` §2）：产品层留下，harness 层换成 Penguin。
  * 这个文件就是那条切口：往上它只暴露四个函数，往下它只知道「起一个 session」「读它落盘的
  * 产物」。领域服务里任何一处都不该再出现 `penguin` 这个词。
  *
@@ -374,7 +374,7 @@ export interface StartRunInput {
    * 这次运行的预算。不给就由 managed worker 退回 `configuredRunBudget()`。
    *
    * 单元循环必须显式给：默认那份是给「一次写整份」定的 10 分钟，
-   * 2026-09-11 实测把一个跑得好好的 27 单元运行在第 10 个单元上掐断（docs/v3/22）。
+   * 2026-09-11 实测把一个跑得好好的 27 单元运行在第 10 个单元上掐断（docs/v3/history/22）。
    */
   budget?: RunBudget;
   /** 运行 id（同时是产物目录名）。不给就现生成一个。 */

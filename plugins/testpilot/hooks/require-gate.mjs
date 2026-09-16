@@ -4,7 +4,7 @@
  *
  * 这是**唯一可靠的"往回说话"通道**里的第二条：`continue` 的 `input` 直接成为下一个 Task 的
  * user 消息，模型一定读到。（第一条是 `pre_tool_use` 的 `deny` reason。`allow` 的 reason
- * 模型看不见——见 `docs/v3/03-penguin-hooks-契约.md` §3。）
+ * 模型看不见——见 `docs/v3/history/03-penguin-hooks-契约.md` §3。）
  *
  * 两条自我约束，都是必要的：
  *

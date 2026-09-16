@@ -1,5 +1,5 @@
 /**
- * 规划器在自己的循环里跑 `modules` + `stories` 两个节点（docs/v3/24 §10）。
+ * 规划器在自己的循环里跑 `modules` + `stories` 两个节点（docs/v3/history/24 §10）。
  *
  * 话术全部来自产品：`testpilot-run-c/SKILL.md` 的两步 + MCP 工具的 description + 服务端
  * `begin_stage` 回的 `structureContract`。这里一个字都不替它们写——这一趟量的就是出厂话术。

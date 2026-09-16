@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * `modules` 节点（docs/v3/24 §6、§7）：模型提议 → 服务端机检 → 人冻结。
+ * `modules` 节点（docs/v3/history/24 §6、§7）：模型提议 → 服务端机检 → 人冻结。
  * 冻结之后按它切单元；没冻结就回落到规则包里那棵树。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"),
@@ -91,7 +91,7 @@ it("没冻结的树不参与切单元：frozenModules 返回 undefined", () => {
 });
 
 /**
- * 提议了却没冻结的时候，故事单元不许被切出来（docs/v3/24 §8.1）。
+ * 提议了却没冻结的时候，故事单元不许被切出来（docs/v3/history/24 §8.1）。
  * 这条不在 work-units 那个套件里，是因为它判的是 `modules` 节点的人工闸门，不是单元循环本身。
  */
 it("提议过但没冻结：领故事单元直接被拒，而不是悄悄换回规则包那棵树", async () => {
@@ -101,7 +101,7 @@ it("提议过但没冻结：领故事单元直接被拒，而不是悄悄换回�
   expect(() => units.planUnits(runId, project, "stories")).toThrow(/module_plan_freeze_required/);
   /**
    * 冻结之后这道闸门就过了，而且**不需要产品模型**：一棵人认过的树本身就是切分依据。
-   * 这条以前断言的是 `work_units_require_product_model`——那是限制，不是设计（docs/v3/24 §12）。
+   * 这条以前断言的是 `work_units_require_product_model`——那是限制，不是设计（docs/v3/history/24 §12）。
    */
   stage.freezeModulePlan(runId, project, human);
   expect(units.planUnits(runId, project, "stories").map((u) => u.unitId)).toEqual(["stories:a"]);
@@ -113,7 +113,7 @@ it("提议过但没冻结：领故事单元直接被拒，而不是悄悄换回�
 });
 
 /**
- * 整份写入那条路上，冻结的树同样管用（docs/v3/24 §10）。
+ * 整份写入那条路上，冻结的树同样管用（docs/v3/history/24 §10）。
  * 这一条以前是个洞：`modules` 冻结了一棵树，规划器写故事时自带另一棵，没人拦。
  */
 it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是哪条故事", async () => {
@@ -146,7 +146,7 @@ it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是�
   const ok = stages.writeRunStage(runId, project, "stories",
     bundle([story("US-1", ["market.book"]), story("US-2", ["market.trades"])])) as { status: string };
   expect(ok.status).toBe("validated");
-  // 扇出结论要回到写它的那一方手里，不能只落一份没人读的报告（docs/v3/24 §11）。
+  // 扇出结论要回到写它的那一方手里，不能只落一份没人读的报告（docs/v3/history/24 §11）。
   expect((ok as unknown as { modulePlan?: Array<{ code: string }> }).modulePlan?.map((f) => f.code))
     .toContain("leaf_fanout_too_low");
   const report = service.runLedger().listRevisions(project, runId).find((r) => r.name === "report/module-fanout");
@@ -156,7 +156,7 @@ it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是�
 });
 
 /**
- * 沙箱探索的闸门（docs/v3/24 §14）：**只剩禁止名单**。
+ * 沙箱探索的闸门（docs/v3/history/24 §14）：**只剩禁止名单**。
  * 2026-09-16 起点会改状态的东西不再要求每个环境勾一次——那些动作正是被测产品的功能；
  * 绝不能碰的地址仍然在禁止名单上，主网就在那上面。
  */
@@ -173,7 +173,7 @@ it("探索要 interact：禁止名单直接拒，其余放行", async () => {
 });
 
 /**
- * 换了模块 id 就要重新认领功能，否则领域材料整份断在这里（docs/v3/24 §27）。
+ * 换了模块 id 就要重新认领功能，否则领域材料整份断在这里（docs/v3/history/24 §27）。
  *
  * 2026-09-12 实测：模型提了一棵新 id 的树，21 个功能一个都没接住；机检只记一条 warn，
  * 冻结之后每个故事单元 `features=0 / rules=0`——规则、观察、生命周期全没流下去，

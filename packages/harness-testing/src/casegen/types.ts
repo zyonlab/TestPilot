@@ -337,7 +337,7 @@ export const TextCaseSchema = z.object({
   featureRefs: z.array(z.string().min(1)).optional(),
   ruleRefs: z.array(z.string().min(1)).optional(),
 
-  /* ---- v2 设计证据（2026-09-11，docs/v3/21 §2 与 §5）。
+  /* ---- v2 设计证据（2026-09-11，docs/v3/history/21 §2 与 §5）。
    *
    * 八个字段全部 `optional()`，一个默认值都不给。理由和 `priority` 那条一样，
    * 而且在这里更要紧：这些字段是**证据**，给默认值等于替设计者答一遍，

@@ -13,7 +13,7 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
      * 探索要不要带钱包、要不要允许点会改状态的东西。
      *
      * 这两件事以前只有 API 开得了——于是「从界面上建一次运行」永远只能跑到未登录、
-     * 只读的那一半产品（docs/v3/24 §13）。一个只有 curl 才打得开的开关，
+     * 只读的那一半产品（docs/v3/history/24 §13）。一个只有 curl 才打得开的开关，
      * 对着界面工作的人等于没有。
      */
     [exploreWallet,setExploreWallet]=useState(false),[exploreInteract,setExploreInteract]=useState(false),
@@ -28,7 +28,7 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
     /**
      * 按模块拆成工作单元。
      *
-     * 2026-09-12 实测（docs/v3/24 §12）：不拆的时候，整份故事由一次模型调用写完，
+     * 2026-09-12 实测（docs/v3/history/24 §12）：不拆的时候，整份故事由一次模型调用写完，
      * 可见输出卡在 ~7k token——**加提示词买到的是思考，不是覆盖**。同一个模型拆成
      * 六个单元之后，故事从 26 条涨到 44 条。而这个开关此前只有 API 打得开，
      * 界面上建的运行永远撞在那个天花板上。

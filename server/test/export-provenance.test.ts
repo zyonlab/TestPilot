@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { buildExportFiles } from "../src/export.js";
 
 /**
- * 导出的 manifest 要带回得去的线索（docs/v3/20 切片 7「失败证据可追溯」）。
+ * 导出的 manifest 要带回得去的线索（docs/v3/history/20 切片 7「失败证据可追溯」）。
  *
  * 交出去的工程里一条测试红了，拿着它要能回到产生它的那次运行。板上的 id 在客户手里
  * 是个孤立字符串——没有 run 的指针就追不回去。

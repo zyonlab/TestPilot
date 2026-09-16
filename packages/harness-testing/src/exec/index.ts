@@ -6,6 +6,7 @@ export * from "./run.js";
 export * from "./interactive.js";
 export * from "./diagnostics.js";
 export * from "./oracle.js";
+export * from "./judge.js";
 export * from "./locators.js";
 export * from "./compare.js";
 export * from "./sfg.js";

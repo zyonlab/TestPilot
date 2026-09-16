@@ -190,7 +190,11 @@ function specForCase(
   const relationalApi =
     tc.oracle?.kind === "api" &&
     (tc.oracle.op === "increased" || tc.oracle.op === "decreased" || tc.oracle.op === "unchanged");
-  const assert = tc.oracle
+  // judge 判据要模型采样：走 checkJudge，而不是只看页面文字的 checkOracle。
+  const judged = tc.oracle?.kind === "judge";
+  const assert = judged
+    ? `  await checkJudge(page, judgeAgent, ${JSON.stringify(tc.oracle)});` + (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
+    : tc.oracle
     ? `  await checkOracle(page, ${JSON.stringify(tc.oracle)}${tc.oracle.kind === "delta" || relationalApi ? ", before" : ""});` +
       (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
     : tc.expected
@@ -201,7 +205,7 @@ function specForCase(
   const needsBefore = tc.oracle?.kind === "delta" || relationalApi;
   // 只解构真的用到的 fixture。一条由程序判定的用例不该顺手把判定模型的 fixture 也拉起来——
   // 那既是多余的开销，也让「这条用例到底要不要模型」在源码上看不出来。
-  const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(usesOracle ? [] : ["aiAssert"])];
+  const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(usesOracle ? [] : ["aiAssert"]), ...(judged ? ["judgeAgent"] : [])];
   // 只导入真的用到的：一个把整层都 import 进来的 spec，读的人分不清它到底依赖了什么。
   const layerImports = [
     usedFlows.size ? `import { ${[...usedFlows].sort().join(", ")} } from "${up}flows";` : "",
@@ -210,7 +214,7 @@ function specForCase(
     .filter(Boolean)
     .join("\n");
   const head = `import { test } from "${up}ai";
-${usesOracle ? `import { checkOracle${needsBefore ? ", readBefore" : ""} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
+${usesOracle ? `import { ${judged ? "checkJudge" : "checkOracle"}${needsBefore ? ", readBefore" : ""} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
   // targetUrl 已经是**这条用例自己的入口**（首步的裸导航被提到了这里，见 liftEntryNavigation）。
   const body = `  await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
 ${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${post ? "  try {\n" : ""}${steps}
@@ -402,7 +406,7 @@ import { executorConnectionFromEnv } from './model/connections-env.js';
 import { openRoleProxy } from './model/role-proxy.js';
 import { midsceneModelConfig } from './model/midscene.js';
 import { writeFile } from 'node:fs/promises';
-type Fixtures={midsceneAgent:PlaywrightAgent;aiAction:(text:string)=>Promise<unknown>;aiAssert:(text:string)=>Promise<unknown>};
+type Fixtures={midsceneAgent:PlaywrightAgent;aiAction:(text:string)=>Promise<unknown>;aiAssert:(text:string)=>Promise<unknown>;judgeAgent:{aiQuery:(demand:Record<string,string>,opt?:Record<string,unknown>)=>Promise<unknown>}};
 export const test=base.extend<Fixtures>({
  midsceneAgent:async({page},use,testInfo)=>{
   const connection=executorConnectionFromEnv();
@@ -412,6 +416,7 @@ export const test=base.extend<Fixtures>({
  },
  aiAction:async({midsceneAgent},use)=>use(text=>text.startsWith('waitFor:')?midsceneAgent.aiWaitFor(text.slice(8).trim()):midsceneAgent.aiAction(text)),
  aiAssert:async({midsceneAgent},use)=>use(text=>midsceneAgent.aiAssert(text)),
+ judgeAgent:async({midsceneAgent},use)=>use({aiQuery:(demand,opt)=>midsceneAgent.aiQuery(demand,opt as never)}),
 });
 export {expect} from '@playwright/test';
 `;

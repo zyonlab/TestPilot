@@ -39,7 +39,7 @@ score_run({ runId:"runs/story-cand-1", goldPath:"../../gold.json" })
 ```
 
 代价：这个数掺了 design 的手艺（虽然 design 版本固定），不如独立尺子干净；好处：现在就能跑。
-详见 `../../../../docs/v3/04-单skill进化.md`。
+详见 `../../../../docs/v3/history/04-单skill进化.md`。
 
 ## inputHash
 

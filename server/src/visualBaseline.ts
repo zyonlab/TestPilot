@@ -11,7 +11,7 @@ export const VISUAL_THRESHOLD = 0.5;
  *
  * 从 `index.ts` 抽出来是为了**让工作流执行也能用**：在此之前只有旧的单用例路径调它，
  * 于是工作流跑出来的截图一张都没进过基线，界面上那页「待审批基线」永远是空的
- * （docs/v3/23 §17）。它不知道调用者是谁，也不该知道。
+ * （docs/v3/history/23 §17）。它不知道调用者是谁，也不该知道。
  */
 export function processVisual(caseId: string, runId: string, pngBuffers: Buffer[], thresholdPct = VISUAL_THRESHOLD): VisualDiff[] {
   const out: VisualDiff[] = [];

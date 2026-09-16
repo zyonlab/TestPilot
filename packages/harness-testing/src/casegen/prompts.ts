@@ -98,9 +98,14 @@ export const CASES_STABLE = [
   "  Quote the literal EXACTLY as the specification writes it. If the outcome cannot be put",
   "  in any of these forms, then it is tier 3 — say so and leave `oracle` out. Claiming",
   "  tier 1 without an oracle is the one thing that makes the label worthless.",
-  "- `oracle` is ALWAYS present as an object. For tier 3 write {\"kind\":\"none\"}. Fields that do not apply",
-  "  to the chosen kind are filled with placeholders: \"-\" for strings, \"GET\" for method, \"eq\" for op, 0 for",
-  "  numbers; the harness strips them. Never leave a field out.",
+  "- `oracle` is ALWAYS present as an object. For tier 3 write {\"kind\":\"none\"} — unless the outcome is",
+  "  generated content (an image, a summary, a caption, a translation) that differs on every run. Then write",
+  "  {\"kind\":\"judge\",\"criteria\":[\"<one yes/no statement about the screen>\", ...],\"samples\":3,\"minPass\":2}:",
+  "  each criterion is ONE statement a reader can check by looking (\"the image shows a cat\", \"the title is at",
+  "  most 20 characters\"), never \"looks good\"; the harness asks the model `samples` times and passes when at",
+  "  least `minPass` samples hold every criterion. Fields that do not apply to the chosen kind are filled with",
+  "  placeholders: \"-\" for strings, \"GET\" for method, \"eq\" for op, 0 for numbers, [] for criteria; the",
+  "  harness strips them. Never leave a field out.",
   "- Steps are short, concrete, end-agnostic actions. No selectors, no page objects, no code.",
   "- Never put credentials in a step. Use ${env.NAME} and ${secret.NAME} placeholders.",
   "- `key` is a dedupe triple 'transition|parameters|assertion', lowercase, no spaces.",
@@ -472,7 +477,7 @@ export const CASES_SCHEMA = {
                * text 类 oracle 带着 `"url":"-"` 之类的占位符回来，`casegen/normalizeOracle.ts` 在 zod 之前剥掉。
                * tier 3 用 `kind: "none"`，剥掉后等于没有 oracle。
                */
-              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "none"] },
+              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "judge", "none"] },
               value: { type: "string" },
               op: { type: "string", enum: ["eq", "neq", "gte", "lte", "exists", "absent", "increased", "decreased", "unchanged"] },
               n: { type: "integer" },
@@ -484,10 +489,14 @@ export const CASES_SCHEMA = {
               body: { type: "string" },
               path: { type: "string" },
               settleMs: { type: "integer" },
+              // judge 专用（生成出来的内容）：几句是/否条件、问几次、至少几次全部成立。不适用时填 [] / 0。
+              criteria: { type: "array", items: { type: "string" } },
+              samples: { type: "integer" },
+              minPass: { type: "integer" },
               unit: { type: "object", properties: { path: { type: "string" }, value: { type: "string" } }, required: ["path", "value"], additionalProperties: false },
               freshness: { type: "object", properties: { timestampPath: { type: "string" }, maxAgeMs: { type: "integer" } }, required: ["timestampPath", "maxAgeMs"], additionalProperties: false },
             },
-            required: ["kind", "value", "url", "method", "path", "op", "settleMs"],
+            required: ["kind", "value", "url", "method", "path", "op", "settleMs", "criteria", "samples", "minPass"],
           },
           key: { type: "string", minLength: 1 },
           // 没写进 schema 的字段模型产不出来——`covers` 是结构覆盖率的全部来源。

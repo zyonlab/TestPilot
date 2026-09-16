@@ -4,7 +4,7 @@ import { runLedger } from "./runService.js";
 import { LedgerError } from "./runLedger.js";
 
 /**
- * 项目级的产品规则包（docs/v3/24 §19）。
+ * 项目级的产品规则包（docs/v3/history/24 §19）。
  *
  * 在这之前规则包**没有任何管理**：每次新建运行在表单里贴一份 JSON，存进那次运行的账本
  * （`knowledge/rulepack/<id>`），跨运行不复用、列不出来、改不了、也比不了两版的差异。

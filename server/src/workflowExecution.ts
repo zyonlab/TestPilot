@@ -112,7 +112,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const session = env?.login?.authRequired ? env.login.session : null;
   const login = env?.login?.authRequired && !session ? env.login.steps ?? [] : [];
   /**
-   * 探索记下来的控件文案与选择器，交给执行侧当**定位提示**（docs/v3/23 F-15）。
+   * 探索记下来的控件文案与选择器，交给执行侧当**定位提示**（docs/v3/history/23 F-15）。
    *
    * 用例里不会有选择器——它是端无关的。选择器留在这里，执行时先试、验不过就交回模型，
    * 见 `exec/run.ts` 的 `byLocator`。没有探索回执的 run（纯 spec 来源）拿到空表，行为不变。
@@ -227,7 +227,11 @@ async function perform(row: ExecutionRow) {
        * `runs` 表没有工作流的行，于是「待审批基线」那一页永远是空的。
        * 失败不该带垮这次执行——基线是附加物，不是判决。
        */
-      try { recordWorkflowCaseRun({ runId: row.runId, projectId: row.projectId, executionId: row.id, visualThresholdPct: env.visualThresholdPct, result: { caseId: kase.id, ...result } as never }); }
+      try {
+        const runRecordId = recordWorkflowCaseRun({ runId: row.runId, projectId: row.projectId, executionId: row.id, visualThresholdPct: env.visualThresholdPct, result: { caseId: kase.id, ...result } as never });
+        // 记下这条对应哪条运行记录：界面要把过程、视觉、性能、报告放在一处（executionDetail.ts）。
+        if (runRecordId) (results[results.length - 1] as Record<string, unknown>).runRecordId = runRecordId;
+      }
       catch (e) { phase(row, "running", undefined, `基线未记录（${kase.id}）：${String((e as Error).message).slice(0, 80)}`); }
       if (Array.isArray(result.modelRequests)) {
         calls += result.modelRequests.filter(r => r.forwarded).length;
@@ -276,6 +280,10 @@ async function perform(row: ExecutionRow) {
     sourceRefs: [row.codeRevision] }, system);
   phase(row, status, artifact.id);
   captureExecutionMemory(ledger(), artifact.id, row.projectId, env.url);
+  // 判定失败的用例进回归候选，等人批准（regressionCandidates.ts）。候选出不来不影响这次执行的结论。
+  // 不只看批次状态：一批里有一条环境失败，批次就记成 infra_error，同批里真正判定失败的那条不能跟着丢。
+  if (status !== "passed" && status !== "cancelled")
+    void import("./regressionCandidates.js").then((m) => m.proposeFromExecution(row.runId, row.projectId, { executionId: row.id })).catch(() => undefined);
 }
 export async function cancelWorkflowExecutions(runId: string, projectId: string) {
   ledger().requireRun(runId, projectId);

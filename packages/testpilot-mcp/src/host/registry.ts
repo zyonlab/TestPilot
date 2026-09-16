@@ -103,6 +103,7 @@ const run: DomainSpec = {
     resume: { summary: "恢复一次停住的运行，从检查点的下一个节点接着跑", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/resume", params: ["projectId", "runId"], mutates: true },
     cancel: { summary: "取消一次运行", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/cancel", params: ["projectId", "runId"], mutates: true },
     spend: { summary: "读这次运行各角色花了多少模型调用", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/spend", params: ["projectId", "runId"] },
+    report: { summary: "读这次运行的归因报表：四个节点的成绩单、成本、单元、门禁、执行，以及问题最可能出在哪一层（模型/上下文/工具/工作流/用例/产品）", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/report", params: ["projectId", "runId"] },
     events: { summary: "追加一条运行事件（宿主侧的进度回报）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/events", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     breakpoints: { summary: "设断点：让运行在某个节点前停下等人", method: "PATCH", path: "/api/wf/runs/:id/breakpoints", params: ["id"], mutates: true, body: json },
     budget: { summary: "改这次运行的预算", method: "PATCH", path: "/api/wf/runs/:id/budget", params: ["id"], mutates: true, body: json },
@@ -180,6 +181,10 @@ const review: DomainSpec = {
     history: { summary: "读复核历史", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/review-history", params: ["projectId", "runId"] },
     decide: { summary: "写复核决定（approved / rejected）。人点头了再调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"], mutates: true, body: json },
     amend: { summary: "修订一条已有的复核决定", method: "PATCH", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"], mutates: true, body: json },
+    candidates: { summary: "列出这次运行的回归候选（执行判定失败、或被驳回且写了理由的用例）", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates", params: ["projectId", "runId"] },
+    propose_candidates: { summary: "从一次执行里收判定失败的用例作回归候选（默认最近一次；环境失败与定位失败不收）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates", params: ["projectId", "runId"], mutates: true, body: json },
+    decide_candidate: { summary: "批准或驳回一条回归候选（approved / dismissed）。**这是人的决定**，人说了才调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates/:candidateId", params: ["projectId", "runId", "candidateId"], mutates: true, body: json },
+    regression_suite: { summary: "读项目回归集：人批准过的缺陷用例与反例评测项", method: "GET", path: "/api/projects/:id/regression-suite", params: ["id"] },
   },
 };
 
@@ -193,6 +198,7 @@ const execution: DomainSpec = {
     baseline: { summary: "读当前的判决集基线", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions/baseline", params: ["projectId", "runId"] },
     set_baseline: { summary: "把某次执行立为基线。**这是人的决定**", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/executions/baseline", params: ["projectId", "runId"], mutates: true, body: json },
     compare: { summary: "把一次执行和基线比：哪几条翻了", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions/compare", params: ["projectId", "runId"] },
+    detail: { summary: "读一次执行的明细：每条用例的步骤日志、判据、截图、视觉基线、性能基线与 Midscene 报告地址", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions/detail/:executionId", params: ["projectId", "runId", "executionId"] },
   },
 };
 

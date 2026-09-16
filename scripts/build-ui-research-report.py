@@ -115,7 +115,7 @@ css = '''
 '''
 
 STATUS_LABELS = {'todo':'待实施', 'doing':'进行中', 'done':'已验收', 'blocked':'待外部条件', 'dropped':'已取消'}
-task_doc = ROOT / 'docs/v3/13-UI与论文路线任务台账.md'
+task_doc = ROOT / 'docs/v3/history/13-UI与论文路线任务台账.md'
 task_text = task_doc.read_text()
 tasks = []
 for match in re.finditer(r'^#### (P-\d+) · ([^\n]+)\n(.*?)(?=^#{2,4} |\Z)', task_text, re.M | re.S):

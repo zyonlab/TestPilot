@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { checkModulePlan, leafModules, type ModuleProposal, type StoryRef } from "../src/domain/modulePlan.js";
 
 /**
- * 模块树机检（docs/v3/24 §7）。每条断言对应 2026-09-11 双臂对照里真实抓到的一处缺陷。
+ * 模块树机检（docs/v3/history/24 §7）。每条断言对应 2026-09-11 双臂对照里真实抓到的一处缺陷。
  */
 const codes = (f: ReturnType<typeof checkModulePlan>) => f.map((x) => x.code);
 

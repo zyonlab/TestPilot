@@ -423,7 +423,7 @@ export interface ObserveSpec {
    */
   groupCap?: number;
   /**
-   * 领域探索 charter（docs/v3/20 §6、21 §2）。
+   * 领域探索 charter（docs/v3/history/20 §6、21 §2）。
    *
    * 给了它，探索就按「规则包里的目标」决定先点什么：普通 button、checkbox、自定义控件
    * 都能匹配，不再只认带 ARIA 组的 tab；goto 只去 charter 允许的路由，全局导航不再把

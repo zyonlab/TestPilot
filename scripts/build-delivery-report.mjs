@@ -2,7 +2,7 @@
 import{readFileSync,writeFileSync,mkdirSync}from'node:fs';import{resolve,join}from'node:path';
 const root=resolve(import.meta.dirname,'..'),out=join(root,'docs/reports');mkdirSync(out,{recursive:true});
 const read=p=>JSON.parse(readFileSync(join(root,p),'utf8'));const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const tasks=[...readFileSync(join(root,'docs/v3/08-双入口双模型-优化任务与验收.md'),'utf8').matchAll(/#### (N-\d+) · ([^\n]+)\n- 状态：([^\n]+)/g)].map(m=>({id:m[1],title:m[2],status:m[3].split(/\s/)[0]}));const required=tasks.filter(t=>t.id!=='N-28'),done=required.filter(t=>t.status==='done').length;
+const tasks=[...readFileSync(join(root,'docs/v3/history/08-双入口双模型-优化任务与验收.md'),'utf8').matchAll(/#### (N-\d+) · ([^\n]+)\n- 状态：([^\n]+)/g)].map(m=>({id:m[1],title:m[2],status:m[3].split(/\s/)[0]}));const required=tasks.filter(t=>t.id!=='N-28'),done=required.filter(t=>t.status==='done').length;
 const domain=read('docs/v3/evidence/n-16/repeated/scored.json'),memory=read('docs/v3/evidence/n-22/execution-scoped-v2/result.json'),evolution=read('docs/v3/evidence/n-21/real-1788960456841/candidate/result.json'),correction=read('docs/v3/evidence/n-21/real-1788960456841/candidate/classification-audit.json'),night=read('docs/v3/evidence/n-18/nights/summary.json'),verification=read('docs/v3/evidence/n-26/verification.json'),demo=read('docs/v3/evidence/n-20/web-to-codex-complete/result.json');
 const E=(p,label='原始证据')=>`<a href="../v3/evidence/${p}">${label} ↗</a>`;const C=(p,label)=>`<a href="../../${p}">${label??p} ↗</a>`;
 const tag=(s,kind='')=>`<span class="tag ${kind}">${esc(s)}</span>`;

@@ -88,7 +88,7 @@ describe("断言钉在易变值上要被拦下", () => {
 });
 
 /**
- * tier 3 的 `{"kind":"none"}`：三处清单曾经互相打架（docs/v3/24 §33）。
+ * tier 3 的 `{"kind":"none"}`：三处清单曾经互相打架（docs/v3/history/24 §33）。
  *
  * skill 明写「tier 3 写 {"kind":"none"}」、受限解码的枚举里也有 none，
  * 而校验 schema 的 union 里没有——模型照着写，校验一律

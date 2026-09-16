@@ -5,7 +5,7 @@ import { DomainIdSchema, ExplorationTargetSpecSchema, type ExplorationTargetSpec
  * 探索 charter：这一次探索**要查什么**，以及**不许做什么**。
  *
  * 它取代了「探索前先问模型猜几条故事」作为决定先点哪里的依据（那一步仍可保留为对照臂）。
- * 候选目标不是用户故事——故事等产品模型出来之后才写（docs/v3/20 §4「模型故事计划过早」）。
+ * 候选目标不是用户故事——故事等产品模型出来之后才写（docs/v3/history/20 §4「模型故事计划过早」）。
  */
 export const ActionsPolicySchema = z
   .object({

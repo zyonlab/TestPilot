@@ -35,6 +35,27 @@ export const MachineOracleSchema = z.discriminatedUnion("kind", [
    * 有它只是为了让「这条用例明说自己没有机器判据」这句话写得出来。
    */
   z.object({ kind: z.literal("none") }),
+  /**
+   * `judge`：给**生成出来的东西**用的判据——图、文案、摘要这类每次都不一样、程序核对不了的输出。
+   *
+   * 原来 tier 3 只有一句 `aiAssert(expected)`：模型看一眼，给一个是/否，不打分、不采样。
+   * 同一张图问两次答案不一样时，那条用例就是随机的，而报告里看不出来。
+   *
+   * 这里把「看一眼」拆开：
+   * - `criteria`：几句**能对着屏幕回答是或否**的话（「图里有一只猫」「标题不超过 20 个字」），
+   *   不是「看起来不错」。一句一个判断，报告能说出是哪一句不成立。
+   * - `samples`：问几次（每次轮换提问顺序，见 `exec/judge.ts`），默认 3。
+   * - `minPass`：至少几次采样**全部条件成立**才算过；默认过半。
+   *
+   * 判决按统计口径给（`aggregateJudge`）：够数算过；采样失败的次数足以翻盘时算「没量到」，
+   * 不算过也不算挂。每条条件的成立率与意见分歧都写进 detail。它永远是 tier 3。
+   */
+  z.object({
+    kind: z.literal("judge"),
+    criteria: z.array(z.string().min(1)).min(1).max(8),
+    samples: z.number().int().min(1).max(9).default(3),
+    minPass: z.number().int().min(1).max(9).optional(),
+  }),
   z.object({ kind: z.literal("text"), value: z.string().min(1) }),
   z.object({ kind: z.literal("noText"), value: z.string().min(1) }),
   z.object({ kind: z.literal("url"), value: z.string().min(1) }),
@@ -87,6 +108,63 @@ export interface PageSnapshot {
   url: string;
   /** 只有 api 判据会填：对接口的一次观察。见 `apiOracle.ts`。 */
   api?: { value?: unknown; error?: string };
+  /** 只有 judge 判据会填：这一屏上的几次采样。见 `exec/judge.ts`。 */
+  judge?: JudgeSampling;
+}
+
+/**
+ * judge 判据的采样结果：每次采样对每条条件给一个是/否，按 `criteria` 的原顺序。
+ * `null` 是这次采样没拿到可用的答案（调用出错、答非所问、条数对不上）。
+ */
+export interface JudgeSampling {
+  verdicts: Array<boolean[] | null>;
+  errors?: string[];
+}
+
+export interface JudgeStats {
+  samples: number;
+  valid: number;
+  passed: number;
+  minPass: number;
+  /** 每条条件在有效采样里成立的次数。 */
+  perCriterion: number[];
+  /** 有效采样之间意见不一：有的全部成立，有的没有。 */
+  split: boolean;
+}
+
+/** 采样次数与及格线：`minPass` 缺省为过半，并夹在 [1, samples] 之内。 */
+export function judgePolicy(oracle: { samples?: number; minPass?: number }): { samples: number; minPass: number } {
+  const samples = Math.max(1, Math.min(9, Math.floor(oracle.samples ?? 3)));
+  const minPass = Math.max(1, Math.min(samples, Math.floor(oracle.minPass ?? Math.floor(samples / 2) + 1)));
+  return { samples, minPass };
+}
+
+/**
+ * 把几次采样合成一个判决。
+ *
+ * - 全部条件成立的采样 ≥ `minPass` → pass；
+ * - 即使把失败的采样都算成成立也够不到 `minPass` → fail；
+ * - 其余（失败的采样足以翻盘）→ unobservable：这次没量到，不是产品错了。
+ */
+export function aggregateJudge(
+  oracle: { criteria: string[]; samples?: number; minPass?: number },
+  sampling: JudgeSampling,
+): OracleVerdict & { judge: JudgeStats } {
+  const { samples, minPass } = judgePolicy(oracle);
+  const n = oracle.criteria.length;
+  const valid = sampling.verdicts.filter((v): v is boolean[] => Array.isArray(v) && v.length === n);
+  const invalid = Math.max(0, samples - valid.length);
+  const passed = valid.filter((v) => v.every(Boolean)).length;
+  const perCriterion = oracle.criteria.map((_, i) => valid.filter((v) => v[i]).length);
+  const split = passed > 0 && passed < valid.length;
+  const judge: JudgeStats = { samples, valid: valid.length, passed, minPass, perCriterion, split };
+  const rates = oracle.criteria.map((c, i) => `「${c}」${perCriterion[i]}/${valid.length}`).join("；");
+  const tail = `${split ? "；各次采样意见不一" : ""}${invalid ? `；${invalid} 次采样没拿到答案` : ""}`;
+  const head = `${passed}/${samples} 次采样全部条件成立（至少要 ${minPass}）`;
+  if (passed >= minPass) return { status: "pass", detail: `${head}：${rates}${tail}`, judge };
+  if (passed + invalid >= minPass)
+    return { status: "unobservable", detail: `${head}，失败的采样足以翻盘，这次不下判决：${rates}${tail}`, judge };
+  return { status: "fail", detail: `${head}：${rates}${tail}`, judge };
 }
 
 /**
@@ -95,7 +173,9 @@ export interface PageSnapshot {
  * The point of having it: a case can now be *checked* against its own claim, instead of
  * the claim being taken at face value.
  */
-export function tierOf(oracle: MachineOracle): 1 | 2 {
+export function tierOf(oracle: MachineOracle): 1 | 2 | 3 {
+  // judge 是模型判的，只是判得更有章法：它交付的永远是 tier 3。
+  if (oracle.kind === "judge") return 3;
   if (oracle.kind === "delta") return 2;
   if (oracle.kind === "api") return oracle.op === "increased" || oracle.op === "decreased" || oracle.op === "unchanged" ? 2 : 1;
   return 1;
@@ -106,6 +186,10 @@ export function describeOracle(oracle: MachineOracle): string {
     // 明说自己没有机器判据的那一种：执行时由模型看屏幕表态（tier 3）。
     case "none":
       return "由模型看屏幕判定（没有机器判据）";
+    case "judge": {
+      const { samples, minPass } = judgePolicy(oracle);
+      return `模型按 ${oracle.criteria.length} 条条件判 ${samples} 次，至少 ${minPass} 次全部成立：${oracle.criteria.join("；")}`;
+    }
     case "text":
       return `页面显示「${oracle.value}」`;
     case "noText":
@@ -196,6 +280,8 @@ export interface OracleVerdict {
   status: "pass" | "fail" | "unobservable";
   /** Why, in terms of what was actually on the page. */
   detail: string;
+  /** 只有 judge 判据有：采样统计。 */
+  judge?: JudgeStats;
 }
 
 export function evaluateOracle(
@@ -210,6 +296,8 @@ export function evaluateOracle(
      */
     case "none":
       return { status: "unobservable", detail: "tier 3：没有机器判据，交由判屏" };
+    case "judge":
+      return after.judge ? aggregateJudge(oracle, after.judge) : { status: "unobservable", detail: "judge 判据没有采样结果" };
     case "text": {
       const hit = after.text.includes(oracle.value);
       return {

@@ -3,7 +3,7 @@
  * 门禁之前的那道门：`stories.json` 的形状。
  *
  * 挂在 `pre_tool_use` 上，拦 `write_file`。**校验的是"将要写的内容"，不是已经写好的文件**——
- * PenguinHarness 没有 tool 之后的 hook 点（见 `docs/v3/03-penguin-hooks-契约.md` §1），
+ * PenguinHarness 没有 tool 之后的 hook 点（见 `docs/v3/history/03-penguin-hooks-契约.md` §1），
  * 所以只能提前一步。好处反而是坏产物根本落不了盘。
  *
  * 不过 → `deny`，zod 的报错原样注回给模型。**不是静默**：静默的校验等于没有校验，

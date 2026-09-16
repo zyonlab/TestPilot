@@ -14,7 +14,7 @@ rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
 rule 08479694  For tier 1 and tier 2 you MUST also give `oracle`, the same
-rule fafd05f9  `oracle` is ALWAYS present as an object. For tier 3 write {"
+rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
 rule fdbd2327  `key` is a dedupe triple 'transition|parameters|assertion',
@@ -102,7 +102,11 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 - **tier 1 和 tier 2 必须同时给 `oracle`**——同一个结果，写成程序不用看图就能核对的形式。
   五种形式见 `REFERENCE.md`。结果没法写成其中任何一种，那它就是 tier 3——
   就说它是 3，并且不写 `oracle`。**声称 tier 1 却不给 oracle，是唯一一件让这个标签彻底作废的事。**
-- **`oracle` 这个对象永远在**：tier 3 写 `{"kind":"none"}`；与所选 kind 无关的字段用占位符填满——字符串 `"-"`、method `"GET"`、op `"eq"`、数字 `0`，harness 会剥掉它们。一个字段都不要漏。（约束解码下模型会跳过可选键，所以 schema 里全是必填。）
+- **`oracle` 这个对象永远在**：tier 3 写 `{"kind":"none"}`——**除非**结果是每次都不一样的生成内容（一张图、一段摘要、一句配文、一段译文）。那就写
+  `{"kind":"judge","criteria":["<一句对着屏幕能答是或否的话>", ...],"samples":3,"minPass":2}`：
+  每条条件是**一个**看一眼就能核对的判断（「图里有一只猫」「标题不超过 20 个字」），**永远不要**写「看起来不错」；
+  harness 会让模型问 `samples` 次，至少 `minPass` 次每条都成立才算过。写法细节见 `REFERENCE-oracle.md`。
+  与所选 kind 无关的字段用占位符填满——字符串 `"-"`、method `"GET"`、op `"eq"`、数字 `0`、criteria `[]`，harness 会剥掉它们。一个字段都不要漏。（约束解码下模型会跳过可选键，所以 schema 里全是必填。）
 - **步骤短、具体、与实现无关。** 不要选择器，不要 page object，不要代码。
 - **步骤里永远不要出现凭证。** 用 `${env.NAME}` 和 `${secret.NAME}` 占位。
 - **`key` 是去重三元组** `'转移|参数|断言'`，小写，无空格。

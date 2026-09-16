@@ -23,7 +23,7 @@ for (const entry of ['codex', 'claude-code']) test(`${entry}: preserve native co
   assert.equal(statSync(receipt.configPath).mode & 0o777, 0o600);
   const client = new Client({ name: 'setup-contract', version: '1.0.0' });
   try { await client.connect(new StdioClientTransport({ command: process.execPath, args: [join(receipt.bin, 'testpilot-mcp')], cwd: workspace, stderr: 'pipe' })); const { tools } = await client.listTools(); assert(tools.some(t => t.name === 'register_run')); assert(tools.some(t => t.name === 'finalize_run'));
-    // 单元循环的四个工具（docs/v3/22）：少任何一个，规划器就只能整份写入，而整份写入在开了单元的 run 上会被服务端拒绝——
+    // 单元循环的四个工具（docs/v3/history/22）：少任何一个，规划器就只能整份写入，而整份写入在开了单元的 run 上会被服务端拒绝——
     // 那时候的表现是「宿主卡在 stories 节点写不进去」，从工具清单上看不出原因。
     for (const name of ['claim_unit', 'write_unit', 'unit_status', 'merge_units']) assert(tools.some(t => t.name === name), `MCP 少了 ${name}`); }
   finally { await client.close(); }

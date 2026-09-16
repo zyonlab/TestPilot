@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 /**
- * 项目级规则包（docs/v3/24 §19）：按内容哈希存版本、用过的不许删、新建运行默认用最新一版。
+ * 项目级规则包（docs/v3/history/24 §19）：按内容哈希存版本、用过的不许删、新建运行默认用最新一版。
  * 在这之前它只能在新建运行的表单里贴一次，躺在那次运行里——列不出、改不了、比不了。
  */
 let dir: string, project: string, packs: typeof import("../src/rulePacks.js"), db: typeof import("../src/db.js");

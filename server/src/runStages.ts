@@ -216,7 +216,7 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
        * 是不是同一棵。那样的话「人冻结了模块树」这件事在这条路上等于没发生过。
        *
        * 挂到树里没有的模块＝错，整份拒收；叶子没故事、扇出太低＝记 `report/module-fanout`
-       * 不拦——和合并那一侧同一个口径（docs/v3/24 §8.1）。
+       * 不拦——和合并那一侧同一个口径（docs/v3/history/24 §8.1）。
        */
       const frozen = frozenModules(runId, projectId);
       if (frozen?.length) {
@@ -293,7 +293,7 @@ export function gateRun(runId: string, projectId: string) {
     const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings });
     const passed = report.score >= pinnedPolicy.minGateScore;
     /**
-     * 不通过时，把门禁的话按单元送回规划器（docs/v3/23 F-11）。
+     * 不通过时，把门禁的话按单元送回规划器（docs/v3/history/23 F-11）。
      *
      * 门禁一直什么都说了——被扣分的用例 id、每条 finding 的规则与原因——只是没人把它们
      * 送回领单元的那一步。两次实测里 Penguin 都是在这里就地停住：它知道自己被拦了，

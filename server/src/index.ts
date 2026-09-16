@@ -266,6 +266,11 @@ app.use("/api/projects/:id/workflow-runs", express.json({ limit: "48mb" }));
 app.use(express.json({ limit: "16mb" }));
 app.use("/api", intentPolicy);
 app.use("/api/projects/:projectId/workflow-runs", runRouter());
+// 项目回归集：人批准过的回归候选（regressionCandidates.ts）。defect 是要一直跑的用例，rejection 是给生成器的反例评测项。
+app.get("/api/projects/:id/regression-suite", async (req, res) => {
+  const { regressionSuite } = await import("./regressionCandidates.js");
+  res.json({ entries: regressionSuite(req.params.id, req.query.kind === "defect" || req.query.kind === "rejection" ? req.query.kind : undefined) });
+});
 app.use("/api/projects/:projectId/model-profiles", modelProfilesRouter());
 // Serve baseline / current / diff images (referenced by VisualDiff.*Ref).
 app.use("/api/artifacts", express.static(ARTIFACT_DIR));
@@ -723,7 +728,7 @@ app.patch("/api/projects/:id", (req, res) => {
   res.json({ project });
 });
 /**
- * 项目级规则包（docs/v3/24 §19）。
+ * 项目级规则包（docs/v3/history/24 §19）。
  *
  * 以前它只能在新建运行的表单里贴一次、躺在那次运行里。规则包是这个产品最主要的领域资产，
  * 却是唯一没有列表、没有版本、没有复用的那一个——同一个项目的两次运行可以用着不同的包
@@ -1589,7 +1594,7 @@ setAgentObserver(async (input) => {
      * 带钱包探索：注入一个虚拟 EIP-1193 provider（`exec/injectedWallet.ts`），
      * 地址与链取自本机钱包与 `chainConfig()`——和执行用例那条路用的是同一个账户。
      *
-     * 为什么必须是显式参数：未登录与已登录看到的是**两个产品**（docs/v3/24 §13）。
+     * 为什么必须是显式参数：未登录与已登录看到的是**两个产品**（docs/v3/history/24 §13）。
      * 不给这个开关，探索永远只看得到未登录那一半，而那一半里下单区全是 N/A。
      */
     wallet?: boolean;

@@ -14,7 +14,7 @@ export function setControls(runId:string,projectId:string,raw:unknown){const inp
 /**
  * 故事节点的契约。
  *
- * 每一条都来自 2026-09-12 的两臂实测（docs/v3/24 §10.4）：左边是机器臂交出来的，
+ * 每一条都来自 2026-09-12 的两臂实测（docs/v3/history/24 §10.4）：左边是机器臂交出来的，
  * 右边是参照臂（人写的那一份）同一份材料上的数——差在哪，这里就写什么。
  *
  *   叶子扇出 0.63 vs 2.0（27 个叶子 27 个空着）· 带出处的验收 0 vs 68/68

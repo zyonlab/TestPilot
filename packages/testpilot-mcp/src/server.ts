@@ -144,7 +144,7 @@ server.registerTool("execute_approved", {
 }, async ({ runId, ...input }) => { try { return ok(await runs.call(runId, "stages/execute", input)); } catch (e) { return fail(e); } });
 server.registerTool("begin_stage", {title:"Begin a workflow node", description:"Call BEFORE planning or executing each node: modules, instructions, stories, cases, gate, finalize. A paused/cancelled response means stop this turn immediately; do not plan, write or call later nodes. Only explicit user resume may continue the same run.", inputSchema:{runId:z.string(),node:z.enum(['source','modules','instructions','stories','cases','gate','finalize','g2','execution'])}}, async ({runId,node})=>{try{return ok(await runs.call(runId,'begin-stage',{node}));}catch(e){return fail(e);}});
 /**
- * 模块规划节点（docs/v3/24 §6、§8）。
+ * 模块规划节点（docs/v3/history/24 §6、§8）。
  *
  * 这里只有**提议**和**读状态**两个工具，没有冻结——冻结那一步必须是人，
  * 服务端的冻结路由带 Authorization 头就 403。模型提议完就停在这儿，这是设计，不是缺口。
@@ -166,7 +166,7 @@ for (const [name, action, description] of [
 ] as const) server.registerTool(name, { title: name, description, inputSchema: { runId: z.string() } },
   async ({ runId }) => { try { return ok(await runs.call(runId, `stages/${action}`, {})); } catch (e) { return fail(e); } });
 /**
- * 单元循环（docs/v3/22）。
+ * 单元循环（docs/v3/history/22）。
  *
  * 拆分与合并都在服务端：`claim_unit` 交出一个单元的范围、上下文清单和它自己的材料，
  * `write_unit` 只校验这个单元。整份 `write_stories` / `write_cases` 在开了单元的 run 上会被拒——

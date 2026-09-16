@@ -42,7 +42,7 @@ interface Item {
  * **v3：`model` 那一条不在这张清单里了，其余五条的落点也重新指过。**
  *
  * 清单问的是「现在能不能开始干活」，而 v3 之后「模型端点配好没有」这个问题的答主
- * 换成了 PenguinHarness（`docs/v3/00-架构.md` §2：模型归 session、能力与进程归
+ * 换成了 PenguinHarness（`docs/v3/history/00-架构.md` §2：模型归 session、能力与进程归
  * penguin-core）。留在这里的五条——项目 / 环境（运行时）/ 被测对象 / 守卫 / 预算
  * ——都是这台机器自己答得上的。
  *

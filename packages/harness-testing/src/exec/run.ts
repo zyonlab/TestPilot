@@ -15,6 +15,7 @@ import { capturePerf, type PerfMetrics } from "../baselines/perf.js";
 import { resolveText, redact, withModel, type ResolveContext } from "@testpilot/harness-core";
 import type { ChainAssertion, OracleCheck, StorageState } from "../types.js";
 import { describeOracle, evaluateOracle, type MachineOracle, type PageSnapshot } from "./oracle.js";
+import { sampleJudge } from "./judge.js";
 import { classifyFailure, isInfraError, type Failure } from "../failure.js";
 import { observeApi } from "./apiOracle.js";
 import { isOpenQuestion, navigationTarget } from "./stepSemantics.js";
@@ -115,7 +116,7 @@ export async function executeRun(
      *
      * 探索对每个控件都记了精确选择器，而文本用例按设计是端无关的、只带文案——于是执行时
      * 只能靠视觉模型按文字找控件。在交易页上「Order History」「Balances」这些词在表格行里
-     * 也出现，`locate: multiple elements found, length = 13` 就是这么来的（docs/v3/23 F-15）。
+     * 也出现，`locate: multiple elements found, length = 13` 就是这么来的（docs/v3/history/23 F-15）。
      *
      * 提示**不是权威**。缓存的 xpath 会随 DOM 过时，直接照点就会点错东西——所以这里要求
      * 两件事同时成立才用它：选择器**恰好命中一个**元素，且那个元素的可见文本**仍然包含**
@@ -384,6 +385,23 @@ export async function executeRun(
      * 在第 n 步之后当场判一条断言：机器判据取此刻的快照，没有判据的交给判官，开放问题只记不判。
      * 2026-09-15 Vikunja：两条描述「途经那一屏」的断言在最后一步之后判，页面早已换了，恒红。
      */
+    /**
+     * judge 判据：在这份快照上采样，结果塞进 `snap.judge`，再交给 `evaluateOracle` 统一出判决。
+     * 全部采样都栽在环境上时，这条判据根本没被判过：记 infra，返回 false 让调用方跳过它。
+     */
+    const judgeInto = async (snap: PageSnapshot, o: Extract<MachineOracle, { kind: "judge" }>): Promise<boolean> => {
+      const out = await sampleJudge(session!.agent as never, o, {
+        call: (fn) => withModel(fn), resolve: (t) => resolveText(t, ctx), isInfra: isInfraError, log: rlog,
+      });
+      if (out.infra) {
+        infraError = true;
+        assertFailed = redact(out.infraMessage ?? "judge sampling failed", secretVals);
+        rlog(`assert ⚠ infra error (judge) — ${assertFailed.slice(0, 80)}`);
+        return false;
+      }
+      snap.judge = out.sampling;
+      return true;
+    };
     const checkNow = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
       if (isOpenQuestion(a.statement)) {
         oracle.push({ assertion: a.statement, status: "unobservable", detail: "开放问题：记下，不下判决" });
@@ -392,9 +410,11 @@ export async function executeRun(
       }
       if (a.oracle) {
         const snap = await snapshotPage(session!.page);
+        if (a.oracle.kind === "judge" && !(await judgeInto(snap, a.oracle))) return;
         const verdict = evaluateOracle(a.oracle, snap, snapBefore);
         const detail = redact(verdict.detail, secretVals);
-        oracle.push({ assertion: a.statement, status: verdict.status, detail, decidedBy: "machine" });
+        oracle.push({ assertion: a.statement, status: verdict.status, detail, decidedBy: a.oracle.kind === "judge" ? "judge" : "machine",
+          ...(verdict.judge ? { judge: verdict.judge } : {}) });
         if (verdict.status === "fail") assertFailed = detail;
         else if (verdict.status === "unobservable" && !unobservable) unobservable = detail;
         rlog(`assert ${verdict.status === "pass" ? "✓" : verdict.status === "unobservable" ? "∅" : "✗"} (after step ${n}) — ${detail}`);
@@ -449,7 +469,11 @@ export async function executeRun(
       endedAt = snapAfter.url;
       for (const check of machineChecks) {
       const shown = describeOracle(check.oracle);
-      rlog(`assert (machine): ${shown}`);
+      rlog(`assert (${check.oracle.kind === "judge" ? "judge" : "machine"}): ${shown}`);
+      if (check.oracle.kind === "judge") {
+        snapAfter.judge = undefined;
+        if (!(await judgeInto(snapAfter, check.oracle))) continue;
+      }
       const verdict = evaluateOracle(check.oracle, snapAfter, snapBefore);
       /**
        * **判据的 detail 也要抹密钥。**
@@ -474,8 +498,9 @@ export async function executeRun(
         assertion: check.statement || shown,
         status: verdict.status,
         detail,
-        decidedBy: "machine",
+        decidedBy: check.oracle.kind === "judge" ? "judge" : "machine",
         ...(heldBefore === undefined ? {} : { heldBefore }),
+        ...(verdict.judge ? { judge: verdict.judge } : {}),
       });
       if (heldBefore && verdict.status === "pass")
         rlog(`  ⚠ 这条判据在步骤跑之前就已经成立——这次通过没有证明这些步骤做成了什么`);

@@ -6,7 +6,7 @@ import { LedgerError } from "./runLedger.js";
 import type { Principal } from "@testpilot/harness-core/run-contracts";
 
 /**
- * `modules` 节点：产品模块树的提议、机检与冻结（docs/v3/24 §6、§7）。
+ * `modules` 节点：产品模块树的提议、机检与冻结（docs/v3/history/24 §6、§7）。
  *
  * 在此之前这条链路上**没有**模块规划：`buildProductModel` 里是 `modules: pack.modules`，
  * 树从规则包原样抄，模型一个字都没参与，于是它的质量从来没被量过——没有节点就没有产物，

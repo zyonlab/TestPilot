@@ -17,7 +17,7 @@ import { DebugPromptsCards, EnvironmentsCard, SecretsCard } from "@/pages/ModelC
  *
  * **v3：属于 harness 的那一节（提示词模板）从这里删掉了。** 上面这条依据正是理由——
  * 提示词现在随 skill 走进 `plugins/testpilot/`，改它影响的是 PenguinHarness 上的每一次运行，
- * 而不是这台机器（`docs/v3/00-架构.md` §2）。留下的两节都属于「这个项目」和「这个人」。
+ * 而不是这台机器（`docs/v3/history/00-架构.md` §2）。留下的两节都属于「这个项目」和「这个人」。
  *
  * 内容**左对齐**，不居中（此前是 `mx-auto max-w-2xl`）。守住 `max-w-2xl` 的行宽是对的，
  * 但居中之后它和上面那行 `why` 说明不共左边——`SectionPage` 的说明贴着左侧栏边缘，

@@ -1,5 +1,8 @@
 import { controls, setControls, beginStage, stageEvent } from './workflowControls.js';
 import { runRoleSpend } from './roleSpend.js';
+import { runReport } from "./runReport.js";
+import { executionDetail } from "./executionDetail.js";
+import { proposeFromExecution, proposeFromRejections, listRegressionCandidates, decideRegressionCandidate } from "./regressionCandidates.js";
 import { revisionLineage, revisionDiff, approvalHistory } from "./artifactViews.js";
 import { Router } from "express";
 import { LedgerError } from "./runLedger.js";
@@ -41,6 +44,8 @@ export function runRouter() {
   router.post('/:runId/controls',wrap((req,res)=>{reviewerPrincipal(req);res.json(setControls(req.params.runId,req.params.projectId,req.body));}));
   router.post('/:runId/begin-stage',wrap((req,res)=>{authorizeRun(req.params.runId,req.headers.authorization?.replace(/^Bearer /,''));res.json(beginStage(req.params.runId,req.params.projectId,req.body));}));
   router.get("/:runId/spend", wrap((req, res) => res.json(runRoleSpend(req.params.runId, req.params.projectId))));
+  // 归因报表：四节点成绩单 + 成本 + 单元 + 门禁 + 执行，按固定规则归到六层（runReport.ts）。
+  router.get("/:runId/report", wrap((req, res) => res.json(runReport(req.params.runId, req.params.projectId))));
   router.get("/:runId/checkpoint", wrap((req, res) => res.json(workflowCheckpoint(req.params.runId, req.params.projectId))));
   router.post("/:runId/cancel", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await cancelProjectWorkflow(req.params.runId, req.params.projectId)); }));
   router.post("/:runId/resume", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await resumeProjectWorkflow(req.params.runId, req.params.projectId)); }));
@@ -49,13 +54,21 @@ export function runRouter() {
   // 执行基线与对比：判决集的基线，不是逐步截图——被测对象是实时行情页，截图基线在它上面每次都红。
   router.get("/:runId/executions/baseline", wrap((req, res) => res.json({ baseline: executionBaseline(req.params.runId, req.params.projectId) ?? null })));
   router.post("/:runId/executions/baseline", wrap((req, res) => res.json(setExecutionBaseline(req.params.runId, req.params.projectId, req.body, reviewerPrincipal(req).id))));
+  // 一次执行的明细：每条用例的过程、判据、截图，连同视觉基线、性能基线与 Midscene 报告（executionDetail.ts）。
+  router.get("/:runId/executions/detail/:executionId", wrap((req, res) => res.json(executionDetail(req.params.runId, req.params.projectId, req.params.executionId))));
   router.get("/:runId/executions/compare", wrap((req, res) => res.json(compareToBaseline(req.params.runId, req.params.projectId, { executionId: req.query.executionId }))));
   router.post("/:runId/review", wrap(async (req, res) => {
     const results = decideRevisions(req.params.runId, req.params.projectId, req.body, reviewerPrincipal(req));
     const cases=reviewRevisions(req.params.runId,req.params.projectId);
     stageEvent(req.params.runId,req.params.projectId,'review',cases.length&&cases.every(c=>c.approval)?'done':'waiting_review');
-    res.json({ results, delivery: await flushDecisionDelivery() });
+    // 驳回且写了理由：留一条反例候选给生成器回归（regressionCandidates.ts）。
+    const regression = proposeFromRejections(req.params.runId, req.params.projectId, results as Array<Record<string, unknown>>, typeof req.body?.note === "string" ? req.body.note : undefined);
+    res.json({ results, delivery: await flushDecisionDelivery(), regressionCandidates: regression.created.map((c) => c.id) });
   }));
+  // 回归候选：执行判定失败 / 驳回的用例 → 候选 → 人批准 → 项目回归集。
+  router.get("/:runId/regression-candidates", wrap((req, res) => res.json({ candidates: listRegressionCandidates(req.params.projectId, { runId: req.params.runId, status: typeof req.query.status === "string" ? req.query.status : undefined }) })));
+  router.post("/:runId/regression-candidates", wrap((req, res) => res.json(proposeFromExecution(req.params.runId, req.params.projectId, req.body))));
+  router.post("/:runId/regression-candidates/:candidateId", wrap((req, res) => res.json(decideRegressionCandidate(req.params.projectId, req.params.candidateId, req.body, reviewerPrincipal(req)))));
   router.patch("/:runId/review", wrap((req, res) => res.json(reviseReviewedCase(req.params.runId, req.params.projectId, req.body, reviewerPrincipal(req)))));
   const stageActions: Record<string, (runId: string, projectId: string, body: any) => unknown> = {
     instructions: loadRunInstructions, retrieve: retrieveRunSpec,
@@ -69,7 +82,7 @@ export function runRouter() {
     execute: startWorkflowExecution,
     decisions: (id, project) => { const decisions = reviewRevisions(id, project).flatMap(c => c.approval ? [{ ...c.approval, decidedByKind: "human", by: c.approval.principal.id }] : []); return { decisions, count: decisions.length }; },
     status: (id, project) => { runLedger().requireRun(id, project); const state = registeredStageProducts(id); return { registered: state.protected, finalized: state.protected && state.finalized }; },
-    // 单元循环（docs/v3/22）：拆分由服务端做，规划器一次只领一个单元。
+    // 单元循环（docs/v3/history/22）：拆分由服务端做，规划器一次只领一个单元。
     "units/claim": (id, project, body) => claimUnit(id, project, body, "planner"),
     "units/write": (id, project, body) => writeUnit(id, project, body),
     "units/status": (id, project, body) => unitStatus(id, project, body?.node),
@@ -110,7 +123,7 @@ export function runRouter() {
      * `validated/` 与 `units/` 两个前缀只能由服务端的 stage 服务写。规划器要留探针，
      * 换个名字就行。
      */
-    if (typeof name === "string" && /^(validated|units)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
+    if (typeof name === "string" && /^(validated|units|regression-candidate)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
     res.json(runLedger().putRevision({ projectId: req.params.projectId, runId: req.params.runId, name,
       kind: kind as ArtifactRevision["kind"], content, mediaType, sourceRefs, parentRevision }, { kind: "agent", id: "host-import" }));
   }));

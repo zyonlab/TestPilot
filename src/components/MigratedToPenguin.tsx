@@ -5,7 +5,7 @@ import { useT } from "@/lib/prefs";
 /**
  * 「这一屏已经不在这里了」。
  *
- * v3 把 TestPilot 切两半（`docs/v3/00-架构.md` §1）：产品层留在 `:5300`，
+ * v3 把 TestPilot 切两半（`docs/v3/history/00-架构.md` §1）：产品层留在 `:5300`，
  * harness 层换成 PenguinHarness，跑在 `:7364`。工作流运行、画布、配对评测、
  * 变异、进程、能力、模型端点、提示词模板——这些问的都是「**这台机器怎么跑的**」，
  * 而它们现在由 Penguin 回答。

@@ -1,5 +1,5 @@
 /**
- * 领域引导探索的真实验收（docs/v3/20 §11 第一切片）。
+ * 领域引导探索的真实验收（docs/v3/history/20 §11 第一切片）。
  *
  * 在隔离的本地 perp-lab fixture 上，绑定 fixtures/perp-lab/rules.json，用真实 headless 浏览器
  * 跑 runObserve；不问模型（charter 取代了「先猜故事」那一步），不下单、不平仓、不撤单。

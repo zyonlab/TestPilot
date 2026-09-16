@@ -3,7 +3,7 @@ import { runGate } from "../src/casegen/gate.js";
 import type { CaseBundle, TextCase } from "../src/casegen/types.js";
 
 /**
- * 2026-09-11 第二轮实测（docs/v3/23）暴露的两条门禁缺陷。
+ * 2026-09-11 第二轮实测（docs/v3/history/23）暴露的两条门禁缺陷。
  *
  * 一、负例比例只数 `designMethod`，把 v2 拆出去的 `scenarioType` 漏掉了；
  * 二、没有 flows 时任何 `covers` 一律记 warn，于是「带完整状态证据」和「凭空编一条边」
@@ -78,7 +78,7 @@ it("顶层与断言都没有判据才是 tier-unbacked", () => {
 });
 
 /**
- * 判决必须在屏幕上（docs/v3/24 §18）。这个产品产出的是端到端 UI 测试：
+ * 判决必须在屏幕上（docs/v3/history/24 §18）。这个产品产出的是端到端 UI 测试：
  * 接口说下单成功而屏幕上没有那一行，用例会通过，而产品其实是坏的。
  */
 it("判据去问被测产品自己的接口：门禁点名；改成看屏幕就不点名", () => {

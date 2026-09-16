@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 /**
- * 工作单元循环（docs/v3/22）：拆分由服务端按产品模型做，规划器一次只领一个单元，
+ * 工作单元循环（docs/v3/history/22）：拆分由服务端按产品模型做，规划器一次只领一个单元，
  * 校验只针对该单元的范围，全部完成后由代码合并。真实账本、临时数据目录、不调模型。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"), db: typeof import("../src/db.js"),
@@ -212,7 +212,7 @@ it("没开 workUnits 的 run 照旧整份写入，不受影响", () => {
 });
 
 /**
- * 2026-09-11 第二轮实测暴露的范围缺陷（docs/v3/23 的 F-7）。
+ * 2026-09-11 第二轮实测暴露的范围缺陷（docs/v3/history/23 的 F-7）。
  */
 it("故事自己声明的规则也进用例单元的范围——featureRefs 推不出来的那条不该被判越界", () => {
   const { runId, ref } = newRun("scope-rulerefs");
@@ -260,7 +260,7 @@ it("整份导入故事的 run 在 stories 节点没有单元可领，用例单�
     materials: [{ name: "m.md", text: "面板有 Cross 与 Isolated。" }], importStories: stories })).rejects.toThrow(/imported_stories_require_work_units/);
 });
 
-/** 门禁 → 规划器的修复回路（docs/v3/23 F-11）与单元重试上限（F-8）。 */
+/** 门禁 → 规划器的修复回路（docs/v3/history/23 F-11）与单元重试上限（F-8）。 */
 it("门禁不通过时，被扣分的用例所在的单元重新打开，并带着门禁的话回来", () => {
   const { runId, ref } = newRun("repair-loop");
   for (let guard = 0; ; guard++) {
@@ -317,7 +317,7 @@ it("同一个单元最多重来 5 次，之后交给人——不再无限发回"
 });
 
 /**
- * `modules` 节点和单元循环的接缝（docs/v3/24 §6）。
+ * `modules` 节点和单元循环的接缝（docs/v3/history/24 §6）。
  * 冻结过的树决定单元怎么切；没冻结的提议一点作用都没有。
  */
 it("冻结过的模块树压过规则包里那一棵：单元按新的根切", () => {
@@ -361,7 +361,7 @@ it("故事单元可以提议修树：单独落一份修订，但一个字都不�
 });
 
 /**
- * 判据里的出处要真的存在（docs/v3/24 §33）。
+ * 判据里的出处要真的存在（docs/v3/history/24 §33）。
  *
  * 契约要求每条判据以「（依据 file.md#N）」收尾，"说不出出处的判据是猜的"，
  * 而服务端只核对模块的 evidence，不核对故事判据里的那个 N。

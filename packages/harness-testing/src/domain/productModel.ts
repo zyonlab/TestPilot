@@ -5,7 +5,7 @@ import type { ExplorationReport, Observation } from "./report.js";
 /**
  * 规范产品模型（ProductModel v1），由代码从「规则包 + 探索回执」确定性整理。
  *
- * 这是 docs/v3/20 §4 里「证据→规范产品模型」那个缺失的中间产物。模型（planner）以后
+ * 这是 docs/v3/history/20 §4 里「证据→规范产品模型」那个缺失的中间产物。模型（planner）以后
  * 可以在它之上提 change proposal，但它本身不由模型写：每个功能的 verification 是
  * 从回执算出来的，规则的 supported/contradicted 是对着 UI 期望判出来的。
  *
@@ -297,7 +297,7 @@ export function buildProductModel(input: { pack: ProductRulePack; report: Explor
       /**
        * 点是点了，但点出来的是一道**闸门**（「建立连接」「在钱包中确认」「确认下单」…），
        * 不是这个功能本身。`confirmed` 的意思必须是「这个功能被证实了」，
-       * 而不是「有个控件响应了」——两者的差别就是这一条（docs/v3/24 §21）。
+       * 而不是「有个控件响应了」——两者的差别就是这一条（docs/v3/history/24 §21）。
        */
       verification = "inconclusive";
       verificationReason = gateNames.length

@@ -5,7 +5,7 @@ import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
 /**
  * 产品规则包（ProductRulePack v1）。
  *
- * 这是 docs/v3/20 §4、21 §2 说的那份「领域/产品规则在 source 之前绑定」的东西。
+ * 这是 docs/v3/history/20 §4、21 §2 说的那份「领域/产品规则在 source 之前绑定」的东西。
  * 内置的 REFERENCE-domain-perp.md 是通用参考，**不是**这个：那份文件下发给了两个 run，
  * 但两个 run 的项目知识版本都是 0——模型收到了一段散文，服务端没有一条可以核对的规则。
  *
@@ -122,7 +122,7 @@ export const ExplorationTargetSpecSchema = z
     /**
      * `activate` 要点它；`observe-only` 只要看见就算完成；`fill` 往它里面填一个**声明好的值**。
      *
-     * `fill` 是 2026-09-12 实测逼出来的（docs/v3/24 §17）：会话签完之后 `Place Order` 出现了，
+     * `fill` 是 2026-09-12 实测逼出来的（docs/v3/history/24 §17）：会话签完之后 `Place Order` 出现了，
      * 点它**什么也没发生**——因为 Size 是空的。探索一直把输入框当 `observe-only`
      * （`activationBlocker` 里文本框一律 `unsupported:value_input`），于是提交这一步
      * 永远走不完最后一厘米。值必须写在包里、由人定：探索自己编一个数填进去，

@@ -1,14 +1,10 @@
 # TestPilot — 给 Claude Code 的接手说明
 
 ## 先做什么
-- 2026-09-10 最新专业性要求先读 `docs/v3/20-领域专业物料链路诊断与重构交接.md` 和 `docs/v3/21-节点提示词与结构化契约草案.md`：先领域引导探索与产品模型，再故事/风险/文本用例/工程集成。当前只是诊断与方案，不能把原冒烟 10/10 当专业验收。
-- 2026-09-10 最新用户决定：本地审核免身份验证。不要恢复 ReviewerSession / TP_REVIEW_TOKEN；操作来源与版本审计保留，详见 09 第 25 节。
-0. **快速接手先读 `docs/v3/09-执行目标与接手指南.md`**：目的与边界、进度快照、设计取舍、N-01 起手式、交接记录格式。每次停止前按该文档 §6 留下可接续记录，并更新 §7 最近交接点。
-1. 读 `docs/v3/00-架构.md`，先读顶部 **2026-09-08 用户决策补充**，再读 §8 红线、§13 规则在哪强制。Web 管项目/workflow/模型/物料/review；Penguin UI 管自进化评估。
-2. 最新 Codex 原生复验见 `docs/v3/19-Codex宿主Hyperliquid实测.md`（10/10 通过；公共页面冒烟范围）。生产实施与真实验收再读 `docs/v3/18-本地UI重构与Hyperliquid验收.md`（Hyperliquid 15/16 通过，C-14 待审；P 项仍按剩余验收保持 doing）。当前 UI 的本地实施再读 `docs/v3/11-WebUI全流程评审与产品设计.md`、`docs/v3/13-UI与论文路线任务台账.md`，然后：
-   `node scripts/plan.mjs --doc docs/v3/13-UI与论文路线任务台账.md --next`
-3. 认领 P 任务（同一 `--doc`，`--set P-xx doing`），按已有基础、代码落点和验收实施；全部兑现后再 done，证据写 `docs/v3/evidence/p-xx/`。当前优先 P-01；PC/SR 已合并到 P 台账。
-4. 08 保留 N 系列历史及人工/观察/发布待条件项，07 保留 T 历史。旧完成率和旧 UI 迁移决策不能替代本轮验收。
+0. **先读 `docs/v3/09-执行目标与接手指南.md`**：目标、当前阶段（初步交付）、现状、下一步、验收命令、交接记录格式。每次停止前按它 §6 在 §7 最上面留一条记录。
+1. 再读 `docs/v3/00-架构.md`（进程、包、阶段流水线、账本、单元循环、守卫的代码落点）与 `docs/v3/01-数据契约.md`（各产物的真源 schema）。安装与宿主接入看 10、14。
+2. `docs/v3/history/` 是 2026-09-16 之前的实验报告、任务台账（T/N/P 系列）、设计提案和交接日志，**只作追溯，不代表现状**；里面的「最新」「当前」都是当时的说法，数字有的后来被更正过。代码注释里引用的 `docs/v3/history/NN §x` 是设计来由，不是待办。
+3. 本地审核免身份验证（2026-09-10 用户决定）：不要恢复 ReviewerSession / TP_REVIEW_TOKEN；操作来源与版本审计保留。
 
 ## 判决必须在屏幕上（2026-09-12 用户决定）
 - **这个项目产出的是端到端 UI 测试代码。一切基于界面：不要直接调用被测网站的接口。**
@@ -18,7 +14,7 @@
   受限解码的 `kind` 枚举里去掉了 `api`（模型发不出来了）；门禁新增 `oracle-offsite`
   （warn，按 caseId 计分，等于挡住这类用例过关）。
 - **旧口径的遗留物，别拿它们当范例**：`fixtures/hyperliquid-testnet/cases.json`（8/8 接口判据）、
-  `fixtures/tier4-demo/cases.json`（4/4）、`docs/v3/06-执行层降本.md`、
+  `fixtures/tier4-demo/cases.json`（4/4）、`docs/v3/history/06-执行层降本.md`、
   `fixtures/*/README.md` 里「判据全部是 kind: api」那套说法，都是这条口径之前写的。
 - `exec/apiOracle.ts` 与 `MachineOracleSchema` 里的 `api` 分支**还在**（执行旧用例要用），
   但新用例走不到那里了。要彻底拆掉是另一件事，没做。
@@ -60,7 +56,8 @@
 
 ## 验收命令
 ```bash
-pnpm typecheck && pnpm test          # 各包 tsc + vitest + hook 子进程测试
+pnpm typecheck && pnpm test          # 各包 tsc + vitest
+pnpm test:hooks                      # hook 子进程测试（不在 pnpm test 里）
 pnpm check:drift                     # 两臂提示词逐条认领
 pnpm check:host-parity               # 宿主入口对 UI 操作的覆盖；加了 UI 路由必须同步分类
 pnpm check:domain-neutral            # 发给每个产品的代码与 skill 里没有写死的领域内容

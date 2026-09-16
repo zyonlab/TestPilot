@@ -263,7 +263,27 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     for (const o of oracles)
       if (o.kind === "api")
         add("oracle-offsite", `verdict is read from the product's own API, not from the screen: ${o.url}`, c.id, "warn", { field: "expected" });
-    if (cfg.gradeOracles && c.tier <= 2 && !oracles.length)
+    /**
+     * **judge 判据不能给 tier 1/2 撑腰。**
+     *
+     * 它是模型判的，只是判得有章法。算「有机器判据」时要把它剔掉，否则一条自称 tier 1、
+     * 只带 judge 的用例会被这条规则放过去——和 `none` 当年漏过去的形状一模一样。
+     */
+    const machineOracles = oracles.filter((o) => o.kind !== "judge");
+    for (const o of oracles) {
+      if (o.kind !== "judge") continue;
+      const vague = o.criteria.filter((q) => VAGUE.test(q));
+      if (vague.length)
+        add("judge-spec", `judge criterion is not a yes/no fact a reader can check: "${vague[0]!.slice(0, 60)}"`, c.id, "warn",
+          { args: { detail: vague[0]!.slice(0, 60) }, field: "expected" });
+      if (o.minPass !== undefined && o.minPass > o.samples)
+        add("judge-spec", `judge needs ${o.minPass} passing samples but only takes ${o.samples}`, c.id, "warn",
+          { args: { detail: `minPass ${o.minPass} > samples ${o.samples}` }, field: "expected" });
+      if (o.samples < 3)
+        add("judge-spec", `judge takes ${o.samples} sample(s) — too few to tell a stable verdict from a lucky one`, c.id, "info",
+          { args: { detail: `samples ${o.samples}` }, field: "expected" });
+    }
+    if (cfg.gradeOracles && c.tier <= 2 && !machineOracles.length)
       add(
         "tier-unbacked",
         `claims tier ${c.tier} but carries no machine-checkable oracle — at execution time a model will decide it`,
@@ -272,7 +292,9 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     if (cfg.gradeOracles && c.oracle && tierOf(c.oracle) > c.tier)
       add(
         "tier-unbacked",
-        `claims tier ${c.tier}, but its oracle is a relation between two observations (tier ${tierOf(c.oracle)})`,
+        tierOf(c.oracle) === 3
+          ? `claims tier ${c.tier}, but its oracle is judged by a model (tier 3)`
+          : `claims tier ${c.tier}, but its oracle is a relation between two observations (tier ${tierOf(c.oracle)})`,
         c.id,
         "info",
       );
@@ -483,7 +505,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    * **`flows` 为空时不能就此放行。**
    *
    * 原来这里是 `if (known.size)`：一份没有流程的产物，任何 `covers` 值都免检。
-   * 2026-09-11 实测（docs/v3/22）：一条臂的 67 条用例里有 27 条填了 `covers`，
+   * 2026-09-11 实测（docs/v3/history/22）：一条臂的 67 条用例里有 27 条填了 `covers`，
    * 值形如 `/trade~6 --[点「Trades」]--> /trade~7`——那是状态转移图**人类可读摘要里的一行**，
    * 不是转移 id。产物的 `flows` 是空的，于是这 27 条编造的引用一条都没被点到，
    * 门禁还给了满分，而结构覆盖率凭空多了 27 条谁也走不到的边。
