@@ -1,0 +1,49 @@
+name: Bug report / 缺陷报告
+description: Something does not work as documented / 行为与文档不符
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include API keys, wallet keys or other secrets. Security issues: see SECURITY.md.
+        请不要贴 API 密钥、钱包私钥等敏感信息；安全问题请按 SECURITY.md 处理。
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / 发生了什么
+      description: What you did, what you expected, what you saw instead. / 你做了什么、预期是什么、实际看到什么。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: dropdown
+    id: entry
+    attributes:
+      label: Entry / 入口
+      options:
+        - Web UI
+        - Claude Code
+        - Codex (experimental)
+        - Penguin (experimental)
+        - Scripts / CLI
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment / 环境
+      description: Output of `node scripts/testpilot-setup.mjs doctor` (it never prints secrets), OS, commit. / 附上 doctor 输出（不会打印密钥）、操作系统、提交号。
+      render: json
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or run ids / 日志或运行 id
+      description: Relevant server log lines, run id, execution id. Redact URLs you cannot share. / 相关日志、运行 id、执行 id；不能公开的地址请打码。

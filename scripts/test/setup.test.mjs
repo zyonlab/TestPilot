@@ -41,6 +41,25 @@ test('Web setup preserves existing env, missing model doctor is actionable and s
   assert.equal(readFileSync(env, 'utf8'), 'PRIVATE_KEY=SECRET_SETUP_SENTINEL\n');
   const diagnosis = run('doctor', '--entry', 'codex', '--model-env', env); assert.equal(diagnosis.status, 1); assert(!diagnosis.stdout.includes('SECRET_SETUP_SENTINEL')); assert(diagnosis.stdout.includes('MIDSCENE_MODEL_NAME'));
 });
+test('Web doctor follows TP_AGENT_RUNTIME: Claude Code by default, Penguin only when chosen', () => {
+  // 以前 web 入口一律按 Penguin 检查（Node 24、TP_PLANNER_*），默认配置下照着 README 跑会被误报。
+  const workspace = mkdtempSync(join(tmpdir(), 'tp web doctor ')), env = join(workspace, '.env');
+  writeFileSync(env, 'MIDSCENE_MODEL_NAME=fake\nMIDSCENE_MODEL_BASE_URL=http://localhost:9\n');
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^TP_(AGENT_RUNTIME|PLANNER_|PENGUIN_)/.test(k)));
+  const doctor = (extra) => JSON.parse(spawnSync(process.execPath, [join(root, 'scripts/testpilot-setup.mjs'), 'doctor', '--model-env', env],
+    { encoding: 'utf8', timeout: 30000, env: { ...clean, ...extra } }).stdout);
+  const byDefault = doctor({});
+  assert.equal(byDefault.webPlanner, 'claude-code');
+  assert(!byDefault.issues.some((i) => /TP_PLANNER|Penguin|Node 24/.test(i)), byDefault.issues.join('\n'));
+  const penguin = doctor({ TP_AGENT_RUNTIME: 'penguin', TP_PENGUIN_NODE: '/nonexistent/node' });
+  assert.equal(penguin.webPlanner, 'penguin');
+  assert(penguin.issues.some((i) => /TP_PLANNER_MODEL_NAME/.test(i)));
+  assert(penguin.issues.some((i) => /Node 24/.test(i)));
+  const help = spawnSync(process.execPath, [join(root, 'scripts/testpilot-setup.mjs'), '--help'], { encoding: 'utf8' });
+  assert.equal(help.status, 0); assert.match(help.stdout, /Usage:/);
+  const unknown = spawnSync(process.execPath, [join(root, 'scripts/testpilot-setup.mjs'), 'nope'], { encoding: 'utf8' });
+  assert.equal(unknown.status, 2); assert.match(unknown.stderr, /Unknown command/);
+});
 test('Penguin local agent installation preserves planner config and other MCP tools', () => {
   const home = mkdtempSync(join(tmpdir(),'tp penguin install ')), state = join(home,'data/default_project/agents/fixture/agent_state');
   mkdirSync(state,{recursive:true}); writeFileSync(join(state,'system_config.yaml'),'name: fixture\ntools:\n  shell: true\n  mcpServers:\n    - name: unrelated\n      config: {command: keep}\nsystem_prompt: |\n  Keep this native prompt.\n');

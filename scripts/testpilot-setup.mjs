@@ -8,6 +8,23 @@ import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2), command = args[0] ?? 'doctor';
+const USAGE = `Usage: node scripts/testpilot-setup.mjs <command> [options]
+
+Commands:
+  doctor     Check Node, dependencies, model env and the planner host (default)
+  start      Start the API server (:5301) and the Web UI (:5300)
+  install    Install TestPilot into a workspace for a host agent
+  uninstall  Remove files installed by \`install\` (only unmodified ones)
+
+Options:
+  --entry <web|claude-code|codex|penguin>   Which entry to check or install (default: web)
+  --workspace <dir>                          Target workspace (default: this checkout)
+  --model-env <file>                         Model env file (default: server/.env)
+  --agent-id <id>                            Penguin agent id (install --entry penguin)
+
+Note: use \`node scripts/testpilot-setup.mjs ...\` rather than \`pnpm setup\` / \`pnpm doctor\`:
+pnpm has built-in commands with those names that run instead of the project scripts.`;
+if (['-h', '--help', 'help'].includes(command)) { console.log(USAGE); process.exit(0); }
 const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i < 0 ? fallback : args[i + 1]; };
 const entry = flag('entry', 'web'), workspace = resolve(flag('workspace', root)), envFile = resolve(flag('model-env', join(root, 'server/.env')));
 if (!['web', 'codex', 'claude-code', 'penguin'].includes(entry)) throw new Error('entry must be web, codex, claude-code or penguin');
@@ -17,21 +34,29 @@ function version(bin, nodeBin) { const result = spawnSync(nodeBin || bin, nodeBi
 const write = (path, text, mode = 0o600) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text, { mode }); chmodSync(path, mode); };
 if (command === 'doctor') {
   const env = envValues(), executor = !!(env.MIDSCENE_MODEL_NAME && (env.MIDSCENE_MODEL_BASE_URL || env.OPENAI_BASE_URL)), planner = !!(env.TP_PLANNER_MODEL_NAME && env.TP_PLANNER_BASE_URL);
-  const host = entry === 'codex' ? version(env.TP_CODEX_BIN || 'codex') : entry === 'claude-code' ? version(env.TP_CLAUDE_BIN || 'claude') : null;
+  /**
+   * Web 发起的生成由谁规划：`TP_AGENT_RUNTIME`，不设即本机 Claude Code（server/src/runtimes.ts）。
+   * 以前 web 入口一律按 Penguin 检查（Node 24、TP_PLANNER_*），默认配置下照着 README 跑会被误报。
+   */
+  const webRuntime = entry === 'web' ? (env.TP_AGENT_RUNTIME || 'claude-code') : null;
+  const needsClaude = entry === 'claude-code' || webRuntime === 'claude-code';
+  const needsPenguin = entry === 'penguin' || webRuntime === 'penguin';
+  const host = entry === 'codex' ? version(env.TP_CODEX_BIN || 'codex') : needsClaude ? version(env.TP_CLAUDE_BIN || 'claude') : null;
   const issues = [];
   if (Number(process.versions.node.split('.')[0]) < 22) issues.push('Use Node 22 or newer for the TestPilot server. Install dependencies with the same Node major version that starts the server.');
   if (!existsSync(join(root, 'server/node_modules/better-sqlite3'))) issues.push('Run pnpm install --frozen-lockfile in the TestPilot checkout.');
   if (!executor) issues.push('Set MIDSCENE_MODEL_NAME and MIDSCENE_MODEL_BASE_URL (or legacy OPENAI_BASE_URL) in the model env file.');
-  if (entry === 'web' && !planner) issues.push('Set TP_PLANNER_MODEL_NAME and TP_PLANNER_BASE_URL. Initially copy the executor model profile.');
-  if (['codex', 'claude-code'].includes(entry) && !host) issues.push(`Install the ${entry} CLI and sign in with its native account.`);
+  if (webRuntime && !['claude-code', 'penguin'].includes(webRuntime)) issues.push(`TP_AGENT_RUNTIME must be claude-code or penguin (got ${webRuntime}).`);
+  if (webRuntime === 'penguin' && !planner) issues.push('Set TP_PLANNER_MODEL_NAME and TP_PLANNER_BASE_URL. Initially copy the executor model profile.');
+  if ((entry === 'codex' || needsClaude) && !host) issues.push(`Install the ${entry === 'codex' ? 'codex' : 'claude-code'} CLI and sign in with its native account${webRuntime ? ' (Web generation is planned by it; set TP_AGENT_RUNTIME to change that)' : ''}.`);
   if (entry === 'codex' && host && /0\.14[0-4]\./.test(host)) issues.push('This Codex CLI predates the verified 0.153.4 runtime. Upgrade the CLI or set TP_CODEX_BIN to a current installation; do not substitute the host model.');
-  if (['web', 'penguin'].includes(entry)) {
+  if (needsPenguin) {
     let node24 = env.TP_PENGUIN_NODE;
     if (!node24) { const base = join(env.HOME || '', '.nvm/versions/node'); try { node24 = join(base, readdirSync(base).filter(n => /^v(2[4-9]|[3-9]\d)\./.test(n)).sort((a,b) => b.localeCompare(a, undefined, { numeric: true }))[0], 'bin/node'); } catch {} }
     if (!node24 || !/^v(2[4-9]|[3-9]\d)\./.test(version(node24) ?? '')) issues.push('Install Node 24+ for Penguin, and set TP_PENGUIN_NODE to its executable.');
     const penguin = env.TP_PENGUIN_BIN || (node24 ? join(dirname(node24), 'penguin') : 'penguin'); if (!version(penguin, node24)) issues.push('Install @prismshadow/penguin-cli using the Penguin Node runtime, and set TP_PENGUIN_BIN.');
   }
-  console.log(JSON.stringify({ entry, workspace, node: process.version, host, plannerSource: entry === 'web' ? (planner ? 'Web profile/environment' : 'missing') : 'native host', executorSource: executor ? 'environment (project settings may override)' : 'missing environment (check project settings)', credentialValuesPrinted: false, reviewer: { mode: 'local', authenticationRequired: false }, issues, ready: issues.length === 0 }, null, 2));
+  console.log(JSON.stringify({ entry, workspace, node: process.version, host, ...(webRuntime ? { webPlanner: webRuntime } : {}), plannerSource: webRuntime === 'penguin' ? (planner ? 'Web profile/environment' : 'missing') : 'native host', executorSource: executor ? 'environment (project settings may override)' : 'missing environment (check project settings)', credentialValuesPrinted: false, reviewer: { mode: 'local', authenticationRequired: false }, issues, ready: issues.length === 0 }, null, 2));
   if (issues.length) process.exitCode = 1;
 } else if (command === 'start') {
   if (entry !== 'web') throw new Error('start supports --entry web; host planners start in their native app.');
@@ -111,4 +136,4 @@ if (command === 'doctor') {
     files[shim.slice(workspace.length + 1)] = createHash('sha256').update(readFileSync(shim)).digest('hex');
     write(join(workspace, '.testpilot/install.json'), JSON.stringify({ ...result, mcp, files }, null, 2)); console.log(JSON.stringify(result, null, 2));
   }
-} else throw new Error('Use doctor, install, start or uninstall');
+} else { console.error(`Unknown command: ${command}\n\n${USAGE}`); process.exitCode = 2; }
