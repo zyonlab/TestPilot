@@ -450,6 +450,7 @@ export const RunPipelineInput = {
   from: z.string().optional().describe('Resume at this node, reading the upstream artefact recorded in events.jsonl. Requires the same outDir, unless frozenInputsDir supplies the upstream products.'),
   frozenInputsDir: z.string().optional().describe('When resuming (from must be set), read the frozen upstream products (nodes/*.json) from this directory instead of outDir, so one frozen input can feed many candidates of the resumed stage. Records frozenInputsDir and the computed inputHash in meta.json.'),
   ablate: z.array(z.string()).optional().describe("Component switches to turn off for this run, for ablation comparison."),
+  domainReferencePath: z.string().optional().describe("File holding the domain reference bound to this run (project data). Omitted: TP_DOMAIN_REFERENCE_FILE, else none."),
   skillVersion: z.string().optional().describe('Version of the calling skill, YYYY-MM-DD.N. Recorded in meta.json as the provenance of this run.'),
   lang: z.string().optional().describe('Output language for stories and cases. Default "zh".'),
 };

@@ -8,7 +8,8 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   // 与 harness-testing/src/baselines/perf.ts 的 DEFAULT_BUDGETS 一致。
   perfBudget: { ttfbMs: 800, fcpMs: 1800, domContentLoadedMs: 3000, loadMs: 5000 },
   ablate: [],
-  guard: { allowHosts: ["localhost", "127.0.0.1", "::1"], blockIrreversible: true, allowlistOnly: false },
+  // 不可逆步骤默认放行：删除、完成、清理是被测产品的功能，用例要测的就是它们（`GUARD_STRICT=1` 可整机拦回来）。
+  guard: { denyHosts: [], blockIrreversible: false },
   capabilities: [],
 };
 
@@ -49,9 +50,8 @@ export function resolveHarnessConfig(
   merged.events.keepLast = num(env.EVENTS_KEEP, merged.events.keepLast);
   merged.events.trimMs = num(env.EVENTS_TRIM_MS, merged.events.trimMs);
   if (env.ABLATE !== undefined) merged.ablate = list(env.ABLATE);
-  if (env.ALLOW_HOSTS) merged.guard.allowHosts = [...merged.guard.allowHosts, ...list(env.ALLOW_HOSTS)];
-  if (env.GUARD_ALLOWLIST_ONLY === "1") merged.guard.allowlistOnly = true;
-  if (env.GUARD_OFF === "1") merged.guard.blockIrreversible = false;
+  if (env.DENY_HOSTS) merged.guard.denyHosts = [...merged.guard.denyHosts, ...list(env.DENY_HOSTS)];
+  if (env.GUARD_STRICT === "1") merged.guard.blockIrreversible = true;
 
   return merged;
 }

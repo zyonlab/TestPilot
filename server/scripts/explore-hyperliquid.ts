@@ -1,5 +1,5 @@
 /**
- * Hyperliquid **测试网** /trade 的领域引导探索（docs/v3/22 阶段 E；地址口径见 docs/v3/24 §15）。
+ * Hyperliquid **测试网** /trade 的领域引导探索（docs/v3/history/22 阶段 E；地址口径见 docs/v3/history/24 §15）。
  *
  * 默认地址是测试网 `app.hyperliquid-testnet.xyz`，不是主网——主网上同一串点击是在花真钱，
  * 而两者只差一个域名。要跑主网必须显式给 `TP_TARGET_URL`，并且自己想清楚为什么。

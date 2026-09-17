@@ -1,4 +1,6 @@
-import {caseEntryUrl} from './caseEntry.js';
+import { boundRulePack } from "./rulePacks.js";
+import { referencedKeys } from "@testpilot/harness-core";
+import {caseEntryUrl, caseStartsLoggedOut} from './caseEntry.js';
 import { recordModelRequests } from './roleSpend.js';
 import { caseRunBudget, configuredRunBudget } from "./runBudget.js";
 import { randomUUID } from "node:crypto";
@@ -35,11 +37,38 @@ export function listWorkflowExecutions(runId: string, projectId: string) {
 }
 function phase(row: ExecutionRow, status: string, revisionId?: string, message?:string) {
   ledger().db.prepare("UPDATE workflow_executions SET status=?,resultRevision=COALESCE(?,resultRevision) WHERE id=?").run(status, revisionId ?? null, row.id);
-  ledger().db.prepare("UPDATE wf_runs SET status=? WHERE id=?").run(status === "running" ? "executing" : status === "passed" ? "completed" : status, row.runId);
+  /**
+   * **用例没全过，不等于这条运行失败了。**
+   *
+   * 此前批次状态原样写进 `wf_runs.status`：20 条里有一条用例红，整条运行就是 `failed`，
+   * 而 `beginStage` 见 `failed` 就拦——g2 要求「用户显式恢复」。2026-09-15 Vikunja：修完执行器、
+   * 补完 afterStep 想重编重跑，g2 被挡；重跑结束又被写回 `failed`。界面那边一直在绕
+   * （`ExecutionControls` 发起执行前见 failed 就先自动 resume），这份测试文件里几乎每条都先手动
+   * `UPDATE wf_runs SET status='waiting_review'`——**所有人都知道这里错了，只是都绕过去了**。
+   *
+   * 执行是挂在运行上的一次活动：判决（有用例失败 / 判定不了）记在执行行里，运行回到它本来的
+   * 状态——能执行的运行一定已经定稿、用例已批准，那就是 `waiting_review`。
+   * 其余照旧：`passed` 记 `completed`；`cancelled` 仍要显式恢复（人按了停，是有意的）；
+   * `infra_error` / `budget_exhausted` 说的是这次没跑完，不挡 g2 与执行。
+   */
+  const runStatus = status === "running" ? "executing" : status === "passed" ? "completed"
+    : status === "failed" || status === "unobservable" ? "waiting_review" : status;
+  ledger().db.prepare("UPDATE wf_runs SET status=? WHERE id=?").run(runStatus, row.runId);
   const sequence = (ledger().db.prepare("SELECT COALESCE(MAX(sequence),-1)+1 AS n FROM workflow_events WHERE runId=? AND node='execution' AND attempt=0").get(row.runId) as { n: number }).n;
   ledger().appendEvent({ id: `execution-${randomUUID()}`, runId: row.runId, node: "execution", attempt: 0, sequence, at: new Date().toISOString(),
     ...(message?{message}:{}), phase: status === "passed" ? "done" : status === "running" ? "running" : status === "cancelled" ? "cancelled" : "failed", ...(revisionId ? { revisionId } : {}) }, row.projectId);
 }
+/** 这批文字引用了、而环境变量与密钥里没有的占位符（`env.X` / `secret.X`，排序去重）。 */
+export function missingPlaceholders(texts: string[], context: { env: Record<string, unknown>; secrets: Record<string, unknown> }): string[] {
+  const missing = new Set<string>();
+  for (const text of texts) {
+    const { env, secret } = referencedKeys(text);
+    for (const key of env) if (!(key in context.env)) missing.add(`env.${key}`);
+    for (const key of secret) if (!(key in context.secrets)) missing.add(`secret.${key}`);
+  }
+  return [...missing].sort();
+}
+
 export function startWorkflowExecution(runId: string, projectId: string, raw: unknown) {
   /**
    * **可以只跑一部分。**
@@ -83,7 +112,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const session = env?.login?.authRequired ? env.login.session : null;
   const login = env?.login?.authRequired && !session ? env.login.steps ?? [] : [];
   /**
-   * 探索记下来的控件文案与选择器，交给执行侧当**定位提示**（docs/v3/23 F-15）。
+   * 探索记下来的控件文案与选择器，交给执行侧当**定位提示**（docs/v3/history/23 F-15）。
    *
    * 用例里不会有选择器——它是端无关的。选择器留在这里，执行时先试、验不过就交回模型，
    * 见 `exec/run.ts` 的 `byLocator`。没有探索回执的 run（纯 spec 来源）拿到空表，行为不变。
@@ -97,7 +126,19 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
     query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locators, visualThresholdPct: env?.visualThresholdPct };
-  guardRun(url, [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps])]);
+  // 不可逆步骤默认放行；额外词来自这次运行绑定的规则包，只有整机打开 GUARD_STRICT 时才生效。
+  /**
+   * **占位符没解析就不要跑。**
+   *
+   * 2026-09-16 实测（Vikunja）：用例引用 `${env.BASE_URL}` 与 `${secret.VIKUNJA_PASSWORD}`，而环境里
+   * 只有 `USERNAME`。认不出的键被原样留下，于是浏览器收到的动作是「打开 ${env.BASE_URL}/login」——
+   * Midscene 规划出一个它没有的 Navigate 动作，用例红得看不出原因；而「密码」那条填进去的字面量
+   * 恰好是个错密码，真正的判决被掩盖了。缺什么，跑之前就说出来。
+   */
+  const texts = [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps, ...(typeof c.expected === "string" ? [c.expected] : [])])];
+  const missing = missingPlaceholders(texts, context);
+  if (missing.length) throw new LedgerError(400, `unresolved_placeholders:${missing.slice(0, 8).join(",")}`);
+  guardRun(url, [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
   const row: ExecutionRow = { id: `exec-${randomUUID()}`, runId, projectId, codeRevision: input.codeRevision, requestHash, status: "running",
     // 选择集不进 environmentHash：跑哪几条不改变「在什么环境里跑」。它在 requestHash 里，也写进产物。
     environmentHash: contentHash(canonicalJSON({ ...snapshot, budget: undefined, caseIds: undefined })), environmentEnc: encryptSecret(JSON.stringify(snapshot)), resultRevision: null, startedAt: new Date().toISOString() };
@@ -131,7 +172,9 @@ async function perform(row: ExecutionRow) {
       const execId = `${row.id}-${contentHash(kase.id).slice(0, 12)}`; active.set(row.id, execId);
       const attempt = () => execOnRunner({ execId, scopeProjectId: row.projectId, modelSnapshotRunId: row.runId, url: caseEntryUrl(kase.precondition,env.url),
         steps: kase.steps, expected: kase.expected, artifactDir: ARTIFACT_DIR,
-        opts: { modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps, login: env.login, storageState: env.storageState,
+        opts: { modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,
+          // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
+          ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState }),
           resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locators: env.locators,
           /**
            * **带钱包探索出来的用例，执行时也要带钱包。**
@@ -184,7 +227,11 @@ async function perform(row: ExecutionRow) {
        * `runs` 表没有工作流的行，于是「待审批基线」那一页永远是空的。
        * 失败不该带垮这次执行——基线是附加物，不是判决。
        */
-      try { recordWorkflowCaseRun({ runId: row.runId, projectId: row.projectId, executionId: row.id, visualThresholdPct: env.visualThresholdPct, result: { caseId: kase.id, ...result } as never }); }
+      try {
+        const runRecordId = recordWorkflowCaseRun({ runId: row.runId, projectId: row.projectId, executionId: row.id, visualThresholdPct: env.visualThresholdPct, result: { caseId: kase.id, ...result } as never });
+        // 记下这条对应哪条运行记录：界面要把过程、视觉、性能、报告放在一处（executionDetail.ts）。
+        if (runRecordId) (results[results.length - 1] as Record<string, unknown>).runRecordId = runRecordId;
+      }
       catch (e) { phase(row, "running", undefined, `基线未记录（${kase.id}）：${String((e as Error).message).slice(0, 80)}`); }
       if (Array.isArray(result.modelRequests)) {
         calls += result.modelRequests.filter(r => r.forwarded).length;
@@ -233,6 +280,10 @@ async function perform(row: ExecutionRow) {
     sourceRefs: [row.codeRevision] }, system);
   phase(row, status, artifact.id);
   captureExecutionMemory(ledger(), artifact.id, row.projectId, env.url);
+  // 判定失败的用例进回归候选，等人批准（regressionCandidates.ts）。候选出不来不影响这次执行的结论。
+  // 不只看批次状态：一批里有一条环境失败，批次就记成 infra_error，同批里真正判定失败的那条不能跟着丢。
+  if (status !== "passed" && status !== "cancelled")
+    void import("./regressionCandidates.js").then((m) => m.proposeFromExecution(row.runId, row.projectId, { executionId: row.id })).catch(() => undefined);
 }
 export async function cancelWorkflowExecutions(runId: string, projectId: string) {
   ledger().requireRun(runId, projectId);

@@ -605,7 +605,7 @@ describe("gate ① on what a case claims to cover", () => {
 });
 
 /**
- * `flows` 为空时，`covers` 不能免检（2026-09-11，docs/v3/22 §6）。
+ * `flows` 为空时，`covers` 不能免检（2026-09-11，docs/v3/history/22 §6）。
  *
  * 原来是 `if (known.size)` 才检查——一份没有流程的产物，任何 covers 值都放行。
  * 实测一条真实臂的 27 条用例把状态转移图**人类可读摘要里的一行**当成转移 id 填了进去，

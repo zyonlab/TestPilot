@@ -33,4 +33,4 @@ cp runs/freeze/nodes/spec.json runs/freeze/nodes/stories.json <此目录>/nodes/
 
 思考模式关不掉，同一份 spec 两次会拆出不同的 stories。这里冻的 stories 只是**一个样本**。
 要防在这一份上过拟合 design，退路是冻 3 份（各跑候选、合起来看），和 held-out 取样同理。
-详见 `../../../../docs/v3/04-单skill进化.md`。
+详见 `../../../../docs/v3/history/04-单skill进化.md`。

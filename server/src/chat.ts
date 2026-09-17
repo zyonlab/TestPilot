@@ -13,6 +13,9 @@ import { ABLATABLE } from "@testpilot/harness-core";
 /** 存在的消融开关。模型只能从这里挑，不能自己编一个。 */
 const ABLATION_NAMES: string[] = Object.values(ABLATABLE);
 import { DEFAULT_PROMPTS, getSettings } from "./settings.js";
+import { FIELDS, isFieldId, shrinkWarnings, type FieldSpec } from "./fieldDraft.js";
+import { runLedger } from "./runService.js";
+import { frozenModules } from "./moduleStage.js";
 
 /**
  * Chat with the agent — a drafting surface, not a control surface.
@@ -39,7 +42,7 @@ import { DEFAULT_PROMPTS, getSettings } from "./settings.js";
  * 这里的做法最简单也最硬：chat **根本不调 startRun**，它只产出那张确认卡，
  * 按下去的是人，走的是界面上那个一模一样的按钮。
  */
-export type ChatIntent = "capability" | "graph" | "prompt" | "ask" | "run";
+export type ChatIntent = "capability" | "graph" | "prompt" | "ask" | "run" | "field";
 
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -47,7 +50,7 @@ export interface ChatTurn {
 }
 
 export interface ChatDraft {
-  kind: "capability" | "graph" | "prompt" | "run";
+  kind: "capability" | "graph" | "prompt" | "run" | "field";
   value: unknown;
   valid: boolean;
   /** Why it cannot be saved. Shown as-is; the reviewer is the one who decides what to do. */
@@ -137,6 +140,34 @@ const RUN_STABLE = [
   "Only use graph ids, node ids and ablation switches that appear in the context below.",
   "Never invent an evaluation arm: comparisons come from the repository's eval specs, not",
   "from this conversation. If asked to start an evaluation, say that and draft a plain run.",
+].join("\n");
+
+/**
+ * 字段起草面的共同规矩。**字段各自的任务说明在 `fieldDraft.ts`**——那边是「这个字段是什么」，
+ * 这边是「起草这件事怎么做」，两者会各自变化。
+ *
+ * 三条都不是客套话，每一条都对着一种实测过的失败：
+ * 一，没有观察就说没有，别补一条看起来合理的；二，引用只能引下面给了编号的东西；
+ * 三，产出会被这个字段自己的校验器判，判回来的理由原样回到对话里——所以不必自评「这份是对的」。
+ */
+const FIELD_STABLE = [
+  "You are drafting ONE FIELD of a TestPilot project, in conversation with the person who owns it.",
+  "You do not save anything: they read your draft and press the button.",
+  "",
+  "Three rules decide whether a draft is usable:",
+  "- Say only what the material below supports. A plausible invention is worse than a gap,",
+  "  because it reads exactly like an observation and nobody will go and check it.",
+  "- Cite only ids that appear below. An id you did not see here does not exist.",
+  "- Your draft is checked by this field's own validator, and its complaints come back to you",
+  "  verbatim. Fix what it says; do not argue that the draft is fine.",
+  "",
+  "Answer the person in `reply` — short, and about what you changed or what you still need.",
+  "Put the field's value in the other property. Keep the two apart: the reply is for reading,",
+  "the value is what gets stored.",
+  "",
+  "When a draft of yours is already below, you are EDITING it: return the whole value with only",
+  "what was asked for changed, and everything else verbatim. Rewriting it from scratch loses",
+  "things silently — a smaller version is still a valid one, so nothing will complain.",
 ].join("\n");
 
 const SCHEMAS = {
@@ -312,6 +343,20 @@ export function checkPrompt(value: unknown, key: string): ChatDraft {
 }
 
 /**
+ * 判一份字段草稿。
+ *
+ * **判定不在这里，在字段自己的校验器里**——这个函数只负责把它说的话原样搬到对话上。
+ * 规则包的校验器会拒收编造的来源、引用不到的功能、与来源等级不匹配的 claimType，
+ * 而那些拒收理由正是模型下一轮要改的东西，所以它们必须原样出现，不能被概括成
+ * 「这份草稿有 3 个问题」。
+ */
+export function checkField(value: unknown, spec: FieldSpec, previous?: unknown): ChatDraft {
+  const { ok, errors } = spec.validate(value);
+  const warnings = shrinkWarnings(previous, value);
+  return { kind: "field", value, valid: ok, issues: errors, target: spec.id, ...(warnings.length ? { warnings } : {}) };
+}
+
+/**
  * What the person is pointing at while they type.
  *
  * The header used to switch between "诊断这次运行" and "改这一步怎么跑" based on the
@@ -346,6 +391,20 @@ export interface ChatInput {
   graphId?: string;
   /** For a prompt draft: which template is being rewritten. */
   promptKey?: string;
+  /**
+   * For a field draft: which complex field this drawer is filling（`fieldDraft.ts` 的 FieldId）。
+   *
+   * 抽屉是**附着在字段上**打开的，所以这个 id 决定三件事：给模型什么任务说明、
+   * 喂它哪些上下文、以及**由谁判草稿合不合格**。判定不由模型自称——见 fieldDraft.ts。
+   */
+  field?: string;
+  /**
+   * 上一轮起草出来的那份值。
+   *
+   * 给它两个用处：进提示词，让这一轮是**改**而不是重写；以及和新的一份比一比，
+   * 少了什么就说出来（`shrinkWarnings`）。缺了前者，实测是改一个枚举值顺手丢掉三个功能。
+   */
+  previous?: unknown;
   existingIds?: string[];
   /** What the question is about, when the person has something selected. */
   context?: ChatContext;
@@ -501,6 +560,118 @@ async function contextLines(ctx: ChatContext | undefined): Promise<string[]> {
   return out.length ? ["", ...out, ""] : [];
 }
 
+/**
+ * 起草面开场要摆给人看的两样东西：有哪些字段可以起草，以及**哪几次运行手里有材料**。
+ *
+ * 第二样是这个抽屉能不能省下人工的关键。没有材料的起草，产出的是一份读起来完整、
+ * 每一条都无从核对的规则包——比空着更糟，因为它看上去已经填好了。所以选运行这一步
+ * 摆在明面上，每一行还带着「几份材料、模块树冻没冻」：人一眼看得出自己选的是不是空的。
+ */
+export function fieldSources(projectId: string) {
+  const fields = Object.values(FIELDS).map((f) => ({ id: f.id, title: f.title, needs: [...f.needs] }));
+  let runs: Array<{ runId: string; at?: string; status?: string; materials: number; modules: number }> = [];
+  try {
+    const l = runLedger();
+    const byRun = new Map<string, number>();
+    for (const r of l.listRevisions(projectId)) {
+      if (r.kind !== "material") continue;
+      byRun.set(r.runId, (byRun.get(r.runId) ?? 0) + 1);
+    }
+    runs = [...byRun.entries()]
+      .map(([runId, materials]) => {
+        const run = outputStore.getRun(runId);
+        let modules = 0;
+        try {
+          modules = frozenModules(runId, projectId)?.length ?? 0;
+        } catch {
+          /* 没冻结过就是 0 */
+        }
+        return { runId, at: run?.startedAt === undefined ? undefined : String(run.startedAt), status: run?.status ? String(run.status) : undefined, materials, modules };
+      })
+      // 新的在前：人要找的几乎总是刚跑完的那一次。
+      .sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? "")))
+      .slice(0, 30);
+  } catch {
+    /* 账本还没建起来——没有可选的运行，抽屉照常开得了 */
+  }
+  return { fields, runs };
+}
+
+/**
+ * 一个字段起草时看得见的东西。
+ *
+ * 只喂 `needs` 声明要的那几样：起草规则包要探索材料和模块树，写领域知识只要材料。
+ * 多喂没有好处——上下文里多出来的每一样都是模型可以引用的东西，而它引用了就等于
+ * 我们默许它把那样东西写进这个字段。
+ *
+ * **没有运行也要能用。** 抽屉是从字段上点开的，那一刻常常还没有任何一次运行
+ * （新项目的第一件事往往正是填规则包）。那就明说材料是空的，让对话去问人，
+ * 而不是让模型对着一片空白编一份看起来完整的规则包。
+ */
+async function fieldContextLines(spec: FieldSpec, projectId?: string, runId?: string): Promise<string[]> {
+  const out: string[] = [];
+  const needs = new Set(spec.needs);
+  if (!runId || !projectId) {
+    out.push(
+      "NO RUN IS SELECTED, so there is no exploration material and no module tree.",
+      "Draft only from what the person tells you in the conversation, and say plainly which",
+      "parts you could not ground. Do not fill the gap with what products like this usually do.",
+    );
+    return ["", ...out, ""];
+  }
+
+  if (needs.has("exploration")) {
+    let material: Array<{ name: string; text: string }> = [];
+    try {
+      const l = runLedger();
+      material = l
+        .listRevisions(projectId, runId)
+        .filter((r) => r.kind === "material")
+        .map((r) => ({ name: r.name, content: l.readRevision(r.id, projectId).content }))
+        .filter((r): r is { name: string; content: string } => typeof r.content === "string")
+        .map((r) => ({ name: r.name, text: r.content }));
+    } catch {
+      /* 这次运行没在账本里登记过——退回节点产出 */
+    }
+    if (!material.length) {
+      const seen = (await nodeOutput(runId, "source").catch(() => undefined)) as { text?: unknown } | undefined;
+      if (typeof seen?.text === "string") material = [{ name: "source", text: seen.text }];
+    }
+    if (material.length) {
+      out.push("OBSERVED MATERIAL (what the product was seen doing — this is your only evidence):");
+      /*
+       * 每份材料截到 12000 字符。探索材料是一屏一段，前面几屏是产品的主界面——
+       * 砍掉尾巴丢的是边角，而整份不砍会把对话挤没。段的编号口径见 materialSections。
+       */
+      for (const m of material) out.push(`----- ${m.name} -----`, brief(m.text, 12000));
+    } else out.push("THIS RUN HAS NO MATERIAL YET: say so instead of drafting from nothing.");
+  }
+
+  if (needs.has("modules")) {
+    const modules = (() => {
+      try {
+        return frozenModules(runId, projectId);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (modules?.length) {
+      out.push(
+        "THE FROZEN MODULE TREE (a rule's `moduleId`, if you set one, must be one of these ids):",
+        ...modules.map((m) => `- ${m.id}${m.parentId ? ` (under ${m.parentId})` : ""} · ${m.name ?? ""} ${m.purpose ? `— ${brief(m.purpose, 160)}` : ""}`),
+      );
+    } else out.push("NO MODULE TREE IS FROZEN for this run: do not invent module ids.");
+  }
+
+  if (needs.has("stories")) {
+    const stories = (await nodeOutput(runId, "stories").catch(() => undefined)) as { stories?: Array<{ id?: string; title?: string }> } | undefined;
+    if (stories?.stories?.length)
+      out.push("STORIES:", ...stories.stories.map((st) => `- ${st.id ?? "?"} · ${brief(st.title ?? "", 120)}`));
+  }
+
+  return ["", ...out, ""];
+}
+
 export async function chat(input: ChatInput): Promise<ChatResult> {
   const run = input.context?.wfRunId ? outputStore.getRun(input.context.wfRunId) : undefined;
   const runProject = (run?.detail as { target?: { projectId?: string } } | undefined)?.target?.projectId;
@@ -530,8 +701,29 @@ export async function chat(input: ChatInput): Promise<ChatResult> {
     );
   }
 
+  /**
+   * 字段起草：把这个字段要的上下文摆出来。
+   *
+   * 探索材料给的是**观察**，所以起草出来的规则只能是 observed——这句既写在
+   * 任务说明里，也由 `validateRulePack` 强制（没有产品级来源的 normative 会被拒）。
+   */
+  let fieldSpec: FieldSpec | undefined;
+  if (intent === "field") {
+    if (!isFieldId(input.field)) throw new Error(`unknown_field:${String(input.field)}`);
+    fieldSpec = FIELDS[input.field];
+    context.push(...(await fieldContextLines(fieldSpec, input.projectId, input.context?.wfRunId)));
+    if (input.previous !== undefined)
+      context.push(
+        "",
+        "YOUR CURRENT DRAFT — edit THIS, and return the WHOLE thing:",
+        typeof input.previous === "string" ? input.previous : JSON.stringify(input.previous, null, 1),
+      );
+  }
+
   const stable =
-    intent === "capability"
+    intent === "field"
+      ? [FIELD_STABLE, "", fieldSpec!.instruction].join("\n")
+      : intent === "capability"
       ? CAPABILITY_STABLE
       : intent === "graph"
         ? GRAPH_STABLE
@@ -544,8 +736,11 @@ export async function chat(input: ChatInput): Promise<ChatResult> {
   const res = await model.chat({
     stable,
     variable: [...context, "", "CONVERSATION:", "", transcript(input.messages)].join("\n"),
-    schema: intent === "ask" ? undefined : (SCHEMAS[intent] as unknown as Record<string, unknown>),
-    maxTokens: intent === "graph" || intent === "prompt" ? 2500 : 1200,
+    schema: intent === "ask" ? undefined
+      : intent === "field" ? (fieldSpec!.schema as unknown as Record<string, unknown>)
+      : (SCHEMAS[intent] as unknown as Record<string, unknown>),
+    // 规则包比一张图还大：给少了只会被截断，而截断的 JSON 连校验都进不去。
+    maxTokens: intent === "field" ? 6000 : intent === "graph" || intent === "prompt" ? 2500 : 1200,
     label: `chat:${intent}`,
   });
 
@@ -562,8 +757,21 @@ export async function chat(input: ChatInput): Promise<ChatResult> {
     };
 
   const reply = String(obj.reply ?? "").trim();
+
+  /*
+   * 模型这一轮只说了话、没给值——那是一次**提问**，不是一份空草稿。
+   *
+   * 起草规则包的头几轮基本都是这样：它得先问清这个产品是做什么的。把 undefined
+   * 交给校验器，得到的是一串「缺这缺那」的红字，看起来像模型答错了，
+   * 而它其实是在等人回答。
+   */
+  if (intent === "field" && obj[fieldSpec!.valueKey] === undefined)
+    return { reply: reply || res.text.trim(), tokens: res.tokens, ms: res.ms };
+
   const draft =
-    intent === "capability"
+    intent === "field"
+      ? checkField(obj[fieldSpec!.valueKey], fieldSpec!, input.previous)
+      : intent === "capability"
       ? checkRecipe(obj.recipe, input.existingIds ?? [])
       : intent === "graph"
         ? checkGraph(obj.graph)

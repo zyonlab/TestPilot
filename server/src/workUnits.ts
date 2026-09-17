@@ -1,3 +1,4 @@
+import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
 import { acceptanceIndex } from "./acceptanceIndex.js";
 import { z } from "zod";
@@ -43,7 +44,7 @@ export interface WorkUnit {
   outputRevision?: string;
   reason?: string;
   /**
-   * 门禁对这个单元里的用例说了什么（docs/v3/23 F-11）。
+   * 门禁对这个单元里的用例说了什么（docs/v3/history/23 F-11）。
    *
    * 门禁把整批判为不通过之后，规划器原来拿不到「该改哪几条」——两次实测它都是就地停住。
    * 而门禁其实什么都说了：`scoreBasis.flagged` 是被扣分的用例 id，每条 finding 都带 `caseId`。
@@ -105,7 +106,7 @@ function productModel(runId: string, projectId: string): { model: UnitBasis; rev
     /**
      * 没有产品模型，但有一棵**人冻结过的**模块树：照样能切单元。
      *
-     * 2026-09-12 实测的直接原因（docs/v3/24 §12）：这条链路上没跑探索，于是整个 stories 节点
+     * 2026-09-12 实测的直接原因（docs/v3/history/24 §12）：这条链路上没跑探索，于是整个 stories 节点
      * 退回「一次调用写完整份」——26 条故事、46 条验收，全部挤在一次 7k token 的可见输出里。
      * 不是模型不想写，是一次答复里写不下。而那棵冻结的树本身就是最好的切分依据。
      */
@@ -123,7 +124,7 @@ function productModel(runId: string, projectId: string): { model: UnitBasis; rev
    * **冻结过的模块树压过规则包里那一棵。**
    *
    * 在此之前模块树只能是 `pack.modules`——人手写在规则包里，模型一个字没参与，
-   * 于是「产品模块规划」这件事在流程里根本不存在（docs/v3/24 §0）。现在 `modules`
+   * 于是「产品模块规划」这件事在流程里根本不存在（docs/v3/history/24 §0）。现在 `modules`
    * 节点可以提议一棵、由人冻结；冻结了就按它切单元，没冻结就照旧回落到规则包。
    *
    * 只换 `modules`，不动 `features` 与 `ruleBindings`：功能与规则的归属仍由规则包说了算，
@@ -284,7 +285,7 @@ export function unitMaterials(runId: string, projectId: string, unit: WorkUnit) 
    * 只发和这个单元有关的那几段生命周期，加上全部角色（角色是全局的，就那么几个）。
    */
   const lifecycle = (model.lifecycle ?? []).filter((l) => !l.featureIds.length || l.featureIds.some((f) => featureIds.includes(f)));
-  return { productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
+  return { domainReference: boundDomainReference(runId, projectId), actionVocabulary: pack?.pack.actionVocabulary ?? [], volatileReadings: pack?.pack.volatileReadings ?? [], productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
 }
 
 function manifestFor(runId: string, projectId: string, unit: WorkUnit, materials: ReturnType<typeof unitMaterials>, claimedBy: string): ContextManifest {
@@ -324,15 +325,39 @@ export function claimUnit(runId: string, projectId: string, raw: unknown, claime
     const manifest = manifestFor(runId, projectId, next, materials, claimedBy);
     next.manifestId = manifest.manifestId;
     save(next);
-    const contract = unitContract(next, materials.modules, materials.features, materials.story, materials.subsumed);
-    return { unit: { ...next, runId: undefined }, manifest, materials, contract,
+    const contract = unitContract(next, materials.modules, materials.features, materials.story, materials.subsumed, materials.actionVocabulary);
+    /**
+     * **整跑不变的东西不随每个单元重发。**
+     *
+     * 2026-09-16 实测：40 个单元的 `claim_unit` 返回合计 110 万字符，其中 `domainReference`
+     * 40 次完全相同（16.8 万）、`storyIndex` 只有两种取值（17.2 万）。它们每一轮都进
+     * `cache_read`——那一跑 7,780 万 token 缓存读、$36，而 output 只有 3,200 token。
+     *
+     * **但第一版剔多了，当天就量出了代价。** 同项目、同 16 个模块、同一份 9 词词表的 A/B：
+     * 动作型验收准则从 74/115（64.3%）掉到 49/130（37.7%），`checkStories` 的
+     * `story_has_no_actionable_criterion` 从 0 条变 5 条，逐模块看多数模块都降
+     * （提交与挂单管理 11/12 → 7/13，持仓与风控 7/13 → 2/11）。故事从写「用户做什么」
+     * 漂成写「屏幕上有什么」——而词表（下单/撤单/平仓/转账…）既是判定动作型的那把尺，
+     * 也是模型写单元时眼前唯一的动词来源。**把词表从眼前拿走，它就不写动作了。**
+     *
+     * 所以只剔大的：`domainReference` 一个字段占被剔总量的 91.5%（4,207 / 4,598 字符），
+     * 其余四样合计 391 字符——40 个单元也才 1.6 万，放回去等于不要钱。
+     *
+     * `storyIndex` 例外：它按节点固定（stories 阶段为空，cases 阶段一份），
+     * 所以只在这个节点的**第一个**单元发一次。
+     */
+    const firstOfNode = units.every((u) => u.unitId === next.unitId || u.status === "pending");
+    const { domainReference: _dr, productModelRevision: _pm, storyIndex, ...perUnit } = materials;
+    const slim = { ...perUnit, ...(firstOfNode && storyIndex.length ? { storyIndex } : {}) };
+    return { unit: { ...next, runId: undefined }, manifest, materials: slim, contract,
+      runScope: "领域参考全文在 load_run_instructions() 的 runScope 里，整跑发一次；这里不重发。词表、易变读数、角色、规则包照常随每个单元发。",
       ...(next.repair ? { repair: repairBrief(next.repair) } : {}),
       remaining: units.filter((u) => u.status !== "done").length - 1 };
   })();
 }
 
 /**
- * 故事单元的写入可以带 `moduleAmendments`：**只提议，不生效**（docs/v3/24 §6.4）。
+ * 故事单元的写入可以带 `moduleAmendments`：**只提议，不生效**（docs/v3/history/24 §6.4）。
  *
  * 模块树冻结之后故事节点碰不得它，于是会出现「一条故事装不下、模型默默挂到最近的模块上」——
  * 那条挂错的边没人看得见。这个出口不改变本次拆分、不进 validated/stories，
@@ -414,7 +439,7 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
        * 我第一版只比对了分节数，于是把合法的 `exploration.md#35`（第 35 个检索块）
        * 判成了「引了不存在的段」——**误伤**。所以这里取两者的上界：
        * 只有两套编号都容不下的号才是真的不存在。
-       * 两套编号共用一个写法这件事本身是设计债，记在 docs/v3/24 §33。
+       * 两套编号共用一个写法这件事本身是设计债，记在 docs/v3/history/24 §33。
        */
       for (const [j, a] of s.acceptance.entries())
         for (const m of String(a).matchAll(/([\w.-]+\.md)#(\d+)/g)) {
@@ -457,7 +482,7 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
     const parsed = UnitCasesSchema.safeParse(typeof content === "string" ? JSON.parse(content) : content);
     if (!parsed.success) return { status: "blocked", gate: "schema", errors: parsed.error.issues.slice(0, 20).map((i) => ({ code: "schema", jsonPointer: "/" + i.path.join("/"), message: i.message })) };
     const storyId = (unit.scope as { storyId: string }).storyId;
-    const acceptanceIds = acceptanceIndex(materials.story ? [materials.story, ...materials.subsumed] : []);
+    const acceptanceIds = acceptanceIndex(materials.story ? [materials.story, ...materials.subsumed] : [], materials.actionVocabulary);
     const norm = (x: string) => x.replace(/[\s“”"'（）()、,，。.]/g, "");
     parsed.data.cases.forEach((c, i) => {
       // 覆盖方的用例仍然挂在覆盖方的故事上；被覆盖故事的准则通过 acRefs 引用，不换 storyId。
@@ -627,6 +652,8 @@ export function unitContract(
   features: Array<{ id: string; moduleId: string }> = [],
   story?: { id: string; title?: string; acceptance?: string[] },
   subsumed: Array<{ id: string; title?: string; acceptance?: string[] }> = [],
+  /** 这个产品特有的动作词（规则包 actionVocabulary）；判哪条准则要人动手时接在通用词后面。 */
+  vocabulary: readonly string[] = [],
 ): string {
   const leaves = leavesOf(next, modules);
   /**
@@ -673,10 +700,10 @@ export function unitContract(
    * 变成一张需要传递闭包的图，而人在界面上看不懂它。
    */
   const subsumeAdvice = next.node === "stories" && next.scope.kind === "journeys"
-    ? ` A journey that walks through what a shorter story already covers SHOULD say so: subsumes:["<storyId>", ...]. A subsumed story gets no cases of its own — this journey's cases discharge its criteria as checks along the way. Use it for short display-only stories ("the header shows mark price") that a real journey passes through anyway; that is how a suite stops being a pile of two-step cases. Only journeys may subsume, only one level deep, and never a story that itself subsumes.`
+    ? ` A journey that walks through what a shorter story already covers SHOULD say so: subsumes:["<storyId>", ...]. A subsumed story gets no cases of its own — this journey's cases discharge its criteria as checks along the way. Use it for short display-only stories ("the header shows the page title") that a real journey passes through anyway; that is how a suite stops being a pile of two-step cases. Only journeys may subsume, only one level deep, and never a story that itself subsumes.`
     : "";
   const acs = story?.acceptance ?? [];
-  const entries = acceptanceIndex(story ? [story, ...subsumed] : []);
+  const entries = acceptanceIndex(story ? [story, ...subsumed] : [], vocabulary);
   const actionable = entries.filter((e) => e.actionable);
   /**
    * 覆盖别人的故事：那几条短故事的准则也归这个单元。
@@ -726,7 +753,11 @@ export function unitContract(
           "tier and oracle move together. tier 1 or 2 REQUIRES a machine-checkable oracle on the case or on at least one assertion; a tier claimed without one is a label with nothing behind it. Write one of these shapes verbatim:",
           '    {"kind":"text","value":"<a literal the page shows>"}   {"kind":"noText","value":"<a literal the page must NOT show>"}',
           '    {"kind":"count","value":"<a literal>","op":"eq|gte|lte","n":<int>}   {"kind":"delta","value":"<label a number sits beside>","direction":"increased|decreased|unchanged"}   ← tier 2',
-          '    {"kind":"api","url":"<endpoint>","method":"GET|POST","body":"<json string, for POST>","path":"<dotted path into the response>","op":"eq|neq|gte|lte|exists|absent|increased|decreased|unchanged","value":<optional>}',
+          /**
+           * 这里原来是一行 `{"kind":"api",…}` 的写法——紧接着的下一句却说「永远不要对产品自己的接口下判断」。
+           * 契约先教一种写法再禁止它，门禁（`oracle-offsite`）又会把照写的用例点名扣分。换成 tier 3 的 judge。
+           */
+          '    {"kind":"judge","criteria":["<one yes/no statement about the screen>", ...],"samples":3,"minPass":2}   ← tier 3, for GENERATED content only (an image, a summary, a caption, a translation)',
           /**
            * **判决从屏幕读**（CLAUDE.md 红线，2026-09-12 用户口径）。
            *
@@ -738,8 +769,9 @@ export function unitContract(
            * 会动的数字不是写接口判据的理由——那恰恰是「只断言存在、或两次读数的关系」的理由。
            */
           "  The verdict is read from the SCREEN. This product generates end-to-end UI tests: a case drives the interface and then judges what the interface shows. Never assert against the product's own API — an API that says the order was placed while the screen shows nothing means the case passes on a broken product.",
-          "  Numbers that move (mark price, funding, countdown, 24h volume, balances) are not a reason to reach for the API: assert that the field EXISTS, or a RELATION between two readings (kind=delta), or a literal the product itself renders — a label, a status word, a count.",
+          "  Numbers that move (counts, countdowns, live prices, balances, timestamps) are not a reason to reach for the API: assert that the field EXISTS, or a RELATION between two readings (kind=delta), or a literal the product itself renders — a label, a status word, a count.",
           "  If nothing can decide it by program, say tier 3 and leave oracle out — and in readiness.reason say what judge or capability is missing.",
+          "  Exception: when the outcome is generated content that differs on every run, give tier 3 a judge oracle. Each criterion is ONE statement a reader answers yes or no by looking (\"the image shows a cat\", \"the title is at most 20 characters\") — never \"looks good\" or \"is reasonable\" (the gate flags those). samples ≥ 3 and minPass ≤ samples; the case passes when at least minPass samples hold every criterion.",
           "covers must be exactly the transition ids in design.transitionIds — the edges this case walks. A rule id (R-…) is NOT a transition and must never appear there; neither is a human-readable summary line. A case that walks no edge leaves covers empty.",
           "Carry the design evidence, not just the method label. The server checks these deterministically and rejects contradictions:",
           /**
@@ -758,7 +790,8 @@ export function unitContract(
           "  • design: equivalence needs inputDimension/partitionId/predicate/validity/representative; boundary needs ruleId/dimension/unit/bound/inclusivity and points including the one AT the bound; decision-table needs conditionIds, rowId and an assignment covering exactly those conditions; state-transition needs stateModelRef/from/event/to and transitionIds that also appear in covers; exploratory needs charterRef and observedResultRefs[].",
           "  • risk: {impact, reason, ruleRefs}. impact is one of funds-and-exposure | authorization | data-integrity | availability | information | cosmetic — a category, NOT a sentence. reason is the sentence: why this priority, not a restatement of it.",
           "  • testData is an OBJECT: {fixtureRef?, accountRef?, values:[{name, value, unit?, source?}]} — not a bare array. Every value carries where it came from (a rule id or the asset metadata). Never invent a constant.",
-          "  • assertions: one entry per independently checkable expectation, each {id, statement, ruleRefs[], oracle?} — the field is `statement`, not `expected`. Do not fold two checks into one sentence.",
+          "  • assertions: one entry per independently checkable expectation, each {id, statement, ruleRefs[], oracle?, afterStep?} — the field is `statement`, not `expected`. Do not fold two checks into one sentence. Assertions are checked after the LAST step unless you set afterStep: n (1-based) — if an assertion describes a screen the case passes THROUGH (「the labels page shows the empty state」 before the step that opens the form), set afterStep to the step that reaches that screen, or it will be judged on the wrong page. An open question is not an assertion: never put 「待确认 / 开放问题 / not a failure criterion」 text into assertions[] — it cannot pass or fail; put it in readiness.reason.",
+          "  • The domain reference from load_run_instructions (runScope.domainReference), when present, is THIS product's own list of invariants (supplied by the project): a case may be written to contradict one; anything it marks as a hypothesis may only become an open question. materials.volatileReadings names readings that change on their own — assert they exist or relate, never pin their value.",
           "  • readiness: {design, execution, reason?}. design ∈ candidate | reviewed. execution ∈ ready | requires-fixture | requires-session | blocked | not-executable. When execution is not `ready` you MUST give reason and say what is missing.",
           "A bound, a step or a constant you cannot trace to a rule or to the asset metadata does not belong in the case. Leave the field out rather than fabricate it — the server treats a missing field and a fabricated one differently.",
           "steps are ACTIONS a browser agent performs, one per line, in order. They are not narration: never put a cross-reference (\"as in S-MKT-01\"), a precondition (\"on an account with no balance\"), or an API call into a step — the agent will try to perform it and the case dies before its oracle is checked. Preconditions go in precondition[], cross-references stay in the story, API checks stay in the oracle.",
@@ -773,7 +806,7 @@ export function unitContract(
            * 一条措辞问题被记成产品缺陷。门禁的 `step-not-an-action` 现在会拦，
            * 但拦住之前先把话说清楚：模型没被告知过这个形状不行。
            */
-          "  NEVER write a step that begins 确认/验证/检查/assert/verify/ensure and then describes what the screen shows (\"确认右侧区域显示订单簿\", \"verify the panel shows Market\"). That is a state, not an action: the browser agent can only DO things, so it gives up and the case dies before any oracle runs. A state the case starts from goes in precondition[]; a state the case ends in goes in assertions[]. If you need the product to be in that state, write the ACTION that puts it there (\"点击 Order Book 标签\").",
+          "  NEVER write a step that begins 确认/验证/检查/assert/verify/ensure and then describes what the screen shows (\"确认右侧区域显示任务列表\", \"verify the panel shows the list\"). That is a state, not an action: the browser agent can only DO things, so it gives up and the case dies before any oracle runs. A state the case starts from goes in precondition[]; a state the case ends in goes in assertions[]. If you need the product to be in that state, write the ACTION that puts it there (\"点击「已完成」标签\").",
           "  Nor a step that is pure looking (\"查看面板方向按钮区域\", \"observe the Size input area\"). Looking is not an operation the browser can perform; if the case only needs to know what is on screen, that belongs in the oracle and in assertions[], and the case may legitimately have just one step: the navigation.",
           "Name a control the way the page shows it AND where it sits when the label is not unique — \"click Balances in the tab row of the account panel in the lower half of the page\", not \"switch to Balances\". One observation per step; a step that asks for four things at once makes the planner give up.",
           "postSteps put the product back. Any case that changes state — an order placed, a toggle flipped, a mode switched, a tab left somewhere else — MUST say how it undoes that, or its second run faces a different product than its first and nobody sees the difference. A read-only case leaves postSteps empty.",

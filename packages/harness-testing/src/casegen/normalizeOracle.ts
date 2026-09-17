@@ -16,6 +16,8 @@ const KEEP: Record<string, readonly string[]> = {
   url: ["kind", "value"],
   count: ["kind", "value", "op", "n"],
   delta: ["kind", "value", "direction", "by"],
+  // judge 没有 value：占位的 "-" 不带走；samples / minPass 填 0 等于没给（走默认）。
+  judge: ["kind", "criteria", "samples", "minPass"],
   api: ["kind", "url", "method", "body", "headers", "path", "op", "value", "by", "settleMs", "unit", "freshness"],
 };
 

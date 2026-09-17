@@ -49,6 +49,9 @@ export interface Environment {
   login: LoginFlow;
   isDefault: boolean;
   createdAt: string;
+  /** 环境画像（2026-09-15）：这个环境提供的前提名、默认注入钱包、允许不可逆操作。由人在环境设置里填。 */
+  capabilities?: string[];
+  injectWallet?: boolean;
 }
 
 export interface SecretMeta {

@@ -10,11 +10,12 @@ export function runOrigin(run:WorkflowRun) {
   if(models.entry==='web')return 'Web';
   return ({codex:'Codex','claude-code':'Claude Code',penguin:'PenguinHarness'} as Record<string,string>)[models.runtime]??models.runtime;
 }
-export class WorkflowError extends Error { constructor(readonly code: string) { super(code); } }
+export class WorkflowError extends Error { constructor(readonly code: string, readonly detail?: string) { super(detail || code); } }
 export async function workflowRequest<T>(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST', signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${API_BASE}/api/${path}`, { method, signal, credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const data = await res.json(); if (!res.ok) {
-    throw new WorkflowError(data.code ?? 'request_failed');
+    // 服务端给了人话就显示人话（守卫的拒绝理由），没有才退回错误码。
+    throw new WorkflowError(data.code ?? 'request_failed', typeof data.message === 'string' ? data.message : undefined);
   } return data as T;
 }
 export const workflowBase = (projectId: string) => `projects/${encodeURIComponent(projectId)}/workflow-runs`;

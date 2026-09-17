@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PER_CASE_BUDGET, PER_UNIT_BUDGET, caseRunBudget, configuredRunBudget, unitRunBudget } from "../src/runBudget.js";
 
 /**
- * 单元循环的预算按单元数放大（docs/v3/22）。
+ * 单元循环的预算按单元数放大（docs/v3/history/22）。
  * 这条测试钉的是一次真实事故：Penguin 在默认的 10 分钟里做完 10 个单元后被墙钟掐断，
  * 而运行本身没有任何问题——一个会因为拆得更细而被自己的预算杀掉的机制等于没有。
  */

@@ -15,6 +15,7 @@ import { ScoreboardPage } from "@/pages/Scoreboard";
 import { GoldPage } from "@/pages/Gold";
 import { ProjectMaterials } from "@/pages/ProjectMaterials";
 import { RulePacks } from "@/pages/RulePacks";
+import { DomainReferences } from "@/pages/DomainReferences";
 import { OnboardPage } from "@/pages/Onboard";
 import { SettingsBody } from "@/components/SettingsDrawer";
 
@@ -72,6 +73,7 @@ export const SURFACES: Surface[] = [
   { id: "artifacts", group: "materials", title: "surface.artifacts", render: ctx => <ProjectMaterials focusRun={ctx.wfRunId} revisionId={ctx.revisionId} /> },
   // 规则包和物料并列：两样都是「喂给这个项目的输入」，只是一份是散文、一份是结构化的领域事实。
   { id: "rulepacks", group: "materials", title: "surface.rulePacks", render: () => <RulePacks />, needsProject: true },
+  { id: "domainrefs", group: "materials", title: "surface.domainReferences", render: () => <DomainReferences />, needsProject: true },
 
   // Fixed product workflow: host and Web runs share the same revisions and approval service.
   { id: "wfruns", group: "workflow", title: "workflow.title", render: ctx => <WorkflowRunsPage focusRun={ctx.wfRunId} />, needsProject: true },

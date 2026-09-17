@@ -1,0 +1,70 @@
+{
+  "id": "judge-golden",
+  "version": "2026-09-16.1",
+  "note": "judge 判据的小型 golden 集：每条是一张模拟「生成结果」的本地页面 + 一个 judge 判据 + 应得的判决。只用来衡量 judge 本身判得准不准、稳不稳，不是任何产品的用例。页面是静态的，判决不随时间变化。",
+  "items": [
+    {
+      "id": "G-01",
+      "page": "red-circle.html",
+      "what": "图里是什么：图与配文都对",
+      "oracle": { "kind": "judge", "criteria": ["图里只有一个圆形", "圆形是红色的", "图下方的配文提到了红色"], "samples": 3 },
+      "expected": "pass"
+    },
+    {
+      "id": "G-02",
+      "page": "blue-square.html",
+      "what": "图里是什么：图是蓝色方块，条件要的是红色圆",
+      "oracle": { "kind": "judge", "criteria": ["图里只有一个圆形", "圆形是红色的", "图下方的配文提到了红色"], "samples": 3 },
+      "expected": "fail"
+    },
+    {
+      "id": "G-03",
+      "page": "blue-square.html",
+      "what": "图文一致：配文说红色的圆，图却是蓝色方块",
+      "oracle": { "kind": "judge", "criteria": ["配文描述的颜色与图中图形的颜色一致"], "samples": 3 },
+      "expected": "fail"
+    },
+    {
+      "id": "G-04",
+      "page": "red-circle.html",
+      "what": "图文一致：配文与图都是红色",
+      "oracle": { "kind": "judge", "criteria": ["配文描述的颜色与图中图形的颜色一致"], "samples": 3 },
+      "expected": "pass"
+    },
+    {
+      "id": "G-05",
+      "page": "two-circles.html",
+      "what": "数量：图里有两个圆，条件要一个",
+      "oracle": { "kind": "judge", "criteria": ["图里只有一个圆形"], "samples": 3 },
+      "expected": "fail"
+    },
+    {
+      "id": "G-06",
+      "page": "two-circles.html",
+      "what": "数量：图里两个圆，配文也说两个",
+      "oracle": { "kind": "judge", "criteria": ["图里有两个圆形", "配文里说的数量与图中圆形的数量一致"], "samples": 3 },
+      "expected": "pass"
+    },
+    {
+      "id": "G-07",
+      "page": "failed.html",
+      "what": "生成失败：页面上没有图",
+      "oracle": { "kind": "judge", "criteria": ["页面上显示了一张生成的图片"], "samples": 3 },
+      "expected": "fail"
+    },
+    {
+      "id": "G-08",
+      "page": "long-title.html",
+      "what": "文案约束：标题三十多个字",
+      "oracle": { "kind": "judge", "criteria": ["页面的大标题不超过 20 个字"], "samples": 3 },
+      "expected": "fail"
+    },
+    {
+      "id": "G-09",
+      "page": "red-circle.html",
+      "what": "文案约束：标题四个字",
+      "oracle": { "kind": "judge", "criteria": ["页面的大标题不超过 20 个字"], "samples": 3 },
+      "expected": "pass"
+    }
+  ]
+}

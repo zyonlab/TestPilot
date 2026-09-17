@@ -36,7 +36,8 @@ import {
   type RunProducts,
 } from "./penguin.js";
 import { getRuntime, defaultRuntimeName, type RuntimeName } from "./runtimes.js";
-import { captureWebModels } from "./modelSnapshots.js";
+import { captureHostWebModels, captureWebModels } from "./modelSnapshots.js";
+import { dataPath } from "./datadir.js";
 import { cancelManagedRun } from "./runtime/managed-penguin.js";
 import { unitGenerationMessage } from "./runtime/skill-launch.js";
 import { unitRunBudget } from "./runBudget.js";
@@ -276,11 +277,18 @@ export async function startRun(
   const scopeProjectId = target.projectId;
   const runId = input.wfRunId ?? newRunId();
   const rt = getRuntime(input.runtime ?? defaultRuntimeName());
-  if (rt.name !== "penguin") throw new Error(`managed_planner_unsupported (${rt.name})：Web 项目模型目前使用 Penguin 托管运行；宿主插件接入另走宿主入口`);
+  /**
+   * Web 发起的规划可以走两条路：Penguin 托管（用项目里配置的规划模型），或本机 Claude Code
+   * （用它自己登录的模型）。Codex 不在初步交付范围里，仍然拒绝。
+   */
+  if (rt.name === "codex") throw new Error(`managed_planner_unsupported (${rt.name})：Web 发起的规划目前支持 Claude Code 与 Penguin；Codex 走宿主入口`);
+  const managed = rt.name === "penguin";
   const prior = outputStore.getRun(runId);
   if (prior && !(prior.detail as { modelRoles?: unknown } | undefined)?.modelRoles)
     throw new Error("legacy_run_model_snapshot_missing：旧运行未记录模型快照，请发起新运行");
-  const models = captureWebModels(runId, scopeProjectId, "penguin", input.generationMode ?? "skill");
+  const models = managed
+    ? captureWebModels(runId, scopeProjectId, "penguin", input.generationMode ?? "skill")
+    : captureHostWebModels(runId, scopeProjectId, rt.name);
   /**
    * 一个项目一个工作区。
    *
@@ -289,7 +297,9 @@ export async function startRun(
    */
   const workspace =
     input.workspace ??
-    (scopeProjectId ? join(workspacesDir(), scopeProjectId) : defaultWorkspace());
+    // Claude Code 每次运行一个工作区：`.mcp.json` 里带着这次运行的写入凭证，两次运行共用一个会互相覆盖。
+    (!managed ? dataPath(`host-workspaces/${runId}`)
+      : scopeProjectId ? join(workspacesDir(), scopeProjectId) : defaultWorkspace());
   const limit =
     input.limit ??
     (typeof input.params?.stories?.maxStories === "number"
@@ -338,7 +348,7 @@ export async function startRun(
         : "Complete only missing stages with write_stories/write_cases/gate_run/finalize_run. Finish at waiting_review. The host remains the planner.",
     ].join("\n") } : {}),
     generationMode: input.generationMode ?? "skill",
-    ...(models ? { models } : {}),
+    ...(managed ? { models: models as ReturnType<typeof captureWebModels> } : {}),
     workspace,
     ...(materialsDir ? { materialsDir } : {}),
     ...(limit !== undefined ? { limit } : {}),

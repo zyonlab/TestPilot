@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { contentHash } from "./runLedger.js";
-import { comparePerf, type PerfMetrics } from "@testpilot/harness-testing";
-import { config } from "./procs.js";
-import { createRun, getCase, getPerfBaseline, upsertPerfBaseline, updateRunResults } from "./db.js";
+import { captureMidsceneReport, comparePerf, type PerfMetrics } from "@testpilot/harness-testing";
+import { config, midsceneDirFor } from "./procs.js";
+import { createRun, getCase, getPerfBaseline, upsertPerfBaseline, updateRunResults, ARTIFACT_DIR } from "./db.js";
 import { processVisual } from "./visualBaseline.js";
 import { reviewRevisions } from "./approvedRuns.js";
 
@@ -22,7 +23,7 @@ export function recordWorkflowCaseRun(input: {
   visualThresholdPct?: number;
   result: { caseId: string; status: string; durationMs?: number; startedAt?: string; failureReason?: string;
     logs?: string[]; oracle?: unknown; infraError?: boolean; failure?: { code?: string; attribution?: string };
-    pngPaths?: string[]; perfMetrics?: PerfMetrics };
+    pngPaths?: string[]; perfMetrics?: PerfMetrics; sinceMs?: number; runnerId?: string };
 }): string | undefined {
   const { runId, projectId, executionId, result, visualThresholdPct } = input;
   if (!result.caseId || result.status === "not_run") return undefined;
@@ -49,6 +50,17 @@ export function recordWorkflowCaseRun(input: {
   // 截图在 runner 那边已经落盘，这里按路径读回来立/比基线。读不到的就跳过，不编一张空图。
   const buffers = (result.pngPaths ?? []).filter((p) => existsSync(p)).map((p) => readFileSync(p));
   const visual = buffers.length ? processVisual(boardId, `${executionId}-${run.id}`, buffers, visualThresholdPct) : [];
-  updateRunResults(run.id, { visual, perf, oracle: result.oracle as never });
+  /**
+   * Midscene 报告：这条刚跑完，这个 runner 上还没有后来的运行，取窗口里最新的那份就是它。
+   * 没调过模型的用例（纯导航、纯程序判据）不会有报告，那就不截——不拿上一条的顶替。
+   */
+  let reportPath: string | undefined;
+  if (typeof result.sinceMs === "number" && result.runnerId) {
+    const dir = midsceneDirFor(result.runnerId);
+    if (existsSync(resolve(dir, "report")))
+      reportPath = captureMidsceneReport({ midsceneDir: dir, sinceMs: result.sinceMs, untilMs: result.sinceMs + (result.durationMs ?? 0) + 1000,
+        destPath: resolve(ARTIFACT_DIR, "reports", `${run.id}.html`) }).reportPath;
+  }
+  updateRunResults(run.id, { visual, perf, oracle: result.oracle as never, ...(reportPath ? { reportPath } : {}) });
   return run.id;
 }

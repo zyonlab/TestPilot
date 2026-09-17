@@ -10,7 +10,7 @@ export function configuredRunBudget(): RunBudget {
  *
  * 默认的 100 次调用 / 10 分钟是给「一次写整份」那条路径定的。开了工作单元之后，
  * 一个单元至少是 claim + retrieve + write 三次调用，再加上模型自己的思考轮次；
- * 2026-09-11 实测（docs/v3/22）：Penguin 在 10 分钟里做完 6 个故事单元和 4 个用例单元，
+ * 2026-09-11 实测（docs/v3/history/22）：Penguin 在 10 分钟里做完 6 个故事单元和 4 个用例单元，
  * 然后被墙钟掐断——`run-budget.json` 里写着 `wallMs: 600000`，而运行本身没有任何问题。
  * 一个会因为拆得更细而被自己的预算杀掉的机制，等于没有这个机制。
  *

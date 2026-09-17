@@ -5,18 +5,18 @@ import { DomainIdSchema, ExplorationTargetSpecSchema, type ExplorationTargetSpec
  * 探索 charter：这一次探索**要查什么**，以及**不许做什么**。
  *
  * 它取代了「探索前先问模型猜几条故事」作为决定先点哪里的依据（那一步仍可保留为对照臂）。
- * 候选目标不是用户故事——故事等产品模型出来之后才写（docs/v3/20 §4「模型故事计划过早」）。
+ * 候选目标不是用户故事——故事等产品模型出来之后才写（docs/v3/history/20 §4「模型故事计划过早」）。
  */
 export const ActionsPolicySchema = z
   .object({
     /** 探索里允许的动作只有「激活 UI」：切 tab、勾选、开面板。 */
     allow: z.array(z.enum(["activate-ui"])).default(["activate-ui"]),
     /**
-     * **沙箱模式**：允许探索点会改状态的目标（下单、平仓、撤单、连接钱包）。
+     * **沙箱模式**：允许探索点会改状态的目标（提交、删除、确认、连接账户）。
      *
-     * 默认 false，而且它不是探索器自己能开的开关——由运行显式声明，且服务端只在
-     * 被测地址处在 `guard.allowHosts` 白名单里时才允许（`workflowOps`）。理由和执行层
-     * 那道守卫是同一条：**判断「这个域名下可不可以做不可逆的事」的人是操作者，不是模型**。
+     * 默认 false，而且它不是探索器自己能开的开关——由运行显式声明 `exploreActions:"interact"`，
+     * 服务端再用禁止名单把关（`workflowOps`）。理由和执行层
+     * 那道守卫是同一条：**判断「这个地址下可不可以做不可逆的事」的是人，不是模型**。
      * 打开之后 `forbidLabels` 与 `neverSubmit` 一并让位——半开的沙箱比不开更难解释。
      */
     allowStateChange: z.boolean().default(false),
@@ -37,6 +37,18 @@ export const ExplorationCharterSchema = z
         entryUrl: z.string().url(),
         /** 允许走到的路由（正则）。空数组 = 只在入口路由上工作，不让全局导航把预算带走。 */
         routes: z.array(z.string()).default([]),
+        /**
+         * 允许走到的**完整地址**（正则），抄自规则包的 `appliesTo.urlPatterns`。
+         *
+         * 2026-09-15 拿 Vikunja 跑带规则包的探索：登录之后 7 屏全停在 `/`，`/projects`
+         * `/labels` `/teams` 一个没去，规则包里指向那几页的目标全记 not_found。原因是
+         * `routes` 从来没人填——`sourceKnowledge` 建 charter 时不传——于是「空数组 = 只在
+         * 入口路由上工作」对每个产品都成立。那条默认是给 Hyperliquid `/trade` 这种业务全在
+         * 一页里的产品定的，换成多页应用就把探索关在门口。
+         *
+         * 范围本来就写在包里：包说自己覆盖哪些地址，探索就能去哪些地址。没写的包行为不变。
+         */
+        urlPatterns: z.array(z.string()).default([]),
       })
       .strict(),
     entryStates: z.array(z.string()).default(["logged-out"]),
@@ -88,6 +100,18 @@ export const DEFAULT_FORBID_LABELS = [
  * 不管现在为哪个目标激活它，一律拒绝。声明比词表准，交叉检查比词表安全。
  */
 
+/**
+ * charter 的 id：`charter-<packId>-<version>`，但要保证它过得了 `DomainIdSchema`。
+ *
+ * 规则包的 `version` 已经在 schema 那一层收紧过字符集；这里再兜一层长度——id 上限 120 字，
+ * 而包 id 与版本号都是人写的，拼起来超长不是不可能。宁可截断，也不要在探索开始的
+ * 第 4 毫秒抛一条看不出因果的正则错（2026-09-16 真撞过一次）。
+ */
+export function charterId(packId: string, version: string): string {
+  const safe = (s: string) => s.replace(/[^A-Za-z0-9_.:/-]/g, "-");
+  return `charter-${safe(packId)}-${safe(version)}`.slice(0, 120);
+}
+
 export function charterFromRulePack(
   pack: ProductRulePack,
   packHash: string,
@@ -95,9 +119,9 @@ export function charterFromRulePack(
 ): ExplorationCharter {
   return ExplorationCharterSchema.parse({
     schemaVersion: "exploration-charter.v1",
-    id: opts.id ?? `charter-${pack.id}-${pack.version}`,
+    id: opts.id ?? charterId(pack.id, pack.version),
     rulePack: { id: pack.id, version: pack.version, hash: packHash },
-    scope: { entryUrl: opts.entryUrl, routes: opts.routes ?? [] },
+    scope: { entryUrl: opts.entryUrl, routes: opts.routes ?? [], urlPatterns: pack.appliesTo.urlPatterns },
     featureTargets: pack.targets,
     ruleRefs: pack.rules.map((r) => r.id),
     actionsPolicy: { forbidLabels: [...DEFAULT_FORBID_LABELS, ...pack.forbidLabels], ...(opts.allowStateChange ? { allowStateChange: true } : {}) },
@@ -213,5 +237,13 @@ export function activationBlocker(
   return undefined;
 }
 
-export const routeAllowed = (charter: ExplorationCharter | undefined, entryRoute: string, route: string): boolean =>
-  !charter || route === entryRoute || charter.scope.routes.some((r) => { try { return new RegExp(r).test(route); } catch { return false; } });
+/**
+ * 这个地址探索能不能去。路由正则对路径判，`urlPatterns` 对完整地址判（它们在包里就是这么写的）。
+ * 不给 `url` 时只看路由——调用方拿不到完整地址的地方，宁可保守。
+ */
+export const routeAllowed = (charter: ExplorationCharter | undefined, entryRoute: string, route: string, url?: string): boolean => {
+  if (!charter || route === entryRoute) return true;
+  const hits = (patterns: readonly string[] | undefined, subject: string) =>
+    (patterns ?? []).some((r) => { try { return new RegExp(r).test(subject); } catch { return false; } });
+  return hits(charter.scope.routes, route) || (url !== undefined && hits(charter.scope.urlPatterns, url));
+};

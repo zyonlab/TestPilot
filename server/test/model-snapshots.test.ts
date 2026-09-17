@@ -43,3 +43,15 @@ it("fails closed if a stored snapshot cannot be decrypted", () => {
   db.db.prepare("UPDATE run_model_snapshots SET connectionsEnc=? WHERE runId=?").run("invalid-ciphertext", "run-new");
   expect(() => snapshots.snapshotExecutor("run-new", a)).toThrow("run_model_snapshot_unreadable");
 });
+
+it("Web 发起、宿主规划的运行只冻结执行模型，规划方记为身份未知的宿主", () => {
+  const snap = snapshots.captureHostWebModels("run-host", a, "claude-code");
+  expect(snap.binding).toMatchObject({ entry: "host", mode: "skill", runtime: "claude-code",
+    planner: { source: "host", runtime: "claude-code", model: null, identityEvidence: "unknown" }, executor: { role: "executor" } });
+  expect(snapshots.snapshotExecutor("run-host", a)).toMatchObject({ role: "executor" });
+  expect(snapshots.captureHostWebModels("run-host", a, "claude-code").binding).toEqual(snap.binding);
+  expect(() => snapshots.captureHostWebModels("run-host", a, "penguin")).toThrow("run_model_binding_conflict");
+  expect(() => snapshots.captureHostWebModels("run-a", a, "claude-code")).toThrow("run_model_binding_conflict");
+  expect(() => snapshots.captureHostWebModels("run-host", b, "claude-code")).toThrow("run_model_scope_conflict");
+  expect(JSON.stringify(db.db.prepare("SELECT * FROM run_model_snapshots WHERE runId='run-host'").all())).not.toContain("private-key");
+});

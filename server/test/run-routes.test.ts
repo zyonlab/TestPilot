@@ -43,7 +43,7 @@ it("imports revisions once, rejects reserved gate output and ignores a forged hu
   expect((await post(`/${r.runId}/artifacts`, { ...body, kind: "gate" }, r.writeToken)).status).toBe(403);
   // 名字也是保留的：门禁判过的 validated/* 与单元循环的 units/* 只能由服务端写。
   // 2026-09-11 实测：门禁把 validated/cases 判为不通过之后，规划器用这条路由把它
-  // 从 53 条用例覆盖成了 1 条探针用例（docs/v3/23 的 F-1）。
+  // 从 53 条用例覆盖成了 1 条探针用例（docs/v3/history/23 的 F-1）。
   for (const name of ["validated/cases", "units/cases/cases:US-1"]) {
     const res = await post(`/${r.runId}/artifacts`, { ...body, name }, r.writeToken);
     expect(res.status).toBe(403);
@@ -76,7 +76,9 @@ async function staged(id: string) {
 }
 const stories = { stories: [{ id: "s1", title: "Increment count", role: "visitor", benefit: "count clicks", acceptance: ["Given count 0, when Increment is clicked, then count is 1"] }] };
 function cases(ref: string) {
-  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", tier: 3, designMethod: "boundary", key: "zero-one", sourceRefs: [ref] }] };
+  // acRefs：账本路径上认领准则是契约的一部分，门禁分数也算它（design-gate-v2）。不填的话这条用例
+  // 明明点了 Increment，却不算做过 s1/AC-1，分数直接归零。
+  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", tier: 3, designMethod: "boundary", key: "zero-one", sourceRefs: [ref], acRefs: ["s1/AC-1"] }] };
 }
 it("serves frozen skills and material chunks; refuses stage skipping and untrusted imported cases", async () => {
   const r = await staged("skip-stages");
@@ -195,7 +197,7 @@ it("stops downstream work and resumes only a verified immutable checkpoint", asy
 it('g2 compilation is independent of requested approval revision order', async () => {
   const r = await staged('ordered-g2'); await r.call('instructions');
   const ref = (await r.call('retrieve', { query: 'count', budgetTokens: 2000 })).body.chunks[0].id;
-  const content = cases(ref); content.cases.push({ ...content.cases[0], id: 'c2', key: 'reset-zero', title: 'Reset at zero', steps: ['Click Reset'], expected: 'Count equals 0' });
+  const content = cases(ref); content.cases.push({ ...content.cases[0], id: 'c2', key: 'reset-zero', title: 'Reset at zero', steps: ['Click Reset'], expected: 'Count equals 0', acRefs: [] });
   await r.call('stories', { content: stories }); await r.call('cases', { content }); await r.call('gate'); await r.call('finalize');
   const approvals = await import('../src/approvedRuns.js'); const reviewed = approvals.reviewRevisions(r.runId, projectId);
   approvals.decideRevisions(r.runId, projectId, { items: reviewed.map(c => ({ caseId: c.caseId, revisionId: c.revision.id, decision: 'approved' })) }, { kind: 'human', id: 'synthetic-review' });
@@ -235,7 +237,7 @@ it("已收尾的 run 不会因为门禁规则变了就再也打不开", async ()
 });
 
 /**
- * 用例节点的结构契约，整份路径也要拿到（docs/v3/24 §34）。
+ * 用例节点的结构契约，整份路径也要拿到（docs/v3/history/24 §34）。
  *
  * 2026-09-13 双臂实测：机器臂走单元循环，那份点名 design / risk / readiness 的契约
  * 每个单元重发一遍 → 设计证据 100%、风险 100%；Claude 臂走整份路径，
@@ -255,7 +257,7 @@ it("begin-stage 给 cases 节点也发结构契约", async () => {
 });
 
 /**
- * g2 的入口地址按**这次运行**声明的来，不是项目级的（docs/v3/24 §36）。
+ * g2 的入口地址按**这次运行**声明的来，不是项目级的（docs/v3/history/24 §36）。
  *
  * 2026-09-13 实测：项目的 targetUrl 是 …/trade，而这次运行按 …/trade/ETH 建
  * （parameters.sourceUrl），用例全是照着 ETH 那一屏写的（Positions (1)、Current Position 0.0400 ETH）。

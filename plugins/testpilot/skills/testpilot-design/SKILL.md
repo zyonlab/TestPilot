@@ -14,7 +14,7 @@ rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
 rule 08479694  For tier 1 and tier 2 you MUST also give `oracle`, the same
-rule fafd05f9  `oracle` is ALWAYS present as an object. For tier 3 write {"
+rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
 rule fdbd2327  `key` is a dedupe triple 'transition|parameters|assertion',
@@ -84,10 +84,10 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 另外三份，按需读：
 
 - `REFERENCE-oracle.md`——**什么才算一个可观察的现象**。断言写得含糊时读它。
-- `REFERENCE-domain-perp.md`——**合约交易前端的不变量**。如果这份文件存在、且被测对象是合约交易页
-  （下单面板、持仓、挂单），设计用例前先读它：涉及资金或仓位的用例，判据打在**界面显示它们的那张表**上——
-  出现了哪一行、行里是什么值、哪个数必须不变。不要去问被测产品自己的接口：这个产品产出的是端到端 UI 测试，
-  接口说成功而屏幕上没有那一行，用例会通过而产品其实是坏的。
+- **这个产品的领域参考**不在 skill 里，在这次运行绑定的知识里（`load_run_instructions` 与单元材料的
+  `domainReference`，由项目提供；没有就是没有）。有的话，设计用例前先读它：它列的是用例可以拿去反驳产品的不变量——
+  判据打在**界面显示它们的那张表**上：出现了哪一行、行里是什么值、哪个数必须不变。标成假设的只能变成开放问题。
+  不要去问被测产品自己的接口：这个产品产出的是端到端 UI 测试，接口说成功而屏幕上没有那一行，用例会通过而产品其实是坏的。
 - `REFERENCE-priority.md`——`priority` 怎么定。
 - `REFERENCE-cleanup.md`——`postSteps` 怎么写。
 - `REFERENCE.md`——`cases.json` 的形状与硬约束。
@@ -102,7 +102,11 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 - **tier 1 和 tier 2 必须同时给 `oracle`**——同一个结果，写成程序不用看图就能核对的形式。
   五种形式见 `REFERENCE.md`。结果没法写成其中任何一种，那它就是 tier 3——
   就说它是 3，并且不写 `oracle`。**声称 tier 1 却不给 oracle，是唯一一件让这个标签彻底作废的事。**
-- **`oracle` 这个对象永远在**：tier 3 写 `{"kind":"none"}`；与所选 kind 无关的字段用占位符填满——字符串 `"-"`、method `"GET"`、op `"eq"`、数字 `0`，harness 会剥掉它们。一个字段都不要漏。（约束解码下模型会跳过可选键，所以 schema 里全是必填。）
+- **`oracle` 这个对象永远在**：tier 3 写 `{"kind":"none"}`——**除非**结果是每次都不一样的生成内容（一张图、一段摘要、一句配文、一段译文）。那就写
+  `{"kind":"judge","criteria":["<一句对着屏幕能答是或否的话>", ...],"samples":3,"minPass":2}`：
+  每条条件是**一个**看一眼就能核对的判断（「图里有一只猫」「标题不超过 20 个字」），**永远不要**写「看起来不错」；
+  harness 会让模型问 `samples` 次，至少 `minPass` 次每条都成立才算过。写法细节见 `REFERENCE-oracle.md`。
+  与所选 kind 无关的字段用占位符填满——字符串 `"-"`、method `"GET"`、op `"eq"`、数字 `0`、criteria `[]`，harness 会剥掉它们。一个字段都不要漏。（约束解码下模型会跳过可选键，所以 schema 里全是必填。）
 - **步骤短、具体、与实现无关。** 不要选择器，不要 page object，不要代码。
 - **步骤里永远不要出现凭证。** 用 `${env.NAME}` 和 `${secret.NAME}` 占位。
 - **`key` 是去重三元组** `'转移|参数|断言'`，小写，无空格。
@@ -151,4 +155,4 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 只说写了哪个文件、几条用例。**不要给这批用例打分、不要说它好不好**——
 门禁由 gate_run 服务端工具计算，模型不写分。
 
-领域规则必须由被测产品版本支持。读取 REFERENCE-domain-perp.md 的适用范围；金融值用十进制字符串，单位/时效与前置状态独立核对，sourceRefs 存在不能替代语义复核。
+领域规则必须由被测产品版本支持。读取这次运行绑定的领域参考的适用范围；数值按产品显示的精度与单位核对，时效与前置状态独立核对，sourceRefs 存在不能替代语义复核。

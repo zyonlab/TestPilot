@@ -1,4 +1,6 @@
-import { captureWebModels } from './modelSnapshots.js';
+import { resolveEnvironment } from "./db.js";
+import { bindDomainReference } from "./domainReferences.js";
+import { captureHostWebModels, captureWebModels } from './modelSnapshots.js';
 import { observeProduct } from './procs.js';
 import { partialObservationPath } from "@testpilot/harness-testing/exec";
 import { ARTIFACT_DIR } from "./db.js";
@@ -9,12 +11,13 @@ import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { config } from "./procs.js";
-import { currentRulePack } from "./rulePacks.js";
+import { bindRulePack, currentRulePack } from "./rulePacks.js";
 import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
 import { contentHash, LedgerError } from "./runLedger.js";
 import { registerWebRun, runLedger } from "./runService.js";
 import { dataPath } from "./datadir.js";
 import { startRun as startWebRun, cancelRun } from "./penguinRun.js";
+import { defaultRuntimeName, plannerRuntimeAvailable, type RuntimeName } from "./runtimes.js";
 import { cancelNativeRun } from "./runtime/native-penguin.js";
 import { cancelRun as cancelClaude } from "./claudecode.js";
 import { cancelWorkflowExecutions } from "./workflowExecution.js";
@@ -24,24 +27,19 @@ import { buildProductModel, charterFromRulePack, describeProductModel, validateR
 
 export async function createWebWorkflow(projectId: string, raw: unknown) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
-  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(1).max(50).default(8),sourceUrl:z.string().url().optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().default(false),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional()}).parse(raw);
+  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(1).max(50).default(8),sourceUrl:z.string().url().optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','penguin']).optional()}).parse(raw);
+  /**
+   * 禁止名单上的地址什么都不跑（`config.guard.denyHosts`，运营方配置）。环境与运行参数都放不开它。
+   * 探索不带钱包、不点会改状态的东西也不行：观察本身会带着登录态与会话去访问那个地址。
+   */
+  if(input.sourceKind==='explore'){const target=(()=>{try{return new URL(input.sourceUrl!).hostname;}catch{return '';}})();if(config.guard.denyHosts.includes(target))throw new LedgerError(403,`explore_host_denied:${target}`);}
+  // 探索要不要带钱包：运行没说，就按这个项目环境的画像（人勾选的 injectWallet）。
+  if(input.exploreWallet===undefined)input.exploreWallet=!!resolveEnvironment(projectId,input.envRef)?.injectWallet;
   if(new Set(input.materials.map(m=>basename(m.name).toLowerCase())).size!==input.materials.length)throw new LedgerError(400,'duplicate_material_name');
   if([...input.materials,...input.knowledge].reduce((sum,m)=>sum+Buffer.byteLength(m.text,'utf8'),0)>40_000_000)throw new LedgerError(400,'total_materials_too_large');
   if(input.materials.some(m=>!(/\.(md|txt)$/i.test(m.name))||m.text.includes('\u0000')))throw new LedgerError(400,'text_material_required');
   if (input.sourceKind==='spec'&&!input.materials.length) throw new LedgerError(400,'spec_materials_required');
   if (input.sourceKind==='explore'&&(!input.sourceUrl||!/^https?:/.test(input.sourceUrl))) throw new LedgerError(400,'explore_url_required');
-  /**
-   * **沙箱探索的唯一闸门**：只有在守卫白名单里的域名才允许探索去点会改状态的东西。
-   *
-   * 和执行层那道守卫是同一条规矩、同一份名单（`config.guard.allowHosts`，由 `ALLOW_HOSTS` 给）：
-   * 判断「这个域名下可不可以做不可逆的事」的是操作者，不是模型，也不是这段代码。
-   * 2026-09-12 的教训就摆在这儿——同一个钱包，测试网上随便点是对的，
-   * 主网上同样的点击是在花真钱，而两者只差一个域名。
-   */
-  if(input.exploreActions==='interact'){
-    const host=(()=>{try{return new URL(input.sourceUrl!).hostname;}catch{return '';}})();
-    if(!config.guard.allowHosts.includes(host))throw new LedgerError(403,`explore_interact_host_not_allowlisted:${host}`);
-  }
   // 规则包在创建时就校验：悬空引用、无来源的要求、无依据的 P0 在这里被拒，不是等到模型用了才发现。
   /**
    * 没显式给规则包时，用**项目当前那一份**。
@@ -77,8 +75,15 @@ export async function createWebWorkflow(projectId: string, raw: unknown) {
   const hash = contentHash(canonicalJSON(input));
   const prior = ledger.db.prepare("SELECT hash,runId FROM workflow_start_requests WHERE projectId=? AND idempotencyKey=?").get(projectId, input.idempotencyKey) as { hash: string; runId: string } | undefined;
   if (prior) { if (prior.hash !== hash) throw new LedgerError(409, "workflow_start_conflict"); return { wfRunId: prior.runId, created: false }; }
+  /**
+   * 规划由谁跑，在创建这一刻定下并记进运行：续跑必须用同一个运行时，否则模型绑定对不上。
+   * 起不来的（本机没有 `claude`、没装 Penguin）当场拒掉，而不是探索跑完几分钟之后才失败。
+   */
+  const plannerRuntime=input.planner??defaultRuntimeName();
+  if(plannerRuntime!=='claude-code'&&plannerRuntime!=='penguin')throw new LedgerError(400,`web_planner_runtime_unsupported:${plannerRuntime}`);
+  if(!plannerRuntimeAvailable(plannerRuntime))throw new LedgerError(400,`planner_runtime_unavailable:${plannerRuntime}`);
   const runId = `run-${randomUUID()}`;
-  const models=captureWebModels(runId,projectId,'penguin','skill');
+  const models=plannerRuntime==='penguin'?captureWebModels(runId,projectId,'penguin','skill'):captureHostWebModels(runId,projectId,plannerRuntime);
   ledger.db.prepare("INSERT INTO workflow_start_requests VALUES (?,?,?,?)").run(projectId, input.idempotencyKey, hash, runId);
   const directory = dataPath(`uploads/${runId}`); mkdirSync(directory, { recursive: true, mode: 0o700 });
   for (const [i, material] of input.materials.entries()) writeFileSync(join(directory, `${i}-${basename(material.name).replace(/[^\p{L}\p{N}_. -]/gu, "_").slice(0, 100)}.md`), material.text, { mode: 0o600 });
@@ -88,11 +93,13 @@ export async function createWebWorkflow(projectId: string, raw: unknown) {
    * 漏了它们，重跑出来的就是另一种探索——而没有人会知道这一次和上一次的差别在哪。
    * 它们同时也是这次运行**被授权做过什么**的凭证：谁允许探索去点会改状态的东西，记在这里。
    */
-  const params={sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,...(input.workUnits?{workUnits:1}:{})};
+  const params={sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
   registerWebRun(runId,projectId,models.binding,params);
   for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
   // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。
-  for(const {pack,hash} of packs) ledger.putRevision({projectId,runId,name:`knowledge/rulepack/${pack.id}`,kind:'report',content:{name:`rulepack/${pack.id}`,roles:['source','stories','cases','gate'],trust:'user-provided',executable:false,rulePack:pack,rulePackHash:hash}}, {kind:'system',id:'web'});
+  for(const {pack,hash} of packs) bindRulePack(runId,projectId,pack,hash,{kind:'system',id:'web'});
+  // 领域参考：项目当前那一版冻结绑定进这次运行；没有就没有（domainReferences.ts）。
+  bindDomainReference(runId,projectId);
   if(imported)ledger.putRevision({projectId,runId,name:'product/model-candidate',kind:'report',content:imported},{kind:'system',id:'web'});
   if(importedStories)ledger.putRevision({projectId,runId,name:'validated/stories',kind:'stories',content:importedStories},{kind:'system',id:'stage-validator'});
   // Acknowledge creation immediately; the source node owns exploration and its failures.
@@ -192,7 +199,7 @@ ${result.notes}${productText}
 Only observed behavior is evidence. Unobserved, authenticated, or transaction behavior must be explicitly marked as unknown.`,{mode:0o600});
       stageEvent(runId,projectId,'source','done',undefined,observation.id);
     } else stageEvent(runId,projectId,'source','done');
-    await startWebRun({wfRunId:runId,target:{projectId,envRef:envRef??params.envRef},materialsDir:directory,limit:params.limit,params:params as never,generationMode:'skill'});
+    await startWebRun({wfRunId:runId,target:{projectId,envRef:envRef??params.envRef},materialsDir:directory,limit:params.limit,params:params as never,generationMode:'skill',runtime:plannerOf(runId,projectId)});
   }catch(error){if(ledger.getRun(runId,projectId).status==='cancelled')return;stageEvent(runId,projectId,'source','failed',String(error instanceof Error?error.message:error).slice(0,1000));ledger.db.prepare("UPDATE wf_runs SET status='failed' WHERE id=?").run(runId);}
 }
 
@@ -225,6 +232,11 @@ export function workflowCheckpoint(runId: string, projectId: string) {
     : stages.find(stage => (conditional.has(stage) ? touched(stage) && !done(stage) : !done(stage))) ?? "finalize";
   return { runId, inputHash: run.binding.inputHash, next, finalized, stages: states, materialRevisions: run.binding.materialRevisions,
     source: run.binding.models.entry, runtime: run.binding.models.runtime };
+}
+/** 这次运行登记时定下的规划运行时——续跑和首跑必须是同一个。 */
+function plannerOf(runId: string, projectId: string): RuntimeName | undefined {
+  const runtime = runLedger().requireRun(runId, projectId).binding.models.runtime;
+  return runtime === "pipeline" ? undefined : runtime;
 }
 export async function cancelProjectWorkflow(runId: string, projectId: string) {
   runLedger().requireRun(runId, projectId);
@@ -261,14 +273,15 @@ export async function resumeProjectWorkflow(runId: string, projectId: string) {
   const awaitingHuman = row.status === "waiting_review" && !checkpoint.finalized;
   if (!awaitingHuman && !["paused", "cancelled", "interrupted", "failed", "infra_error", "budget_exhausted"].includes(row.status)) throw new LedgerError(409, "workflow_not_resumable");
   if (checkpoint.finalized) { ledger.db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId); return { checkpoint, status: "waiting_review" }; }
-  if (checkpoint.source === "host") { ledger.db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run(runId); return { checkpoint, status: "registered", continuation: "continue_in_original_host" }; }
+  // 宿主自己登记的运行只能回宿主接着做；Web 发起、由宿主运行时规划的，Web 能再把它拉起来。
+  if (checkpoint.source === "host" && registered.input.parameters?.launchedBy !== "web") { ledger.db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run(runId); return { checkpoint, status: "registered", continuation: "continue_in_original_host" }; }
   const pausedAt=controls(runId,projectId).pausedAt;
   resumeControls(runId,projectId);
   const detail = row.detail as { penguin?: { workspace?: string }; target?: { envRef?: string }; parameters?: { limit?: number } };
   ledger.db.prepare("UPDATE wf_runs SET status='registered' WHERE id=?").run(runId);
   try {
     await startWebRun({ wfRunId: runId, target: { projectId, envRef: detail.target?.envRef }, workspace: detail.penguin?.workspace,
-      materialsDir: dataPath(`inputs/${runId}`), limit: detail.parameters?.limit, params: registered.input.parameters, generationMode: "skill", resumeStage: pausedAt ?? checkpoint.next });
+      materialsDir: dataPath(`inputs/${runId}`), limit: detail.parameters?.limit, params: registered.input.parameters, generationMode: "skill", runtime: plannerOf(runId, projectId), resumeStage: pausedAt ?? checkpoint.next });
     return { checkpoint, status: "running" };
   } catch (error) { ledger.db.prepare("UPDATE wf_runs SET status='failed' WHERE id=?").run(runId); throw error; }
 }

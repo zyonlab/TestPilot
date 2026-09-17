@@ -32,6 +32,8 @@ export interface OracleCheck {
    * report that hides the difference cannot be used to argue about tier distribution.
    */
   decidedBy?: "machine" | "judge";
+  /** judge 判据的采样统计（几次、几次全部成立、每条条件成立几次、意见是否分歧）。 */
+  judge?: import("./exec/oracle.js").JudgeStats;
   /**
    * 这条判据在**步骤跑之前**是不是就已经成立了。
    *

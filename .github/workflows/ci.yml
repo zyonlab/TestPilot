@@ -1,4 +1,8 @@
-# ⚠️ 2026-09-15：这个工作流被**手动关掉了**（`gh workflow disable ci`），用户的决定。
+# ⚠️ 2026-09-15 关掉（`gh workflow disable ci`），2026-09-16 用户决定**继续关着**。
+#
+# 更正一处说法：这份工作流里的步骤都**不打模型**（typecheck、各包单测、hook 测试、
+# drift、host-parity、replay——replay 是对冻结运行的确定性重打分）。要大模型才跑得动的
+# 是真实用例执行，那本来就不在 CI 里。CI 上红的是 `apps/runner` 起真浏览器的三条测试。
 #
 # 关的时候它是红的：`apps/runner` 三条测试在 CI 上失败而本机四条全绿——
 #   captures a screenshot and perf metrics   拿到 'failed'

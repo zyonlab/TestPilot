@@ -8,7 +8,7 @@ import {
 import { StateFlowGraphSchema, type StateFlowGraph } from "../src/exec/sfg.js";
 
 /**
- * 探索回执、覆盖计数与产品模型（docs/v3/21 §8 反例 2、3、5、7、9、10、11）。
+ * 探索回执、覆盖计数与产品模型（docs/v3/history/21 §8 反例 2、3、5、7、9、10、11）。
  * 全部喂合成数据，不开浏览器、不问模型；同一套函数在真实探索里跑。
  */
 const packPath = resolve(import.meta.dirname, "../../../fixtures/perp-lab/rules.json");
@@ -200,7 +200,7 @@ describe("buildExplorationReport 直接调用", () => {
 });
 
 /**
- * 闸门不是确证（docs/v3/24 §21）。
+ * 闸门不是确证（docs/v3/history/24 §21）。
  * 实测：探索点「全仓」弹出保证金弹窗、点「Place Order」弹出确认框，
  * 回执里都有「新控件」，于是两个功能都被判成 confirmed——而保证金一次没切成、订单一张没下。
  */
@@ -238,7 +238,7 @@ describe("闸门文案：点出一道门不算把功能验了", () => {
     expect(verdict(["Confirm Order"], ["div: Isolated"]).verification).toBe("confirmed");
   });
   /**
-   * 声明了「点完屏幕上该出现什么」，就以屏幕为准（docs/v3/24 §24.3）。
+   * 声明了「点完屏幕上该出现什么」，就以屏幕为准（docs/v3/history/24 §24.3）。
    *
    * 2026-09-12 实测：机器臂走完整条下单链、点了弹窗里的确认键，这里判 confirmed，
    * 数的却是上一步「弹窗打开了」那个效果；同一时刻账户页上是「尚无开放仓位」。
@@ -266,7 +266,7 @@ describe("闸门文案：点出一道门不算把功能验了", () => {
     expect(f.verificationReason).toContain("Positions (1)");
   });
   /**
-   * 声明了期望、目标却**从没点过** → 不是确证（docs/v3/24 §32）。
+   * 声明了期望、目标却**从没点过** → 不是确证（docs/v3/history/24 §32）。
    *
    * 2026-09-12 第二次撞见同一件事的另一条路：`missed` 只数 attempted 的观察，
    * 「看见了但没点」落不进它，判决滑到「有效果且不是闸门」那一支——
@@ -296,7 +296,7 @@ describe("闸门文案：点出一道门不算把功能验了", () => {
   };
 
   /**
-   * **假设没被满足 ≠ 产品错了**（docs/v3/24 §35）。
+   * **假设没被满足 ≠ 产品错了**（docs/v3/history/24 §35）。
    *
    * `conflicted` 是在指控产品有缺陷，那个指控只有 normative（背后有官方文档 / 产品规格 /
    * fixture 契约）才提得起。2026-09-13 实测：`REFERENCE-domain-perp.md` 的五条不变量搬进

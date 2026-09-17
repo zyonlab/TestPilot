@@ -59,7 +59,7 @@ paired_eval({ a:"runs/base-1", b:"runs/cand-A-1", goldPath:"stages/design/gold.j
    scanner 该量「该报的 finding 有没有报」——两把尺子**都还没实现**，只在各自 README 里
    写清打算怎么量。在它们落地之前，进化 stories 的**退路是「下游冻结」**：换一版 stories，
    design 用**旧版**跑，看**端到端**分数动没动——把 stories 的好坏折射到最终覆盖率上。
-   详见 `../../../docs/v3/04-单skill进化.md`。
+   详见 `../../../docs/v3/history/04-单skill进化.md`。
 
 ## 这一层现在的状态
 

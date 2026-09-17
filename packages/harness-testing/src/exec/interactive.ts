@@ -156,7 +156,7 @@ export async function askForScenarios(
     "2. stories：人在这一屏上可能要完成的**具体的事**，每条给出它要用到的控件编号。",
     "",
     "写故事的要求：",
-    "- 一条故事是一件**能做完的事**（「用限价单买入」「查看当前持仓」），不是一个静态观察（「页面显示资金费率」）。",
+    "- 一条故事是一件**能做完的事**（「提交一张表单并看到新记录出现」「把一条记录改成另一种状态」），不是一个静态观察（「页面显示一个数字」）。",
     "- 只能引用上面出现过的编号。编不出编号的故事不要写。",
     "- 同一个控件组里的不同选项，往往对应不同的故事——那正是这个产品的业务分支。",
     "- 优先级按「不做这件事这个产品就没意义」来排。",
@@ -423,7 +423,7 @@ export interface ObserveSpec {
    */
   groupCap?: number;
   /**
-   * 领域探索 charter（docs/v3/20 §6、21 §2）。
+   * 领域探索 charter（docs/v3/history/20 §6、21 §2）。
    *
    * 给了它，探索就按「规则包里的目标」决定先点什么：普通 button、checkbox、自定义控件
    * 都能匹配，不再只认带 ARIA 组的 tab；goto 只去 charter 允许的路由，全局导航不再把
@@ -493,6 +493,11 @@ export interface ObserveSpec {
    * `${env.*}` / `${secret.*}` 在这里解析后执行，日志里只留模板——和执行用例同一条规矩。
    */
   login?: string[];
+  /**
+   * 这个环境提供的前提名（环境设置里由人填，例如 `session`、`wallet-session`）。
+   * 规则包里目标的 `requires` 对照的就是它。不给时按老规矩：配了登录步骤就提供 `session`。
+   */
+  capabilities?: string[];
   resolve?: ResolveContext;
   launch: LaunchOpts;
 }
@@ -1199,7 +1204,7 @@ export async function runObserve(
      * charter 记账。有 charter 时不再问模型猜故事：候选任务来自规则包，真正的故事
      * 等产品模型出来之后才写。`session` 这个前提只在环境配了登录步骤时算满足。
      */
-    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.login?.length ? ["session"] : []) : undefined;
+    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.capabilities ?? (spec.login?.length ? ["session"] : [])) : undefined;
     if (spec.charter) note(`charter ${spec.charter.id}：${spec.charter.featureTargets.length} 个目标，规则包 ${spec.charter.rulePack.id}@${spec.charter.rulePack.version}`);
     let charterShots = 0;
     const charterShot = async (): Promise<string | undefined> => {
@@ -1725,7 +1730,7 @@ export async function runObserve(
         if (offsiteSection(c.href)) continue;
         if (deadHref.has(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
-        if (!routeAllowed(spec.charter, entryRoute, pathOf(new URL(c.href, screen.url).toString()))) continue;
+        { const to = new URL(c.href, screen.url).toString(); if (!routeAllowed(spec.charter, entryRoute, pathOf(to), to)) continue; }
         return { key: c.href, kind: "goto", href: c.href };
       }
 
@@ -1822,7 +1827,7 @@ export async function runObserve(
           continue;
         }
         if (sfgStates.some((st) => st.route === route)) continue;
-        if (!routeAllowed(spec.charter, entryRoute, route)) continue;
+        if (!routeAllowed(spec.charter, entryRoute, route, new URL(href, screen.url).toString())) continue;
         return { key: href, kind: "goto", href };
       }
 
@@ -1842,7 +1847,7 @@ export async function runObserve(
         if (c.href && c.href !== here && !deadHref.has(c.href)) {
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           if (offsiteSection(c.href)) continue;
-          if (!routeAllowed(spec.charter, entryRoute, pathOf(new URL(c.href, screen.url).toString()))) continue;
+          { const to = new URL(c.href, screen.url).toString(); if (!routeAllowed(spec.charter, entryRoute, pathOf(to), to)) continue; }
           return { key: c.href, kind: "goto", href: c.href };
         }
         /**

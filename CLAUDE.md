@@ -1,14 +1,10 @@
 # TestPilot — 给 Claude Code 的接手说明
 
 ## 先做什么
-- 2026-09-10 最新专业性要求先读 `docs/v3/20-领域专业物料链路诊断与重构交接.md` 和 `docs/v3/21-节点提示词与结构化契约草案.md`：先领域引导探索与产品模型，再故事/风险/文本用例/工程集成。当前只是诊断与方案，不能把原冒烟 10/10 当专业验收。
-- 2026-09-10 最新用户决定：本地审核免身份验证。不要恢复 ReviewerSession / TP_REVIEW_TOKEN；操作来源与版本审计保留，详见 09 第 25 节。
-0. **快速接手先读 `docs/v3/09-执行目标与接手指南.md`**：目的与边界、进度快照、设计取舍、N-01 起手式、交接记录格式。每次停止前按该文档 §6 留下可接续记录，并更新 §7 最近交接点。
-1. 读 `docs/v3/00-架构.md`，先读顶部 **2026-09-08 用户决策补充**，再读 §8 红线、§13 规则在哪强制。Web 管项目/workflow/模型/物料/review；Penguin UI 管自进化评估。
-2. 最新 Codex 原生复验见 `docs/v3/19-Codex宿主Hyperliquid实测.md`（10/10 通过；公共页面冒烟范围）。生产实施与真实验收再读 `docs/v3/18-本地UI重构与Hyperliquid验收.md`（Hyperliquid 15/16 通过，C-14 待审；P 项仍按剩余验收保持 doing）。当前 UI 的本地实施再读 `docs/v3/11-WebUI全流程评审与产品设计.md`、`docs/v3/13-UI与论文路线任务台账.md`，然后：
-   `node scripts/plan.mjs --doc docs/v3/13-UI与论文路线任务台账.md --next`
-3. 认领 P 任务（同一 `--doc`，`--set P-xx doing`），按已有基础、代码落点和验收实施；全部兑现后再 done，证据写 `docs/v3/evidence/p-xx/`。当前优先 P-01；PC/SR 已合并到 P 台账。
-4. 08 保留 N 系列历史及人工/观察/发布待条件项，07 保留 T 历史。旧完成率和旧 UI 迁移决策不能替代本轮验收。
+0. **先读 `docs/v3/09-执行目标与接手指南.md`**：目标、当前阶段（初步交付）、现状、下一步、验收命令、交接记录格式。每次停止前按它 §6 在 §7 最上面留一条记录。
+1. 再读 `docs/v3/00-架构.md`（进程、包、阶段流水线、账本、单元循环、守卫的代码落点）与 `docs/v3/01-数据契约.md`（各产物的真源 schema）。安装与宿主接入看 10、14。
+2. `docs/v3/history/` 是 2026-09-16 之前的实验报告、任务台账（T/N/P 系列）、设计提案和交接日志，**只作追溯，不代表现状**；里面的「最新」「当前」都是当时的说法，数字有的后来被更正过。代码注释里引用的 `docs/v3/history/NN §x` 是设计来由，不是待办。
+3. 本地审核免身份验证（2026-09-10 用户决定）：不要恢复 ReviewerSession / TP_REVIEW_TOKEN；操作来源与版本审计保留。
 
 ## 判决必须在屏幕上（2026-09-12 用户决定）
 - **这个项目产出的是端到端 UI 测试代码。一切基于界面：不要直接调用被测网站的接口。**
@@ -18,7 +14,7 @@
   受限解码的 `kind` 枚举里去掉了 `api`（模型发不出来了）；门禁新增 `oracle-offsite`
   （warn，按 caseId 计分，等于挡住这类用例过关）。
 - **旧口径的遗留物，别拿它们当范例**：`fixtures/hyperliquid-testnet/cases.json`（8/8 接口判据）、
-  `fixtures/tier4-demo/cases.json`（4/4）、`docs/v3/06-执行层降本.md`、
+  `fixtures/tier4-demo/cases.json`（4/4）、`docs/v3/history/06-执行层降本.md`、
   `fixtures/*/README.md` 里「判据全部是 kind: api」那套说法，都是这条口径之前写的。
 - `exec/apiOracle.ts` 与 `MachineOracleSchema` 里的 `api` 分支**还在**（执行旧用例要用），
   但新用例走不到那里了。要彻底拆掉是另一件事，没做。
@@ -28,13 +24,28 @@
   本机链配置 `chainId 421614`（Arbitrum Sepolia）、`fixtures/hyperliquid-testnet/`、注入钱包用的账户，
   说的都是这一条链。测试网上随便点是对的。
 - **主网 `app.hyperliquid.xyz` 不作为被测对象**。同一个钱包在那边有真钱（2026-09-12 实测
-  `Portfolio Value $6.77`），同一串点击就是在花钱，而两者只差一个域名。它在 `guard.allowHosts`
-  里也永远不该出现——代码与测试里出现的主网地址是「不在白名单的那个例子」，别顺手改掉。
-- 探索要点会改状态的东西（`exploreActions:"interact"`）时，服务端只认 `config.guard.allowHosts`。
-  测试网域名**已经在 `server/harness.config.ts` 的 allowHosts 里**（2026-09-07 加的，理由写在那儿），
-  所以不需要 `ALLOW_HOSTS` 环境变量——2026-09-12 实测：不给这个变量，测试网 interact 照样放行，
-  主网照样 403。要给别的域名开这个口子，走那份配置并在旁边写清理由。
+  `Portfolio Value $6.77`），同一串点击就是在花钱，而两者只差一个域名。它在
+  `server/harness.config.ts` 的 `guard.denyHosts` 里，永远不该被移出——代码与测试里出现的主网地址是「被禁止的那个例子」，别顺手改掉。
+- **没有主机白名单，也没有「允许不可逆」这个开关**（2026-09-15 / 2026-09-16 用户决定）。删除、完成、清理是被测产品的功能，用例要测的正是这一段生命周期，所以**默认放行**；
+  探索要点会改状态的东西，声明 `exploreActions:"interact"` 即可。全局只留禁止名单 `guard.denyHosts`，主网在上面，谁也放不开；
+  运营方要整机拦截不可逆步骤，把 `guard.blockIrreversible` 设回 true 或给 `GUARD_STRICT=1`（那时规则包的 `sideEffectLabels` 才起作用）。
 - `fixtures/hyperliquid-mainnet/` 这个目录名是历史，里面的规则包对测试网同样适用（已实测）。
+
+## 领域内容一律是项目数据（2026-09-15 用户决定）
+- 非通用的部分**不许写进代码**（也不许写成 `if (某个领域)`）：只能是项目数据，由用户用对话抽屉聊出来或自己指定。
+  载体三个：**规则包**（`actionVocabulary` / `sideEffectLabels` / `volatileReadings` 等）、**领域参考**（「领域参考」页，
+  按版本存、运行开始时冻结绑定）、**环境画像**（前提名 `capabilities`、`injectWallet`）。
+- `benchmark/hyperliquid-testnet/domain-reference.md` 是评测数据集，只给 `evals/domain-perp.json` 按路径绑定
+  （消融开关叫 `domain-reference`），不出现在界面，也不导入新项目。没有「预设」，不做旧数据兼容。
+- `pnpm check:domain-neutral` 必须绿：产品源码非注释代码与 skill 里不许有写死的领域词。
+
+## 初步交付：开源发布（2026-09-16 用户决定）
+- 对象：**开源 / 公开发布**，许可 MIT；**新建公开仓库、不带提交历史**（从整理后的快照做第一个提交），现有私有仓库原样保留。建公开仓库、push、发布仍要当轮确认。
+- 入口：**Web + Claude Code**。Web 发起的生成默认由本机 Claude Code 规划（`TP_AGENT_RUNTIME` 不设即 `claude-code`，新建运行表单可选）；
+  Penguin（需 Node 24 与 Penguin 服务）与 Codex 标实验性。运行登记时定下规划运行时，续跑用同一个。
+- 验收被测对象：Vikunja（本地）+ Hyperliquid 测试网。
+- **冻结不做**：自进化、经验与反例库、子 agent 并行、去不去掉 Penguin、Gold 与记分板、论文研究线（台账 P-13～P-24）。新需求先问「初步交付需不需要」。
+- 本机基准应用目录由 `TP_BENCH_DIR` 给（默认 `~/bench`），仓库里不写死任何人的主目录。
 
 ## 不做的事（除非用户当轮明说）
 - 本会话用户已授权本地真实模型/浏览器联调，不需要再次索要 `.env` 或确认这类验收。新会话按其授权范围执行；不得把旧默认限制当成本会话的额外审批。`git commit` / `git push` / 对外发布仍未授权。
@@ -45,9 +56,11 @@
 
 ## 验收命令
 ```bash
-pnpm typecheck && pnpm test          # 各包 tsc + vitest + hook 子进程测试
+pnpm typecheck && pnpm test          # 各包 tsc + vitest
+pnpm test:hooks                      # hook 子进程测试（不在 pnpm test 里）
 pnpm check:drift                     # 两臂提示词逐条认领
 pnpm check:host-parity               # 宿主入口对 UI 操作的覆盖；加了 UI 路由必须同步分类
+pnpm check:domain-neutral            # 发给每个产品的代码与 skill 里没有写死的领域内容
 node scripts/replay.mjs              # 冻结运行确定性重打分
 node scripts/cost-report.mjs         # 每条用例的账（跑过用例之后）
 ```

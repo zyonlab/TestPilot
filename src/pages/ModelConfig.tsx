@@ -26,7 +26,7 @@ import type { AppSettings, PromptTemplates } from "@/lib/api";
 import type { Environment, LoginFlow, SecretMeta } from "@/lib/types";
 
 /*
- * `ModelConfigPage`（模型端点这一整屏）已在 v3 Phase 3 退役——见 `docs/v3/00-架构.md` §1/§2 与
+ * `ModelConfigPage`（模型端点这一整屏）已在 v3 Phase 3 退役——见 `docs/v3/history/00-架构.md` §1/§2 与
  * `components/SettingsDrawer.tsx` 的文件注释：模型端点归 PenguinHarness 的 session，不再是
  * 这台机器的设置。这个文件现在只剩它名字所说的另一半：环境、密钥、提示词模板与偏好，
  * 这三张卡被 `pages/SettingsSections.tsx` re-export 复用，是活代码。

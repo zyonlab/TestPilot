@@ -4,17 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * `modules` 节点（docs/v3/24 §6、§7）：模型提议 → 服务端机检 → 人冻结。
+ * `modules` 节点（docs/v3/history/24 §6、§7）：模型提议 → 服务端机检 → 人冻结。
  * 冻结之后按它切单元；没冻结就回落到规则包里那棵树。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"),
-  db: typeof import("../src/db.js"), stage: typeof import("../src/moduleStage.js");
+  db: typeof import("../src/db.js"), stage: typeof import("../src/moduleStage.js"),
+  controlsModule: typeof import("../src/workflowControls.js");
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tp-modstage-"));
   vi.stubEnv("TP_DATA_DIR", dir);
   vi.stubEnv("MIDSCENE_MODEL_NAME", "fixture"); vi.stubEnv("MIDSCENE_MODEL_BASE_URL", "https://fixture.test/v1"); vi.stubEnv("MIDSCENE_MODEL_API_KEY", "fixture-key");
   db = await import("../src/db.js"); service = await import("../src/runService.js"); stage = await import("../src/moduleStage.js");
+  controlsModule = await import("../src/workflowControls.js");
   project = db.createProject("mod-stage", "http://127.0.0.1:5391/").id;
 });
 afterAll(() => { service.runLedger().close(); db.db.close(); vi.unstubAllEnvs(); rmSync(dir, { recursive: true, force: true }); });
@@ -89,7 +91,7 @@ it("没冻结的树不参与切单元：frozenModules 返回 undefined", () => {
 });
 
 /**
- * 提议了却没冻结的时候，故事单元不许被切出来（docs/v3/24 §8.1）。
+ * 提议了却没冻结的时候，故事单元不许被切出来（docs/v3/history/24 §8.1）。
  * 这条不在 work-units 那个套件里，是因为它判的是 `modules` 节点的人工闸门，不是单元循环本身。
  */
 it("提议过但没冻结：领故事单元直接被拒，而不是悄悄换回规则包那棵树", async () => {
@@ -99,7 +101,7 @@ it("提议过但没冻结：领故事单元直接被拒，而不是悄悄换回�
   expect(() => units.planUnits(runId, project, "stories")).toThrow(/module_plan_freeze_required/);
   /**
    * 冻结之后这道闸门就过了，而且**不需要产品模型**：一棵人认过的树本身就是切分依据。
-   * 这条以前断言的是 `work_units_require_product_model`——那是限制，不是设计（docs/v3/24 §12）。
+   * 这条以前断言的是 `work_units_require_product_model`——那是限制，不是设计（docs/v3/history/24 §12）。
    */
   stage.freezeModulePlan(runId, project, human);
   expect(units.planUnits(runId, project, "stories").map((u) => u.unitId)).toEqual(["stories:a"]);
@@ -111,7 +113,7 @@ it("提议过但没冻结：领故事单元直接被拒，而不是悄悄换回�
 });
 
 /**
- * 整份写入那条路上，冻结的树同样管用（docs/v3/24 §10）。
+ * 整份写入那条路上，冻结的树同样管用（docs/v3/history/24 §10）。
  * 这一条以前是个洞：`modules` 冻结了一棵树，规划器写故事时自带另一棵，没人拦。
  */
 it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是哪条故事", async () => {
@@ -144,7 +146,7 @@ it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是�
   const ok = stages.writeRunStage(runId, project, "stories",
     bundle([story("US-1", ["market.book"]), story("US-2", ["market.trades"])])) as { status: string };
   expect(ok.status).toBe("validated");
-  // 扇出结论要回到写它的那一方手里，不能只落一份没人读的报告（docs/v3/24 §11）。
+  // 扇出结论要回到写它的那一方手里，不能只落一份没人读的报告（docs/v3/history/24 §11）。
   expect((ok as unknown as { modulePlan?: Array<{ code: string }> }).modulePlan?.map((f) => f.code))
     .toContain("leaf_fanout_too_low");
   const report = service.runLedger().listRevisions(project, runId).find((r) => r.name === "report/module-fanout");
@@ -154,22 +156,24 @@ it("故事挂在冻结树里没有的模块上：整份写入被拒，指出是�
 });
 
 /**
- * 沙箱探索的闸门（docs/v3/24 §14）：只有守卫白名单里的域名才允许探索去点会改状态的东西。
- * 同一个钱包，测试网上随便点是对的，主网上同样的点击是在花真钱——两者只差一个域名。
+ * 沙箱探索的闸门（docs/v3/history/24 §14）：**只剩禁止名单**。
+ * 2026-09-16 起点会改状态的东西不再要求每个环境勾一次——那些动作正是被测产品的功能；
+ * 绝不能碰的地址仍然在禁止名单上，主网就在那上面。
  */
-it("探索要 interact：白名单外的域名直接拒，白名单内才放行", async () => {
+it("探索要 interact：禁止名单直接拒，其余放行", async () => {
   const ops = await import("../src/workflowOps.js");
+  const { config } = await import("../src/procs.js");
   const base = { idempotencyKey: `ex-${Date.now()}`, sourceKind: "explore" as const, exploreActions: "interact" as const };
-  await expect(ops.createWebWorkflow(project, { ...base, sourceUrl: "https://app.hyperliquid.xyz/trade" }))
-    .rejects.toThrow(/explore_interact_host_not_allowlisted/);
-  // 白名单里默认有 localhost：同样的参数就过得去（这里只验闸门，不真起浏览器）。
-  const ok = await ops.createWebWorkflow(project, { ...base, idempotencyKey: `ex2-${Date.now()}`, sourceUrl: "http://localhost:5391/trade" })
+  const denied = config.guard.denyHosts[0];
+  if (denied) await expect(ops.createWebWorkflow(project, { ...base, sourceUrl: `https://${denied}/trade` })).rejects.toThrow(/explore_host_denied/);
+  const attempt = (key: string, sourceUrl: string) => ops.createWebWorkflow(project, { ...base, idempotencyKey: `${key}-${Date.now()}`, sourceUrl })
     .then(() => "created").catch((e: Error) => e.message);
-  expect(String(ok)).not.toMatch(/host_not_allowlisted/);
+  // 没有环境也照样能建（这里只验闸门，不真起浏览器）。
+  expect(await attempt("ex-noenv", "http://127.0.0.1:5391/trade")).not.toMatch(/explore_interact_not_allowed|explore_host_denied/);
 });
 
 /**
- * 换了模块 id 就要重新认领功能，否则领域材料整份断在这里（docs/v3/24 §27）。
+ * 换了模块 id 就要重新认领功能，否则领域材料整份断在这里（docs/v3/history/24 §27）。
  *
  * 2026-09-12 实测：模型提了一棵新 id 的树，21 个功能一个都没接住；机检只记一条 warn，
  * 冻结之后每个故事单元 `features=0 / rules=0`——规则、观察、生命周期全没流下去，
@@ -194,4 +198,64 @@ it("新树一个功能都没认领 → 整份拒收；认领了就放行", () =>
 
   const ok = stage.writeModulePlan(runId, project, tree(["f.one", "f.two"])) as { status: string };
   expect(ok.status).toBe("validated");
+});
+
+/**
+ * 2026-09-16：Hyperliquid 那一跑里 Claude 用了 43 次 Bash、25 次 Read，其中 15 次在读服务端源码
+ * （`moduleStage.ts` / `modulePlan.ts` / `workflowControls.ts`），为的是搞清模块树要交什么、
+ * 机检会怎么拒——因为 `modules` 这一步当时只发 `sections`，契约、规则、功能清单一样都没发。
+ * 一跑 $6.39，而没有模块节点的那跑 $3.14。这三样现在当数据交出去。
+ */
+it("begin_stage(modules) 把契约、机检规则与功能清单一并交出去", () => {
+  const runId = newRun("modules-contract");
+  service.runLedger().putRevision({ runId, projectId: project, name: "product/model-candidate", kind: "report", content: {
+    modules: [{ id: "m", name: "模块", parentId: null }],
+    features: [{ id: "f.one", moduleId: "m", name: "功能一" }, { id: "f.two", moduleId: "m", name: "功能二" }],
+  } }, { kind: "system", id: "test" });
+
+  const begun = stage.beginStage ? stage.beginStage(runId, project, { node: "modules" }) : undefined;
+  const out = (begun ?? controlsModule.beginStage(runId, project, { node: "modules" })) as {
+    sections?: string[]; structureContract?: string; features?: Array<{ id: string; name?: string }>;
+    checks?: Array<{ code: string; severity: string; means: string }>;
+  };
+  expect(out.sections).toEqual(["m.md#1", "m.md#2", "m.md#3"]);
+  expect(out.structureContract).toMatch(/parentId/);
+  expect(out.structureContract).toMatch(/EVERY FEATURE MUST BE CLAIMED BY A LEAF/);
+  expect(out.features).toEqual([{ id: "f.one", name: "功能一", moduleId: "m" }, { id: "f.two", name: "功能二", moduleId: "m" }]);
+  const codes = (out.checks ?? []).map((c) => c.code);
+  expect(codes).toContain("module_fake_hierarchy");
+  expect(codes).toContain("module_tree_drops_all_features");
+  expect(codes).toContain("material_section_unclaimed");
+  expect((out.checks ?? []).every((c) => ["error", "warn", "info"].includes(c.severity) && c.means.length > 0)).toBe(true);
+});
+
+it("没有产品模型时功能清单是空的，不报错", () => {
+  const runId = newRun("modules-no-model");
+  const out = controlsModule.beginStage(runId, project, { node: "modules" }) as { features?: unknown[]; structureContract?: string };
+  expect(out.features).toEqual([]);
+  expect(out.structureContract).toMatch(/AT LEAST TWO LEVELS/);
+});
+
+/**
+ * 2026-09-16：Hyperliquid 那一跑的模块树冻结是 Claude 按用户当轮授权代按的，
+ * 而账本里所有冻结都写成同一行 `frozenBy: local-operator`——事后看不出是人按还是代理代按。
+ * 冻结现在收一条 note，并把「谁按的、什么时候、什么说明」一起回出去。
+ */
+it("冻结留下的痕迹要分得清人和代理", () => {
+  const runId = newRun("freeze-note");
+  service.runLedger().putRevision({ runId, projectId: project, name: "product/model-candidate", kind: "report", content: {
+    modules: [{ id: "m", name: "模块", parentId: null }], features: [{ id: "f.one", moduleId: "m" }],
+  } }, { kind: "system", id: "test" });
+  stage.writeModulePlan(runId, project, { modules: [
+    { id: "m-a", name: "甲", parentId: null, purpose: "用户在这里做甲事", evidence: ["m.md#1"], featureIds: ["f.one"] },
+    { id: "m-a.one", name: "甲之一", parentId: "m-a", purpose: "甲的第一件事", evidence: ["m.md#2"] },
+  ] });
+
+  expect(stage.modulePlanState(runId, project)).toMatchObject({ exists: true, frozen: false });
+  stage.freezeModulePlan(runId, project, { kind: "human", id: "local-operator" }, "由 Claude 代按：用户 2026-09-16 在对话中明确授权");
+  const state = stage.modulePlanState(runId, project) as { frozen: boolean; frozenBy?: string; frozenNote?: string; frozenAt?: string };
+  expect(state.frozen).toBe(true);
+  expect(state.frozenBy).toBe("local-operator");
+  expect(state.frozenNote).toMatch(/代按/);
+  expect(state.frozenAt).toBeTruthy();
 });

@@ -42,7 +42,7 @@
  * 全是 `用户查看X` / `页面加载完成` / `订单成交` / `行情触及 TP 价` 这类观察与系统事件。
  */
 const ACTION =
-  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|下单|撤单|撤掉|撤销|取消|平仓|开仓|转账|充值|提现|划转|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
+  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|撤销|取消|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
 
 export interface AcceptanceEntry {
   id: string;
@@ -59,10 +59,18 @@ export function acceptanceWhen(text: string): string {
   // 只认子句开头的 When（句首，或 `/ ， ; 换行` 之后）——2026-09-14 实测模型两种分隔都用——`Then …when 用户…` 里的 when 不是子句。
   return (/(?:^|[/,，;；\n])\s*When\s+([^/,，;；\n]+)/i.exec(text))?.[1]?.trim() ?? "";
 }
-export function acceptanceIsActionable(text: string): boolean {
-  const when = acceptanceWhen(text);
+/**
+ * 这个产品特有的动作词（规则包 `actionVocabulary`）拼成的正则。
+ * 2026-09-15 起通用表里不放行业词——「下单 / 平仓 / 充值」只有交易类产品才是动作，由它们自己的包提供。
+ */
+function vocabularyPattern(vocabulary: readonly string[] | undefined): RegExp | undefined {
+  const words = (vocabulary ?? []).map((w) => w.trim()).filter(Boolean);
+  return words.length ? new RegExp(words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i") : undefined;
+}
+export function acceptanceIsActionable(text: string, vocabulary?: readonly string[]): boolean {
+  const target = acceptanceWhen(text) || text;
   // 没写 When 的准则按整句判断：有动作动词就算动作型，宁可宽，不要把真动作误判成看一眼。
-  return ACTION.test(when || text);
+  return ACTION.test(target) || !!vocabularyPattern(vocabulary)?.test(target);
 }
 export function acceptanceId(storyId: string, index: number): string {
   return `${storyId}/AC-${index + 1}`;
@@ -70,6 +78,7 @@ export function acceptanceId(storyId: string, index: number): string {
 
 export function acceptanceIndex(
   stories: Array<{ id: string; acceptance?: string[] }>,
+  vocabulary?: readonly string[],
 ): AcceptanceEntry[] {
   return stories.flatMap((s) =>
     (s.acceptance ?? []).map((text, index) => ({
@@ -78,7 +87,7 @@ export function acceptanceIndex(
       index,
       text,
       when: acceptanceWhen(text),
-      actionable: acceptanceIsActionable(text),
+      actionable: acceptanceIsActionable(text, vocabulary),
     })),
   );
 }
@@ -96,12 +105,13 @@ export interface AcceptanceFinding { code: string; storyId: string; message: str
  */
 export function checkStories(
   stories: Array<{ id: string; title?: string; acceptance?: string[] }>,
+  vocabulary?: readonly string[],
 ): AcceptanceFinding[] {
   const out: AcceptanceFinding[] = [];
   for (const s of stories) {
     const acs = s.acceptance ?? [];
     if (!acs.length) continue;
-    if (!acs.some(acceptanceIsActionable))
+    if (!acs.some((a) => acceptanceIsActionable(a, vocabulary)))
       out.push({
         code: "story_has_no_actionable_criterion",
         storyId: s.id,

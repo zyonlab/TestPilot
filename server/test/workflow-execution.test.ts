@@ -136,3 +136,25 @@ it("断言级判据要交到执行侧，否则 tier 1 在执行时只是一个�
   const opts = runner.run.mock.calls.at(-1)![0].opts;
   expect(opts.assertions).toEqual([{ id: "A-1", statement: "The counter reads 1", ruleRefs: [], oracle: { kind: "text", value: "Count: 1" } }]);
 });
+
+/**
+ * 2026-09-15 Vikunja：执行里有用例红，整条运行被写成 failed，g2 要求显式恢复——
+ * 修完执行器想重编重跑被挡，重跑完又被写回 failed。这份文件里其余测试开头那句手动
+ * `UPDATE wf_runs SET status='waiting_review'` 就是一直在绕它。这一条**不做手动重置**。
+ */
+it("用例没全过只记在执行上：运行回到 waiting_review，不用恢复就能再跑、再进节点", async () => {
+  service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+  runner.run.mockResolvedValueOnce({ status: "failed", infraError: false, durationMs: 5, modelRequests: [], pngPaths: [], logs: [], failureReason: "页面上没有「Count: 1」", oracle: [{ status: "fail", decidedBy: "machine" }] });
+  const red = execution.startWorkflowExecution(runId, projectId, { codeRevision, idempotencyKey: "case-red", envRef: "usage-probe" });
+  await vi.waitFor(() => expect(row(red.executionId).status).toBe("failed"));
+  // 判决在执行行上；运行本身没有失败。
+  expect(service.runLedger().outputs.getRun(runId)?.status).toBe("waiting_review");
+  const controls = await import("../src/workflowControls.js");
+  expect((controls.beginStage(runId, projectId, { node: "g2" }) as { status: string }).status).not.toBe("failed");
+
+  // 判定不了（unobservable）同理。
+  runner.run.mockResolvedValueOnce({ status: "unobservable", infraError: false, durationMs: 5, modelRequests: [], pngPaths: [], logs: [], oracle: [{ status: "unobservable", decidedBy: "machine" }] });
+  const unsure = execution.startWorkflowExecution(runId, projectId, { codeRevision, idempotencyKey: "case-unobservable", envRef: "usage-probe" });
+  await vi.waitFor(() => expect(row(unsure.executionId).status).toBe("unobservable"));
+  expect(service.runLedger().outputs.getRun(runId)?.status).toBe("waiting_review");
+});

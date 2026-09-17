@@ -20,7 +20,7 @@ import {
   storiesVariable,
   COMPOSE_STABLE,
   composeVariable,
-  COMPOSE_SCHEMA, DOMAIN_PERP } from "./prompts.js";
+  COMPOSE_SCHEMA, domainReferenceBlock } from "./prompts.js";
 import { locate, overlaps, splitDocuments } from "./attribute.js";
 import { runGate } from "./gate.js";
 import {
@@ -970,7 +970,7 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
     contextTokens: number;
     perStoryMaxTokens: number;
     maxCasesPerStory: number;
-    oracleGuidance: "default" | "strict";
+    oracleGuidance: "default" | "strict"; domainReference?: string; domainReferencePath?: string;
   },
   z.infer<typeof StoryBundleSchema>,
   CaseBundle
@@ -1003,6 +1003,13 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
        * kept as a parameter so it can be compared rather than believed.
        */
       oracleGuidance: z.enum(["default", "strict"]).default("default"),
+      /**
+       * 这次运行绑定的领域参考（项目数据，见 prompts.ts 的 domainReferenceBlock）。
+       * 正文直接给，或给一个相对 baseDir 的路径（评测臂用路径，保证两臂读的是同一份冻结文件）。
+       * 两样都没有就没有领域段——代码不替任何产品补一段。
+       */
+      domainReference: z.string().optional(),
+      domainReferencePath: z.string().optional(),
     }),
     input: StoryBundleSchema,
     output: CaseBundleSchema,
@@ -1017,6 +1024,13 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
        * 此前图里无条件存着一个空 `specText`，于是它每次都「覆盖」成了没有规格。
        */
       const specText = params.specText?.trim() ? params.specText : (bundle.specText ?? "");
+      const domainText = params.domainReference?.trim()
+        ? params.domainReference
+        : params.domainReferencePath
+          ? readFileSync(params.domainReferencePath.startsWith("/") ? params.domainReferencePath : `${opts.baseDir ?? process.cwd()}/${params.domainReferencePath}`, "utf8")
+          : "";
+      // 消融臂（domain-reference）去掉的就是这一段；没绑定时两臂本来就一样。
+      const domainBlock = ctx.ablated.has(ABLATABLE.domainReference) ? "" : domainReferenceBlock(domainText);
       if (!specText.trim())
         // 空规格不再是一件悄无声息的事：这个节点会照常产出用例，只是它只看得见故事，
         // 而那正是它此前一直在做的事，没有任何一处说出来。
@@ -1094,8 +1108,8 @@ export function designCasesNode(opts: CaseGenNodeOptions): NodeDef<
                 return CASES_STABLE;
               })() +
               (params.oracleGuidance === "strict" ? ORACLE_STRICT : "") +
-              // 领域 REFERENCE 臂（07 T-10）：默认带，`ablate: ["domain-perp"]` 去掉。
-              (ctx.ablated.has(ABLATABLE.domainPerp) ? "" : DOMAIN_PERP),
+              // 领域参考：运行绑定了才有，`ablate: ["domain-reference"]` 去掉。
+              domainBlock,
             // `hint` 一起送进去：模型该知道的不是「内容被截断了」，而是「还剩什么、怎么拿」。
             variable: casesVariable(
               specForCall.hint ? `${specForCall.text}\n\n[retrieval] ${specForCall.hint}` : specForCall.text,

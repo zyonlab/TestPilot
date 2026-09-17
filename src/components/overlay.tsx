@@ -37,10 +37,29 @@ function useEscapeToClose(active: boolean, onClose: () => void) {
  *
  * A drawer holding a specification and a drawer holding one run's detail want different
  * widths, and re-dragging on every open is the kind of small tax that makes a reader stop
- * opening things. Held in memory rather than storage: it is a working preference, not a
- * setting, and it should not outlive the session in a way nobody asked for.
+ * opening things.
+ *
+ * 2026-09-17 用户要求「拖过的宽度要记住」：原来只存在内存里，刷新一次就回到默认。
+ * 现在写进 localStorage（按抽屉类型分开）；存储不可用（隐私模式、被禁）时退回内存，照样能用。
  */
-const widths = new Map<string, number>();
+const WIDTH_KEY = (k: string) => `tp.drawerWidth.${k}`;
+const widths = {
+  get(k: string): number | undefined {
+    try {
+      const v = Number(window.localStorage.getItem(WIDTH_KEY(k)));
+      return Number.isFinite(v) && v >= 420 ? v : memory.get(k);
+    } catch { return memory.get(k); }
+  },
+  set(k: string, v: number) {
+    memory.set(k, v);
+    try { window.localStorage.setItem(WIDTH_KEY(k), String(Math.round(v))); } catch { /* 退回内存 */ }
+  },
+  clear(k: string) {
+    memory.delete(k);
+    try { window.localStorage.removeItem(WIDTH_KEY(k)); } catch { /* 忽略 */ }
+  },
+};
+const memory = new Map<string, number>();
 
 /**
  * 展开到最宽时能占到哪。
@@ -100,10 +119,24 @@ export function Drawer({
 }) {
   const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
+  /**
+   * 2026-09-17：默认不再整屏打开。整屏把画布整个盖住，人看不到自己是从哪一步点进来的；
+   * 默认给视口七成左右，要整屏点标题栏的按钮，拖过的宽度下次沿用（换了更小的屏会被夹回可用范围）。
+   */
   const [width, setWidth] = useState(() =>
-    resizeKey ? (widths.get(resizeKey) ?? (fullscreen ? wideOf(true) : roomyDefault(defaultWidth))) : 0,
+    resizeKey ? Math.min(wideOf(fullscreen), widths.get(resizeKey) ?? roomyDefault(defaultWidth)) : 0,
   );
   const drag = useRef<{ x: number; w: number } | null>(null);
+  /**
+   * 同一个抽屉实例换了用途（工作台里「运行详情 / 节点 / 产物」共用一个）时，按新用途重新取记住的宽度。
+   * 否则宽度停在第一次打开时那一类上：2026-09-17 实测产物抽屉打开成了运行详情的宽度。
+   */
+  const keyRef = useRef(resizeKey);
+  useEffect(() => {
+    if (!resizeKey || keyRef.current === resizeKey) return;
+    keyRef.current = resizeKey;
+    setWidth(Math.min(wideOf(fullscreen), widths.get(resizeKey) ?? roomyDefault(defaultWidth)));
+  }, [resizeKey, fullscreen, defaultWidth]);
   /**
    * 展开之前那一档宽度。
    *
@@ -184,9 +217,20 @@ export function Drawer({
               document.body.style.userSelect = "none";
               e.preventDefault();
             }}
+            onDoubleClick={() => {
+              const next = roomyDefault(defaultWidth);
+              widths.clear(resizeKey);
+              setWidth(next);
+            }}
             title={t("overlay.dragWidth")}
-            className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize hover:bg-primary/30"
-          />
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("overlay.dragWidth")}
+            className="group absolute inset-y-0 -left-1 z-10 flex w-3 cursor-col-resize items-center justify-center"
+          >
+            <span className="h-full w-px bg-transparent transition-colors group-hover:bg-primary/40" />
+            <span className="absolute h-10 w-1 rounded-full bg-border transition-colors group-hover:bg-primary/70" />
+          </div>
         )}
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           {title != null && (

@@ -177,6 +177,12 @@
   },
   {
    "source": "index.ts",
+   "method": "GET",
+   "path": "/api/chat/fields",
+   "uiOnly": "Web UI 字段起草抽屉的开场数据（可起草的字段 + 哪几次运行有材料）。和 POST /api/chat 同一个理由：宿主自己就是那个对话方，材料它用 tp_artifact 读，起草完的规则包走 tp_project.add_rule_pack 落地。"
+  },
+  {
+   "source": "index.ts",
    "method": "POST",
    "path": "/api/chat",
    "uiOnly": "Web UI 自己的对话框——它做的事（跟人商量、再调工具）正是宿主本身在做的。把它暴露给宿主等于让 agent 去驱动另一个 agent，多一层没有意义。议定之后的落地走 tp_audit.apply_graph / apply_prompt。"
@@ -489,6 +495,30 @@
   },
   {
    "source": "index.ts",
+   "method": "DELETE",
+   "path": "/api/projects/:id/domain-references/:hash",
+   "host": "tp_project.remove_domain_reference"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/domain-references/:hash",
+   "host": "tp_project.domain_reference"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/domain-references",
+   "host": "tp_project.domain_references"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/domain-references",
+   "host": "tp_project.add_domain_reference"
+  },
+  {
+   "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/environments",
    "host": "tp_project.environments"
@@ -534,6 +564,12 @@
    "method": "GET",
    "path": "/api/projects/:id/quarantine-log",
    "host": "tp_report.quarantine_log"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/regression-suite",
+   "host": "tp_review.regression_suite"
   },
   {
    "source": "index.ts",
@@ -712,6 +748,12 @@
   {
    "source": "runRoutes.ts",
    "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/executions/detail/:executionId",
+   "host": "tp_execution.detail"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/executions",
    "host": "tp_execution.list"
   },
@@ -720,6 +762,30 @@
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/modules/freeze",
    "host": "tp_stage.freeze_modules"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/regression-candidates/:candidateId",
+   "host": "tp_review.decide_candidate"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/regression-candidates",
+   "host": "tp_review.candidates"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/regression-candidates",
+   "host": "tp_review.propose_candidates"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/report",
+   "host": "tp_run.report"
   },
   {
    "source": "runRoutes.ts",
@@ -1101,8 +1167,8 @@
   }
  ],
  "baseline": {
-  "covered": 181,
-  "reachable": 181,
+  "covered": 191,
+  "reachable": 191,
   "rate": 1
  }
 }

@@ -17,7 +17,7 @@ import { MigratedToPenguin } from "@/components/MigratedToPenguin";
  *
  * 上面那段英文注释描述的配对评测——两臂、消融开关、显著性读数、critic 提的建议、
  * `evals/*.json` 的定义、变异面板——问的都是「**这一版 harness 比上一版好不好**」，
- * 而 v3 把 harness 层整个换成了 PenguinHarness（`docs/v3/00-架构.md` §1/§2）：
+ * 而 v3 把 harness 层整个换成了 PenguinHarness（`docs/v3/history/00-架构.md` §1/§2）：
  * benchmark 目录、scoreboard、held-out、frozen baseline 都在那边，
  * `paired_eval` / `mutate_and_detect` 变成 MCP 工具，**且配对评测刻意绕过 agent**
  * （§3 P1）。在这里再画一份两臂对比，画的会是另一台机器上的数。

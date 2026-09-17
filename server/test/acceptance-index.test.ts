@@ -64,7 +64,8 @@ describe("动作动词表（拿真语料调出来的）", () => {
 
   it("「挂单」是名词，不能当动词——「查看挂单档位」不是动作", () => {
     expect(acceptanceIsActionable("Given A / When 用户查看挂单档位 / Then B")).toBe(false);
-    expect(acceptanceIsActionable("Given A / When 用户撤掉该挂单 / Then B")).toBe(true);
+    // 「撤掉」是交易类产品的动作词，来自那个产品的规则包（2026-09-15 起不在通用表里）。
+    expect(acceptanceIsActionable("Given A / When 用户撤掉该挂单 / Then B", ["撤掉"])).toBe(true);
   });
 
   it("「打开/执行/设为/切到」都是动作——重写正则时丢过一次", () => {

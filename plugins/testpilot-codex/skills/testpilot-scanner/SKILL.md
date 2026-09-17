@@ -54,7 +54,7 @@ description: Audits whether the artifacts of one TestPilot run can be trusted, b
 读报告的人照着这句话能自己验一遍，不需要相信你。
 
 - 好：`步骤 2 点击「Withdraw」，但 materials 里 12 个屏的 controls 里没有这个控件（最接近的是「Transfer」）`
-- 好：`断言「Funding 显示 0.01000%」——0.01000% 在 materials/entry.md 第 8 行出现过，但它是一次采集的读数，不是一条规则`
+- 好：`断言「在线人数显示 1,204」——1,204 在 materials/entry.md 第 8 行出现过，但它是一次采集的读数，不是一条规则`
 - 坏：`断言不够具体`（没指向任何地方，读的人只能选择相信）
 - 坏：`可能存在重复`（「可能」不是审计结论。查得出就报，查不出就不报）
 

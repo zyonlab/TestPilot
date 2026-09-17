@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 读 docs/v3/07 的任务块（默认；--doc 可换），报进度、报「下一批能做的」、改状态。
+ * 读 docs/v3/history/07 的任务块（默认；--doc 可换），报进度、报「下一批能做的」、改状态。
  *
  * 这个脚本刻意不建自己的状态文件：`- 状态：` 那一行就是唯一的真相源。
  * 理由写在那份文档的 §0——两个真相源会长出两份互相矛盾的历史，
@@ -12,11 +12,11 @@ import { dirname, join } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 /**
- * `--doc <path>` 指向另一份同格式的任务文档（docs/v3/07 第四档路线用它）。
+ * `--doc <path>` 指向另一份同格式的任务文档（docs/v3/history/07 第四档路线用它）。
  * 任务 id 的前缀跟着文档走：spec/17 是 `U-`，v3/07 是 `T-`。不给就还是 spec/17。
  */
 const docArg = process.argv.indexOf("--doc");
-const DOC = docArg >= 0 ? join(ROOT, process.argv[docArg + 1]) : join(ROOT, "docs/v3/07-第四档路线-任务与进度.md");
+const DOC = docArg >= 0 ? join(ROOT, process.argv[docArg + 1]) : join(ROOT, "docs/v3/history/07-第四档路线-任务与进度.md");
 if (docArg >= 0) process.argv.splice(docArg, 2);
 const STATES = ["todo", "doing", "done", "blocked", "dropped"];
 

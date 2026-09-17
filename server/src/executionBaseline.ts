@@ -62,7 +62,7 @@ export const executionBaseline = (runId: string, projectId: string): ExecutionBa
  * 把某次执行和基线比。
  *
  * 基线与当前之间的那些次执行也一起交给比较函数——**抖动只有靠中间那几次才看得出来**，
- * 而这个被测对象上抖动正是失败的主要成分（docs/v3/23 §12.5：连跑两轮都是 29/35，
+ * 而这个被测对象上抖动正是失败的主要成分（docs/v3/history/23 §12.5：连跑两轮都是 29/35，
  * 失败的却是不同的六条）。
  */
 export function compareToBaseline(runId: string, projectId: string, raw: unknown) {

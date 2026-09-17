@@ -33,15 +33,9 @@ it("ignores nonsense values rather than propagating a zero", () => {
   expect(cfg.execution.queueConcurrency).toBe(1);
 });
 
-it("adds allowlisted hosts instead of replacing the local ones", () => {
-  const cfg = resolveHarnessConfig({}, { ALLOW_HOSTS: "staging.example.com, qa.example.com" });
-  expect(cfg.guard.allowHosts).toEqual([
-    "localhost",
-    "127.0.0.1",
-    "::1",
-    "staging.example.com",
-    "qa.example.com",
-  ]);
+it("adds denied hosts from the environment instead of replacing the configured ones", () => {
+  const cfg = resolveHarnessConfig({ guard: { denyHosts: ["prod.example.com"] } }, { DENY_HOSTS: "live.example.com, pay.example.com" });
+  expect(cfg.guard.denyHosts).toEqual(["prod.example.com", "live.example.com", "pay.example.com"]);
 });
 
 it("reads the ablation list from the environment, empty string meaning none", () => {

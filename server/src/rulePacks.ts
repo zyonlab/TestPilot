@@ -4,7 +4,7 @@ import { runLedger } from "./runService.js";
 import { LedgerError } from "./runLedger.js";
 
 /**
- * 项目级的产品规则包（docs/v3/24 §19）。
+ * 项目级的产品规则包（docs/v3/history/24 §19）。
  *
  * 在这之前规则包**没有任何管理**：每次新建运行在表单里贴一份 JSON，存进那次运行的账本
  * （`knowledge/rulepack/<id>`），跨运行不复用、列不出来、改不了、也比不了两版的差异。
@@ -23,6 +23,15 @@ export interface RulePackVersion {
   hash: string;
   createdAt: string;
   counts: { modules: number; features: number; rules: number; targets: number };
+  /**
+   * 这一版现在还过得了校验吗。
+   *
+   * 2026-09-16：schema 收紧（版本号要能拼进 charter 的 id）之后，我自己早先存的两版
+   * 带 `+` 的包读不出来了——而列表只读行、不校验，于是它们照样列在界面上，
+   * 选中之后要等到建运行那一刻才 400。**列表就该说清哪一版已经不能用了。**
+   */
+  valid: boolean;
+  invalidReason?: string;
 }
 
 function table() {
@@ -33,14 +42,19 @@ function table() {
   return db;
 }
 const countsOf = (p: ProductRulePack) => ({ modules: p.modules.length, features: p.features.length, rules: p.rules.length, targets: p.targets.length });
-const rowToVersion = (r: { id: string; projectId: string; packId: string; version: string; hash: string; json: string; createdAt: string }): RulePackVersion =>
+const rowToVersion = (r: { id: string; projectId: string; packId: string; version: string; hash: string; json: string; createdAt: string }): Omit<RulePackVersion, "valid"> =>
   ({ id: r.id, projectId: r.projectId, packId: r.packId, version: r.version, hash: r.hash, createdAt: r.createdAt,
      counts: countsOf(JSON.parse(r.json) as ProductRulePack) });
 
 export function listRulePacks(projectId: string): Array<RulePackVersion & { usedByRuns: string[] }> {
   const rows = table().prepare("SELECT * FROM rule_packs WHERE projectId=? ORDER BY createdAt DESC").all(projectId) as never[];
   const used = usageByHash(projectId);
-  return (rows as Array<Parameters<typeof rowToVersion>[0]>).map((r) => ({ ...rowToVersion(r), usedByRuns: used.get(r.hash) ?? [] }));
+  return (rows as Array<Parameters<typeof rowToVersion>[0]>).map((r) => {
+    // 校验放在这里而不是只在建运行时：早先存下、后来被 schema 收紧判为无效的版本，要在列表上就看得出来。
+    const v = validateRulePack(JSON.parse(r.json));
+    return { ...rowToVersion(r), usedByRuns: used.get(r.hash) ?? [],
+      valid: v.ok, ...(v.ok ? {} : { invalidReason: v.errors.slice(0, 2).map((e) => `${e.code}@${e.jsonPointer}`).join("; ") }) };
+  });
 }
 
 /** 哪一版被哪些运行用过。运行里那条 `knowledge/rulepack/*` 修订记着哈希，从那儿反查。 */
@@ -74,11 +88,13 @@ export function saveRulePack(projectId: string, raw: unknown): RulePackVersion &
   if (!v.ok) throw new LedgerError(400, `invalid_rule_pack:${JSON.stringify(v.errors.slice(0, 8))}`);
   const existing = table().prepare("SELECT * FROM rule_packs WHERE projectId=? AND packId=? AND hash=?")
     .get(projectId, v.pack.id, v.hash) as Parameters<typeof rowToVersion>[0] | undefined;
-  if (existing) return { ...rowToVersion(existing), created: false };
-  const row = { id: `rp-${v.hash.slice(0, 12)}`, projectId, packId: v.pack.id, version: v.pack.version,
+  // 走到这里说明 validateRulePack 已经过了，所以这一版按定义就是合法的。
+  if (existing) return { ...rowToVersion(existing), valid: true, created: false };
+  // id 带上项目：同一份包装进两个项目是两行。
+  const row = { id: `rp-${projectId}-${v.hash.slice(0, 12)}`, projectId, packId: v.pack.id, version: v.pack.version,
     hash: v.hash, json: JSON.stringify(v.pack), createdAt: new Date().toISOString() };
   table().prepare("INSERT INTO rule_packs (id,projectId,packId,version,hash,json,createdAt) VALUES (@id,@projectId,@packId,@version,@hash,@json,@createdAt)").run(row);
-  return { ...rowToVersion(row), created: true };
+  return { ...rowToVersion(row), valid: true, created: true };
 }
 
 /** 删一版。**用过的那一版不许删**：运行的回执指着它，删了之后那次运行就说不清自己按什么跑的。 */
@@ -91,4 +107,33 @@ export function deleteRulePack(projectId: string, hash: string): void {
 export function currentRulePack(projectId: string): ProductRulePack | undefined {
   const row = table().prepare("SELECT json FROM rule_packs WHERE projectId=? ORDER BY createdAt DESC LIMIT 1").get(projectId) as { json: string } | undefined;
   return row ? (JSON.parse(row.json) as ProductRulePack) : undefined;
+}
+
+/**
+ * 这次运行**绑定的**规则包（账本里最新那条 `knowledge/rulepack/*`）；没绑定返回 undefined。
+ * 执行守卫、门禁、验收准则索引从这里取这个产品特有的词——不是从代码里。
+ */
+/**
+ * 把一份规则包冻结绑定进这次运行（`knowledge/rulepack/<id>`）。Web 建的运行和宿主登记的运行走同一个写法，
+ * 否则宿主运行的 `boundRulePack` 是空的，项目的行业词表到不了验收索引、门禁与守卫。
+ */
+export function bindRulePack(runId: string, projectId: string, pack: ProductRulePack, hash: string, principal: { kind: "system" | "agent"; id: string }): void {
+  runLedger().putRevision({ projectId, runId, name: `knowledge/rulepack/${pack.id}`, kind: "report",
+    content: { name: `rulepack/${pack.id}`, roles: ["source", "stories", "cases", "gate"], trust: "user-provided", executable: false, rulePack: pack, rulePackHash: hash } }, principal as never);
+}
+
+/** 项目当前那份规则包绑定进运行；项目没有就什么都不写。 */
+export function bindCurrentRulePack(runId: string, projectId: string, principal: { kind: "system" | "agent"; id: string }): void {
+  const current = currentRulePack(projectId);
+  if (!current) return;
+  const v = validateRulePack(current);
+  if (v.ok) bindRulePack(runId, projectId, v.pack, v.hash, principal);
+}
+
+export function boundRulePack(runId: string, projectId: string): ProductRulePack | undefined {
+  const l = runLedger();
+  const rev = l.listRevisions(projectId, runId).filter((r) => r.name.startsWith("knowledge/rulepack/")).sort((a, b) => a.revision - b.revision).at(-1);
+  if (!rev) return undefined;
+  const v = validateRulePack((l.readRevision(rev.id, projectId).content as { rulePack?: unknown }).rulePack);
+  return v.ok ? v.pack : undefined;
 }

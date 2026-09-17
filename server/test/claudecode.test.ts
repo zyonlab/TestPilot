@@ -51,8 +51,10 @@ describe("claudecode 接缝", () => {
 });
 
 describe("运行时分发", () => {
-  it("不给就是 penguin；不认识的名字报错而不是退回", () => {
-    expect(getRuntime(undefined).name).toBe("penguin");
+  it("不给就是默认运行时（不设 TP_AGENT_RUNTIME 时是 Claude Code）；不认识的名字报错而不是退回", () => {
+    const saved = process.env.TP_AGENT_RUNTIME;
+    delete process.env.TP_AGENT_RUNTIME;
+    try { expect(getRuntime(undefined).name).toBe("claude-code"); } finally { if (saved !== undefined) process.env.TP_AGENT_RUNTIME = saved; }
     expect(getRuntime("claude-code").name).toBe("claude-code");
     expect(() => getRuntime("gemini")).toThrow(/未知的运行时/);
     expect(isRuntimeName("codex")).toBe(true);
@@ -61,15 +63,15 @@ describe("运行时分发", () => {
 
 describe("runMessage（07 T-12）", () => {
   it("消融开关写进起跑那句话，否则两臂一模一样", () => {
-    const m = runMessage({ materialsDir: "/m", outDir: "/o", limit: 3, ablate: ["domain-perp"], generationMode: "pipeline" });
-    expect(m).toContain("`ablate` = [\"domain-perp\"]");
+    const m = runMessage({ materialsDir: "/m", outDir: "/o", limit: 3, ablate: ["domain-reference"], generationMode: "pipeline" });
+    expect(m).toContain("`ablate` = [\"domain-reference\"]");
     expect(runMessage({ materialsDir: "/m", outDir: "/o" })).not.toContain("ablate");
   });
 
   it("消融开关写进 .mcp.json 的 env（TP_ABLATE），空串即清掉", () => {
     const ws = mkdtempSync(join(tmpdir(), "tp-ablate-"));
-    writeMcpConfig(ws, { TP_ABLATE: "domain-perp" });
-    expect(JSON.parse(readFileSync(join(ws, ".mcp.json"), "utf8")).mcpServers.testpilot.env.TP_ABLATE).toBe("domain-perp");
+    writeMcpConfig(ws, { TP_ABLATE: "domain-reference" });
+    expect(JSON.parse(readFileSync(join(ws, ".mcp.json"), "utf8")).mcpServers.testpilot.env.TP_ABLATE).toBe("domain-reference");
     writeMcpConfig(ws, { TP_ABLATE: "" });
     expect(JSON.parse(readFileSync(join(ws, ".mcp.json"), "utf8")).mcpServers.testpilot.env.TP_ABLATE).toBe("");
   });

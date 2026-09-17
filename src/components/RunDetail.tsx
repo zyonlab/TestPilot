@@ -81,7 +81,7 @@ const PERF_LABELS: Record<string, string> = {
   domContentLoadedMs: "DCL",
   loadMs: "Load",
 };
-function PerfSection({ run }: { run: RunRecord }) {
+export function PerfSection({ run }: { run: RunRecord }) {
   const t = useT();
   const perf = run.perf;
   if (!perf || !perf.verdicts?.length) return null;
@@ -139,7 +139,7 @@ function PerfSection({ run }: { run: RunRecord }) {
 
 // Visual-baseline results for a run: per-step baseline|current|diff with mismatch %, and an
 //"Approve" that promotes the current image to the new baseline (accept the change).
-function VisualSection({ run }: { run: RunRecord }) {
+export function VisualSection({ run }: { run: RunRecord }) {
   const t = useT();
   const [approved, setApproved] = useState<Record<number, boolean>>({});
   const visual = run.visual ?? [];

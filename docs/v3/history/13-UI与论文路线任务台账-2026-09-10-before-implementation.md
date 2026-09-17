@@ -7,7 +7,7 @@
 2026-09-10：原型已改为在原有完整工作台上修缮，详见 [原型记录](15-原有工作台原型修缮记录.md)。这次是设计基线纠正与交互原型完善，下列 P 任务状态保持不变。
 
 ```sh
-node scripts/plan.mjs --doc docs/v3/13-UI与论文路线任务台账.md --next
+node scripts/plan.mjs --doc docs/v3/history/13-UI与论文路线任务台账.md --next
 ```
 
 ## 1. P0 · 恢复完整身份与审阅路径

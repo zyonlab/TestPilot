@@ -6,7 +6,7 @@ import { LedgerError } from "./runLedger.js";
 import type { Principal } from "@testpilot/harness-core/run-contracts";
 
 /**
- * `modules` 节点：产品模块树的提议、机检与冻结（docs/v3/24 §6、§7）。
+ * `modules` 节点：产品模块树的提议、机检与冻结（docs/v3/history/24 §6、§7）。
  *
  * 在此之前这条链路上**没有**模块规划：`buildProductModel` 里是 `modules: pack.modules`，
  * 树从规则包原样抄，模型一个字都没参与，于是它的质量从来没被量过——没有节点就没有产物，
@@ -83,7 +83,7 @@ function store() {
 
 function receiptOf(runId: string) {
   const row = store().db.prepare("SELECT json FROM run_stage_receipts WHERE runId=? AND stage='modules'").get(runId) as { json: string } | undefined;
-  return row ? (JSON.parse(row.json) as { revisionId: string; frozen?: boolean; findings?: number; frozenBy?: string; frozenAt?: string }) : undefined;
+  return row ? (JSON.parse(row.json) as { revisionId: string; frozen?: boolean; findings?: number; frozenBy?: string; frozenAt?: string; frozenNote?: string }) : undefined;
 }
 
 /**
@@ -172,7 +172,16 @@ export function writeModulePlan(runId: string, projectId: string, raw: unknown) 
  * warning 不拦冻结——机检判不了「切得对不对」，拦下去只会让人学会绕过它；
  * 但未处理的 warning 会随冻结一起记进回执，谁冻的、冻的时候还剩几条，都留痕。
  */
-export function freezeModulePlan(runId: string, projectId: string, actor: Principal) {
+/**
+ * 冻结这棵树。**只有人能按**，而「人」这一层在本机是免身份验证的（`reviewerPrincipal`），
+ * 于是账本里所有冻结都长得一样：`frozenBy: local-operator`。
+ *
+ * 2026-09-16 实测：Hyperliquid 那一跑的冻结是 Claude 按用户当轮授权代按的，而事后
+ * 从账本上**看不出人按还是代理代按**——两者写进去的是同一行字。`note` 就是为这件事加的：
+ * 代按的人把「谁授权、代谁按」写进来，审计才追得回去。不写也能冻（本人按就是常态），
+ * 但写了就留得下。
+ */
+export function freezeModulePlan(runId: string, projectId: string, actor: Principal, note?: string) {
   if (actor.kind !== "human") throw new LedgerError(403, "module_plan_freeze_requires_human");
   const l = store();
   l.requireRun(runId, projectId);
@@ -182,7 +191,8 @@ export function freezeModulePlan(runId: string, projectId: string, actor: Princi
   const content = l.readRevision(r.revisionId, projectId).content as { findings?: PlanFinding[] };
   const open = (content.findings ?? []).filter((f) => f.severity !== "error");
   const value = { revisionId: r.revisionId, frozen: true, findings: (content.findings ?? []).length,
-    openFindings: open.length, frozenBy: actor.id, frozenAt: new Date().toISOString() };
+    openFindings: open.length, frozenBy: actor.id, frozenAt: new Date().toISOString(),
+    ...(note?.trim() ? { frozenNote: note.trim().slice(0, 2000) } : {}) };
   l.db.prepare("UPDATE run_stage_receipts SET json=? WHERE runId=? AND stage='modules'").run(JSON.stringify(value), runId);
   stageEvent(runId, projectId, "modules", "done", open.length ? `frozen with ${open.length} open findings` : undefined, r.revisionId);
   return { frozen: true, revisionId: r.revisionId, openFindings: open.length, openCodes: [...new Set(open.map((f) => f.code))] };
@@ -192,7 +202,10 @@ export function modulePlanState(runId: string, projectId: string) {
   const r = receiptOf(runId);
   if (!r) return { exists: false as const };
   const content = runLedger().readRevision(r.revisionId, projectId).content as ModulePlan & { findings?: PlanFinding[] };
+  // 谁按的、什么时候、代按的说明，一并回出去：界面与审计此前只看得到一个 frozen 布尔值。
   return { exists: true as const, frozen: !!r.frozen, revisionId: r.revisionId,
+    ...(r.frozenBy ? { frozenBy: r.frozenBy } : {}), ...(r.frozenAt ? { frozenAt: r.frozenAt } : {}),
+    ...(r.frozenNote ? { frozenNote: r.frozenNote } : {}),
     modules: content.modules.length, outOfScope: content.outOfScope?.length ?? 0, findings: content.findings ?? [] };
 }
 

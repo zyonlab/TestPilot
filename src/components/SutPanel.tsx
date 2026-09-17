@@ -28,6 +28,9 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
   /** 视口。空 = 沿用默认，不是 0。 */
   const [vpW, setVpW] = useState("");
   const [vpH, setVpH] = useState("");
+  /** 环境画像：前提名（逗号分隔）、默认注入钱包。 */
+  const [caps, setCaps] = useState("");
+  const [injectWallet, setInjectWallet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [log, setLog] = useState<string[]>([]);
@@ -41,6 +44,8 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
     setBaseUrl(e?.baseUrl ?? "");
     setVpW(e?.viewport?.width ? String(e.viewport.width) : "");
     setVpH(e?.viewport?.height ? String(e.viewport.height) : "");
+    setCaps((e?.capabilities ?? []).join(", "));
+    setInjectWallet(!!e?.injectWallet);
   }, [projectId]);
 
   useEffect(() => {
@@ -79,6 +84,8 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
           apiLogin: env.login?.apiLogin ?? null,
         },
         isDefault: env.isDefault,
+        capabilities: caps.split(/[,，\s]+/).map((c) => c.trim()).filter(Boolean),
+        injectWallet,
       });
       await load();
       onChanged?.();
@@ -186,6 +193,22 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
       </div>
       <p className="mt-1 text-[0.75rem] leading-relaxed text-muted-foreground">{t("sut.viewportWhy")}</p>
 
+      {/* 环境画像。三样都是这个被测对象的属性，由人决定，不从代码或聊天里来：
+          规则包目标的 requires 对照前提名；探索默认带不带钱包；能不能执行删除、支付这类不可逆步骤。
+          最后一项打勾要再确认一次，确认框里写明是哪个地址。 */}
+      <label htmlFor="sut-capabilities" className="mt-4 block text-[0.75rem] font-medium">{t("sut.capabilities")}</label>
+      <input
+        id="sut-capabilities"
+        className="mt-1 w-full rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[0.8125rem]"
+        placeholder="session"
+        value={caps}
+        onChange={(e) => setCaps(e.target.value)}
+      />
+      <p className="mt-1 text-[0.75rem] leading-relaxed text-muted-foreground">{t("sut.capabilitiesWhy")}</p>
+      <label className="mt-3 flex items-start gap-2 text-[0.8125rem]">
+        <input id="sut-inject-wallet" type="checkbox" className="mt-1" checked={injectWallet} onChange={(e) => setInjectWallet(e.target.checked)} />
+        <span><span className="font-medium">{t("sut.injectWallet")}</span><span className="mt-0.5 block text-[0.75rem] text-muted-foreground">{t("sut.injectWalletWhy")}</span></span>
+      </label>
       <h3 className="mt-5 text-[0.8125rem] font-semibold">{t("sut.carried")}</h3>
       <p className="mt-1 text-[0.75rem] leading-relaxed text-muted-foreground">{t("sut.carriedWhy")}</p>
       <table className="mt-2 w-full text-[0.8125rem]">

@@ -97,7 +97,7 @@ function checklistOf(dir: string): string[] {
       if (items.length) return items;
     }
   }
-  return ["删掉易变读数（时刻、资金费率、24h 量、倒计时）", "match 子句至少一个非空且能命中", "heldOut 标一半，留出的不参与调参"];
+  return ["删掉易变读数（时刻、计数、实时数值、倒计时）", "match 子句至少一个非空且能命中", "heldOut 标一半，留出的不参与调参"];
 }
 
 /**

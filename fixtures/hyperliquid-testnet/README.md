@@ -7,7 +7,7 @@ Binance demo 的会话导入、WAF、结算时点，都是 staging 那套老问�
 
 ## 这份基准量什么
 
-**30 条 P0 十分钟跑完**（`docs/v3/06-执行层降本.md`）。所以判据全部是 `kind: api`——去问
+**30 条 P0 十分钟跑完**（`docs/v3/history/06-执行层降本.md`）。所以判据全部是 `kind: api`——去问
 `https://api.hyperliquid-testnet.xyz/info`，不问模型：
 
 | 用例 | 接口 | 路径 | 判据 |
@@ -39,7 +39,7 @@ BingX 那次是劫持接口把账户**写**成确定的，这里是读接口把�
    把 USDC 划回永续（Unified 开着时这个动作被拒：`Action disabled when unified account is active`）。
    切成 Manual 之后再跑 Enable Trading 不会翻回去（实测一次）。
 2. **视口 1440×900。** 环境设置里改。窄视口下下单面板整块不渲染，用例会在「找不到 Size」上死，
-   而那不是产品的错（`docs/v3/00-架构.md §10` 在 Binance 上撞过同一件事）。
+   而那不是产品的错（`docs/v3/history/00-架构.md §10` 在 Binance 上撞过同一件事）。
 3. **新地址的一次性引导，和每条都要过的「登录态」。** 分清这两层（2026-09-07 实测）：
    * **按地址一次性**：条款弹窗（Terms of Use…两个复选框 + `Accept`）接受过一次后所有新浏览器都不再出现。
      新地址第一次用一个临时运行（`POST /api/run`，`injected: true`）点掉它。
@@ -85,4 +85,4 @@ node fixtures/hyperliquid-testnet/import.mjs --address $(cat server/.wallets/acc
 | 判据由机器判定的比例 | 100% | 100%（14 次运行全部 `decidedBy: machine`） |
 | 连续 5 次通过率、flake | flake ≤ 5% | 未量（只有两遍）；C 7/7，D 6/7（1 infra：Midscene 回放拿 undefined 坐标点鼠标） |
 
-写进 `docs/v3/06-执行层降本.md` 的实测表，不要只留在这里。
+写进 `docs/v3/history/06-执行层降本.md` 的实测表，不要只留在这里。

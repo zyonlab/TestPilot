@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 /**
- * 项目级规则包（docs/v3/24 §19）：按内容哈希存版本、用过的不许删、新建运行默认用最新一版。
+ * 项目级规则包（docs/v3/history/24 §19）：按内容哈希存版本、用过的不许删、新建运行默认用最新一版。
  * 在这之前它只能在新建运行的表单里贴一次，躺在那次运行里——列不出、改不了、比不了。
  */
 let dir: string, project: string, packs: typeof import("../src/rulePacks.js"), db: typeof import("../src/db.js");
@@ -49,4 +49,42 @@ it("没用过的版本能删", () => {
   const before = packs.listRulePacks(project).length;
   packs.deleteRulePack(project, packs.listRulePacks(project)[0]!.hash);
   expect(packs.listRulePacks(project)).toHaveLength(before - 1);
+});
+
+/**
+ * 2026-09-15：宿主登记的运行也要绑定项目当前那份规则包。之前只有 Web 那条路绑定，
+ * 宿主运行的 `boundRulePack` 永远为空，项目的行业词表（actionVocabulary 等）到不了验收索引、门禁与守卫。
+ */
+it("宿主登记的运行冻结绑定项目当前那份规则包", async () => {
+  const service = await import("../src/runService.js");
+  const latest = packs.saveRulePack(project, { ...RAW, version: `${String(RAW.version)}-vocab`, actionVocabulary: ["结算"] });
+  const { runId } = service.registerHostRun(project, { runtime: "codex", externalId: "host-pack", idempotencyKey: "host-pack", materials: [{ name: "m.md", text: "# m\n\n## a\nx\n" }] });
+  const bound = packs.boundRulePack(runId, project);
+  expect(bound?.version).toBe(`${String(RAW.version)}-vocab`);
+  expect(bound?.actionVocabulary).toEqual(["结算"]);
+  expect(packs.listRulePacks(project).find((v) => v.hash === latest.hash)!.usedByRuns).toContain(runId);
+});
+
+/**
+ * 2026-09-16：schema 收紧（版本号要能拼进 charter 的 id）之后，早先存下的带 `+` 的版本读不出来了，
+ * 而列表只读行不校验，于是它们照样列在界面上，选中后要等到建运行那一刻才 400。列表就该说清。
+ */
+it("列表标出已经过不了校验的旧版本", () => {
+  const project2 = db.createProject("packs-legacy", "http://127.0.0.1:5391/").id;
+  packs.saveRulePack(project2, RAW);
+  // 绕过保存时的校验，直接写一行「历史遗留」的非法版本号，模拟收紧 schema 之前存下的数据。
+  const row = db.db.prepare("SELECT * FROM rule_packs WHERE projectId=?").get(project2) as Record<string, unknown>;
+  const legacy = JSON.parse(String(row.json)) as Record<string, unknown>;
+  legacy.version = `${String(RAW.version)}+legacy`;
+  db.db.prepare("INSERT INTO rule_packs (id,projectId,packId,version,hash,json,createdAt) VALUES (?,?,?,?,?,?,?)")
+    .run(`rp-${project2}-legacy`, project2, String(row.packId), String(legacy.version), `${"f".repeat(64)}`, JSON.stringify(legacy), new Date(Date.now() + 1000).toISOString());
+
+  const list = packs.listRulePacks(project2);
+  expect(list).toHaveLength(2);
+  const bad = list.find((v) => v.version.endsWith("+legacy"))!;
+  const good = list.find((v) => !v.version.endsWith("+legacy"))!;
+  expect(bad.valid).toBe(false);
+  expect(bad.invalidReason).toMatch(/version|invalid/i);
+  expect(good.valid).toBe(true);
+  expect(good.invalidReason).toBeUndefined();
 });

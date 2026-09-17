@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { locatorHints, pickLocator, locatorUsable } from "../src/exec/locators.js";
 
 /**
- * 定位提示表（docs/v3/23 F-15）：探索知道每个控件的选择器，用例只带文案。
+ * 定位提示表（docs/v3/history/23 F-15）：探索知道每个控件的选择器，用例只带文案。
  * 这张表把两者接起来，而选择器不进用例——用例仍然是端无关的。
  */
 const obs = (over: Record<string, unknown>) => ({

@@ -5,7 +5,7 @@
  * calibration endpoint. They must agree to the digit: a κ the desk shows and a κ the tool
  * reports are the same measurement of the same judge, or the number means nothing.
  *
- * Raw agreement overstates a judge by 33–41 points (docs/v3/00-架构.md §5), so `kappa` is
+ * Raw agreement overstates a judge by 33–41 points (docs/v3/history/00-架构.md §5), so `kappa` is
  * the headline and `agreement` is reported only for context.
  *
  * `pe === 1` leaves κ undefined in the textbook sense: both sides put every item in the same

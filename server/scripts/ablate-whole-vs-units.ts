@@ -5,7 +5,7 @@
  * 全部故事），单元臂一次只拿一个单元的范围。材料、模型、温度、契约措辞全一样。
  *
  * 它要回答的是这个 loop 的核心主张——「拆了之后产物更好」。此前所有对比都是 loop 对 loop，
- * 这句话一次都没被验证过（docs/v3/23 §19）。
+ * 这句话一次都没被验证过（docs/v3/history/23 §19）。
  */
 import { config } from "dotenv";
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";

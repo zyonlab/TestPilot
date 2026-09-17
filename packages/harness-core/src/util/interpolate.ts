@@ -50,6 +50,26 @@ export function resolveMap(
   return out;
 }
 
+/**
+ * 这段文字引用了哪些 `${env.X}` / `${secret.X}`。
+ *
+ * `resolveText` 对不认识的键**原样留着**——留着才看得出它没被解析。但没人查的话，
+ * 一条引用了不存在变量的步骤会被照着字面送去执行：2026-09-16 实测，「打开 ${env.BASE_URL}/login」
+ * 就这么原样进了浏览器动作规划。要在跑之前查出来，先得数得出它引用了什么。
+ */
+export function referencedKeys(text: string): { env: string[]; secret: string[] } {
+  const env = new Set<string>(), secret = new Set<string>();
+  let m: RegExpExecArray | null;
+  PLACEHOLDER.lastIndex = 0;
+  while ((m = PLACEHOLDER.exec(text))) {
+    const key = m[2];
+    if (!key) continue;
+    if (m[1] === "secret") secret.add(key);
+    else if (m[1] === "env") env.add(key);
+  }
+  return { env: [...env], secret: [...secret] };
+}
+
 // True if the template references a secret placeholder (so we know to keep the
 // template out of any resolved log line).
 export function hasSecretRef(text: string): boolean {

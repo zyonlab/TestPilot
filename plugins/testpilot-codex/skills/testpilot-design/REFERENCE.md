@@ -34,26 +34,26 @@
 }
 ```
 
-## v2 设计证据（2026-09-11，docs/v3/21 §2 与 §5）
+## v2 设计证据（2026-09-11，docs/v3/history/21 §2 与 §5）
 
 下面八个字段**都是可选的**，一个默认值都没有——「没给证据」和「给了空证据」在归档里必须分得开。
 但只要给了，服务端就会确定性地核对；对不上直接拒绝写入，并指出是哪一条、哪个字段路径。
 
 ```json
 {
-  "acRefs": ["AC-RO-PARTIAL"],
-  "conditionRefs": ["COND-REDUCE-LONG"],
+  "acRefs": ["AC-TITLE-MAX"],
+  "conditionRefs": ["COND-SIGNED-IN"],
   "scenarioType": "positive",
   "design": {
     "technique": "boundary",
-    "ruleId": "R-SIZE-PRECISION", "dimension": "数量", "unit": "BTC",
-    "bound": "0.001", "inclusivity": "inclusive", "step": "0.001",
-    "points": [{ "at": "below", "value": "0.0009" }, { "at": "at", "value": "0.001" }]
+    "ruleId": "R-TITLE-LENGTH", "dimension": "标题长度", "unit": "字符",
+    "bound": "250", "inclusivity": "inclusive", "step": "1",
+    "points": [{ "at": "at", "value": "250" }, { "at": "above", "value": "251" }]
   },
-  "risk": { "impact": "funds-and-exposure", "reason": "数量取整错误会改变实际敞口", "ruleRefs": ["R-SIZE-PRECISION"] },
-  "testData": { "fixtureRef": "perp-deterministic-v1", "values": [{ "name": "size", "value": "0.001", "unit": "BTC", "source": "R-SIZE-PRECISION" }] },
-  "assertions": [{ "id": "A-SIZE", "statement": "仓位表里 BTC 那一行的数量列显示 0.001", "ruleRefs": ["R-SIZE-PRECISION"], "oracle": { "kind": "text", "value": "0.001" } }],
-  "readiness": { "design": "candidate", "execution": "requires-fixture", "reason": "缺可控持仓 fixture" }
+  "risk": { "impact": "data-integrity", "reason": "超长标题被静默截断会丢掉用户输入", "ruleRefs": ["R-TITLE-LENGTH"] },
+  "testData": { "fixtureRef": "seeded-project-v1", "values": [{ "name": "title", "value": "250 个字符的标题", "unit": "字符", "source": "R-TITLE-LENGTH" }] },
+  "assertions": [{ "id": "A-TITLE", "statement": "任务列表里新建的那一行显示完整的 250 个字符标题，结尾没有被截掉", "ruleRefs": ["R-TITLE-LENGTH"], "oracle": { "kind": "text", "value": "标题末尾-250" } }],
+  "readiness": { "design": "candidate", "execution": "requires-fixture", "reason": "缺一个预置好的项目 fixture" }
 }
 ```
 
@@ -69,7 +69,7 @@
 | `design`（decision-table） | `assignment` 的键必须**正好**是自己列出的 `conditionIds`：多一个、少一个都会被拒。一张有空格的判定表说不出这一行测的是什么 |
 | `design`（state-transition） | `transitionIds` 必须也出现在 `covers` 里，两处说的是同一批边 |
 | `risk` | 有 `risk` 就必须有 `priority`——理由不能解释一个不存在的判断 |
-| `assertions` | id 不重复；声称 tier 1/2 时，断言自己或用例本身至少有一个判据 |
+| `assertions` | id 不重复；声称 tier 1/2 时，断言自己或用例本身至少有一个判据；断言默认在**最后一步之后**判，描述途经那一屏的写 `afterStep`（从 1 数，≤ 步骤数）；「开放问题 / 待确认」不是断言，写进 `readiness.reason` |
 | `readiness` | `execution` 不是 `ready` 时必须写 `reason`，否则它和「忘了填」分不开 |
 
 **一个追不回来源的边界、步长或常数，不要写进用例。** 宁可留空——服务端对「缺字段」和「编造的字段」处理方式不同，
@@ -88,7 +88,7 @@
 | `cases[].tier` | 只能是 1 / 2 / 3 |
 | `cases[].key` | 非空 |
 | `cases[].postSteps` | 字符串数组（可以是空数组）；每个元素非空 |
-| `cases[].oracle` | 可选；给的话必须有 `kind` 和 `value`，`kind` 是那五种之一 |
+| `cases[].oracle` | 可选；`kind` 是 `REFERENCE-oracle.md` 列的那几种之一。程序能判的几种要有 `value`；tier 3 写 `none`，生成内容写 `judge`（带 `criteria`，没有 `value`） |
 | `cases[].priority` | 可选，但**应该每条都给**；只能是 `P0` / `P1` / `P2` |
 | `cases[].covers` | 字符串数组（可以是空数组） |
 | `cases[].sourceRefs` | 字符串数组，**每条至少一个**，每个必须是这次运行里 `retrieve_spec` 返回过的段 id。形状层允许空数组（A 臂旧运行兼容），但 hook 会拒空的与对不上的 |

@@ -19,6 +19,8 @@ export type MachineOracle =
   | { kind: "url"; value: string }
   | { kind: "count"; value: string; op?: "eq" | "gte" | "lte"; n: number }
   | { kind: "delta"; value: string; direction: "increased" | "decreased" | "unchanged"; by?: number }
+  /** 生成内容的判据：模型按几句是/否条件判 samples 次，至少 minPass 次全部成立才过（tier 3）。 */
+  | { kind: "judge"; criteria: string[]; samples?: number; minPass?: number }
   | {
       /** 问接口而不是看屏幕。交易页的真值（持仓/挂单/余额）在接口里是精确的数。 */
       kind: "api";

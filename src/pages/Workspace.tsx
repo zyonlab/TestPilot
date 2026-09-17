@@ -735,7 +735,7 @@ function RuntimeRail({
 /**
  * 画布这一屏——`?open=canvas` 落到搬迁空态，画布本身不再挂载。
  *
- * 理由是 `docs/v3/00-架构.md` §1/§2 的那一刀：工作流的编排与运行整个换成
+ * 理由是 `docs/v3/history/00-架构.md` §1/§2 的那一刀：工作流的编排与运行整个换成
  * PenguinHarness——session、events、trace 都在 `:7364`，而画布画的正是这些。
  * §6 也点名了这一条：US-14（画布）是 22 条用户故事里**变差的两条之一**，
  * 补回的方式是 `run_pipeline` emit 节点事件 + `{stopAfter, from}` 参数，

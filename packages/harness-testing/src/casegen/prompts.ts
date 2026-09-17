@@ -98,9 +98,14 @@ export const CASES_STABLE = [
   "  Quote the literal EXACTLY as the specification writes it. If the outcome cannot be put",
   "  in any of these forms, then it is tier 3 — say so and leave `oracle` out. Claiming",
   "  tier 1 without an oracle is the one thing that makes the label worthless.",
-  "- `oracle` is ALWAYS present as an object. For tier 3 write {\"kind\":\"none\"}. Fields that do not apply",
-  "  to the chosen kind are filled with placeholders: \"-\" for strings, \"GET\" for method, \"eq\" for op, 0 for",
-  "  numbers; the harness strips them. Never leave a field out.",
+  "- `oracle` is ALWAYS present as an object. For tier 3 write {\"kind\":\"none\"} — unless the outcome is",
+  "  generated content (an image, a summary, a caption, a translation) that differs on every run. Then write",
+  "  {\"kind\":\"judge\",\"criteria\":[\"<one yes/no statement about the screen>\", ...],\"samples\":3,\"minPass\":2}:",
+  "  each criterion is ONE statement a reader can check by looking (\"the image shows a cat\", \"the title is at",
+  "  most 20 characters\"), never \"looks good\"; the harness asks the model `samples` times and passes when at",
+  "  least `minPass` samples hold every criterion. Fields that do not apply to the chosen kind are filled with",
+  "  placeholders: \"-\" for strings, \"GET\" for method, \"eq\" for op, 0 for numbers, [] for criteria; the",
+  "  harness strips them. Never leave a field out.",
   "- Steps are short, concrete, end-agnostic actions. No selectors, no page objects, no code.",
   "- Never put credentials in a step. Use ${env.NAME} and ${secret.NAME} placeholders.",
   "- `key` is a dedupe triple 'transition|parameters|assertion', lowercase, no spaces.",
@@ -262,44 +267,32 @@ export const ORACLE_STRICT = [
   "that passes against the backend while the screen shows something else has verified the wrong thing.",
   "State that the UI owns: after an action, the record it created appears in the table that lists such records,",
   "with the values the user typed. Assert THAT: `count` over the row label, `text` over the value in the row,",
-  "`delta` over a number that must move. Where a number is volatile (price, funding, countdown, 24h volume),",
+  "`delta` over a number that must move. Where a number is volatile (a count, a countdown, a live price, a timestamp),",
   "assert existence or a relation between two readings — never a pinned value.",
 ].join("\n");
 
 /**
- * Domain invariants of a perpetual-futures trading front-end (07 T-10). Optional on purpose — it is the
- * "domain REFERENCE" arm of a paired evaluation: with it, cases can contradict the product; without it, they
- * can only notice that it changed. Skill-world equivalent: `testpilot-design/REFERENCE-domain-perp.md` present or not.
- * Conditional in its own text, so a login page does not get perp rules pushed at it.
+ * 领域参考：**这一次运行绑定的那份**，由项目提供，不是代码里的一段。
+ *
+ * 此前这里是一段写死的永续合约不变量，进程内 design.cases 与 MCP run_pipeline 对每个产品都默认发送——
+ * Vikunja 那样的待办应用也收到 26 行合约散文。2026-09-15 起它是项目数据：用户在「领域参考」页聊出来
+ * 或上传，运行开始时冻结绑定；没绑定就没有这一段。原文现在是评测数据集
+ * `benchmark/hyperliquid-testnet/domain-reference.md`。
+ * 这里只留**怎么用**一份领域参考的通用说明，内容一个字都不属于某个领域。
  */
-export const DOMAIN_PERP = [
-  "",
-  "IF THE PRODUCT UNDER TEST IS A PERPETUAL-FUTURES TRADING FRONT-END, these invariants are what a case can",
-  "contradict. Each one names the check; write the oracle against what the front-end itself shows — the row that",
-  "appears, the value in it, the refusal text — never against the exchange's own API. Apply only rules supported",
-  "by this product/version specification; missing venue rules are unobservable, never invented:",
-  "- Resolve the venue lot size and documented UI normalization first. Only a product that explicitly TRUNCATES",
-  "  0.0016 at step 0.001 must place 0.001. Rejection is also valid for other venues; never infer normalization from decimal limits.",
-  "- Price is aligned to the tick size; a limit price outside the exchange's band around the reference price is",
-  "  refused before it reaches the book. Oracle: the refusal text the front-end shows, quoted exactly.",
-  "- Max leverage falls with notional value (tiers); the leverage the account ends up with is what the position",
-  "  row shows. Oracle: the leverage badge / the position row's leverage cell reads the chosen value.",
-  "- Switching isolated/cross recomputes available balance and liquidation price — assert the MODE the panel now",
-  "  shows, not the numbers, which move with the market.",
-  "- A take-profit trigger sits above the entry for a long and below for a short; stop-loss the other way.",
-  "  Oracle: after placing, a row for that trigger order appears in the open-orders table naming that market.",
-  "- Closing a position removes it: after Market Close the positions table no longer lists that market (the empty",
-  "  state text appears when it was the only one).",
-  "- An order larger than available margin is refused: the front-end shows its refusal, and no new row appears in",
-  "  the open-orders table (tier 2: the row count is unchanged).",
-  "- Funding rate, countdown, 24h volume, mark/oracle price are VOLATILE readings: never pin them in an",
-  "  assertion. Assert that the field exists, or assert a relation, never a value.",
-  "- After a disconnect/reconnect the open-orders table must still list the same rows it listed before.",
-  "Assertions about money or position state are made on the table that displays them, with the identifiers the",
-  "user chose (market, price, size) — so a reader can reproduce the check by looking at the screen.",
-  "Use decimal strings for financial values, explicit base/quote units, uniquely selected coin/order IDs, fresh state and reset preconditions.",
-  "Mode existence does not prove balance recomputation, and order existence does not prove trigger price or UI/API equality. Split these obligations or report unobservable.",
-].join("\n");
+export function domainReferenceBlock(text: string): string {
+  if (!text.trim()) return "";
+  return [
+    "",
+    "DOMAIN REFERENCE for this product (supplied by the project, not by the harness). It lists invariants a case",
+    "can contradict. Apply only what this product and version actually supports; anything the reference marks as a",
+    "hypothesis may only become an open question, never a failing assertion. Write every oracle against what the",
+    "front-end itself shows — the row that appears, the value in it, the refusal text — never against the product's API.",
+    "--- reference begins ---",
+    text.trim(),
+    "--- reference ends ---",
+  ].join("\n");
+}
 
 /**
  * Language: the artifact is read and maintained by the same people who wrote the spec, so
@@ -484,7 +477,7 @@ export const CASES_SCHEMA = {
                * text 类 oracle 带着 `"url":"-"` 之类的占位符回来，`casegen/normalizeOracle.ts` 在 zod 之前剥掉。
                * tier 3 用 `kind: "none"`，剥掉后等于没有 oracle。
                */
-              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "none"] },
+              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "judge", "none"] },
               value: { type: "string" },
               op: { type: "string", enum: ["eq", "neq", "gte", "lte", "exists", "absent", "increased", "decreased", "unchanged"] },
               n: { type: "integer" },
@@ -496,10 +489,14 @@ export const CASES_SCHEMA = {
               body: { type: "string" },
               path: { type: "string" },
               settleMs: { type: "integer" },
+              // judge 专用（生成出来的内容）：几句是/否条件、问几次、至少几次全部成立。不适用时填 [] / 0。
+              criteria: { type: "array", items: { type: "string" } },
+              samples: { type: "integer" },
+              minPass: { type: "integer" },
               unit: { type: "object", properties: { path: { type: "string" }, value: { type: "string" } }, required: ["path", "value"], additionalProperties: false },
               freshness: { type: "object", properties: { timestampPath: { type: "string" }, maxAgeMs: { type: "integer" } }, required: ["timestampPath", "maxAgeMs"], additionalProperties: false },
             },
-            required: ["kind", "value", "url", "method", "path", "op", "settleMs"],
+            required: ["kind", "value", "url", "method", "path", "op", "settleMs", "criteria", "samples", "minPass"],
           },
           key: { type: "string", minLength: 1 },
           // 没写进 schema 的字段模型产不出来——`covers` 是结构覆盖率的全部来源。
@@ -619,13 +616,13 @@ export const COMPOSE_STABLE = [
   // 两条"规则"，用例跟着断言它们——下一次跑必然失败，而门禁给了满分。
   // 上面那三条（逐字引用、近似会变成假失败、把现状写成规则）合起来正是在鼓励这件事，
   // 所以必须有一条反向约束。
-  "- **A reading is data, not behaviour.** Prices, countdowns, funding rates, balances,",
+  "- **A reading is data, not behaviour.** Counts, countdowns, live prices, balances,",
   "  volumes, timestamps — anything that changes on its own between two visits — must never",
   "  become a rule about its value. You may write that the field exists, where it sits, what",
   "  it is expressed in, and what it changes with. You may not write that it equals what it",
   "  happened to say when the material was captured.",
-  "  Wrong: \"the entry page shows 0.01000%\" / \"Countdown reads 05:40:16\".",
-  "  Right: \"the entry page shows a funding rate and the countdown to the next settlement\".",
+  "  Wrong: \"the overview shows 6 open tasks\" / \"Updated 3 minutes ago\".",
+  "  Right: \"the overview shows how many tasks are open and when the list was last updated\".",
   "  If the material marks a fragment as volatile, treat that marking as binding.",
 ].join("\n");
 

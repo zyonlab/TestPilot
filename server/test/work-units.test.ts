@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 /**
- * 工作单元循环（docs/v3/22）：拆分由服务端按产品模型做，规划器一次只领一个单元，
+ * 工作单元循环（docs/v3/history/22）：拆分由服务端按产品模型做，规划器一次只领一个单元，
  * 校验只针对该单元的范围，全部完成后由代码合并。真实账本、临时数据目录、不调模型。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"), db: typeof import("../src/db.js"),
@@ -212,7 +212,7 @@ it("没开 workUnits 的 run 照旧整份写入，不受影响", () => {
 });
 
 /**
- * 2026-09-11 第二轮实测暴露的范围缺陷（docs/v3/23 的 F-7）。
+ * 2026-09-11 第二轮实测暴露的范围缺陷（docs/v3/history/23 的 F-7）。
  */
 it("故事自己声明的规则也进用例单元的范围——featureRefs 推不出来的那条不该被判越界", () => {
   const { runId, ref } = newRun("scope-rulerefs");
@@ -260,7 +260,7 @@ it("整份导入故事的 run 在 stories 节点没有单元可领，用例单�
     materials: [{ name: "m.md", text: "面板有 Cross 与 Isolated。" }], importStories: stories })).rejects.toThrow(/imported_stories_require_work_units/);
 });
 
-/** 门禁 → 规划器的修复回路（docs/v3/23 F-11）与单元重试上限（F-8）。 */
+/** 门禁 → 规划器的修复回路（docs/v3/history/23 F-11）与单元重试上限（F-8）。 */
 it("门禁不通过时，被扣分的用例所在的单元重新打开，并带着门禁的话回来", () => {
   const { runId, ref } = newRun("repair-loop");
   for (let guard = 0; ; guard++) {
@@ -317,7 +317,7 @@ it("同一个单元最多重来 5 次，之后交给人——不再无限发回"
 });
 
 /**
- * `modules` 节点和单元循环的接缝（docs/v3/24 §6）。
+ * `modules` 节点和单元循环的接缝（docs/v3/history/24 §6）。
  * 冻结过的树决定单元怎么切；没冻结的提议一点作用都没有。
  */
 it("冻结过的模块树压过规则包里那一棵：单元按新的根切", () => {
@@ -361,7 +361,7 @@ it("故事单元可以提议修树：单独落一份修订，但一个字都不�
 });
 
 /**
- * 判据里的出处要真的存在（docs/v3/24 §33）。
+ * 判据里的出处要真的存在（docs/v3/history/24 §33）。
  *
  * 契约要求每条判据以「（依据 file.md#N）」收尾，"说不出出处的判据是猜的"，
  * 而服务端只核对模块的 evidence，不核对故事判据里的那个 N。
@@ -388,4 +388,33 @@ it("判据引了材料里不存在的段 → 这一单元打回", () => {
   units.claimUnit(runId, project, { node: "stories" });
   const ok = units.writeUnit(runId, project, { unitId: c.unit!.unitId, content: story("前置：无 / 触发：点 / 结果：变（依据 sections.md#2）") }) as { status: string };
   expect(ok.status).toBe("validated");
+});
+
+/**
+ * 2026-09-16：40 个单元的 claim 返回合计 110 万字符，其中领域参考 40 次完全相同、
+ * storyIndex 只有两种取值、角色与词表各只有一种——整跑级事实被逐单元重发了 39 遍，
+ * 而每一轮都算进 cache_read（那一跑 7,780 万 token 缓存读、$36，output 只有 3,200）。
+ * 它们现在只在 load_run_instructions 发一次。
+ */
+it("claim_unit 不重发整跑级材料，load_run_instructions 发一次", () => {
+  const { runId } = newRun("slim-claim");
+  // newRun 内部已经调过一次 load_run_instructions；它幂等，第二次返回同一份回执。
+  const instructions = stages.loadRunInstructions(runId, project) as { runScope?: Record<string, unknown> };
+  expect(instructions.runScope).toBeTruthy();
+  const scope = instructions.runScope!;
+  // 这份夹具本来就没有领域参考、角色与词表，所以只验形状：字段在、类型对。
+  expect(typeof scope.domainReference).toBe("string");
+  for (const arrayField of ["actionVocabulary", "volatileReadings", "roles"]) expect(Array.isArray(scope[arrayField])).toBe(true);
+
+  const claimed = units.claimUnit(runId, project, { node: "stories" }) as { materials?: Record<string, unknown>; runScope?: string };
+  // 只剔大的：领域参考全文占被剔总量的 91.5%，它整跑发一次就够。
+  for (const gone of ["domainReference", "productModelRevision"]) expect(claimed.materials).not.toHaveProperty(gone);
+  /*
+   * 词表必须留在单元材料里。2026-09-16 的 A/B 把它一起剔掉过，同项目同模块树下
+   * 动作型验收准则从 64.3% 掉到 37.7%、`story_has_no_actionable_criterion` 从 0 变 5：
+   * 词表既是判定动作型的尺子，也是模型写单元时眼前唯一的动词来源。它只有 46 字符。
+   */
+  for (const kept of ["features", "rules", "modules", "actionVocabulary", "volatileReadings", "roles", "rulePack"])
+    expect(claimed.materials).toHaveProperty(kept);
+  expect(claimed.runScope).toMatch(/load_run_instructions/);
 });

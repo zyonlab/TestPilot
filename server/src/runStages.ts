@@ -1,3 +1,5 @@
+import { boundRulePack } from "./rulePacks.js";
+import { boundDomainReference } from "./domainReferences.js";
 import { requireStageStarted } from './workflowControls.js';
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -15,7 +17,12 @@ import { frozenModules } from './moduleStage.js';
 import { checkModulePlan } from "@testpilot/harness-testing/domain";
 import { acceptanceIndex, checkStories } from "./acceptanceIndex.js";
 
-const policy = Object.freeze({ version: "design-gate-v1", minGateScore: 0.6, minNegativeRatio: 0.3 });
+/**
+ * v2（2026-09-15）：分数从「没被点名的用例占比」变成它 × 「有人真做了的动作型准则占比」。
+ * 算法变了而阈值没变，所以版本号必须跳——v1 的 0.8 和 v2 的 0.8 不是同一把尺子量出来的。
+ * 已收尾的运行不受影响（finalizeRun 不重判）；门禁过了但还没收尾的，收尾时会要求重跑门禁。
+ */
+const policy = Object.freeze({ version: "design-gate-v2", minGateScore: 0.6, minNegativeRatio: 0.3 });
 type Stage = "instructions" | "stories" | "cases" | "gate" | "finalize";
 const principal = { kind: "system" as const, id: "stage-validator" };
 function store() {
@@ -90,7 +97,7 @@ function verifyCases(runId: string, projectId: string, content: unknown) {
    * 只关一边的话，换条路写进来的用例照样可以自己编一条验收准则——2026-09-13 实测 85 条里
    * 21 条就是这么来的。旧写法（逐字的 Given/When/Then 原文）仍然认，认不出来的才算改写。
    */
-  const entries = acceptanceIndex(bundle.stories);
+  const entries = acceptanceIndex(bundle.stories, boundRulePack(runId, projectId)?.actionVocabulary);
   const known = new Set(entries.map(e => e.id));
   const norm = (x: string) => x.replace(/[\s“”"'（）()、,，。.]/g, "");
   const bad = bundle.cases.flatMap((c, i) => (c.acRefs ?? []).map((r, j) => ({ c, i, j, r }))
@@ -103,6 +110,25 @@ function verifyCases(runId: string, projectId: string, content: unknown) {
 }
 
 /** Serving these bytes proves delivery to the host context, not attention or obedience. */
+/**
+ * 整跑级材料：领域参考、行业词表、易变读数、角色、规则包摘要。
+ * 它们不随单元变化，所以不该出现在每个 `claim_unit` 的返回里（见下面的注释）。
+ */
+export function runScopeMaterials(runId: string, projectId: string) {
+  const pack = boundRulePack(runId, projectId);
+  // 用本文件的 store()：workUnits 已经反向 import 了 runStages，引它的 latestByName 会成环。
+  const l = store();
+  const modelRev = l.listRevisions(projectId, runId).filter((r) => r.name === "product/model-candidate").sort((x, y) => x.revision - y.revision).at(-1);
+  const model = modelRev ? (l.readRevision(modelRev.id, projectId).content as { roles?: unknown[] }) : undefined;
+  return {
+    domainReference: boundDomainReference(runId, projectId),
+    actionVocabulary: pack?.actionVocabulary ?? [],
+    volatileReadings: pack?.volatileReadings ?? [],
+    roles: model?.roles ?? [],
+    ...(pack ? { rulePack: { id: pack.id, version: pack.version } } : {}),
+  };
+}
+
 export function loadRunInstructions(runId: string, projectId: string) {
   return store().db.transaction(() => {
     requireStageStarted(runId,projectId,"instructions");
@@ -117,7 +143,18 @@ export function loadRunInstructions(runId: string, projectId: string) {
     const loadedDigest = contentHash(canonicalJSON(files.map(({ path, hash }) => ({ path, hash }))));
     const memory = selectRunMemory(store(), runId, projectId, getProject(projectId)?.targetUrl ?? 'http://localhost',
       process.env.TP_MEMORY_ENABLED !== '0' && run.input.parameters?.memoryEnabled !== false && run.binding.contextPolicy?.memory !== 'off');
-    const content = { files, loadedDigest, memory, skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
+    /**
+      * **整跑不变的材料只发一次。**
+      *
+      * 2026-09-16 实测（Hyperliquid，40 个工作单元）：`claim_unit` 每次回 2.6 万字符，
+      * 其中 `domainReference` 40 次一模一样（16.8 万字符）、`roles` / `rulePack` / 词表
+      * 各只有一种取值——整跑级的事实被逐单元重发了 39 遍。而这些字符每一轮都算进
+      * `cache_read`：那一跑 7,780 万 token 的缓存读、$36，output 只有 3,200 token。
+      * 真正贵的不是「写用例」，是「把用过的东西一遍遍重读」。
+      *
+      * 它们挂在这里：这个工具幂等（第二次调用返回同一份回执），天然只发一次。
+      */
+    const content = { files, loadedDigest, memory, runScope: runScopeMaterials(runId, projectId), skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
     const r = save(runId, projectId, "instructions", content, memory.entries.map(e => e.sourceRevision));
     store().db.prepare("UPDATE wf_run_registrations SET bindingJson=? WHERE runId=?").run(canonicalJSON({ ...run.binding, loadedDigest, memoryDigest: memory.digest }), runId);
     return { ...content, revisionId: r.revisionId };
@@ -179,7 +216,7 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
        * 是不是同一棵。那样的话「人冻结了模块树」这件事在这条路上等于没发生过。
        *
        * 挂到树里没有的模块＝错，整份拒收；叶子没故事、扇出太低＝记 `report/module-fanout`
-       * 不拦——和合并那一侧同一个口径（docs/v3/24 §8.1）。
+       * 不拦——和合并那一侧同一个口径（docs/v3/history/24 §8.1）。
        */
       const frozen = frozenModules(runId, projectId);
       if (frozen?.length) {
@@ -228,10 +265,10 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
         if ((byId.get(id)!.subsumes ?? []).length) throw new LedgerError(400, `story_subsume_chain:${st.id}->${id}`);
         if (covers.has(st.id)) throw new LedgerError(400, `story_subsume_chain:${st.id}`);
       }
-      acceptance = checkStories(stories);
+      acceptance = checkStories(stories, boundRulePack(runId, projectId)?.actionVocabulary);
       const priorIndex = store().listRevisions(projectId, runId).filter(r => r.name === "report/acceptance-index").sort((a, b) => a.revision - b.revision).at(-1);
       store().putRevision({ runId, projectId, name: "report/acceptance-index", kind: "report",
-        content: { entries: acceptanceIndex(stories), findings: acceptance }, parentRevision: priorIndex?.id ?? null }, principal);
+        content: { entries: acceptanceIndex(stories, boundRulePack(runId, projectId)?.actionVocabulary), findings: acceptance }, parentRevision: priorIndex?.id ?? null }, principal);
 
       const prior = receipt(runId, "stories");
       if (receipt(runId, "cases") && prior && canonicalJSON(current(runId, projectId, "stories").content) !== canonicalJSON(verdict.data))
@@ -250,10 +287,13 @@ export function gateRun(runId: string, projectId: string) {
     const verdict = verifyCases(runId, projectId, cases.content);
     if (!verdict.ok) return { status: "blocked", ...verdict };
     const pinnedPolicy = (current(runId, projectId, "instructions").content as { policy: typeof policy }).policy;
-    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio });
+    // 账本路径：故事已编号、acRefs 是契约的一部分，所以准则覆盖进分数（见 GateOptions.acceptanceInScore）。
+    // 这个产品特有的动作词与易变读数名，来自这次运行绑定的规则包；没有就只用通用规则。
+    const pack = boundRulePack(runId, projectId);
+    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings });
     const passed = report.score >= pinnedPolicy.minGateScore;
     /**
-     * 不通过时，把门禁的话按单元送回规划器（docs/v3/23 F-11）。
+     * 不通过时，把门禁的话按单元送回规划器（docs/v3/history/23 F-11）。
      *
      * 门禁一直什么都说了——被扣分的用例 id、每条 finding 的规则与原因——只是没人把它们
      * 送回领单元的那一步。两次实测里 Penguin 都是在这里就地停住：它知道自己被拦了，
@@ -291,7 +331,8 @@ export function finalizeRun(runId: string, projectId: string) {
      */
     const previous = receipt(runId, "finalize");
     if (previous) return { ...(current(runId, projectId, "finalize").content as object), revisionId: previous.revisionId };
-    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio });
+    const pack = boundRulePack(runId, projectId);
+    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings });
     if (!passed || fresh.score < pinnedPolicy.minGateScore || canonicalJSON(fresh) !== canonicalJSON(report)) throw new LedgerError(409, "gate_not_passed");
     const summary = { runId, projectId, status: "waiting_review", stories: verdict.data.stories.length, cases: verdict.data.cases.length,
       gateScore: report.score, binding: run.binding, storiesRevision: stories.revision.id, casesRevision: cases.revision.id, gateRevision: gate.revision.id,

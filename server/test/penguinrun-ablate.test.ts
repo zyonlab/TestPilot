@@ -24,18 +24,25 @@ describe("penguinRun.startRun 把 ablate 交给运行时", () => {
   it("body.ablate → rt.startRun({ ablate })", async () => {
     const rt = await import("../src/runtimes.js");
     const { startRun } = await import("../src/penguinRun.js");
-    await startRun({ runtime: "penguin", materialsDir: "/tmp/m", limit: 1, ablate: ["domain-perp"], workspace: "/tmp/ws" } as never);
+    await startRun({ runtime: "penguin", materialsDir: "/tmp/m", limit: 1, ablate: ["domain-reference"], workspace: "/tmp/ws" } as never);
     const call = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
-    expect(call?.ablate).toEqual(["domain-perp"]);
+    expect(call?.ablate).toEqual(["domain-reference"]);
   });
-  it("rejects a Web adapter that cannot honor the configured planner", async () => {
+  it("Web 发起的 Claude Code 运行不带托管规划模型、工作区按运行分开；Codex 仍拒绝", async () => {
+    const rt = await import("../src/runtimes.js");
     const { startRun } = await import("../src/penguinRun.js");
-    await expect(startRun({ runtime: "claude-code", workspace: "/tmp/ws" })).rejects.toThrow("managed_planner_unsupported (claude-code)");
+    const calls = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls;
+    const before = calls.length;
+    await startRun({ runtime: "claude-code", materialsDir: "/tmp/m", wfRunId: "run-web-claude" } as never);
+    const call = calls[before]?.[0] as Record<string, unknown> | undefined;
+    expect(call?.models).toBeUndefined();
+    expect(String(call?.workspace)).toMatch(/host-workspaces[\\/]run-web-claude$/);
+    await expect(startRun({ runtime: "codex", workspace: "/tmp/ws" } as never)).rejects.toThrow("managed_planner_unsupported (codex)");
   });
 });
 
 /**
- * 续跑的话术必须和首跑说同一件事（docs/v3/24 §28）。
+ * 续跑的话术必须和首跑说同一件事（docs/v3/history/24 §28）。
  *
  * 2026-09-12 实测：开了工作单元的运行，一「继续运行」就被指使去调
  * `write_stories` / `write_cases`——而那两个工具在单元模式下必然被拒
@@ -60,7 +67,7 @@ describe("续跑的话术", () => {
 });
 
 /**
- * 预算按「真正会拆出多少单元」给（docs/v3/24 §31）。
+ * 预算按「真正会拆出多少单元」给（docs/v3/history/24 §31）。
  *
  * 2026-09-12：故事扇出调对之后用例单元从 4 个变成 56 个，而预算还是按老口径
  * （主模块数 + 1 + 功能数）估的 324 次调用——规划器写到一半被自己的预算掐断，

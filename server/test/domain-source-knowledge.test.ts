@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 /**
- * source 节点的知识绑定：规则包 → charter + ContextManifest（docs/v3/20 §11 切片 2 的服务端半边）。
+ * source 节点的知识绑定：规则包 → charter + ContextManifest（docs/v3/history/20 §11 切片 2 的服务端半边）。
  * 真实账本、临时数据目录；不开浏览器、不问模型。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"), db: typeof import("../src/db.js"), ops: typeof import("../src/workflowOps.js");

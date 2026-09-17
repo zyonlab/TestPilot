@@ -114,7 +114,7 @@ export async function loadRepo() {
 /**
  * trace 第一行的 `session_meta` 里有 workspace 的绝对路径。
  *
- * stdin 里没有 workspace（见 `docs/v3/03-penguin-hooks-契约.md` §4），这是唯一的正当来源。
+ * stdin 里没有 workspace（见 `docs/v3/history/03-penguin-hooks-契约.md` §4），这是唯一的正当来源。
  */
 export function workspaceOf(tracePath) {
   if (!tracePath) return null;

@@ -1,4 +1,6 @@
 import { readActiveEvolution } from './evolution/bridge.js';
+import { environmentPatch } from "./environmentInput.js";
+import { defaultRuntimeName, plannerRuntimeAvailable } from './runtimes.js';
 import {storedScoreboard} from 'testpilot-mcp/score-store';
 import {reviewCorsOptions} from './corsOptions.js';
 import { intentPolicy, requestPrincipal } from "./intentPolicy.js";
@@ -102,7 +104,7 @@ import {
   supervisor,
   takenProcessIds, eventStore, setChildAsk,
   midsceneDirFor } from "./procs.js";
-import { applyGraphDraft, chat, checkPrompt, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
+import { applyGraphDraft, chat, checkPrompt, fieldSources, validRecipeOrThrow, type ChatContext, type ChatIntent } from "./chat.js";
 import { changes, codeLine, codeProvenance } from "./codeline.js";
 import { traceability, traceabilityOfRun } from "./trace.js";
 import { allProjectOverviews, projectOverview } from "./overview.js";
@@ -130,7 +132,8 @@ import {
 } from "./config.js";
 import { probeModel, generateCode, refineCase } from "./model.js";
 import { describeModelConfig, saveModelConfig } from "./modelconfig.js";
-import { listRulePacks, readRulePack, saveRulePack, deleteRulePack } from "./rulePacks.js";
+import { listRulePacks, readRulePack, saveRulePack, deleteRulePack, currentRulePack } from "./rulePacks.js";
+import { listDomainReferences, readDomainReference, saveDomainReference, deleteDomainReference } from "./domainReferences.js";
 import { modelProfilesRouter } from "./modelProfilesRoutes.js";
 import { projectPlannerModel } from "./modelProfiles.js";
 // The executor moved to the domain package (it runs in the runner process now). The
@@ -263,6 +266,11 @@ app.use("/api/projects/:id/workflow-runs", express.json({ limit: "48mb" }));
 app.use(express.json({ limit: "16mb" }));
 app.use("/api", intentPolicy);
 app.use("/api/projects/:projectId/workflow-runs", runRouter());
+// 项目回归集：人批准过的回归候选（regressionCandidates.ts）。defect 是要一直跑的用例，rejection 是给生成器的反例评测项。
+app.get("/api/projects/:id/regression-suite", async (req, res) => {
+  const { regressionSuite } = await import("./regressionCandidates.js");
+  res.json({ entries: regressionSuite(req.params.id, req.query.kind === "defect" || req.query.kind === "rejection" ? req.query.kind : undefined) });
+});
 app.use("/api/projects/:projectId/model-profiles", modelProfilesRouter());
 // Serve baseline / current / diff images (referenced by VisualDiff.*Ref).
 app.use("/api/artifacts", express.static(ARTIFACT_DIR));
@@ -720,7 +728,7 @@ app.patch("/api/projects/:id", (req, res) => {
   res.json({ project });
 });
 /**
- * 项目级规则包（docs/v3/24 §19）。
+ * 项目级规则包（docs/v3/history/24 §19）。
  *
  * 以前它只能在新建运行的表单里贴一次、躺在那次运行里。规则包是这个产品最主要的领域资产，
  * 却是唯一没有列表、没有版本、没有复用的那一个——同一个项目的两次运行可以用着不同的包
@@ -741,6 +749,27 @@ app.post("/api/projects/:id/rule-packs", (req, res) => {
 });
 app.delete("/api/projects/:id/rule-packs/:hash", (req, res) => {
   try { deleteRulePack(req.params.id, req.params.hash); res.json({ ok: true }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
+
+/**
+ * 项目级领域参考：和规则包一个待遇——按内容哈希存版本、运行开始时冻结绑定、用过的版本不能删。
+ */
+app.get("/api/projects/:id/domain-references", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  res.json({ references: listDomainReferences(req.params.id) });
+});
+app.get("/api/projects/:id/domain-references/:hash", (req, res) => {
+  try { res.json({ reference: readDomainReference(req.params.id, req.params.hash) }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
+app.post("/api/projects/:id/domain-references", (req, res) => {
+  if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
+  try { res.json(saveDomainReference(req.params.id, req.body ?? {})); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message) }); }
+});
+app.delete("/api/projects/:id/domain-references/:hash", (req, res) => {
+  try { res.json(deleteDomainReference(req.params.id, req.params.hash)); }
   catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
 });
 app.delete("/api/projects/:id", (req, res) => {
@@ -1079,7 +1108,7 @@ async function runAndPersistCase(
         }
       : undefined;
 
-  guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)]);
+  guardRun(url, [...login, ...c.steps.map((s) => s.text), ...c.postSteps.map((s) => s.text)], { sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
   /**
    * 环境级复位（07 T-28 验收 ②）：`vars.TP_RESET_CMD` 在每条用例跑之前执行一次，输出记进这次运行的日志。
    * teardown 是模型做的、会失手；失手一次，后面每条的判据都被残留状态带偏（实测一次连带三条）。
@@ -1362,7 +1391,7 @@ app.get("/api/cases/:id/debug", async (req, res) => {
 
   try {
     if (!url) throw new Error("no url (set an environment baseUrl or project targetUrl)");
-    guardRun(url, plan.map((p) => p.text));
+    guardRun(url, plan.map((p) => p.text), { sideEffectLabels: currentRulePack(c.projectId)?.sideEffectLabels });
     await live.debug(
       { url, plan, expected: c.expected || "", hint: hint || undefined, resolve: ctx, launch },
       ARTIFACT_DIR,
@@ -1565,7 +1594,7 @@ setAgentObserver(async (input) => {
      * 带钱包探索：注入一个虚拟 EIP-1193 provider（`exec/injectedWallet.ts`），
      * 地址与链取自本机钱包与 `chainConfig()`——和执行用例那条路用的是同一个账户。
      *
-     * 为什么必须是显式参数：未登录与已登录看到的是**两个产品**（docs/v3/24 §13）。
+     * 为什么必须是显式参数：未登录与已登录看到的是**两个产品**（docs/v3/history/24 §13）。
      * 不给这个开关，探索永远只看得到未登录那一半，而那一半里下单区全是 N/A。
      */
     wallet?: boolean;
@@ -1610,6 +1639,8 @@ setAgentObserver(async (input) => {
        * 不会把密码印在登录页上。而凭证一直在环境里，执行用例时也一直在用。
        */
       ...(projectId ? observeLogin(projectId, envRef) : {}),
+      // 这个环境提供的前提名（人在环境设置里填的）；没填就由探索器按「配了登录就有 session」推。
+      ...(env?.capabilities?.length ? { capabilities: env.capabilities } : {}),
       launch: {
         cacheId: `observe-${projectId ?? "adhoc"}`,
         ...(projectId ? observeLaunch(projectId, envRef) : {}),
@@ -1729,35 +1760,14 @@ app.get("/api/projects/:id/environments", (req, res) => {
   res.json({ environments: listEnvironments(req.params.id).map(sanitizeEnv) });
 });
 app.post("/api/projects/:id/environments", (req, res) => {
-  const { name, baseUrl, vars, headers, query, login, isDefault, viewport, visualThresholdPct } = req.body ?? {};
-  if (!name) return res.status(400).json({ error: "name is required" });
-  /*
-   * 视口一直被这里丢掉：界面（SutPanel）发了 `viewport`，`upsertEnvironment` 也收，
-   * 但路由的解构没有它——于是「配过了」的视口从没进过库，探索和真跑都用默认的 1024×720。
-   * 只收合法的数：一个 `{}` 或字符串会让 `viewportJson` 看起来像配过了，而它什么都没说。
-   */
-  const vp =
-    viewport && typeof viewport === "object"
-      ? {
-          ...(Number(viewport.width) > 0 ? { width: Math.round(Number(viewport.width)) } : {}),
-          ...(Number(viewport.height) > 0 ? { height: Math.round(Number(viewport.height)) } : {}),
-        }
-      : undefined;
-  // 视觉阈值：只收 0–100 的数，`0` 有意义（逐像素必须相同），所以不能用真值判断。
-  const vt = Number(visualThresholdPct);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (!body.name) return res.status(400).json({ error: "name is required" });
+  // 只把**这次真的说了**的字段交下去；没说的由 upsertEnvironment 沿用已存的（见 environmentInput.ts）。
   const environment = upsertEnvironment({
     projectId: req.params.id,
-    ...(Number.isFinite(vt) && vt >= 0 && vt <= 100 ? { visualThresholdPct: vt } : {}),
-    id: req.body?.id,
-    name,
-    baseUrl: baseUrl ?? "",
-    vars: vars ?? {},
-    headers: headers ?? {},
-    query: query ?? {},
-    ...(vp && (vp.width || vp.height) ? { viewport: vp } : {}),
-    // No `session` key here → upsert preserves any captured session.
-    login: login ?? {},
-    isDefault: !!isDefault,
+    id: body.id as string | undefined,
+    name: String(body.name),
+    ...environmentPatch(body),
   });
   res.json({ environment: sanitizeEnv(environment) });
 });
@@ -3056,7 +3066,7 @@ app.get("/api/ablatable", (_req, res) => res.json({ ablatable: ALL_ABLATABLE }))
 /**
  * 接入就绪清单：**从零到第一批可复核用例，还差哪几条。**
  *
- * 在服务端算而不是让前端拼六次请求，理由是真相在这一侧——守卫的白名单、环境的登录态、
+ * 在服务端算而不是让前端拼六次请求，理由是真相在这一侧——守卫的禁止名单与环境开关、环境的登录态、
  * 能力的健康检查、预算的默认值，四样都只有网关知道。前端拼的话会长出第二套口径，
  * 而两套口径最后总会给出两个不同的答案。
  *
@@ -3154,24 +3164,42 @@ app.get("/api/readiness", (req, res) => {
     const s = supervisor.statusOf(c.id);
     return !!s?.lastError && s.state !== "alive";
   });
-  items.push(
-    bad.length
-      ? {
-          id: "runtime",
-          state: "broken",
-          detail: { key: "ready.runtimeBroken", params: { id: bad[0]!.id } },
-          // lastError 是子进程自己说的话，原样带出去：它是给人拿去搜的那一截。
-          hint: String(supervisor.statusOf(bad[0]!.id)?.lastError ?? "").slice(0, 160),
-        }
-      : alive.length
-        ? { id: "runtime", state: "ok", detail: { key: "ready.runtimeOk", params: { a: alive.length, n: capabilities.length } } }
-        : { id: "runtime", state: "none", detail: { key: "ready.runtimeNone", params: { n: capabilities.length } } },
-  );
+  /**
+   * **没声明能力就没有这一项。**
+   *
+   * 这里数的是本机声明的外部服务（基准应用、模型代理这些）。一份干净安装一个都没有，
+   * 而清单上却写着「6 个能力，一个都没起」——2026-09-16 看这一屏时，它像是装坏了，
+   * 其实什么都不缺。有声明才问它们起没起。
+   */
+  if (capabilities.length)
+    items.push(
+      bad.length
+        ? {
+            id: "runtime",
+            state: "broken",
+            detail: { key: "ready.runtimeBroken", params: { id: bad[0]!.id } },
+            // lastError 是子进程自己说的话，原样带出去：它是给人拿去搜的那一截。
+            hint: String(supervisor.statusOf(bad[0]!.id)?.lastError ?? "").slice(0, 160),
+          }
+        : alive.length
+          ? { id: "runtime", state: "ok", detail: { key: "ready.runtimeOk", params: { a: alive.length, n: capabilities.length } } }
+          : { id: "runtime", state: "none", detail: { key: "ready.runtimeNone", params: { n: capabilities.length } } },
+    );
 
   /**
-   * 守卫白名单：被测地址在不在名单里。
-   *
-   * 不在名单里**不拦运行**（`allowlistOnly` 是关的），但这个域名下命中删除/支付/结账
+   * 规划：Web 发起生成时由谁写故事和用例（`TP_AGENT_RUNTIME`，不设是 Claude Code）。
+   * 只查本机起不起得来、不查登录态；起不来时建运行会被当场拒绝，所以要在第一屏就说出来。
+   */
+  {
+    const planner = defaultRuntimeName();
+    items.push(plannerRuntimeAvailable(planner)
+      ? { id: "planner", state: "ok", detail: { key: "ready.plannerOk", params: { runtime: planner } } }
+      : { id: "planner", state: "broken", detail: { key: "ready.plannerMissing", params: { runtime: planner } },
+          hint: planner === "claude-code" ? "claude --version" : "TP_PENGUIN_BIN" });
+  }
+
+  /**
+   * 守卫：被测地址在禁止名单上就什么都不跑；环境没勾「允许不可逆」时，命中删除/支付/结账
    * 等词的步骤会被一律拒绝。这件事必须在跑之前说出来，否则人会在执行报告里
    * 看到一堆没有理由的失败。
    */
@@ -3185,14 +3213,9 @@ app.get("/api/readiness", (req, res) => {
   items.push(
     !host
       ? { id: "guard", state: "none", detail: { key: "ready.guardNoHost" } }
-      : config.guard.allowHosts.includes(host)
-        ? { id: "guard", state: "ok", detail: { key: "ready.guardOk", params: { host } } }
-        : {
-            id: "guard",
-            state: "unverified",
-            detail: { key: "ready.guardNo", params: { host } },
-            hint: { key: "ready.guardWhy" },
-          },
+      : config.guard.denyHosts.includes(host)
+        ? { id: "guard", state: "broken", detail: { key: "ready.guardDenied", params: { host } } }
+        : { id: "guard", state: "ok", detail: { key: "ready.guardOk", params: { host } } },
   );
 
   const b = config.budget;
@@ -3276,6 +3299,10 @@ app.post("/api/chat", async (req, res) => {
       intent?: ChatIntent;
       graphId?: string;
       promptKey?: string;
+      /** 起草哪个复杂字段（intent "field"）。 */
+      field?: string;
+      /** 上一轮的草稿：这一轮是改它，不是重写。 */
+      previous?: unknown;
       context?: ChatContext;
       projectId?: string;
     };
@@ -3286,6 +3313,8 @@ app.post("/api/chat", async (req, res) => {
         intent: body.intent ?? "ask",
         graphId: body.graphId,
         promptKey: body.promptKey,
+        field: body.field,
+        previous: body.previous,
         projectId: body.projectId,
         // What the person has selected on the canvas. Read server-side into the prompt, so a
         // question about "this step" is answered against that step's real parameters and output.
@@ -3295,6 +3324,23 @@ app.post("/api/chat", async (req, res) => {
     );
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * 起草面开场：有哪些字段可以聊出来，以及这个项目哪几次运行手里有材料。
+ *
+ * 只读。**没有「应用」这一路**——一个字段聊出来之后走的是它自己本来那条保存路径
+ * （规则包走 `POST /api/projects/:id/rule-packs`，那里有 `validateRulePack`），
+ * 而不是另开一个专给聊天用的入口。多一条入口就多一份会和主路径走岔的校验。
+ */
+app.get("/api/chat/fields", (req, res) => {
+  const projectId = String(req.query.projectId ?? "");
+  if (!projectId) return res.status(400).json({ error: "projectId is required" });
+  try {
+    res.json(fieldSources(projectId));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
   }
 });
 

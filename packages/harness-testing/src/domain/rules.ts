@@ -5,7 +5,7 @@ import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
 /**
  * 产品规则包（ProductRulePack v1）。
  *
- * 这是 docs/v3/20 §4、21 §2 说的那份「领域/产品规则在 source 之前绑定」的东西。
+ * 这是 docs/v3/history/20 §4、21 §2 说的那份「领域/产品规则在 source 之前绑定」的东西。
  * 内置的 REFERENCE-domain-perp.md 是通用参考，**不是**这个：那份文件下发给了两个 run，
  * 但两个 run 的项目知识版本都是 0——模型收到了一段散文，服务端没有一条可以核对的规则。
  *
@@ -122,7 +122,7 @@ export const ExplorationTargetSpecSchema = z
     /**
      * `activate` 要点它；`observe-only` 只要看见就算完成；`fill` 往它里面填一个**声明好的值**。
      *
-     * `fill` 是 2026-09-12 实测逼出来的（docs/v3/24 §17）：会话签完之后 `Place Order` 出现了，
+     * `fill` 是 2026-09-12 实测逼出来的（docs/v3/history/24 §17）：会话签完之后 `Place Order` 出现了，
      * 点它**什么也没发生**——因为 Size 是空的。探索一直把输入框当 `observe-only`
      * （`activationBlocker` 里文本框一律 `unsupported:value_input`），于是提交这一步
      * 永远走不完最后一厘米。值必须写在包里、由人定：探索自己编一个数填进去，
@@ -166,7 +166,15 @@ export const ProductRulePackSchema = z
   .object({
     schemaVersion: z.literal("product-rule-pack.v1"),
     id: DomainIdSchema,
-    version: z.string().min(1),
+    /**
+     * 版本号会被**拼进 charter 的 id**（`charter-<packId>-<version>`，见 `charter.ts`），
+     * 而那个 id 受 `DomainIdSchema` 约束。所以这里跟着用同一套字符集。
+     *
+     * 2026-09-16 实测：迁移时把版本写成 `2026-09-13.3+domain-data`，存得下（当时只校验
+     * 非空），真拿去建 charter 时才炸——探索节点开始 4 毫秒就失败，错误是一条
+     * `path: ["id"]` 的 zod 正则错，看不出跟版本号有关。存的时候拒，错误才指得到字段。
+     */
+    version: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,63}$/, "version 只能用字母数字与 _ . : / -（它会拼进 charter 的 id）"),
     domain: z.string().min(1),
     product: z.string().min(1),
     network: z.string().min(1),
@@ -235,6 +243,23 @@ export const ProductRulePackSchema = z
      * 文案按产品走（连钱包、二次确认、短信验证码各行各业长得都不一样），所以写在规则包里。
      */
     gateLabels: z.array(z.string()).default([]),
+    /**
+     * **这个产品特有的动作词**，接在通用动作词后面（门禁与验收准则索引用来判「这条准则要人动手」）。
+     *
+     * 通用表里原来混着「下单 / 撤单 / 平仓 / 开仓 / 转账 / 充值 / 提现 / 划转」——只有交易类产品才有的词，
+     * 焊在对每个产品都生效的正则里。2026-09-15 挪到这里：交易所的包写它们，待办应用的包不写。
+     */
+    actionVocabulary: z.array(z.string().min(1)).default([]),
+    /**
+     * **这个产品特有的不可逆操作**，接在通用那张（删除 / 支付 / 退款…）后面，执行守卫用。
+     * 每条是正则（和 `forbidLabels` 一样），才写得出「动作要拦、名词别误伤」：`下单(?!面板|区)`。
+     */
+    sideEffectLabels: z.array(z.string().min(1)).default([]),
+    /**
+     * **这个产品会自己变的读数叫什么**（比如某个价格、某个倒计时）。门禁看到断言把它们钉在一个数上就报；
+     * 通用规则只认数字的形状（时刻、长小数百分比、大额数字），认不出名字。
+     */
+    volatileReadings: z.array(z.string().min(1)).default([]),
   })
   .strict();
 export type ProductRulePack = z.infer<typeof ProductRulePackSchema>;

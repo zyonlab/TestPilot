@@ -39,26 +39,26 @@
   },
   "skillVersions": {
     "testpilot-generate": "2026-09-10.1",
-    "testpilot-explore": "2026-09-03.1",
+    "testpilot-explore": "2026-09-15.3",
     "testpilot-stories": "2026-09-14.1",
-    "testpilot-design": "2026-09-13.1",
+    "testpilot-design": "2026-09-16.2",
     "testpilot-run-c": "2026-09-14.1",
     "testpilot-evaluation": "2026-09-03.1",
     "testpilot-benchmark-design": "2026-09-04.1",
-    "testpilot-scanner": "2026-09-03.1",
+    "testpilot-scanner": "2026-09-15.1",
     "testpilot-memory": "2026-09-09.3",
     "testpilot-onboard-sut": "2026-09-04.1"
   },
   "_note": "`skillVersions` 不是 PenguinHarness 的字段——官方 loader 用 plugin.json 的 version 给每个 skill 盖同一个版本号。这里逐个给，是因为 `RunMeta.skillVersion` 要指认「这次运行用的是哪一版生成器」：testpilot-generate 是 A 臂、没变过，它跟着 C 臂一起跳版本会让两臂的印记同时改变，而 P1 要求两臂只差一件事。官方 loader 读到未知字段会忽略它，所以这个字段不会让这个 plugin 变得不可安装。",
   "skillDigests": {
     "testpilot-generate": "12ee15239b74568a",
-    "testpilot-explore": "49cd2ccdaf361117",
+    "testpilot-explore": "9a186817751f8708",
     "testpilot-stories": "0e71db20690374b0",
-    "testpilot-design": "17734a1342ef759e",
+    "testpilot-design": "e8f6f7f52e5b5033",
     "testpilot-run-c": "5f7d0a92ddf947b2",
     "testpilot-evaluation": "3d1bc1c2aaeae65e",
     "testpilot-benchmark-design": "e864d158ad34baf6",
-    "testpilot-scanner": "10e35f7f7a7ada73",
+    "testpilot-scanner": "62ae2e9aad43bba6",
     "testpilot-memory": "41b7b032023da7a8",
     "testpilot-onboard-sut": "cd302c44eb146513"
   }

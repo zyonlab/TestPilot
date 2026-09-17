@@ -1,5 +1,6 @@
 import { tierOf } from "../exec/oracle.js";
 import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from "./types.js";
+import { isOpenQuestion } from "../exec/stepSemantics.js";
 
 /**
  * Gate ① — does this batch of text cases meet the test-design rules?
@@ -14,6 +15,16 @@ import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from
  */
 
 export interface GateOptions {
+  /**
+   * 分数里算不算「有人真做了的动作型准则占比」这个因子（见 runGate 文末）。
+   *
+   * **只有账本那条路径该开。** 那边故事被编号（`acceptanceIndex.ts`）、编号交给了模型、
+   * `acRefs` 填不出编号就拒收——认领准则是契约的一部分。进程内的 `design.cases` 节点与
+   * MCP `run_pipeline` 的契约里一个字都没提 `acRefs`，那边的用例天生不认领任何准则；
+   * 默认开的话，每一次画布运行只要故事里有一条「点击」就是 0 分。2026-09-15 改的时候
+   * 就是 `run-routes.test.ts` 先红，回头一查才发现节点臂根本不产出这一栏。
+   */
+  acceptanceInScore?: boolean;
   /** Below this share of negative/boundary cases, an all-happy-path suite is called out. */
   minNegativeRatio?: number;
   /** A case that verifies one thing has few steps; a case with twenty verifies nothing. */
@@ -23,9 +34,22 @@ export interface GateOptions {
   gradeOracles?: boolean;
   /** Ablation: stop collapsing cases that share a dedupe key. */
   dedupe?: boolean;
+  /**
+   * 这个产品特有的动作词（规则包 `actionVocabulary`），接在通用动作词后面。
+   * 通用表里不放行业词：「下单 / 平仓」只有交易类产品才是动作，由它们自己的包提供。
+   */
+  actionVocabulary?: string[];
+  /** 这个产品会自己变的读数名（规则包 `volatileReadings`）：断言把它们钉在一个数上就报 oracle-volatile。 */
+  volatileReadings?: string[];
 }
 
-const DEFAULTS: Required<GateOptions> = {
+/** 一串字面词拼成一个正则；空表返回 undefined——没有数据就没有这一条，不回落到任何内置词。 */
+function wordsPattern(words: readonly string[] | undefined): RegExp | undefined {
+  const list = (words ?? []).map((w) => w.trim()).filter(Boolean);
+  return list.length ? new RegExp(list.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i") : undefined;
+}
+
+const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [],
   minNegativeRatio: 0.3,
   maxSteps: 8,
   minSteps: 1,
@@ -88,7 +112,7 @@ const STEP_IS_ASSERTION = {
  * 全是 `用户查看X` / `页面加载完成` / `订单成交` / `行情触及 TP 价` 这类观察与系统事件。
  */
 const ACCEPTANCE_ACTION =
-  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|下单|撤单|撤掉|撤销|取消|平仓|开仓|转账|充值|提现|划转|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
+  /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|撤销|取消|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
   // 只认子句开头的 When（句首，或 `/ ， ; 换行` 之后）——2026-09-14 实测模型两种分隔都用。服务端同义实现见 acceptanceIndex.ts。
@@ -98,9 +122,9 @@ function normalizeRef(x: string): string {
   return x.replace(/[\s“”"'（）()、,，。.]/g, "");
 }
 /** 步骤里有没有一个既不是导航、也不是「看一眼」的真实动作。 */
-function caseHasAction(c: { steps?: string[] }): boolean {
+function caseHasAction(c: { steps?: string[] }, isAction: (text: string) => boolean = (t) => ACCEPTANCE_ACTION.test(t)): boolean {
   return (c.steps ?? []).some(
-    (step) => !NAV_STEP.test(step) && ACCEPTANCE_ACTION.test(step) && !STEP_IS_ASSERTION.test(step),
+    (step) => !NAV_STEP.test(step) && isAction(step) && !STEP_IS_ASSERTION.test(step),
   );
 }
 
@@ -138,6 +162,9 @@ const CONCRETE =
 
 export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport {
   const cfg = { ...DEFAULTS, ...opts };
+  const extraAction = wordsPattern(cfg.actionVocabulary);
+  const isAction = (text: string) => ACCEPTANCE_ACTION.test(text) || !!extraAction?.test(text);
+  const volatileNames = wordsPattern(cfg.volatileReadings);
   const findings: GateFinding[] = [];
   const storyIds = new Set(bundle.stories.map((s) => s.id));
   const cases = bundle.cases;
@@ -196,7 +223,8 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
      * 报 warn 而不是 info：它不是"写得不够好"，而是"它一定会红，而红的原因和产品无关"。
      * 一条必然失败的用例比没有这条用例更糟，因为它会把真实失败淹掉。
      */
-    if (cfg.gradeOracles && VOLATILE_ORACLE.test(c.expected))
+    // 通用规则只认数字的形状；规则包给了读数名时，「名字 + 一个数」也算钉住了。
+    if (cfg.gradeOracles && (VOLATILE_ORACLE.test(c.expected) || (!!volatileNames?.test(c.expected) && /\d/.test(c.expected))))
       add(
         "oracle-volatile",
         `assertion is pinned to a value that changes on its own: "${c.expected.slice(0, 60)}"`,
@@ -235,7 +263,27 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     for (const o of oracles)
       if (o.kind === "api")
         add("oracle-offsite", `verdict is read from the product's own API, not from the screen: ${o.url}`, c.id, "warn", { field: "expected" });
-    if (cfg.gradeOracles && c.tier <= 2 && !oracles.length)
+    /**
+     * **judge 判据不能给 tier 1/2 撑腰。**
+     *
+     * 它是模型判的，只是判得有章法。算「有机器判据」时要把它剔掉，否则一条自称 tier 1、
+     * 只带 judge 的用例会被这条规则放过去——和 `none` 当年漏过去的形状一模一样。
+     */
+    const machineOracles = oracles.filter((o) => o.kind !== "judge");
+    for (const o of oracles) {
+      if (o.kind !== "judge") continue;
+      const vague = o.criteria.filter((q) => VAGUE.test(q));
+      if (vague.length)
+        add("judge-spec", `judge criterion is not a yes/no fact a reader can check: "${vague[0]!.slice(0, 60)}"`, c.id, "warn",
+          { args: { detail: vague[0]!.slice(0, 60) }, field: "expected" });
+      if (o.minPass !== undefined && o.minPass > o.samples)
+        add("judge-spec", `judge needs ${o.minPass} passing samples but only takes ${o.samples}`, c.id, "warn",
+          { args: { detail: `minPass ${o.minPass} > samples ${o.samples}` }, field: "expected" });
+      if (o.samples < 3)
+        add("judge-spec", `judge takes ${o.samples} sample(s) — too few to tell a stable verdict from a lucky one`, c.id, "info",
+          { args: { detail: `samples ${o.samples}` }, field: "expected" });
+    }
+    if (cfg.gradeOracles && c.tier <= 2 && !machineOracles.length)
       add(
         "tier-unbacked",
         `claims tier ${c.tier} but carries no machine-checkable oracle — at execution time a model will decide it`,
@@ -244,7 +292,9 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     if (cfg.gradeOracles && c.oracle && tierOf(c.oracle) > c.tier)
       add(
         "tier-unbacked",
-        `claims tier ${c.tier}, but its oracle is a relation between two observations (tier ${tierOf(c.oracle)})`,
+        tierOf(c.oracle) === 3
+          ? `claims tier ${c.tier}, but its oracle is judged by a model (tier 3)`
+          : `claims tier ${c.tier}, but its oracle is a relation between two observations (tier ${tierOf(c.oracle)})`,
         c.id,
         "info",
       );
@@ -272,6 +322,20 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
           args: { step: s.slice(0, 50) },
           field: "steps",
         });
+    /**
+     * 断言挂在第几步之后判（`afterStep`），得落在步骤范围里——超出去执行器就只能在最后判，等于没写。
+     * 开放问题写进断言里判不出结果（执行器只记不判）：记 info，让它挪进 readiness.reason。
+     */
+    for (const a of c.assertions ?? []) {
+      if (a.afterStep !== undefined && a.afterStep > c.steps.length)
+        add("assertion-after-step-out-of-range", `assertion ${a.id} is pinned after step ${a.afterStep}, but the case has ${c.steps.length} step(s)`, c.id, "warn", {
+          args: { assertion: a.id, afterStep: a.afterStep, steps: c.steps.length },
+        });
+      if (isOpenQuestion(a.statement))
+        add("assertion-open-question", `assertion ${a.id} is an open question, not a check — it can neither pass nor fail; move it to readiness.reason`, c.id, "info", {
+          args: { assertion: a.id },
+        });
+    }
   }
 
   // 3. Duplicates — same key, same case in different words.
@@ -344,17 +408,24 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    */
   const coveredBy = new Map<string, string>();
   for (const s of bundle.stories) for (const id of s.subsumes ?? []) coveredBy.set(id, s.id);
+  /** 动作型准则的分母与没人真做的那几条——分数要用（见文末 score）。 */
+  let actionable = 0;
+  const uncoveredAc: string[] = [];
   for (const s of bundle.stories) {
     const owner = coveredBy.get(s.id) ?? s.id;
     const mine = cases.filter((c) => c.storyId === s.id || c.storyId === owner);
     (s.acceptance ?? []).forEach((text, i) => {
-      if (!ACCEPTANCE_ACTION.test(whenClause(text) || text)) return;
+      if (!isAction(whenClause(text) || text)) return;
+      actionable += 1;
       const id = `${s.id}/AC-${i + 1}`;
       const claimed = mine.filter((c) => (c.acRefs ?? []).some((r) => r === id || normalizeRef(r) === normalizeRef(text)));
-      if (!claimed.length)
+      if (!claimed.length) {
+        uncoveredAc.push(id);
         add("acceptance-uncovered", `${id} 要求用户动手（When ${(whenClause(text) || text).slice(0, 34)}），却没有任何用例认领它`, undefined, "warn", { args: { storyId: s.id, acId: id } });
-      else if (!claimed.some(caseHasAction))
+      } else if (!claimed.some((x) => caseHasAction(x, isAction))) {
+        uncoveredAc.push(id);
         add("acceptance-uncovered", `${id} 要求用户动手，而认领它的 ${claimed.map((c) => c.id).join("/")} 步骤里只有导航和查看——没有人真的做过这个动作`, undefined, "warn", { args: { storyId: s.id, acId: id } });
+      }
     });
   }
 
@@ -366,7 +437,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    * 展示型需求确实存在，所以是 `warn` 不是 `error`；但它得被数出来。
    */
   for (const c of cases)
-    if ((c.steps ?? []).length && !caseHasAction(c))
+    if ((c.steps ?? []).length && !caseHasAction(c, isAction))
       add("case-without-action", `除了导航之外没有任何动作，步骤只是看：${(c.steps ?? []).join(" | ").slice(0, 70)}`, c.id, "warn", { field: "steps" });
 
   /**
@@ -434,7 +505,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
    * **`flows` 为空时不能就此放行。**
    *
    * 原来这里是 `if (known.size)`：一份没有流程的产物，任何 `covers` 值都免检。
-   * 2026-09-11 实测（docs/v3/22）：一条臂的 67 条用例里有 27 条填了 `covers`，
+   * 2026-09-11 实测（docs/v3/history/22）：一条臂的 67 条用例里有 27 条填了 `covers`，
    * 值形如 `/trade~6 --[点「Trades」]--> /trade~7`——那是状态转移图**人类可读摘要里的一行**，
    * 不是转移 id。产物的 `flows` 是空的，于是这 27 条编造的引用一条都没被点到，
    * 门禁还给了满分，而结构覆盖率凭空多了 27 条谁也走不到的边。
@@ -629,16 +700,42 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   const flagged = [
     ...new Set(findings.filter((f) => f.severity === "warn" && f.caseId).map((f) => f.caseId as string)),
   ];
-  const score = cases.length ? Math.max(0, 1 - flagged.length / cases.length) : 0;
+  /**
+   * **分数是两个比例的乘积：没被警告点到的用例占比 × 有人真做了的动作型准则占比。**
+   *
+   * 此前只有前一半。`acceptance-uncovered` 按故事记、不带 caseId，于是**永远进不了
+   * `flagged`**——漏掉的准则再多，分数一分不扣。一个用例量小的运行最容易撞上：
+   * 用例少，被点名的用例就少，而没人认领的准则反而多。2026-09-15 回查已存的门禁报告：
+   *
+   *   | 运行                               | 旧分 | 动作型准则 | 没人真做 | 新分  |
+   *   | Vikunja · Claude Code 宿主（19 条）| 1.0  | 16         | 4        | 0.75  |
+   *   | Hyperliquid · Claude Code（11 条） | 1.0  | 14         | 6        | 0.571 |
+   *   | Hyperliquid · Web（86 条）         | 0.814| 53         | 1        | 0.799 |
+   *
+   * 前两次拿的是满分，而其中一次有 43% 的动作型准则没有任何用例去做——
+   * 门禁在这类运行上说的「完美」恰好是它最没看住的时候。第三行几乎不动：
+   * 覆盖好的运行不会被这个改动误伤。
+   *
+   * 乘而不是加权平均：两件事都得成立，任一半塌了分数就该跟着塌，不该被另一半的高分垫起来。
+   * 没有动作型准则时第二个因子取 1——没有要做的动作，就谈不上漏做。
+   * 这个因子只在 `acceptanceInScore` 打开时生效，理由写在 GateOptions 上。
+   */
+  const caseShare = cases.length ? Math.max(0, 1 - flagged.length / cases.length) : 0;
+  const acceptanceCounts = cfg.acceptanceInScore === true && actionable > 0;
+  const acceptanceShare = acceptanceCounts ? (actionable - uncoveredAc.length) / actionable : 1;
+  const score = caseShare * acceptanceShare;
 
   return {
-    // The score is a blunt instrument on purpose: a share of cases with no warning against
-    // them. It is meant to move between versions, not to be a certificate.
+    // The score is a blunt instrument on purpose. It is meant to move between versions, not to be a certificate.
     score,
     scoreBasis: {
       cases: cases.length,
       flagged,
-      formula: `1 − ${flagged.length}/${cases.length}（被警告点到的用例 ÷ 全部用例）`,
+      // 只在它真的进了分数时才写出来——界面会照着它说「分数的另一半掉在这里」，没算进去就不能这么说。
+      ...(cfg.acceptanceInScore === true ? { acceptance: { actionable, uncovered: uncoveredAc } } : {}),
+      formula: acceptanceCounts
+        ? `(1 − ${flagged.length}/${cases.length}) × (1 − ${uncoveredAc.length}/${actionable})（被警告点到的用例 ÷ 全部用例；没人真做的动作型准则 ÷ 全部动作型准则）`
+        : `1 − ${flagged.length}/${cases.length}（被警告点到的用例 ÷ 全部用例）`,
     },
     findings,
     stats: {

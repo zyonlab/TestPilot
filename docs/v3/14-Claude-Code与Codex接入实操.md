@@ -1,136 +1,115 @@
 # Claude Code 与 Codex 接入实操
 
-2026-09-09，针对当前源码安装器。依赖：已取得 TestPilot checkout、Node 22+ 和 pnpm；服务的 better-sqlite3 安装与启动使用相同 Node 主版本。Penguin/Web 当前规划适配需要独立 Node 24+ 与 Penguin CLI，doctor 会提示路径问题。尚未公开发布插件市场。
+本文讲宿主接入：怎么把 TestPilot 接进 Claude Code（主路径），以及实验性的 Codex / Penguin。依赖安装、`server/.env`、doctor、守卫与卸载细节见 [安装与诊断](10-安装与诊断.md)。
 
-## 1. 两个目录、两个模型职责
+## 1. 两个目录、两种模型
 
-TestPilot checkout 是服务/插件源码；workspace 是你要测试的应用仓库。安装命令在前者运行，--workspace 指向后者。当前安装把绝对 Node、MCP 和 env 文件路径写入配置，移动源码目录或换机器后应重新安装，不是可任意搬动的单文件包。
+- **TestPilot checkout**：服务、MCP 与插件源码。所有安装命令都在这里运行。
+- **workspace**：你要接入的工作目录，用 `--workspace` 指过去。安装会把绝对的 Node、MCP 入口和 env 文件路径写进配置，移动 checkout 或换机器后要重新安装。
 
-宿主 Claude/Codex/Penguin 使用自己的原生规划模型和登录态，不要求再填写规划模型。Midscene 使用 TestPilot 服务项目配置或 server/.env 中的执行配置。Web 用户则配置两个角色，当前可使用相同模型；以后单独修改 TP_PLANNER_*。
+规划由宿主自己的模型和登录态负责，不需要再填规划模型。执行层是 Midscene，模型取自 TestPilot 项目设置或 `server/.env`（通过 `--model-env` 引用，配置里只存路径、不复制密钥）。
 
-## 2. 服务准备
+接入前先把服务跑起来（默认 API `http://127.0.0.1:5301`，Web `http://localhost:5300`），在 Web 的项目页建好项目，记下**项目 ID**（不是标题）。
 
-本机已有依赖与 server/.env，可直接 doctor。新机器在 TestPilot checkout：
+## 2. Claude Code（主路径）
 
-```sh
-pnpm install --frozen-lockfile
-pnpm setup --entry web
-pnpm doctor --entry web
-```
+先安装并登录 Claude Code。有三种用法，产物都写到同一个服务里，Web 上看到的是同一份。
 
-setup 仅在 env 文件不存在时创建样例，不覆盖已有配置。编辑私有 server/.env，使用实际端点与密钥；以下仅示意字段，不要将占位值覆盖本机已有文件：
+### 2.1 从 Web 发起
 
-```dotenv
-MIDSCENE_MODEL_NAME=your-execution-model
-MIDSCENE_MODEL_BASE_URL=https://your-provider.example/v1
-MIDSCENE_MODEL_API_KEY=your-private-key
-TP_PLANNER_MODEL_NAME=your-planning-model
-TP_PLANNER_BASE_URL=https://your-provider.example/v1
-TP_PLANNER_API_KEY=your-private-key
-TP_PLANNER_THINK=0
-TP_PLANNER_TIMEOUT_MS=900000
-```
+什么都不用装：新建运行时规划运行时默认就是 Claude Code（`TP_AGENT_RUNTIME` 不设即 `claude-code`）。服务会为每次运行建一个独立工作区（数据目录下的 `host-workspaces/<runId>`），写入带本次运行凭证的 `.mcp.json`，再以非交互方式起 `claude`（`TP_CLAUDE_BIN` 可覆盖）。若 `plugins/testpilot-claude/` 已由 `pnpm build:claude-plugin` 生成，会话会带上 `--plugin-dir`，门禁 hook 随之生效；没生成就只有服务端门禁。
 
-执行层也兼容旧 OPENAI_BASE_URL/OPENAI_API_KEY；具体优先级看 server/.env.example 与 connections-env.ts。同名环境变量可能覆盖文件值。项目设置保存后优先于 env，已有运行继续使用冻结快照。仅修改 env 须重启服务；当前没有完整的 UI 恢复环境默认路径，切换前确认覆盖来源。
-
-仅宿主管理时启动 API 即可；Web review 需要 Web：
+### 2.2 在本仓库里带插件用
 
 ```sh
-# 终端 A：在 TestPilot checkout
-pnpm server:dev
-# 终端 B：在 TestPilot checkout
-pnpm dev
+pnpm build:claude-plugin
+claude --plugin-dir plugins/testpilot-claude
 ```
 
-也可使用 node scripts/testpilot-setup.mjs start --entry web 同时启动。Web 默认 http://localhost:5300，API 默认 http://127.0.0.1:5301。在 Web 设置→项目，新建或选择项目，记住项目 ID（不是标题）；项目可对应独立目标应用 URL。需要真实执行时启动目标应用。
+插件目录由真源 `plugins/testpilot/` 生成：十个 skill、`hooks/hooks.json`（写 stories/cases/memory 前校验、停止前要求门禁）、`.mcp.json`（stdio 起 `packages/testpilot-mcp`）。MCP 默认连 `http://127.0.0.1:5301`，可用 `TP_SERVER_URL` 改。
 
-停止时在启动终端 Ctrl+C，再检查下面命令没有残留监听；只关闭自己启动的进程，不按进程名批量杀掉用户服务：
-
-```sh
-lsof -nP -iTCP:5300 -iTCP:5301 -sTCP:LISTEN
-```
-
-## 3. 安装 Codex
-
-先安装并登录 Codex 原生客户端。本机已有，doctor 已识别 codex-cli 0.153.4；这是本机验证版本，不是全平台最低版本承诺。在 TestPilot checkout 执行，替换 workspace 为实际被测仓库：
-
-```sh
-node scripts/testpilot-setup.mjs install --entry codex \
-  --workspace "/absolute/path/to/application" \
-  --model-env "/Users/admin/Midscene/testpilot/server/.env" \
-  --server http://127.0.0.1:5301
-node scripts/testpilot-setup.mjs doctor --entry codex \
-  --workspace "/absolute/path/to/application"
-```
-
-其他机器把 --model-env 改为自己的 TestPilot 路径。可选 --project-id 实际项目ID；未提供时，运行注册需要显式给出项目。不要使用 --env-file 代替 --model-env。
-
-安装产物：workspace/.codex/config.toml 中的 TestPilot MCP 段、.agents/skills 下的十个技能、.testpilot/bin shim 与安装收据。宿主原有模型和其他 MCP 保留。官方说明项目级 MCP 仅在受信任项目加载；Codex 从仓库 .agents/skills 发现技能。[MCP 配置](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[技能发现](https://learn.chatgpt.com/docs/build-skills)。
-
-在 Codex 中打开对应 workspace 的本地任务，按原生项目提示启用自己的项目配置；若未出现新技能/MCP，重启客户端或新开该项目会话。在该项目终端执行 codex mcp list；交互界面的 /mcp 可检查连接。也可用自然语言明确要求使用 testpilot-run-c，避免依赖不同客户端的选择器样式。
-
-若 PATH 中旧 Codex 无法调用宿主当前模型，用 TP_CODEX_BIN 指向已安装的新版本；不要换掉用户的模型来掩盖版本错误。诊断程序识别哪个可执行文件，不代表另一个终端的 PATH 已同步。
-
-## 4. 安装 Claude Code
-
-先安装并登录 Claude Code。然后在 TestPilot checkout 执行：
+### 2.3 装进自己的工作目录
 
 ```sh
 node scripts/testpilot-setup.mjs install --entry claude-code \
-  --workspace "/absolute/path/to/application" \
-  --model-env "/Users/admin/Midscene/testpilot/server/.env" \
-  --server http://127.0.0.1:5301
-node scripts/testpilot-setup.mjs doctor --entry claude-code \
-  --workspace "/absolute/path/to/application"
+  --workspace "<工作目录的绝对路径>" \
+  --model-env "<checkout>/server/.env" \
+  --server http://127.0.0.1:5301 \
+  [--project-id <项目ID>]
+node scripts/testpilot-setup.mjs doctor --entry claude-code
 ```
 
-安装写 workspace/.mcp.json 和 .claude/skills，不复制规划密钥。在目标 workspace 启动 claude，在项目 MCP 提示中启用 testpilot，然后用 /mcp 或 claude mcp list 查看连接。项目 .mcp.json 第一次需要 Claude 自身的启用确认，这是宿主的加载机制。技能可用 /testpilot-run-c 或自然语言触发。[Claude MCP](https://code.claude.com/docs/en/mcp)、[Claude skills](https://code.claude.com/docs/en/skills)。
+- 写入 `<workspace>/.mcp.json` 的 `mcpServers.testpilot`（保留其他 MCP）、`.claude/skills/` 下十个 skill、`.testpilot/bin/testpilot-mcp` shim 与收据 `.testpilot/install.json`。
+- 这种方式**不装 hook**，阶段约束靠服务端门禁；要 hook 用 2.2。
+- 目录可以含空格。不要用 `--env-file` 代替 `--model-env`：部分 Node 版本会把它当成 Node 自己的启动参数。
+- 给了 `--project-id` 会写进 MCP 的 `TP_PROJECT_ID`；没给时注册运行要显式带项目 ID。
 
-目前两宿主共用一个安装收据：同一个 workspace 连续安装 Claude 和 Codex 会覆盖收据，影响后续升级/卸载。P-12 将修复；目前每个 workspace 安装一个宿主，或使用各自独立 checkout。不要把两次独立干净目录测试声称为共存已验收。
+在 workspace 里启动 `claude`，按提示启用项目级 MCP（`.mcp.json` 第一次需要宿主确认），再用 `/mcp` 或 `claude mcp list` 看连接。skill 用 `/testpilot-run-c` 或自然语言触发。参考：[Claude Code MCP](https://code.claude.com/docs/en/mcp)、[Claude Code skills](https://code.claude.com/docs/en/skills)。
 
-## 5. 首次使用与成功检查
+## 3. 首次使用
 
-可粘贴给宿主的提示（替换项目 ID、材料路径和目标 URL）：
+可以直接粘贴给宿主（替换尖括号内容）：
 
 ```text
 使用 TestPilot 的 testpilot-run-c 技能。
-TestPilot 项目 ID 是 <实际项目ID>，目标是 <测试环境URL>。
-读取 <需求材料路径>，先确认需求和领域规则的出处，再注册本次运行。
-由你自己的规划模型完成故事与用例设计；通过 TestPilot MCP 写入并执行阶段门禁。
-将结果停在 waiting_review，给出 runId 和 Web 中的对应入口；不要代替人批准。
+TestPilot 项目 ID 是 <项目ID>，被测地址是 <测试环境URL>。
+读取 <需求材料路径>，注册本次运行，按阶段完成模块、故事和用例。
+模块树提议完停下等我冻结；最后停在 waiting_review，给出 runId，不要替我批准。
 ```
 
-正常工具链是 register_run→load_run_instructions→retrieve_spec→write_stories→write_cases→gate_run→finalize_run。具体输入 schema 以当前 MCP tools/list 为准，不手工拼过时 payload。检索返回的 chunk ID 和阶段 revision 必须保留。注册重试沿用同一幂等参数；宿主不知道准确模型身份时标为未知。
+`testpilot-run-c` 规定的工具顺序：
 
-检查：宿主能看到 register_run/finalize_run；注册后的 run 在 Web 同项目出现；故事与用例有不可变 revision；finalize 后是 waiting_review。人类在 Web 核对来源/expected，直接作出审批决定（无需身份验证），再 generate_execution / execute_approved。单纯 doctor ready、MCP 在线或出现目录不是这些结果的替代。
+1. `register_run`（无 runId 时；重试保持参数完全一致）→ `load_run_instructions` → `retrieve_spec`（chunk ID 逐字引用）。
+2. 项目带产品模型时：`begin_stage`（`node:"modules"`）→ `plan_modules` 提议至少两层的模块树 → **停下，由人冻结**（模型没有冻结工具；`module_plan_state` 读状态，未冻结时 `claim_unit` 会被拒）。
+3. `write_stories` → `write_cases` → `gate_run`（分数由服务端算，被拦就改用例再跑）→ `finalize_run`，状态变为 `waiting_review`。
 
-2026-09-10 用户决定取消本地审核身份验证。Web 不再显示身份或解锁控件；无需 TP_REVIEW_TOKEN，服务不再生成 reviewer-token。审批记录使用 local-operator，表示本地操作来源，不能当作已验证的真人身份。显式带 agent Authorization 的请求仍不能审批；无凭证的本地 API 已不构成客户端身份隔离。宿主 MCP 的 run 能力和版本检查保留，宿主仍须等待操作方的审批决定。
+输入 schema 以 MCP `tools/list` 为准，不要手拼旧 payload。除阶段工具外还有 `tp_project` / `tp_run` / `tp_review` / `tp_execution` 等按域分组的工具，Web 上的大部分操作都能在宿主里做；不知道 runId 时用 `tp_run.list` 找。
 
-## 6. Penguin 与升级卸载
+**成功的标志：** 宿主能看到 `register_run` / `finalize_run`；运行出现在 Web 同一项目下；故事与用例有不可变版本；finalize 后是 `waiting_review`。之后由人在 Web 复核来源与预期并批准（本地免登录，记录为 `local-operator`），再 `generate_execution` / `execute_approved`。带 `Authorization` 头的代理请求不能做审批。doctor ready、MCP 在线都代替不了这几条。
 
-Penguin 先创建 agent，然后在 TestPilot checkout 使用 pnpm setup --entry penguin --agent-id 实际ID --project 实际项目ID。宿主保留原生 planner；配套评估 UI 当前单独运行，见 [扩展安装和门禁](../../extensions/penguin-evaluation/README.md)。不要把仅装技能等同于评估扩展已经启动。
+## 4. 实验性：Codex
 
-同宿主重复 install 更新托管内容；升级前保留自己修改过的技能，因为 install 的复制更新不同于 uninstall 的哈希保留策略。卸载在 TestPilot checkout：
+不在初步交付的验收范围内，Web 也不能用 Codex 发起规划（服务端拒绝为 `web_planner_runtime_unsupported:codex`），只能从宿主侧用。
 
 ```sh
-node scripts/testpilot-setup.mjs uninstall --workspace "/absolute/path/to/application"
+node scripts/testpilot-setup.mjs install --entry codex \
+  --workspace "<工作目录的绝对路径>" \
+  --model-env "<checkout>/server/.env" \
+  --server http://127.0.0.1:5301
+node scripts/testpilot-setup.mjs doctor --entry codex
 ```
 
-卸载删除收据追踪且哈希未变的文件，保留改过技能和用户材料。数据/env 不删除，宿主模型与账号保留。当前 plugins/testpilot-codex 是有效插件目录，公共市场安装未发布；项目级安装是本指南已验证路径。
+- 写入 `<workspace>/.codex/config.toml` 里 `# BEGIN TESTPILOT` … `# END TESTPILOT` 之间的 `[mcp_servers.testpilot]`（保留宿主模型与其他 MCP）、`.agents/skills/` 下十个 skill、shim 与收据。已有未托管的 `mcp_servers.testpilot` 时拒绝安装。
+- 项目级 MCP 只在受信任项目里加载；装完没出现就重启客户端或新开会话，用 `codex mcp list` 或交互界面的 `/mcp` 检查。
+- `codex` 版本过旧（doctor 会标出 0.140–0.144）时，用 `TP_CODEX_BIN` 指向新版，不要为绕过版本问题换掉宿主模型。doctor 认到的可执行文件不代表另一个终端的 PATH 也一样。
+- 插件形态：`pnpm build:codex-plugin` 生成 `plugins/testpilot-codex/`，其 MCP 命令是裸的 `testpilot-mcp`，需要把安装输出里的 `bin`（`<workspace>/.testpilot/bin`）加进启动 Codex 的 PATH。安装器不改个人 marketplace 或全局配置。
+- 服务端适配器（`server/src/codex.ts`）以 `codex exec` 起会话时会剔除 `TP_PLANNER_*` 与 `MIDSCENE_*`，不覆盖宿主规划模型。
 
-## 7. 排障与已验证范围
+实测记录见 [Codex 宿主 Hyperliquid 实测](history/19-Codex宿主Hyperliquid实测.md)。
+
+## 5. 实验性：Penguin
+
+需要 Node 24+、Penguin CLI 与正在运行的 Penguin 服务。先在 Penguin 里创建 agent，再：
+
+```sh
+node scripts/testpilot-setup.mjs install --entry penguin --agent-id <agent-id> \
+  [--project <penguin项目ID，默认 default_project>] [--penguin-home <默认 ~/.penguin>]
+node scripts/testpilot-setup.mjs doctor --entry penguin
+```
+
+安装器调用 `plugins/testpilot/install.sh` 装 skill 与 hook，并在 agent 的 `system_config.yaml` 的 `tools.mcpServers` 里加一段带标记的 TestPilot MCP；保留原生规划模型和其他工具。收据写在 agent_state 目录下，卸载时 `--workspace` 指向该目录。Node 查找顺序：`TP_PENGUIN_NODE` → nvm 里最高的 Node 24+ → 当前或系统 Node 24+；`TP_PENGUIN_BIN` 可覆盖 CLI。Web 发起 Penguin 规划时还需要规划模型（`TP_PLANNER_*` 或项目模型设置）。配套评估 UI 另行安装，见 [评估扩展说明](../../extensions/penguin-evaluation/README.md)。
+
+## 6. 排障
 
 | 表现 | 检查 |
 |---|---|
-| 菜单打开但项目空、Failed to fetch | 服务是否是当前 checkout；5301 旧进程会导致新版前端 API / CORS 不匹配。只读 health 200 不足以证明版本一致 |
-| MCP 未出现 | workspace 是否正确、项目配置是否启用、CLI 路径是否可执行、checkout/env 引用是否仍存在 |
-| doctor ready 但运行失败 | doctor 当前只作 CLI/依赖/配置预检，不测试真实 provider、MCP 会话、API 作用域或 SUT |
-| 收到 installed_skills_changed / stale revision | 新注册/明确续跑并重新绑定版本；不删除旧证据或伪造 gate |
-| Web 失败 session 不在了 | 查看最后阶段/输入/预算与日志；先判断是否可续，可直接恢复，无需审核登录，不盲目再次创建 |
-| 配置改了仍用旧模型 | 当前项目是否覆盖 env；服务是否重启；查看运行被冻结的模型快照 |
+| Web 项目为空、Failed to fetch | 5301 上是不是当前 checkout 的服务；旧进程会让新前端 API 对不上。health 200 不能证明版本一致 |
+| 建运行报 `planner_runtime_unavailable:claude-code` | 服务进程能否执行 `claude --version`（PATH 或 `TP_CLAUDE_BIN`）；只查可执行，不查登录态 |
+| Web 发起的 Claude Code 会话里 hook 报错 | 是否跑过 `pnpm build:claude-plugin`（`tp-config.json` 是本机生成的） |
+| 宿主里看不到 MCP | workspace 是否正确、项目 MCP 是否已启用/受信任、shim 与 `--model-env` 指向的文件是否还在 |
+| doctor ready 但运行失败 | doctor 不测真实模型、MCP 会话、登录态和被测应用，看运行日志 |
+| `installed_skills_changed` / 版本过期 | skill 在运行中途变了；新注册或明确续跑并重新绑定版本，不删旧证据、不伪造门禁 |
+| 改了配置还在用旧模型 | 项目设置是否覆盖了 env、服务是否重启；运行用的是登记时冻结的模型快照 |
+| 同一目录装过两个宿主后卸载不干净 | 收据只有一份、被后装的覆盖了；一个工作目录只装一个宿主 |
 
-本轮 node --test scripts/test/setup.test.mjs 四项通过，含 Claude/Codex 独立干净目录与含空格路径、重复安装、真实 stdio 握手 tools/list、修改后卸载保留；Web env 保留与 Penguin 配置合并。模型 API 使用合成配置，没有收费模型请求；本轮没有重新执行三宿主端到端生成。日志在 evidence/ui-review-2026-09-09/install-tests.tap。
-
-## 8. 2026-09-10 · 新增原生 Codex 实测
-
-已对 Hyperliquid 项目的冻结 Explore 材料做原生 Codex → MCP → Web 独立复核 → 原生 MCP 提交执行 → Midscene 报告的真实验证：8 模块、6 故事、10 用例，10/10 通过。不是重新 Explore、公共市场安装或完整金融领域测试。原生适配器使用 0.153.4 与既有登录态，不配置独立 planner；过程、命令与证据见 [19](19-Codex宿主Hyperliquid实测.md)。前述 §7 的“未重新执行”仅描述 09-09 安装检查。
+卸载与升级见 [安装与诊断](10-安装与诊断.md#升级与卸载)。
