@@ -400,12 +400,6 @@
   {
    "source": "index.ts",
    "method": "GET",
-   "path": "/api/materials",
-   "host": "tp_project.materials"
-  },
-  {
-   "source": "index.ts",
-   "method": "GET",
    "path": "/api/model/config",
    "host": "tp_settings.model_config"
   },
@@ -1167,8 +1161,8 @@
   }
  ],
  "baseline": {
-  "covered": 191,
-  "reachable": 191,
+  "covered": 190,
+  "reachable": 190,
   "rate": 1
  }
 }

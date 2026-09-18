@@ -100,8 +100,9 @@ describe("a graph a model drafted", () => {
     const draft = checkGraph(stripped);
     expect(draft.valid).toBe(true);
     expect(draft.warnings?.join(" ")).toMatch(/would be dropped/);
-    // 读文件的那个节点现在叫 docs：用户文档是材料，spec 是整理出来的那一步。
-    expect(draft.warnings?.some((w) => w.startsWith("docs.path"))).toBe(true);
+    // 2026-09-18 起读文件的 docs 节点不再有默认路径（产品代码不指向仓库夹具），
+    // 所以这里改看 spec 节点：丢掉的参数一样要被说出来。
+    expect(draft.warnings?.some((w) => w.startsWith("spec."))).toBe(true);
     expect(draft.diff?.length).toBeGreaterThan(0);
   });
 });

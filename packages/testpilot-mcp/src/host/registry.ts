@@ -56,7 +56,6 @@ const project: DomainSpec = {
     },
     update: { summary: "改项目（名字、目标地址）", method: "PATCH", path: "/api/projects/:id", params: ["id"], mutates: true, body: json },
     remove: { summary: "删项目。不可撤销，动手前先跟人确认", method: "DELETE", path: "/api/projects/:id", params: ["id"], mutates: true },
-    materials: { summary: "列出可用的材料（领域知识正文）", method: "GET", path: "/api/materials" },
     rule_packs: { summary: "列出项目绑定的规则包", method: "GET", path: "/api/projects/:id/rule-packs", params: ["id"] },
     rule_pack: { summary: "读一份规则包的全文", method: "GET", path: "/api/projects/:id/rule-packs/:hash", params: ["id", "hash"] },
     add_rule_pack: {
