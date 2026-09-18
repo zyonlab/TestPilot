@@ -3,7 +3,7 @@
   "version": "2026-09-10.1",
   "skillVersions": {
     "testpilot-generate": "2026-09-10.1",
-    "testpilot-explore": "2026-09-15.3",
+    "testpilot-explore": "2026-09-18.1",
     "testpilot-stories": "2026-09-14.1",
     "testpilot-design": "2026-09-16.2",
     "testpilot-run-c": "2026-09-14.1",
@@ -15,7 +15,7 @@
   },
   "skillDigests": {
     "testpilot-generate": "12ee15239b74568a",
-    "testpilot-explore": "9a186817751f8708",
+    "testpilot-explore": "982c2342aff18355",
     "testpilot-stories": "0e71db20690374b0",
     "testpilot-design": "e8f6f7f52e5b5033",
     "testpilot-run-c": "5f7d0a92ddf947b2",

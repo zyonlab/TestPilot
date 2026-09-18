@@ -15,7 +15,7 @@ import { g1 } from "../src/casegen/graph.js";
 import { runGate } from "../src/casegen/gate.js";
 import type { CaseBundle, GatedBundle } from "../src/casegen/types.js";
 
-const FIXTURES = fileURLToPath(new URL("../../../fixtures/mock-spec/", import.meta.url));
+const FIXTURES = fileURLToPath(new URL("../../../fixtures/sample-spec/", import.meta.url));
 const SPEC = readFileSync(`${FIXTURES}acme-portal.md`, "utf8");
 const GOLD = JSON.parse(readFileSync(`${FIXTURES}gold-checklist.json`, "utf8")) as GoldChecklist;
 

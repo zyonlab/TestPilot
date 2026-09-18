@@ -93,7 +93,7 @@ describe("scoreCoverage", () => {
 
 describe("the shipped gold checklist", () => {
   const shipped = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../../../fixtures/mock-spec/gold-checklist.json", import.meta.url)), "utf8"),
+    readFileSync(fileURLToPath(new URL("../../../fixtures/sample-spec/gold-checklist.json", import.meta.url)), "utf8"),
   ) as GoldChecklist;
 
   it("is well formed and keeps a held-out slice", () => {

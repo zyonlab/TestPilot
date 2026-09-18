@@ -10,7 +10,7 @@ import { loadGold } from "../src/score.js";
  *
  * 借 commerce-agents 的 `examples/demo_common/tests/contract.py`：四个垂类共享一份契约测试，
  * 垂类差异用 fixture 缺席时 skip 表达，而不是各写一份。这里的「垂类」是能力目录：
- * casegen 与 binance-futures 两份，以后每加一份基准都自动进这张网。
+ * casegen 与 hyperliquid-testnet 两份，以后每加一份基准都自动进这张网。
  *
  * `loadGold` 找不到就抛、不兜底（`score.ts`）是这份契约在代码里的另一半。
  */

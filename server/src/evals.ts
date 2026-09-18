@@ -212,9 +212,7 @@ export function getEval(id: string): Record<string, unknown> | undefined {
  * checklist, and getting this wrong is silent: the mock checklist against the self-test
  * run would simply read 0% and look like a regression rather than a mix-up.
  */
-const GRAPH_GOLD: Record<string, string> = {
-  "selftest-g1": "fixtures/self-test/gold-checklist.json",
-};
+const GRAPH_GOLD: Record<string, string> = {};
 
 /**
  * What an evaluation of this graph would be scored against, before running one.
@@ -250,7 +248,7 @@ export function evalSubject(graphId: string): {
 }
 
 function loadGold(goldPath?: string, graphId?: string): { gold: GoldChecklist; path: string } {
-  const path = goldPath ?? (graphId && GRAPH_GOLD[graphId]) ?? "fixtures/mock-spec/gold-checklist.json";
+  const path = goldPath ?? (graphId && GRAPH_GOLD[graphId]) ?? "benchmark/casegen/gold.json";
   const full = path.startsWith("/") ? path : resolve(REPO_ROOT, path);
   return { gold: JSON.parse(readFileSync(full, "utf8")) as GoldChecklist, path };
 }

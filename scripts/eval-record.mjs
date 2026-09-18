@@ -15,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const [listPath, cap = "binance-futures"] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const [listPath, cap = "casegen"] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const WRITE_BASELINE = process.argv.includes("--baseline");
 if (!listPath) {
   console.error("用法：node scripts/eval-record.mjs <eval-sessions.json> <capability> [--baseline]");

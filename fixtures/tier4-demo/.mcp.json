@@ -1,1 +1,0 @@
-{ "mcpServers": { "testpilot": { "command": "node", "args": ["../../packages/testpilot-mcp/bin/testpilot-mcp.mjs"], "env": { "TP_RUNTIME": "claude-code" } } } }

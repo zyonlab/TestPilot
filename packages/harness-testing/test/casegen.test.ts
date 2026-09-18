@@ -271,7 +271,7 @@ describe("the specification reaching the node that writes the cases", () => {
 describe("the graph definition", () => {
   it("omits specText entirely when the specification was given as a path", async () => {
     const { g1Graph } = await import("../src/casegen/graph.js");
-    const design = g1Graph({ spec: { path: "fixtures/mock-spec/acme-portal.md" } }).nodes.find((n) => n.id === "design");
+    const design = g1Graph({ spec: { path: "fixtures/sample-spec/acme-portal.md" } }).nodes.find((n) => n.id === "design");
     expect(design?.params).not.toHaveProperty("specText");
   });
 

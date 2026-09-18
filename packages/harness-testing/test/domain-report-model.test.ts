@@ -11,7 +11,7 @@ import { StateFlowGraphSchema, type StateFlowGraph } from "../src/exec/sfg.js";
  * 探索回执、覆盖计数与产品模型（docs/v3/history/21 §8 反例 2、3、5、7、9、10、11）。
  * 全部喂合成数据，不开浏览器、不问模型；同一套函数在真实探索里跑。
  */
-const packPath = resolve(import.meta.dirname, "../../../fixtures/perp-lab/rules.json");
+const packPath = resolve(import.meta.dirname, "./fixtures/perp-lab-rules.json");
 const pack = (() => { const v = validateRulePack(JSON.parse(readFileSync(packPath, "utf8"))); if (!v.ok) throw new Error("pack"); return v; })();
 const charter = charterFromRulePack(pack.pack, pack.hash, { entryUrl: "http://127.0.0.1:5391/", maxScreens: 8 });
 

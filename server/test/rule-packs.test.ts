@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
  * 在这之前它只能在新建运行的表单里贴一次，躺在那次运行里——列不出、改不了、比不了。
  */
 let dir: string, project: string, packs: typeof import("../src/rulePacks.js"), db: typeof import("../src/db.js");
-const RAW = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../fixtures/perp-lab/rules.json"), "utf8")) as Record<string, unknown>;
+const RAW = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../packages/harness-testing/test/fixtures/perp-lab-rules.json"), "utf8")) as Record<string, unknown>;
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tp-rulepacks-"));
