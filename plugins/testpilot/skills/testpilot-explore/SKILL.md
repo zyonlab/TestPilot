@@ -22,9 +22,9 @@ description: Turns an exploration of a running product into the workspace materi
 2. 把一次已经跑完的探索产物，转成 `<workspace>/materials/` 下的材料；
 3. 把「这批材料是观察，不是意图」这件事**一路标下去**。
 
-> **Phase 1B 不对 demo.binance.com 真跑。** 那需要一次有效的会话导入、一个 1600×1000 的
-> 视口和一次十几分钟的真实运行。基准目录 `benchmark/binance-futures/` 用的是
-> **2026-09-01 那次已经跑完的探索产物**。要重新采集，先读下面三条。
+> **不要为了写材料去对被测站点真跑一次探索。** 那需要一次有效的会话导入、一个
+> 1600×1000 的视口和十几分钟。默认用**已经跑完的探索产物**转材料；确实要重新采集，
+> 先读下面三条。
 
 ## 三条前提
 

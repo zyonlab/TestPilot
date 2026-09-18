@@ -5,7 +5,7 @@ import {storeScoreboardEntry} from './score-store.js';
  * `scoreRun` 的核心搬自 `server/src/evals.ts`，两处改动，都是 v3 的规格要的：
  *
  * 1. **`loadGold` 找不到就抛。** 老版本是
- *    `goldPath ?? GRAPH_GOLD[graphId] ?? "fixtures/mock-spec/gold-checklist.json"`——
+ *    `goldPath ?? GRAPH_GOLD[graphId] ?? "benchmark/casegen/gold.json"`——
  *    一个静默兜底。它的后果不是「少了一个分数」，是「多了一个对着错清单算出来的分数」，
  *    而那个分数读起来像一次退步。架构 §3 P2 点名要改的就是这个 `??`。
  * 2. **带完整 `binding`。** `RunMeta` 从 `runs/<id>/meta.json` 读，缺任一必填项当场抛

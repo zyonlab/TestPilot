@@ -156,7 +156,7 @@ describe("回放与基线", () => {
   });
 
   it("仓库里那三条用例本身是合法的", () => {
-    const cases = loadEvalCases(join(__dirname, "..", "..", "..", "benchmark", "binance-futures", "cases"));
+    const cases = loadEvalCases(join(__dirname, "..", "..", "..", "fixtures", "eval-cases"));
     expect(cases.map((c) => c.id).sort()).toEqual(["honest-run", "meta-forgery", "poisoned-material"]);
   });
 });

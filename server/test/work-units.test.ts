@@ -12,7 +12,7 @@ let dir: string, project: string, service: typeof import("../src/runService.js")
   moduleStage: typeof import("../src/moduleStage.js");
 let pack: import("@testpilot/harness-testing/domain").ProductRulePack, model: import("@testpilot/harness-testing/domain").ProductModel;
 
-const packRaw = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../fixtures/perp-lab/rules.json"), "utf8"));
+const packRaw = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../packages/harness-testing/test/fixtures/perp-lab-rules.json"), "utf8"));
 
 /** 一份「面板都试过、提交类被策略挡住」的合成回执，等价于真实探索的结果形状。 */
 async function syntheticModel() {

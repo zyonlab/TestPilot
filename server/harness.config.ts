@@ -72,9 +72,9 @@ export default defineHarnessConfig({
      * 版本全部 pin 死——`latest` 会在某天悄悄换掉被测对象，而那种变化在结果里
      * 看起来像 harness 变了。
      *
-     * 只登记**已核实镜像存在**的那些。其余四个（retroboard / dimeshift / splittypie /
-     * phoenix）见 `fixtures/benchmark/apps.json`：没有可公开拉取的镜像，写一条没核实过的
-     * `docker run` 进来，等于给出一个跑不起来的承诺。
+     * 只登记**已核实镜像存在**的那些。retroboard / dimeshift / splittypie / phoenix
+     * 没有可公开拉取的镜像，写一条没核实过的 `docker run` 进来，
+     * 等于给出一个跑不起来的承诺。
      */
     {
       id: "bench-petclinic",

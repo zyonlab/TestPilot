@@ -44,7 +44,7 @@ describe("仓库里的评测定义", () => {
   it("仓库自带的那几份全部读得出来", () => {
     const { specs, problems } = listEvalSpecs();
     expect(problems).toEqual([]);
-    expect(specs.map((s) => s.id)).toContain("design-methods");
+    expect(specs.map((s) => s.id)).toContain("domain-perp");
     expect(specs.every((s) => s.why.length >= 10)).toBe(true);
   });
 

@@ -331,7 +331,7 @@ export const outputStore = new SqliteOutputStore(dataPath("workflows.db"));
  *
  * Two documents rather than one: what the product does and how it behaves on screen are
  * written apart, and a case designer needs both. The gold checklist it is scored against
- * (`fixtures/self-test/gold-checklist.json`) was extracted by hand from the second one.
+ * (`benchmark/casegen/gold.json`) was extracted by hand from the second one.
  */
 function selfTestGraph(g1: GraphDef): GraphDef {
   return {

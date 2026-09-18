@@ -17,7 +17,7 @@ export function testingPack(opts: {
   baseDir?: string;
   specPath?: string;
 }): DomainPack {
-  const specPath = opts.specPath ?? "fixtures/mock-spec/acme-portal.md";
+  const specPath = opts.specPath ?? "fixtures/sample-spec/acme-portal.md";
   const g1 = g1Graph({ spec: { path: specPath }, lang: "zh" });
   return {
     name: "testing",

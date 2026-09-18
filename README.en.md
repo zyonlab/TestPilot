@@ -17,7 +17,7 @@
 
 ---
 
-> **Status**: early release (0.1). The full pipeline has been run end to end against two systems under test: a self-hosted [Vikunja](https://vikunja.io/) and the Hyperliquid testnet. Data formats and APIs may still change; check the recent changes in the [handoff guide](docs/v3/09-执行目标与接手指南.md) (Chinese) before upgrading.
+> **Status**: early release (0.1). The full pipeline has been run end to end against the Hyperliquid testnet. Data formats and APIs may still change; check the recent changes in the [handoff guide](docs/v3/09-执行目标与接手指南.md) (Chinese) before upgrading.
 
 ## What it is
 

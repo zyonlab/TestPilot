@@ -15,7 +15,7 @@
   "why": "为什么问这个问题。必填，且不能只是复述标题。",
 
   "graphId": "g1-text-cases",
-  "goldPath": "fixtures/mock-spec/gold-checklist.json",  // 可省，按图有默认
+  "goldPath": "fixtures/sample-spec/gold-checklist.json", // 可省，缺省是 benchmark/casegen/gold.json
   "casesNode": "gate",                                    // 哪个节点的产物拿去打分
 
   "a": { "label": "现状", "ablate": [], "params": {} },

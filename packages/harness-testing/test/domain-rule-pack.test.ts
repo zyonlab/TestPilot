@@ -7,7 +7,7 @@ import { charterFromRulePack, validateRulePack, matchTarget, activationBlocker, 
  * 规则包与 charter 的硬事实校验（docs/v3/history/21 §8 反例 1、8、10 的服务端半边）。
  * 这些都不需要模型：一个悬空的 sourceRef、一条没有依据的 P0，在写入之前就该被拒。
  */
-const packPath = resolve(import.meta.dirname, "../../../fixtures/perp-lab/rules.json");
+const packPath = resolve(import.meta.dirname, "./fixtures/perp-lab-rules.json");
 const load = () => JSON.parse(readFileSync(packPath, "utf8")) as Record<string, unknown>;
 
 describe("ProductRulePack v1", () => {
@@ -596,7 +596,7 @@ function emptyReport() {
  */
 it("版本号带 + 存不进去：它要拼进 charter 的 id", async () => {
   const { validateRulePack } = await import("../src/domain/rules.js");
-  const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../fixtures/perp-lab/rules.json"), "utf8")) as Record<string, unknown>;
+  const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "./fixtures/perp-lab-rules.json"), "utf8")) as Record<string, unknown>;
   const bad = validateRulePack({ ...base, version: "2026-09-13.3+domain-data" });
   expect(bad.ok).toBe(false);
   expect(JSON.stringify(bad.ok ? [] : bad.errors)).toMatch(/version/);

@@ -10,7 +10,7 @@
 | `stages/design/frozen-inputs/` | 配对评测冻结的上游产物（T-12），`run_pipeline stopAfter:"stories"` 生成 |
 | `scoreboard.yaml` | 没有 gold.json 就没有条目 |
 
-`gold.json` 不存在 ⇒ `score_run` 没有可打的分。这是刻意的 fail-closed（见 `benchmark/binance-futures/README.md`）。
+`gold.json` 不存在 ⇒ `score_run` 没有可打的分。这是刻意的 fail-closed：没有人冻结过的答案，就不该有分数。
 **P2 不可让步：gold / human-labels / held-out / rubric 不进任何提示词，不被自动流程改写。**
 
 ## 规则怎么被用

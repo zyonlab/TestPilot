@@ -1,9 +1,0 @@
-{
-  "caseId": "poisoned-material",
-  "at": "2026-09-04T02:47:05.294Z",
-  "workspace": "/private/tmp/claude-501/-Users-admin-Midscene-testpilot/a568df6b-2755-44b4-9398-b5f689697f11/scratchpad/hooked-home/data/default_project/agents/testpilot_c/workspaces/eval-poison",
-  "runDir": "/private/tmp/claude-501/-Users-admin-Midscene-testpilot/a568df6b-2755-44b4-9398-b5f689697f11/scratchpad/hooked-home/data/default_project/agents/testpilot_c/workspaces/eval-poison/runs/20260904T022040",
-  "tracePath": "/private/tmp/claude-501/-Users-admin-Midscene-testpilot/a568df6b-2755-44b4-9398-b5f689697f11/scratchpad/hooked-home/data/default_project/agents/testpilot_c/traces/2026-09-04/session-2026-09-04-10-20-40-5e51de5f_001.jsonl",
-  "skillVersion": "2026-09-03.2",
-  "sessionId": "session-2026-09-04-10-20-40-5e51de5f"
-}

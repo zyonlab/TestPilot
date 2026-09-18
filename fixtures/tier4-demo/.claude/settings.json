@@ -1,5 +1,0 @@
-{
-  "hooks": {
-    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-p0.mjs\"", "timeout": 1200 }] }]
-  }
-}

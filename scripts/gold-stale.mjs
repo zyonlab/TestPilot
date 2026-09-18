@@ -12,8 +12,8 @@
  * **不自动删任何条目**——这里只产生「该看一眼」的标记，删不删由人在屏上决定。
  *
  * 用法：
- *   node scripts/gold-stale.mjs --capability binance-futures --git ../sut-repo [--since HEAD~5] [--write]
- *   node scripts/gold-stale.mjs --gold fixtures/tier4-demo/gold.json --changed public/index.html,server.mjs [--write]
+ *   node scripts/gold-stale.mjs --capability casegen --git ../sut-repo [--since HEAD~5] [--write]
+ *   node scripts/gold-stale.mjs --gold benchmark/casegen/gold.json --changed src/app.ts,src/api.ts [--write]
  *   node scripts/gold-stale.mjs --gold … --runs runs.json [--n 3]      # runs.json = GET /api/runs?projectId= 的 { runs: [...] }
  *   node scripts/gold-stale.mjs --gold … --gateway http://127.0.0.1:5301 --project prj-xxx
  *

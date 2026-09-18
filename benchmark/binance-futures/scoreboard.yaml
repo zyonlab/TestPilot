@@ -1,7 +1,0 @@
-# TestPilot 基准记分板：binance-futures
-#
-# 由 score_run / paired_eval 追加，**不要手写**。
-# 每条 entry 必须带完整 binding（RunMeta），缺 skillVersion / promptsDigest / model /
-# materialsHash 任一项拒收（数据契约 §2）。
-# goldHash 变了就是新谱系，跨谱系不比——所以这个文件在 gold.json 定稿之前不会有任何条目。
-entries: []

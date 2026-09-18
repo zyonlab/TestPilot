@@ -65,11 +65,11 @@ export class NotFound extends Error {
 /**
  * 能力单元 = 目录（架构 §5）。
  *
- * `binance-futures`：Phase 1 真正在做的那一个。`TP_CAPABILITY` 可以改，
+ * `casegen`：自举基准，仓库里唯一有冻结 gold 的那个。`TP_CAPABILITY` 可以改，
  * 但**不要在一次校准跑到一半时改**——`human-labels.json` 是按能力分目录存的，
  * 改一次等于把已标的那些留在另一个目录里，而界面上只会显示"还没标"。
  */
-export const CAPABILITY = process.env.TP_CAPABILITY || "binance-futures";
+export const CAPABILITY = process.env.TP_CAPABILITY || "casegen";
 
 /**
  * `benchmark/<capability>/`。

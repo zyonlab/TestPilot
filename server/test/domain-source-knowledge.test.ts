@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
  * 真实账本、临时数据目录；不开浏览器、不问模型。
  */
 let dir: string, project: string, service: typeof import("../src/runService.js"), db: typeof import("../src/db.js"), ops: typeof import("../src/workflowOps.js");
-const packRaw = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../fixtures/perp-lab/rules.json"), "utf8"));
+const packRaw = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../packages/harness-testing/test/fixtures/perp-lab-rules.json"), "utf8"));
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tp-domain-src-"));
   vi.stubEnv("TP_DATA_DIR", dir);

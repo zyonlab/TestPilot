@@ -43,7 +43,7 @@
 - 对象：**开源 / 公开发布**，许可 MIT；**新建公开仓库、不带提交历史**（从整理后的快照做第一个提交），现有私有仓库原样保留。建公开仓库、push、发布仍要当轮确认。
 - 入口：**Web + Claude Code**。Web 发起的生成默认由本机 Claude Code 规划（`TP_AGENT_RUNTIME` 不设即 `claude-code`，新建运行表单可选）；
   Penguin（需 Node 24 与 Penguin 服务）与 Codex 标实验性。运行登记时定下规划运行时，续跑用同一个。
-- 验收被测对象：Vikunja（本地）+ Hyperliquid 测试网。
+- 验收被测对象：**只有 Hyperliquid 测试网**（2026-09-18 用户决定）。Vikunja 那条线连同它的数据一起清掉了，早期在它上面跑通的记录留在 history。
 - **冻结不做**：自进化、经验与反例库、子 agent 并行、去不去掉 Penguin、Gold 与记分板、论文研究线（台账 P-13～P-24）。新需求先问「初步交付需不需要」。
 - 本机基准应用目录由 `TP_BENCH_DIR` 给（默认 `~/bench`），仓库里不写死任何人的主目录。
 
