@@ -79,6 +79,15 @@ flowchart LR
 | **复核：逐条批准或驳回** | **运行报告：每条用例的过程与判据** |
 | ![复核](docs/assets/workflow/07-review.png) | ![运行报告](docs/assets/workflow/09-report.png) |
 
+真跑起来是这样的。下面三张来自同一条用例（`C-MKT-BOOK-05`「成交列表按时间倒序，第一行是最近一笔」，通过，35.1 秒）：执行过程里每一步都留下被测页面的截图和这一步的判定；截图同时存为视觉基线，下次执行会比对；Midscene 自己的报告可以逐帧回看，包括每次点击的落点。
+
+| 执行过程：每步的页面截图与判定 | 视觉基线：本次执行留下的三步截图 |
+|---|---|
+| ![执行过程](docs/assets/workflow/14-exec-timeline.png) | ![视觉基线](docs/assets/workflow/15-visual-baseline.png) |
+
+![Midscene 报告](docs/assets/workflow/16-midscene-report.png)
+*Midscene 报告：断言「成交列表的 Time 列自上而下递减」在测试网页面上通过*
+
 ## 快速开始
 
 ### 前置条件

@@ -79,6 +79,15 @@ Taken from a run against the Hyperliquid testnet (planned by Claude Code, 115 ca
 | **Review: approve or reject each case** | **Run report: steps and checks per case** |
 | ![Review](docs/assets/workflow/07-review.png) | ![Run report](docs/assets/workflow/09-report.png) |
 
+Here is an actual run. All three below come from one case (`C-MKT-BOOK-05`, "the trades list is newest first", passed in 35.1s): every step keeps a screenshot of the page under test next to what was checked there; those screenshots also become the visual baseline for the next run; and Midscene's own report replays the run frame by frame, including where each click landed.
+
+| Steps: page screenshot and check per step | Visual baseline: the three screenshots this run left |
+|---|---|
+| ![Execution steps](docs/assets/workflow/14-exec-timeline.png) | ![Visual baseline](docs/assets/workflow/15-visual-baseline.png) |
+
+![Midscene report](docs/assets/workflow/16-midscene-report.png)
+*The Midscene report: the assertion "the Time column of the trades list decreases top to bottom" passing on the testnet page*
+
 ## Quick start
 
 ### Prerequisites
