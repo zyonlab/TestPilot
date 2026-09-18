@@ -1,7 +1,29 @@
 {
   "name": "testpilot-web",
   "version": "0.1.0",
+  "description": "Turn requirement documents or site explorations into human-reviewed end-to-end UI tests whose verdicts are read from the screen.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zyonlab/TestPilot.git"
+  },
+  "homepage": "https://github.com/zyonlab/TestPilot#readme",
+  "bugs": {
+    "url": "https://github.com/zyonlab/TestPilot/issues"
+  },
+  "keywords": [
+    "e2e-testing",
+    "test-generation",
+    "ui-testing",
+    "midscene",
+    "playwright",
+    "claude-code",
+    "mcp",
+    "llm-agents"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "type": "module",
   "scripts": {

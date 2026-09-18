@@ -1,0 +1,12 @@
+{
+  "name": "testpilot",
+  "owner": { "name": "TestPilot" },
+  "description": "TestPilot: turn requirements or an explored web app into reviewed end-to-end UI tests (Midscene).",
+  "plugins": [
+    {
+      "name": "testpilot",
+      "source": "./plugins/testpilot-claude",
+      "description": "Stage tools (MCP), skills and gate hooks for generating reviewed E2E UI test cases with a running TestPilot server."
+    }
+  ]
+}

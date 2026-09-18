@@ -1,0 +1,25 @@
+name: Feature request / 功能建议
+description: Propose a change / 提议一个改动
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some areas are frozen for the current release (self-improvement, experience libraries, parallel sub-agents, gold sets / scoreboards, research track). See the README roadmap.
+        当前版本冻结了部分方向（自进化、经验库、子 agent 并行、Gold 与记分板、论文研究线），见 README 的路线图。
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 要解决的问题
+      description: What are you trying to do, and what gets in the way? / 你想做什么，卡在哪里？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal / 设想
+      description: How should it work? Mention if it touches verdicts, human gates or domain data. / 应该怎么工作？是否涉及判据、人工把关或领域数据？
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / 其他方案

@@ -19,14 +19,30 @@
 
 什么都不用装：新建运行时规划运行时默认就是 Claude Code（`TP_AGENT_RUNTIME` 不设即 `claude-code`）。服务会为每次运行建一个独立工作区（数据目录下的 `host-workspaces/<runId>`），写入带本次运行凭证的 `.mcp.json`，再以非交互方式起 `claude`（`TP_CLAUDE_BIN` 可覆盖）。若 `plugins/testpilot-claude/` 已由 `pnpm build:claude-plugin` 生成，会话会带上 `--plugin-dir`，门禁 hook 随之生效；没生成就只有服务端门禁。
 
-### 2.2 在本仓库里带插件用
+### 2.2 装成插件（推荐）或只在本次会话加载
 
 ```sh
 pnpm build:claude-plugin
+# 装成插件：仓库根的 .claude-plugin/marketplace.json 把本 checkout 声明为本地插件市场
+claude plugin marketplace add "<checkout 的绝对路径>"
+claude plugin install testpilot@testpilot
+# 或者只在本次会话加载
 claude --plugin-dir plugins/testpilot-claude
 ```
 
-插件目录由真源 `plugins/testpilot/` 生成：十个 skill、`hooks/hooks.json`（写 stories/cases/memory 前校验、停止前要求门禁）、`.mcp.json`（stdio 起 `packages/testpilot-mcp`）。MCP 默认连 `http://127.0.0.1:5301`，可用 `TP_SERVER_URL` 改。
+插件目录由真源 `plugins/testpilot/` 生成，内容有三样：
+- 十个 skill；
+- `hooks/hooks.json`：写 stories/cases/memory 前做校验，停止前要求门禁；
+- `.mcp.json`：以 stdio 方式启动 `packages/testpilot-mcp`。
+
+MCP 默认连 `http://127.0.0.1:5301`，可用 `TP_SERVER_URL` 改。
+
+**只能从本地 checkout 安装**：`.mcp.json` 用 `${CLAUDE_PLUGIN_ROOT}/../../packages/…` 引用仓库里的 MCP 入口，hook 用 `${CLAUDE_PLUGIN_ROOT}/../testpilot/hooks/…` 引用 hook 脚本，`tp-config.json` 里还有本机绝对路径（这个文件由 build 生成，不入库）。2026-09-17 在隔离的 `CLAUDE_CONFIG_DIR` 里实测过以下几点：
+- 从本地市场安装后，`CLAUDE_PLUGIN_ROOT` 指向 checkout 里的原目录，`claude mcp list` 显示 `plugin:testpilot:testpilot … ✔ Connected`；
+- `claude plugin details` 列出 10 个 skill、PreToolUse 与 Stop 两个 hook；
+- 已安装插件时再加 `--plugin-dir`，MCP 仍然只有一份。
+
+更新时先重跑 build，再执行 `claude plugin marketplace update testpilot` 和 `claude plugin update testpilot@testpilot`。卸载用 `claude plugin uninstall testpilot@testpilot`，再执行 `claude plugin marketplace remove testpilot`。
 
 ### 2.3 装进自己的工作目录
 
@@ -60,7 +76,7 @@ TestPilot 项目 ID 是 <项目ID>，被测地址是 <测试环境URL>。
 `testpilot-run-c` 规定的工具顺序：
 
 1. `register_run`（无 runId 时；重试保持参数完全一致）→ `load_run_instructions` → `retrieve_spec`（chunk ID 逐字引用）。
-2. 项目带产品模型时：`begin_stage`（`node:"modules"`）→ `plan_modules` 提议至少两层的模块树 → **停下，由人冻结**（模型没有冻结工具；`module_plan_state` 读状态，未冻结时 `claim_unit` 会被拒）。
+2. 项目带产品模型时：`begin_stage`（`node:"modules"`）→ `plan_modules` 提议至少两层的模块树 → **停下，由人冻结**（`module_plan_state` 读状态，未冻结时 `claim_unit` 会被拒）。注意：宿主工具里有 `tp_stage.freeze_modules`，调用时不带运行令牌，服务端会把它当作本地操作员，所以模型在技术上可以自己冻结。目前只靠工具说明约束，见 [02 §10-1](02-工作流-横向与纵向.md#10-已知缺口2026-09-17-核对)。
 3. `write_stories` → `write_cases` → `gate_run`（分数由服务端算，被拦就改用例再跑）→ `finalize_run`，状态变为 `waiting_review`。
 
 输入 schema 以 MCP `tools/list` 为准，不要手拼旧 payload。除阶段工具外还有 `tp_project` / `tp_run` / `tp_review` / `tp_execution` 等按域分组的工具，Web 上的大部分操作都能在宿主里做；不知道 runId 时用 `tp_run.list` 找。
