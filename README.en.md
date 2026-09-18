@@ -45,48 +45,129 @@ How it differs from "let an AI write test scripts":
 | Export | A standalone Playwright + Midscene project that uses the same oracle implementation as the platform |
 | Host entry | Through an MCP server and plugins, Claude Code (and the experimental Codex and Penguin) can perform what the UI can, except 3 UI-only features (chat drawer, event stream…), enforced by `pnpm check:host-parity` |
 
-## Pipeline
+## What a run looks like
+
+Follow this line once and you have seen all of TestPilot. The screenshots come from a real run against the [Hyperliquid testnet](https://app.hyperliquid-testnet.xyz/trade): planned by the locally signed-in Claude Code, started from an exploration, producing 34 user stories and 115 text cases, 9 of which were executed. The UI is shown in Chinese; English and Japanese are available from the language switch.
+
+```mermaid
+flowchart TD
+  S["(1) Spec documents"] --> PM["Product model"]
+  E["(1) Explore a live site"] --> PM
+  PM --> MT["(2) Module tree"]
+  MT --> FZ{{"Human freezes the tree"}}
+  FZ --> ST["(3) User stories"]
+  ST --> TC["(4) Text cases"]
+  TC --> G1{"Design gate<br/>structure · provenance · oracles · negatives"}
+  G1 -- fails --> TC
+  G1 -- passes --> RV{{"(5) Human review: approve / reject / edit"}}
+  RV --> CG["(6) Compile to Midscene actions<br/>(no model involved)"]
+  CG --> EX["(7) Run in a real browser<br/>verdict read from the screen"]
+  EX --> RP["(8) Run report · attribution · regression"]
+  EX --> PW["Export a Playwright project"]
+  RP --> RG{{"Human decides regression candidates"}}
+```
+
+The pipeline stops for a human in exactly three places: **freezing the module tree, reviewing cases, and deciding regression candidates.** Everything else is driven stage by stage by the server, and every stage's output is recorded in the run ledger as an immutable revision.
+
+The workbench is that line: eight stages with their state and artifacts — green is done, red is failed or waiting.
+
+![Workbench](docs/assets/workflow/01-bench.png)
+
+### 1. Start a run: give it documents, or let it look for itself
+
+Choose spec or explore, set the target URL, domain knowledge, rule pack and output language, and pick who plans (the local Claude Code by default). Once the run is registered, the materials, rule pack, domain reference and planner runtime are frozen to it.
+
+![New run form](docs/assets/workflow/02-new-run.png)
+
+### 2. Module tree: the model proposes, a human freezes
+
+The model cuts a tree at least two levels deep from the materials or the exploration, and the server machine-checks it (structure, references, cycles). **Freezing is a human decision**: until the tree is frozen, no work unit can be claimed for stories. After freezing, press "continue" and the planner picks up where it left off.
+
+![Product structure](docs/assets/workflow/04-module-tree.png)
+
+### 3. User stories: one work unit per module
+
+Each story carries Given/When/Then acceptance criteria, the features and rules it refers to, and its provenance (which passage of which material). Every module shows its story count, highlighted when it is zero — so a module nobody covered is visible at a glance.
+
+![User stories](docs/assets/workflow/05-stories.png)
+
+### 4. Text cases and the design gate
+
+Cases hang off acceptance criteria and carry the risk they address, test data, the design technique behind them (equivalence classes, boundaries, decision tables…) and their oracles. The gate checks structure, provenance, whether an oracle is vague or reads a volatile value, the share of negative cases, and whether every criterion is covered. When it fails, the affected work units are reopened for another pass. The score is computed by tooling, never by the model itself.
+
+### 5. Review: approve or reject, one case at a time
+
+The list on the left filters, searches and handles cases in bulk; the panel on the right shows everything behind a case: why it is worth testing, which criterion it covers, preconditions, test data, steps and checks. You can edit a case, which invalidates its approval and sends it back to review. **Only approved cases go any further**, and a rejection with a reason becomes a counter-example candidate.
+
+![Review](docs/assets/workflow/07-review.png)
+
+### 6. Compile: no model involved
+
+Approved steps become Midscene actions (`aiAction` / `aiWaitFor` / `aiAssert`) one by one, then pass a code gate. This step is deterministic: the same set of approvals must compile to the same artifact, and execution recompiles and compares before it starts — a mismatch is refused.
+
+![Execution scope and compile](docs/assets/workflow/08-execute.png)
+
+### 7. Execution: real clicks in a real browser, verdicts read from the screen
+
+Every case gets a fresh browser session. Each step keeps a screenshot of the page under test, whether the locator hint matched, and whatever is checked after that step. Below is the passing case `C-MKT-BOOK-05` ("the trades list is newest first", 35.1s):
+
+![Execution steps](docs/assets/workflow/14-exec-timeline.png)
+
+Midscene's own report replays the run frame by frame, including where each click landed:
+
+![Midscene report](docs/assets/workflow/16-midscene-report.png)
+
+Those screenshots also become the visual baseline compared step by step on the next run; performance gets a baseline the same way.
+
+### 8. Reports: a failure has to say whose fault it is
+
+In the run report every case opens into overview, steps, checks, visual baseline, performance and raw data, with links straight to the Midscene report or back to review.
+
+![Run report](docs/assets/workflow/09-report.png)
+
+The attribution report assigns each problem to one of six layers — model, context, tooling and environment, workflow, case, product — by fixed rules, each with the rule that fired and the evidence behind it. In the run above, 5 of 9 cases failed and the report is explicit: one never ran because of the environment (not a verdict), one had a step that never landed on the UI (locating or decomposition failed), and one was failed by a programmatic oracle with no baseline to separate "just broke" from "always been broken".
+
+![Attribution report](docs/assets/workflow/12-attribution.png)
+
+Failed verdicts and rejections with a reason become regression candidates, and **approving or dismissing them is a human decision**: an approved defect joins the regression suite and runs from then on, an approved counter-example becomes an evaluation item for the generator.
+
+![Regression candidates](docs/assets/workflow/13-regression-candidates.png)
+
+## How it fits together
 
 ```mermaid
 flowchart LR
-  S["Spec"] --> PM["Product model"]
-  E["Explore a live site"] --> PM
-  PM --> MT["Module tree<br/>(human freezes)"]
-  MT --> ST["User stories"]
-  ST --> TC["Text cases"]
-  TC --> G1{"Design gate"}
-  G1 --> RV["Human review"]
-  RV --> CG["Compile to Midscene actions"]
-  CG --> EX["Run in browser<br/>verdict from the screen"]
-  EX --> RP["Run report · attribution · regression"]
-  EX --> PW["Export Playwright project"]
+  subgraph B["Browser"]
+    W["Web UI :5300"]
+  end
+  subgraph S["API server :5301"]
+    API["Stage services · review · execution · guard"]
+    LG[("Run ledger workflows.db<br/>immutable revisions + events")]
+    DB[("Main DB testpilot.db<br/>case board · run records · baselines")]
+  end
+  H["Planner host<br/>claude -p subprocess"]
+  M["MCP server<br/>stage tools + host tools"]
+  R["runner subprocess<br/>Midscene + puppeteer"]
+  T["Site under test"]
+  W <--> API
+  API --- LG
+  API --- DB
+  API -->|"one workspace per run<br/>single-use write credential"| H
+  H --> M
+  M -->|"HTTP, the same API the UI uses"| API
+  API -->|"one case at a time"| R
+  R -->|"click · type · read the screen"| T
+  R -->|"screenshots · verdicts · usage"| API
 ```
 
-Two model roles are involved:
+Two model roles, neither standing in for the other:
 
 | Role | Provided by | Does |
 |---|---|---|
 | Planner | The host's own model (by default the locally signed-in Claude Code) | Product model, module tree, stories, cases |
 | Executor | Midscene, using the vision model configured in `server/.env` | Locating elements, acting, reading the screen, judging tier 3 oracles |
 
-## Screenshots
-
-Taken from a run against the Hyperliquid testnet (planned by Claude Code, 115 cases). The UI is shown in Chinese; English and Japanese are available from the language switch. Full screenshots for every step, with the call chains behind them, are in [Workflows](docs/v3/02-工作流-横向与纵向.md).
-
-| Workbench: stage flow | User stories: module tree and stories |
-|---|---|
-| ![Workbench](docs/assets/workflow/01-bench.png) | ![User stories](docs/assets/workflow/05-stories.png) |
-| **Review: approve or reject each case** | **Run report: steps and checks per case** |
-| ![Review](docs/assets/workflow/07-review.png) | ![Run report](docs/assets/workflow/09-report.png) |
-
-Here is an actual run. All three below come from one case (`C-MKT-BOOK-05`, "the trades list is newest first", passed in 35.1s): every step keeps a screenshot of the page under test next to what was checked there; those screenshots also become the visual baseline for the next run; and Midscene's own report replays the run frame by frame, including where each click landed.
-
-| Steps: page screenshot and check per step | Visual baseline: the three screenshots this run left |
-|---|---|
-| ![Execution steps](docs/assets/workflow/14-exec-timeline.png) | ![Visual baseline](docs/assets/workflow/15-visual-baseline.png) |
-
-![Midscene report](docs/assets/workflow/16-midscene-report.png)
-*The Midscene report: the assertion "the Time column of the trades list decreases top to bottom" passing on the testnet page*
+What every stage reads and writes, which error codes reject it, the run state machine and sequence diagrams for six key operations are in [Workflows](docs/v3/02-工作流-横向与纵向.md) (Chinese).
 
 ## Quick start
 
@@ -186,14 +267,12 @@ All three use the same API server (`http://127.0.0.1:5301` by default, override 
 
 ### From the Web UI
 
-1. Create a project, set the target URL and the environment profile (login flow, viewport, wallet injection…).
-2. Add requirement material, or choose to explore the target; add domain knowledge in "Rule packs" and "Domain references" if needed, or draft it in the chat drawer.
-3. Start a run from the workbench. It is planned by the local Claude Code by default; the new-run form lets you choose another runtime.
-4. The run stops at the module tree. Review and freeze it in the workbench; generation then continues with stories and cases, followed by the design gate.
-5. Approve or reject cases in "Review". Approved cases are compiled and run.
-6. In "Run reports", inspect each case's step timeline, checks, visual baseline, performance and Midscene report. The run detail shows the attribution report and lets you decide on regression candidates. You can also export a Playwright project.
+The flow, and what each step looks like, is [walked through above](#what-a-run-looks-like). Two things come first:
 
-Local review needs no sign-in; the origin and version of every action are recorded.
+1. Create a project, set the target URL and configure the environment profile (login flow, viewport, wallet injection…).
+2. Add domain knowledge where you need it, in "rule packs" and "domain references", or by talking it out in the chat drawer.
+
+Then start a run from the workbench. Local review needs no sign-in; the origin and version of every action are recorded.
 
 ### From Claude Code
 
