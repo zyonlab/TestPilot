@@ -2138,6 +2138,17 @@ export const dict: Record<string, Entry> = {
     en: "hands the gate's objections to the model to rewrite these; one model call per case, tens of seconds each locally",
     ja: "ゲートの指摘をモデルに渡して書き直します（1 件 1 コール）",
   },
+  "review.rejectReason": { zh: "驳回理由", en: "Reason for rejecting", ja: "却下の理由" },
+  "review.rejectReasonPlaceholder": {
+    zh: "为什么这条不该生成？至少 4 个字",
+    en: "Why should this case not have been written? At least 4 characters",
+    ja: "なぜこのケースは書かれるべきでなかったか（4 文字以上）",
+  },
+  "review.rejectReasonHint": {
+    zh: "驳回必须写理由：它会变成反例候选，下一次生成时用来考生成器。批准不需要。",
+    en: "A rejection needs a reason: it becomes a counter-example candidate that later evaluates the generator. Approving does not.",
+    ja: "却下には理由が必須：反例候補として生成器の評価に使われます。承認には不要です。",
+  },
   "review.notePlaceholder": {
     zh: "补充要求（可选）",
     en: "extra instruction (optional)",
