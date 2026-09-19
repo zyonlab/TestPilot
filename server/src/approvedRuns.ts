@@ -55,6 +55,11 @@ export function decideRevisions(runId: string, projectId: string, raw: unknown, 
   const principal = human(actor);
   const input = z.object({ items: z.array(z.object({ caseId: z.string(), revisionId: z.string(), decision: z.enum(["approved", "rejected"]) })).min(1), note: z.string().max(4000).optional() }).parse(raw);
   if (new Set(input.items.map(i => i.caseId)).size !== input.items.length) throw new LedgerError(400, "duplicate_review_case");
+  // 驳回必须写理由。理由不是礼貌，是唯一能把「这条为什么不该生成」留给下一次的东西：
+  // `proposeFromRejections` 只收带理由的驳回，理由短于 4 个字就当没写（regressionCandidates.ts）。
+  // 没有这道拦截时，界面上一路点「拒绝所选版本」就能把反例悄悄丢光，宿主工具同理。
+  if (input.items.some(i => i.decision === "rejected") && (input.note ?? "").trim().length < 4)
+    throw new LedgerError(400, "rejection_requires_reason");
   return ledger().db.transaction(() => {
     const current = reviewRevisions(runId, projectId);
     return input.items.map(item => {

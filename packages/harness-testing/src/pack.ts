@@ -17,8 +17,9 @@ export function testingPack(opts: {
   baseDir?: string;
   specPath?: string;
 }): DomainPack {
-  const specPath = opts.specPath ?? "fixtures/sample-spec/acme-portal.md";
-  const g1 = g1Graph({ spec: { path: specPath }, lang: "zh" });
+  // 不给默认规格路径：产品代码指向仓库里的夹具，等于把自举时代的样例发给每个项目。
+  // 没给路径就让图在跑到 source.spec 时明说缺输入，而不是悄悄读一份别人的规格。
+  const g1 = g1Graph({ spec: opts.specPath ? { path: opts.specPath } : {}, lang: "zh" });
   return {
     name: "testing",
     description: "Specification → text cases → code → bounded repair",

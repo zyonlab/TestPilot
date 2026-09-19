@@ -52,7 +52,6 @@ import {
   setCaseExecutor,
 } from "./evals.js";
 import { getEvalSpec, listEvalSpecs, specFromSuggestion } from "./evalspecs.js";
-import { listMaterials } from "./materials.js";
 import {
   activeRuns,
   allOutputs,
@@ -2975,7 +2974,6 @@ app.get("/api/evals/specs", (_req, res) => res.json(listEvalSpecs()));
  * 列出来不等于推荐：选哪几份仍然是人的决定。这里解决的只是"路径拼对了但选错了文档"
  * 这种不会报错、二十分钟后才显形的问题。
  */
-app.get("/api/materials", (_req, res) => res.json(listMaterials()));
 
 // 按 id 跑一份定义好的评测。参数只有 target —— 其余全部来自文件，这是它进仓库的意义：
 // 一次可以被随手改掉的评测，量到的是改它的人想看到的东西。

@@ -54,6 +54,18 @@ it("驳回且写了理由的用例成为反例候选；没写理由的不收", (
   expect(regression.proposeFromRejections(runId, projectId, [{ decision: "rejected", status: "recorded", caseId: "c3", revisionId: c.sourceRevisionId }], " ")).toEqual({ created: [], updated: [] });
 });
 
+it("驳回不写理由会被服务端拦下——界面上一路点「拒绝」就把反例丢光的那条路堵住了", async () => {
+  const approvals = await import("../src/approvedRuns.js");
+  const review = approvals.reviewRevisions(runId, projectId);
+  const target = review.find((c) => c.caseId === "c2")!;
+  const reject = (note?: string) =>
+    approvals.decideRevisions(runId, projectId, { items: [{ caseId: "c2", revisionId: target.revision.id, decision: "rejected" }], ...(note === undefined ? {} : { note }) }, human);
+  expect(() => reject()).toThrow(/rejection_requires_reason/);
+  expect(() => reject("  短 ")).toThrow(/rejection_requires_reason/);
+  // 批准不受影响：理由是给「为什么不该生成」用的。
+  expect(() => approvals.decideRevisions(runId, projectId, { items: [{ caseId: "c2", revisionId: target.revision.id, decision: "approved" }] }, human)).not.toThrow();
+});
+
 it("执行里判定失败的用例自动成为缺陷候选；环境失败不收；同一版再挂一次不重复", async () => {
   runner.run
     .mockResolvedValueOnce({ status: "failed", infraError: false, durationMs: 5, modelRequests: [], logs: [], failureReason: "页面上没有「Count: 1」", oracle: [{ status: "fail", decidedBy: "machine", assertion: "Counter shows Count: 1" }] })
