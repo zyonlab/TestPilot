@@ -220,7 +220,7 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        style={resizeKey ? { width } : undefined}
+        style={resizeKey ? { width, maxWidth: "100vw" } : undefined}
         className={cn(
         /* `outline-none` 在这里是对的，别加焦点环：这是抽屉/对话框的**容器**，
            `tabIndex={-1}` 只为打开时把焦点程序化地放进来，人不会 Tab 到它上面。
