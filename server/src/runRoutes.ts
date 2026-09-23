@@ -141,7 +141,7 @@ export function runRouter() {
      * `validated/` 与 `units/` 两个前缀只能由服务端的 stage 服务写。规划器要留探针，
      * 换个名字就行。
      */
-    if (typeof name === "string" && /^(validated|units|regression-candidate|preparation|g2)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
+    if (typeof name === "string" && /^(validated|units|regression-candidate|preparation|g2|retrieval)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
     res.json(runLedger().putRevision({ projectId: req.params.projectId, runId: req.params.runId, name,
       kind: kind as ArtifactRevision["kind"], content, mediaType, sourceRefs, parentRevision }, { kind: "agent", id: "host-import" }));
   }));

@@ -39,7 +39,10 @@ it('real Chrome collector → sealed materials → preparation probe/trial → f
  const source=svc.runLedger().listRevisions(project,run).find(r=>r.name==='exploration/observations')!;
  const captured:any=svc.runLedger().readRevision(source.id,project).content;expect(captured.report.observations[0].locatorEvidence.stateDigest).toBe(selected.hints[0].evidence?.stateDigest);
  const stage=await import('../src/runStages.js'),approval=await import('../src/approvedRuns.js'),prep=await import('../src/preparation.js');
- stage.loadRunInstructions(run,project);const ref=stage.retrieveRunSpec(run,project,{query:'Open',budgetTokens:2000}).chunks[0].id;
+ stage.loadRunInstructions(run,project);const retrieval=stage.retrieveRunSpec(run,project,{query:'Open',budgetTokens:2000}),ref=retrieval.chunks[0].id;
+ const retrievalAudit:any=svc.runLedger().readRevision(retrieval.audit.revisionId,project).content;
+ expect(retrievalAudit.materials[0]).toMatchObject({sourceType:'runtime-observation',sourceEvidence:'collector-ancestry',sourceRefs:[source.id]});
+ expect(retrievalAudit.materials[0].sources[0].contentHash).toBe(source.contentHash);
  const stories=[{id:'s1',title:'Panel',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Panel opens',designMethod:'boundary',steps:['Click Open'],expected:'Panel visible',tier:1,key:'open-panel',sourceRefs:[ref],oracle:{kind:'text',value:'Panel visible'},readiness:{design:'candidate',execution:'blocked',reason:'Needs trial'}}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
  const reviewed=approval.reviewRevisions(run,project)[0];approval.decideRevisions(run,project,{items:[{caseId:'c1',revisionId:reviewed.revision.id,decision:'approved'}]},{kind:'human',id:'synthetic-human'});
  const batch=await prep.startPreparation(run,project,{revisionIds:[reviewed.revision.id]});const call=(input:any)=>prep.preparationStep(run,project,{batchId:batch.batchId,caseId:'c1',...input});

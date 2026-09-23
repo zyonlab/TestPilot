@@ -312,7 +312,7 @@ describe("observed artefacts", () => {
     const idx = buildIndexFromDocs([{ docId: "observed/explore.json", text: JSON.stringify(OBSERVED) }], "h");
     const out = retrieve(idx, "下单面板的杠杆倍数", 10_000);
     expect(out.chunks).toHaveLength(0);
-    expect(out.hint).toMatch(/Chinese but the indexed material is in English/);
+    expect(out.hint).toMatch(/CJK script but the indexed material mainly uses Latin script/);
   });
 });
 

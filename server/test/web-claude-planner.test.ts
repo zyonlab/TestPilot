@@ -111,6 +111,11 @@ it("reruns cases with frozen upstream receipts and fresh instruction binding",as
  l.db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(wfRunId);
  const result=await ops.rerunProjectNode(wfRunId,projectId,{node:"cases",idempotencyKey:"cases-repeat"});
  const fresh=l.requireRun(result.wfRunId,projectId);
+ const stages=await import('../src/runStages.js');stages.loadRunInstructions(result.wfRunId,projectId);
+ const retrieved=stages.retrieveRunSpec(result.wfRunId,projectId,{query:'用户',budgetTokens:2000});
+ const audit=l.readRevision(retrieved.audit.revisionId,projectId).content as any;
+ expect(retrieved.chunks.length).toBeGreaterThan(0);
+ expect(audit.materials[0]).toMatchObject({inheritance:'inherited',sources:[{runId:wfRunId}]});
  expect(fresh.binding.loadedDigest).toBeTruthy();
  expect(l.nodeStates(result.wfRunId).find(n=>n.node==="cases")?.phase).toBe("queued");
  const receipt=l.db.prepare("SELECT json FROM run_stage_receipts WHERE runId=? AND stage='modules'").get(result.wfRunId) as {json:string};

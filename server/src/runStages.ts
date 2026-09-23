@@ -6,10 +6,9 @@ import { requireStageStarted } from './workflowControls.js';
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import { canonicalJSON, type ArtifactRevision } from "@testpilot/harness-core/run-contracts";
 import { ARTIFACT_WRITING_GUIDELINES, validateStories, validateCases, runGate, type CaseBundle, type StoryBundle } from "@testpilot/harness-testing/casegen";
-import { buildIndexFromDocs, retrieve, SPEC_FENCE, MAX_FENCED_CHARS } from "@testpilot/harness-testing/retrieve";
+import { auditedRetrieve, boundRetrievalIndex, historicalRetrievalIds } from "./retrievalAudit.js";
 import { runLedger, skillBinding } from "./runService.js";
 import { contentHash, LedgerError } from "./runLedger.js";
 import { getProject } from './db.js';
@@ -80,7 +79,7 @@ function editable(runId: string, projectId: string) {
 }
 function basis(runId: string) {
   const rows = store().db.prepare("SELECT json FROM run_retrievals WHERE runId=?").all(runId) as Array<{ json: string }>;
-  return { retrieved: rows.flatMap(r => JSON.parse(r.json).chunkIds as string[]), retrieveCalls: rows.length, indexed: null };
+  return { retrieved: historicalRetrievalIds(store(),runId), retrieveCalls: rows.length, indexed: null };
 }
 function verifyCases(runId: string, projectId: string, content: unknown) {
   const stories = current(runId, projectId, "stories");
@@ -175,23 +174,13 @@ export function loadRunInstructions(runId: string, projectId: string) {
  */
 export function retrievalChunkCount(runId: string, projectId: string): number {
   try {
-    const run = ready(runId, projectId);
-    const docs = run.binding.materialRevisions.map(id => { const r = store().readRevision(id, projectId); return { docId: `materials/${r.revision.name}`, text: String(r.content) }; });
-    return buildIndexFromDocs(docs, run.binding.materialsHash!).chunks.length;
+    return boundRetrievalIndex(store(),runId,projectId).index.chunks.length;
   } catch { return 0; }
 }
 
 export function retrieveRunSpec(runId: string, projectId: string, raw: unknown) {
-  const input = z.object({ query: z.string(), budgetTokens: z.number().int().min(200).max(200_000), chunkIds: z.array(z.string()).optional() }).parse(raw);
-  const run = ready(runId, projectId); current(runId, projectId, "instructions");
-  const docs = run.binding.materialRevisions.map(id => { const r = store().readRevision(id, projectId); return { docId: `materials/${r.revision.name}`, text: String(r.content) }; });
-  const index = buildIndexFromDocs(docs, run.binding.materialsHash!);
-  const found = retrieve(index, input.query, input.budgetTokens, { chunkIds: input.chunkIds });
-  const retrievalId = `retrieve-${randomUUID()}`;
-  store().db.prepare("INSERT INTO run_retrievals VALUES (?,?,?)").run(retrievalId, runId, canonicalJSON({ ...input,
-    materialsHash: run.binding.materialsHash, chunkIds: found.chunks.map(c => c.id), at: new Date().toISOString() }));
-  return { ...found, chunks: found.chunks.map(c => ({ ...c, heading: c.heading.map(h => SPEC_FENCE.sanitizeText(h, 200)), text: SPEC_FENCE.sanitizeText(c.text, MAX_FENCED_CHARS) })),
-    retrievalId, materialsHash: run.binding.materialsHash, indexed: index.chunks.length, notice: SPEC_FENCE.notice };
+  ready(runId, projectId); current(runId, projectId, "instructions");
+  return auditedRetrieve(store(),runId,projectId,raw);
 }
 export function writeRunStage(runId: string, projectId: string, stage: "stories" | "cases", content: unknown, opts: { viaUnits?: boolean } = {}) {
   return store().db.transaction(() => {

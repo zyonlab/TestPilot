@@ -25,8 +25,9 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "n
 import { join, relative, resolve } from "node:path";
 
 export * from "./fence.js";
+import { SPEC_FENCE, MAX_FENCED_CHARS } from "./fence.js";
 
-/** 一段规格。`tokens` 是粗估——预算只要「够准到不撑爆窗口」就行。 */
+/** Indexed tokens estimate the raw body; returned tokens estimate sanitized heading + body. Neither is billed usage. */
 export interface SpecChunk {
   id: string;
   docId: string;
@@ -43,6 +44,8 @@ export interface SpecEdge {
 }
 
 export interface SpecIndex {
+  indexVersion?: 2;
+  contentDigest?: string;
   materialsHash: string;
   chunks: SpecChunk[];
   edges: SpecEdge[];
@@ -54,7 +57,20 @@ export interface RetrievedChunk extends SpecChunk {
   why: string;
 }
 
+export interface RetrievalDiagnostics {
+  version: 1;
+  mode: "ranked" | "requested";
+  budgetTokens: number;
+  estimatedTokens: number;
+  budgetScope: "sanitized-heading-and-text";
+  tokenAccounting: "estimate-not-model-usage";
+  budgetOmittedIds: string[];
+  deliveryOmittedIds: string[];
+  unknownRequiredIds: string[];
+  duplicateRequestedIds: string[];
+}
 export interface RetrieveResult {
+  diagnostics: RetrievalDiagnostics;
   chunks: RetrievedChunk[];
   /** 相关（分数 > 0）但没装进预算的段数。 */
   dropped: number;
@@ -399,9 +415,13 @@ export function chunkMaterial(docId: string, raw: string): SpecChunk[] {
 
 export function buildIndexFromDocs(docs: Array<{ docId: string; text: string }>, materialsHash: string): SpecIndex {
   const chunks = docs.flatMap((d) => chunkMaterial(d.docId, d.text));
-  return { materialsHash, chunks, edges: buildEdges(chunks) };
+  const content = { materialsHash, chunks, edges: buildEdges(chunks) };
+  return { indexVersion: 2, ...content, contentDigest: indexContentDigest(content) };
 }
 
+function indexContentDigest(index: SpecIndex): string {
+  return createHash("sha256").update(JSON.stringify({materialsHash:index.materialsHash,chunks:index.chunks,edges:index.edges})).digest("hex");
+}
 /** 索引落在哪。契约 §4：`materials/.index/`。 */
 export const indexPath = (materialsDir: string): string => join(resolve(materialsDir), ".index", "index.json");
 
@@ -418,7 +438,7 @@ export function loadOrBuildIndex(materialsDir: string, opts: { rebuild?: boolean
   if (!opts.rebuild) {
     try {
       const cached = JSON.parse(readFileSync(path, "utf8")) as SpecIndex;
-      if (cached.materialsHash === hash) return cached;
+      if (cached.indexVersion === 2 && cached.materialsHash === hash && Array.isArray(cached.chunks) && Array.isArray(cached.edges) && cached.contentDigest === indexContentDigest(cached)) return cached;
     } catch {
       // 读不回来就重建。一份坏掉的缓存不该让检索失败——它只是一份可以再算一次的东西。
     }
@@ -479,29 +499,38 @@ export function retrieve(
   budgetTokens: number,
   opts: { chunkIds?: string[] } = {},
 ): RetrieveResult {
+  query = SPEC_FENCE.sanitizeText(query);
+  if (!Number.isInteger(budgetTokens) || budgetTokens < 0 || budgetTokens > 200_000) throw new Error("invalid_retrieval_budget");
   const byId = new Map(index.chunks.map((c) => [c.id, c]));
-
-  if (opts.chunkIds?.length) {
-    const picked: RetrievedChunk[] = [];
-    let used = 0;
-    let skipped = 0;
-    for (const id of opts.chunkIds) {
-      const c = byId.get(id);
-      if (!c) continue;
-      if (used + c.tokens > budgetTokens && picked.length) {
-        skipped += 1;
-        continue;
-      }
-      used += c.tokens;
-      picked.push({ ...c, score: 0, why: "requested by id" });
+  const diagnostics: RetrievalDiagnostics = { version: 1, mode: opts.chunkIds !== undefined ? "requested" : "ranked",
+    budgetTokens, estimatedTokens: 0, budgetScope: "sanitized-heading-and-text", tokenAccounting: "estimate-not-model-usage",
+    budgetOmittedIds: [], deliveryOmittedIds: [], unknownRequiredIds: [], duplicateRequestedIds: [] };
+  const picked: RetrievedChunk[] = [];
+  const pick = (c: SpecChunk, score: number, why: string) => {
+    // Normalize before accounting: NFKC and replaced tags can expand the source.
+    // Whole chunks only. A delivery cap is an omission, never a silent truncation.
+    const heading = c.heading.map(h => SPEC_FENCE.sanitizeText(h));
+    const text = SPEC_FENCE.sanitizeText(c.text);
+    const tokens = estimateTokens(heading.join("\n") + "\n" + text);
+    if (tokens + diagnostics.estimatedTokens > budgetTokens) { diagnostics.budgetOmittedIds.push(c.id); return; }
+    if (text.length > MAX_FENCED_CHARS || heading.some(h => h.length > 200) || picked.length >= 128) {
+      diagnostics.deliveryOmittedIds.push(c.id); return;
     }
-    return {
-      chunks: picked,
-      dropped: skipped,
-      hint: skipped
-        ? `Loaded ${picked.length} of the ${opts.chunkIds.length} requested sections; ${skipped} did not fit the ${budgetTokens}-token budget. Ask for them separately.`
-        : `Loaded ${picked.length} requested section(s).`,
-    };
+    diagnostics.estimatedTokens += tokens;
+    picked.push({ ...c, heading, text, tokens, score, why });
+  };
+  if (opts.chunkIds !== undefined) {
+    const seen = new Set<string>();
+    for (const id of opts.chunkIds) {
+      if (seen.has(id)) { diagnostics.duplicateRequestedIds.push(id); continue; }
+      seen.add(id);
+      const c = byId.get(id);
+      if (!c) { diagnostics.unknownRequiredIds.push(id); continue; }
+      pick(c, 0, "requested by id");
+    }
+    const dropped = diagnostics.budgetOmittedIds.length + diagnostics.deliveryOmittedIds.length;
+    return { chunks: picked, diagnostics, dropped,
+      hint: `Loaded ${picked.length} requested sections; ${dropped} omitted, ${diagnostics.unknownRequiredIds.length} unknown IDs. Inspect diagnostics; retry omitted chunkIds with a sufficient budget. Delivery-limited chunks require a source artifact read or a better-sectioned material revision.` };
   }
 
   const base = bm25(index, query);
@@ -541,22 +570,12 @@ export function retrieve(
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score || a.chunk.id.localeCompare(b.chunk.id));
 
-  const picked: RetrievedChunk[] = [];
-  let used = 0;
-  const left: string[] = [];
-  for (const r of ranked) {
-    if (used + r.chunk.tokens > budgetTokens) {
-      left.push(r.chunk.id);
-      continue;
-    }
-    used += r.chunk.tokens;
-    picked.push({ ...r.chunk, score: r.score, why: r.why });
-  }
-
+  for (const r of ranked) pick(r.chunk, r.score, r.why);
+  const left = [...diagnostics.budgetOmittedIds, ...diagnostics.deliveryOmittedIds];
   return {
-    chunks: picked,
-    dropped: left.length,
-    hint: buildHint(picked.length, left, used, budgetTokens, index.chunks.length, scriptMismatch(query, index)),
+    chunks: picked, diagnostics, dropped: left.length,
+    hint: buildHint(picked.length, left, diagnostics.estimatedTokens, budgetTokens, index.chunks.length, scriptMismatch(query, index)) +
+      (diagnostics.deliveryOmittedIds.length ? " Delivery-limited chunks require a source artifact read or a better-sectioned material revision." : ""),
   };
 }
 
@@ -578,8 +597,8 @@ const cjkShare = (text: string): number => {
 function scriptMismatch(query: string, index: SpecIndex): string | undefined {
   const q = cjkShare(query);
   const corpus = cjkShare(index.chunks.map((c) => c.text).join(" ").slice(0, 20_000));
-  if (q > 0.3 && corpus < 0.1) return "The query is in Chinese but the indexed material is in English — matching here is literal, not translated, so ask in the material's language.";
-  if (q < 0.1 && corpus > 0.3) return "The query is in English but the indexed material is in Chinese — matching here is literal, not translated, so ask in the material's language.";
+  if (q > 0.3 && corpus < 0.1) return "The query uses CJK script but the indexed material mainly uses Latin script — matching here is literal, not translated, so ask in the material's language.";
+  if (q < 0.1 && corpus > 0.3) return "The query uses Latin script but the indexed material mainly uses CJK script — matching here is literal, not translated, so ask in the material's language.";
   return undefined;
 }
 
@@ -597,17 +616,27 @@ function buildHint(
   total: number,
   scriptMismatch?: string,
 ): string {
-  if (!loaded)
+  if (!loaded && !left.length)
     return (
       `No section of the specification matched this query (${total} sections indexed).` +
       (scriptMismatch ? ` ${scriptMismatch}` : "") +
-      ` Work from the story alone, and say so — do not invent specification text.`
+      ` This does not establish absence of relevant evidence. Reformulate the query or request known chunk IDs; disclose missing context and do not invent specification text.`
     );
   if (!left.length)
-    return `Loaded all ${loaded} relevant sections (${used}/${budget} tokens). Nothing relevant was left out.`;
-  const shown = left.slice(0, 5).join(", ");
+    return `Loaded all ${loaded} positive-score candidates (${used}/${budget} estimated tokens). No positive-score candidates were omitted. Relevance and evidence completeness remain unassessed.`;
+  const shown = left.slice(0, 3).join(", ");
   return (
-    `Loaded ${loaded} sections (${used}/${budget} tokens). ${left.length} further relevant section(s) did not fit: ${shown}${left.length > 5 ? ", …" : ""}. ` +
+    `Loaded ${loaded} sections (${used}/${budget} estimated tokens). ${left.length} further positive-score candidate(s) did not fit: ${shown}${left.length > 3 ? ", …" : ""}. ` +
     `They are omitted, not summarised — if what you need is missing, ask for them by chunkId with retrieve_spec({ chunkIds: [...] }) rather than guessing.`
   );
 }
+
+/** Diagnostic metadata is outside the content budget, but bounded separately. */
+export function compactDiagnostics(d: RetrievalDiagnostics, offset = 0) {
+  const page = (ids: string[]) => ({ ids: ids.slice(offset, offset + 8), total: ids.length,
+    nextOffset: offset + 8 < ids.length ? offset + 8 : null });
+  return { ...d, budgetOmittedIds: page(d.budgetOmittedIds), deliveryOmittedIds: page(d.deliveryOmittedIds),
+    unknownRequiredIds: page(d.unknownRequiredIds), duplicateRequestedIds: page(d.duplicateRequestedIds) };
+}
+
+export {evaluateRetrieval,type RetrievalFixture} from "./evaluate.js";

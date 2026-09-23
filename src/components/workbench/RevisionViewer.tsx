@@ -1,3 +1,4 @@
+import {RetrievalAudit} from './RetrievalAudit';
 import {EvidenceReuse} from './EvidenceReuse';
 import {LifecycleDetail} from './LifecycleDetail';
 import {ExecutionObservation} from './ExecutionObservation';
@@ -63,6 +64,7 @@ export function RevisionContent({content,kind,projectId,runId}:{content:unknown;
   if(typeof content==='string')return <Markdown text={content}/>;
   if(!content||typeof content!=='object')return <DocumentFields data={content}/>;
   const data=content as Record<string,unknown>;
+  if(data.schemaVersion==='retrieval-audit.v1')return <RetrievalAudit value={data}/>;
   if(data.schemaVersion==='product-rule-pack.v1')return <RulePackDocument data={{rulePack:data}}/>;
   if(data.rulePack&&typeof data.rulePack==='object'&&Array.isArray((data.rulePack as Record<string,unknown>).rules))return <RulePackDocument data={data}/>;
   if(data.schemaVersion==='exploration-report.v1'||data.schemaVersion==='exploration-summary.v1')return <ExplorationDocument data={data}/>;

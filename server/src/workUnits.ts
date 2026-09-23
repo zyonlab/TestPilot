@@ -1,3 +1,4 @@
+import {historicalRetrievalIds} from "./retrievalAudit.js";
 import { LIFECYCLE_INSTRUCTIONS } from '@testpilot/harness-testing/casegen';
 import { STORY_PLANNING_CONTRACT, storyPlanningIssues } from '@testpilot/harness-testing/casegen';
 import { boundDomainReference } from "./domainReferences.js";
@@ -545,13 +546,13 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
      * 一个指本次 `retrieve_spec` 返回的 chunk id，而单元材料把规则连同它的 `sourceRefs`
      * 一起交到了模型手上。**同名不同义**，不点破就只能猜。契约里现在把两者并排写清。
      */
-    const retrieved = new Set(runLedger().db.prepare("SELECT json FROM run_retrievals WHERE runId=?").all(runId)
-      .flatMap((r) => JSON.parse((r as { json: string }).json).chunkIds as string[]));
+    // Historical run membership only; this does not establish current unit visibility or semantic support.
+    const retrieved = new Set(historicalRetrievalIds(runLedger(),runId));
     if (retrieved.size) {
       const prov = checkProvenance(parsed.data.cases, retrieved);
       for (const u of prov.unknown)
         errors.push({ code: "source_ref_not_retrieved", jsonPointer: `/cases/${parsed.data.cases.findIndex((c) => c.id === u.caseId)}/sourceRefs`,
-          message: `${u.caseId}: ${u.refs.slice(0, 4).join(" ")} 不是本次 retrieve_spec 返回过的 chunk id（规则自带的 sourceRefs 是另一个东西，别照抄）` });
+          message: `${u.caseId}: ${u.refs.slice(0, 4).join(" ")} 不是该运行历史 retrieve_spec 返回过的 chunk id（不代表当前单元可见）（规则自带的 sourceRefs 是另一个东西，别照抄）` });
       for (const id of prov.unreferenced)
         errors.push({ code: "source_ref_missing", jsonPointer: `/cases/${parsed.data.cases.findIndex((c) => c.id === id)}/sourceRefs`,
           message: `${id}: 一条出处都没写` });

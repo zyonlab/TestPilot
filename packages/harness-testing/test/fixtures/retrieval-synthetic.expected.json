@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "algorithm": "bm25-relations-v1",
+  "fixtureDigest": "cf8ef90a7ee9112080d7a48fe03f2a115c0f715954542d1ae629589d02a8a2a5",
+  "purpose": "synthetic-retrieval-regression",
+  "gate": null,
+  "cases": [
+    {
+      "id": "english",
+      "selectedIds": [
+        "portal.md#1",
+        "portal.md#2"
+      ],
+      "requiredRecall": 1,
+      "relevantPrecision": 1,
+      "missingIds": [],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 22,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.044,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 22,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "chinese",
+      "selectedIds": [
+        "zh.md#1"
+      ],
+      "requiredRecall": 1,
+      "relevantPrecision": 1,
+      "missingIds": [],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 11,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.022,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 11,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "japanese",
+      "selectedIds": [
+        "ja.md#1"
+      ],
+      "requiredRecall": 1,
+      "relevantPrecision": 1,
+      "missingIds": [],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 19,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.038,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 19,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "cross-language",
+      "selectedIds": [
+        "ja.md#1"
+      ],
+      "requiredRecall": 0,
+      "relevantPrecision": 1,
+      "missingIds": [
+        "portal.md#1"
+      ],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 19,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.038,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 19,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "requested",
+      "selectedIds": [
+        "portal.md#1"
+      ],
+      "requiredRecall": 1,
+      "relevantPrecision": 1,
+      "missingIds": [],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 11,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.022,
+      "diagnostics": {
+        "version": 1,
+        "mode": "requested",
+        "budgetTokens": 500,
+        "estimatedTokens": 11,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [
+          "missing"
+        ],
+        "duplicateRequestedIds": [
+          "portal.md#1"
+        ]
+      }
+    },
+    {
+      "id": "oversized-first",
+      "selectedIds": [
+        "zh.md#1"
+      ],
+      "requiredRecall": 0,
+      "relevantPrecision": 0,
+      "missingIds": [
+        "large.md#1"
+      ],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 11,
+      "budgetTokens": 20,
+      "budgetUtilization": 0.55,
+      "diagnostics": {
+        "version": 1,
+        "mode": "requested",
+        "budgetTokens": 20,
+        "estimatedTokens": 11,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [
+          "large.md#1"
+        ],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "ranked-budget",
+      "selectedIds": [
+        "portal.md#1"
+      ],
+      "requiredRecall": 0.5,
+      "relevantPrecision": 1,
+      "missingIds": [
+        "portal.md#2"
+      ],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 11,
+      "budgetTokens": 15,
+      "budgetUtilization": 0.7333333333333333,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 15,
+        "estimatedTokens": 11,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [
+          "portal.md#2"
+        ],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "no-result",
+      "selectedIds": [],
+      "requiredRecall": 0,
+      "relevantPrecision": null,
+      "missingIds": [
+        "portal.md#1"
+      ],
+      "unknownLabelIds": [],
+      "assessment": "labeled-synthetic",
+      "estimatedTokens": 0,
+      "budgetTokens": 500,
+      "budgetUtilization": 0,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 0,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "unlabeled",
+      "selectedIds": [
+        "portal.md#1",
+        "portal.md#2"
+      ],
+      "requiredRecall": null,
+      "relevantPrecision": null,
+      "missingIds": null,
+      "unknownLabelIds": [],
+      "assessment": "unassessed",
+      "estimatedTokens": 22,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.044,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 22,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    },
+    {
+      "id": "invalid-labels",
+      "selectedIds": [
+        "portal.md#1",
+        "portal.md#2"
+      ],
+      "requiredRecall": null,
+      "relevantPrecision": null,
+      "missingIds": [
+        "not-in-corpus"
+      ],
+      "unknownLabelIds": [
+        "not-in-corpus"
+      ],
+      "assessment": "invalid-labels",
+      "estimatedTokens": 22,
+      "budgetTokens": 500,
+      "budgetUtilization": 0.044,
+      "diagnostics": {
+        "version": 1,
+        "mode": "ranked",
+        "budgetTokens": 500,
+        "estimatedTokens": 22,
+        "budgetScope": "sanitized-heading-and-text",
+        "tokenAccounting": "estimate-not-model-usage",
+        "budgetOmittedIds": [],
+        "deliveryOmittedIds": [],
+        "unknownRequiredIds": [],
+        "duplicateRequestedIds": []
+      }
+    }
+  ]
+}
