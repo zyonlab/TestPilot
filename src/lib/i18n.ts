@@ -10,6 +10,7 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "exploration.observedControls": {zh:"原始控件标签、状态与区域证据（不等于业务结论）",en:"Original labels, state and regional evidence (not business verdicts)",ja:"元のラベル・状態・領域の証拠（業務判定ではありません）"},
   "compare.reviewGlobal": {zh:"评价整个流程组合",en:"Review the whole pipeline combination",ja:"全体の構成を評価"},
   "compare.title": {"zh": "节点产物对比", "en": "Node artifact comparison", "ja": "ノード成果物の比較"},
   "compare.description": {"zh": "选择两次运行，固定当前产物版本后逐节点查看。支持尚未完成的运行，不依赖 Gold。", "en": "Pin current artifacts from two runs and inspect each node. Unfinished runs are supported; Gold is not required.", "ja": "2つの実行の現在の成果物を固定して比較します。未完了の実行も対応し、Gold は不要です。"},

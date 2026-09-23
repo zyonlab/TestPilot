@@ -1,3 +1,4 @@
+import {readControlScopes,activateScopedControl} from './controlScope.js';
 import {inspectLocator, type LocatorEvidence} from './locatorEvidence.js';
 import { randomUUID, createHash } from "node:crypto";
 import { assessExploration, ExplorationAttemptSchema, explorationExecId, type ExplorationAttempt, type ExplorationAssessment } from "../domain/explorationEvidence.js";
@@ -603,6 +604,7 @@ export async function runObserve(
      * `Buy / Long` 既是下单面板的方向切换、又是确认框的确认键，只按文案匹配点到哪个全看运气。
      */
     container: string;
+    scopes?: string[];
     /**
      * 这个控件现在处于什么状态——选中、勾选、按下、展开、禁用，以及下拉当前选的是哪一项。
      *
@@ -1010,7 +1012,7 @@ export async function runObserve(
     const extra: Control[] = spec.charter
       ? await page
           .evaluate(
-            (patterns: string[]) => {
+            (patterns: {pattern:string;ignoreCountSuffix?:boolean}[]) => {
               const res: string[][] = [];
               const seen = new Set<string>();
               for (const el of document.querySelectorAll("body *")) {
@@ -1024,12 +1026,12 @@ export async function runObserve(
                 if (getComputedStyle(e).cursor !== "pointer") continue;
                 const text = (e.innerText || "").trim().replace(/\s+/g, " ");
                 if (!text || text.length > 60) continue;
-                if (!patterns.some((p) => { try { return new RegExp(p, "i").test(text); } catch { return false; } })) continue;
+                if (!patterns.some((p) => { try { return new RegExp(p.pattern, "i").test(p.ignoreCountSuffix?text.replace(/\s*\(\d+\)\s*$/,'').trim():text); } catch { return false; } })) continue;
                 // 取叶子：孩子里有同样文字的，说明这一层只是容器。
                 if ([...el.children].some((c) => ((c as HTMLElement).innerText || "").trim().replace(/\s+/g, " ") === text)) continue;
                 const parts: string[] = [];
                 let node: Element | null = el;
-                while (node && node !== document.body && parts.length < 8) {
+                while (node && node !== document.body && parts.length < 32) {
                   const parent: Element | null = node.parentElement;
                   if (!parent) break;
                   const t = node.tagName.toLowerCase();
@@ -1067,7 +1069,7 @@ export async function runObserve(
               }
               return res;
             },
-            spec.charter.featureTargets.flatMap((t) => t.match.label),
+            spec.charter.featureTargets.flatMap((t) => t.match.label.map(pattern=>({pattern,ignoreCountSuffix:t.match.ignoreCountSuffix}))),
           )
           .then((rows) =>
             rows
@@ -1097,6 +1099,17 @@ export async function runObserve(
           })
       : [];
     if (extra.length) elements.push(...extra);
+    if(spec.charter?.featureTargets.some(t=>t.match.near?.length)){
+      const scopes=await page.evaluate(readControlScopes,elements.map(e=>e.selector));
+      elements.forEach((e,i)=>{e.scopes=scopes[i]??[];});
+    }
+    // Preserve empty/nonempty counter state even when numeric label identity is normalized.
+    for(const e of elements){
+      const counter=e.label.match(/\((\d+)\)\s*$/);
+      if(counter && spec.charter?.featureTargets.some(t=>t.match.ignoreCountSuffix && t.match.label.some(p=>new RegExp(p,'i').test(e.label.replace(/\s*\(\d+\)\s*$/, '').trim())))){
+        e.state += `,count=${Number(counter[1])===0?'empty':'nonempty'}`;
+      }
+    }
     /**
      * 组配额：一个控件组最多留 `groupCap` 项，其余按顺序丢，但**把丢了多少记下来**。
      *
@@ -1549,6 +1562,7 @@ export async function runObserve(
           fillValue?: string;
           /** charter 目标声明的容器文案（`match.within`）：点之前按它把元素重新找回来。 */
           within?: string[];
+          near?: string[];
         }
       | { key: string; kind: "goto"; href: string }
       /**
@@ -1643,6 +1657,7 @@ export async function runObserve(
             shape: `charter:${pick.spec.id}`,
             charter: { stableId: pick.target.stableId, specId: pick.spec.id, featureId: pick.spec.featureId },
             ...(pick.spec.match.within.length ? { within: pick.spec.match.within } : {}),
+            ...(pick.spec.match.near?.length ? {near:pick.spec.match.near} : {}),
             // fill 目标：填这个声明好的值，而不是点它。值来自规则包，探索不自己编。
             ...(pick.spec.action === "fill" && pick.spec.value ? { fillValue: pick.spec.value } : {}),
           };
@@ -2223,67 +2238,7 @@ export async function runObserve(
            */
           const inspected=await inspectLocator(page,next.selector).catch(()=>undefined);
           if(inspected?.ok && inspected.evidence.label===next.label)locatorEvidence=inspected.evidence;
-          const clicked = (await page.evaluate(((({ sel, label, within }: { sel: string; label: string; within?: string[] }) => {
-            /**
-             * 这段在浏览器里跑，**不能出现具名函数**：tsx 会给 `const f = () => {}` 套一层
-             * `__name(...)`，那个辅助在页面里不存在，搬进去就是 `__name is not defined`——
-             * 2026-09-12 实测，整轮探索第 3 轮就 stuck，三个目标全记成 failed。所以下面全是循环。
-             */
-            const at = document.querySelector(sel);
-            if (at && ((at as HTMLElement).innerText || (at as HTMLInputElement).value || at.getAttribute("aria-label") || "")
-              .replace(/\s+/g, " ").trim() === label) { (at as HTMLElement).click(); return "selector"; }
-            const hits: HTMLElement[] = [];
-            const els = document.querySelectorAll("button,a,div,span,input,label");
-            for (let i = 0; i < els.length; i++) {
-              const e = els[i] as HTMLElement;
-              const t = (e.innerText || (e as HTMLInputElement).value || e.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
-              if (t !== label || !e.offsetWidth || !e.offsetHeight) continue;
-              if (within && within.length) {
-                let container = "";
-                for (let n: HTMLElement | null = e, k = 0; n && k < 12; k++, n = n.parentElement) {
-                  const role = n.getAttribute ? n.getAttribute("role") || "" : "";
-                  const cls = typeof n.className === "string" ? n.className : "";
-                  const st = getComputedStyle(n);
-                  const floats = (st.position === "fixed" || st.position === "absolute")
-                    && (parseInt(st.zIndex || "0", 10) || 0) >= 10 && n.offsetWidth >= 200 && n.offsetHeight >= 100;
-                  if (role === "dialog" || role === "alertdialog" || (n.getAttribute && n.getAttribute("aria-modal") === "true") ||
-                      /modal|dialog|popup|drawer|overlay/i.test(cls) || floats) {
-                    container = (n.innerText || "").replace(/\s+/g, " ").trim().slice(0, 120);
-                    break;
-                  }
-                }
-                let ok = false;
-                for (let j = 0; j < within.length; j++) {
-                  try { if (new RegExp(within[j]!, "i").test(container)) { ok = true; break; } } catch { /* 坏正则当不匹配 */ }
-                }
-                if (!ok) continue;
-              }
-              hits.push(e);
-            }
-            /**
-             * 同一句文案常常同时命中按钮和它里面的 span——那不是歧义，是一个控件的两层。
-             * 先只留最里层（剔掉「包着另一个命中项」的那些），再优先按钮类。
-             */
-            const inner: HTMLElement[] = [];
-            for (let i = 0; i < hits.length; i++) {
-              let wraps = false;
-              for (let j = 0; j < hits.length; j++) if (i !== j && hits[i]!.contains(hits[j]!)) { wraps = true; break; }
-              if (!wraps) inner.push(hits[i]!);
-            }
-            let pick = inner;
-            if (pick.length > 1) {
-              const buttons: HTMLElement[] = [];
-              for (let i = 0; i < pick.length; i++) {
-                const el = pick[i]!;
-                const r = el.getAttribute ? el.getAttribute("role") || "" : "";
-                if (el.tagName === "BUTTON" || el.tagName === "A" || r === "button") buttons.push(el);
-              }
-              if (buttons.length === 1) pick = buttons;
-            }
-            if (pick.length !== 1) return `ambiguous:${pick.length}`;
-            pick[0]!.click();
-            return "relocated";
-          }) as unknown) as (arg: never) => unknown, { sel: next.selector, label: next.label, within: next.within })) as string;
+          const clicked = await page.evaluate(activateScopedControl,{sel:next.selector,label:next.label,within:next.within,near:next.near}) as string;
           if (clicked !== "selector") locatorEvidence=undefined;
           if (clicked !== "selector") note(`第 ${rounds} 轮：${next.label} 的路径已经过时（${clicked}）`);
           if (clicked.startsWith("ambiguous")) {

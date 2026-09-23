@@ -144,6 +144,7 @@ export interface ControlLike {
   state: string;
   /** 这个控件所在容器（弹窗/抽屉）的文案。采集器给；不在任何容器里就是空。 */
   container?: string;
+  scopes?: string[];
 }
 
 /** `button[button]: Limit` → `button`；`input[checkbox]: Reduce Only` → `input`。 */
@@ -179,7 +180,9 @@ export function matchTarget(control: ControlLike, spec: ExplorationTargetSpec, r
    * 宁可漏，不可点错：点错的代价是把方向按钮当成确认键，然后宣称订单提交过了。
    */
   if (spec.match.within.length && !anyMatch(spec.match.within, control.container ?? "")) return false;
-  if (!anyMatch(spec.match.label, control.label)) return false;
+  if (spec.match.near?.length && !(control.scopes??[]).some(text=>spec.match.near!.every(pattern=>compile(pattern,'i')?.test(text)))) return false;
+  const label=spec.match.ignoreCountSuffix?control.label.replace(/\s*\(\d+\)\s*$/, '').trim():control.label;
+  if (!anyMatch(spec.match.label, label)) return false;
   if (spec.match.roles.length) {
     const tag = tagOf(control.display);
     const type = inputTypeOf(control.display);

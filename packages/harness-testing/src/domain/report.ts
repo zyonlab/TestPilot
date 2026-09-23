@@ -24,6 +24,8 @@ export const InteractionTargetSchema = z
     route: z.string(),
     role: z.string().default(""),
     label: z.string(),
+    observedState: z.string().optional(),
+    scopeEvidence: z.array(z.string()).optional(),
     display: z.string(),
     selector: z.string(),
     availability: z.enum(["enabled", "disabled"]).default("enabled"),
@@ -175,10 +177,10 @@ export function buildExplorationReport(input: {
   const frontier = planned
     .filter((p) => !p.terminal || p.status === "blocked" || p.status === "failed")
     .map((p) => ({ targetSpecId: p.targetSpecId, featureId: p.featureId, ...(p.targetIds[0] ? { targetId: p.targetIds[0] } : {}), reason: assessment.targets.find(t => t.targetSpecId === p.targetSpecId)!.reason }));
-  const unknowns = [
+  const unknowns = [...new Set([
     ...(input.unknowns ?? []),
     ...planned.filter((p) => p.status === "not_found").map((p) => `target ${p.targetSpecId} (${p.featureId}) not found in scope: not observed ≠ not applicable`),
-  ];
+  ])];
   const completion: ExplorationReport["completion"] = assessment.status === "complete" ? "complete" : "partial";
   const count = (s: PlannedTarget["status"]) => planned.filter((p) => p.status === s).length;
   return ExplorationReportSchema.parse({

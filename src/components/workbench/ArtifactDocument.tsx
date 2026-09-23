@@ -62,6 +62,8 @@ export function ExplorationDocument({data}:{data:DocumentData}) {
       <section className="space-y-3"><h4 className="font-semibold">{t('exploration.evidence.targets')}</h4>{targets.map((target,i)=><details key={i} className="rounded border border-border p-3"><summary className="cursor-pointer text-sm"><span className="font-mono">{String(target.targetSpecId)}</span> · {text(target.reason)}</summary><div className="mt-3 space-y-3 text-sm"><p>{t('exploration.evidence.assertionsPassed')}: {text(target.assertion)}</p>
         <p>{t('artifact.references')}: {[...list(target.observationIds),...list(target.evidenceRefs)].join(' · ')||t('exploration.evidence.not_collected')}</p>
         {list(target.invalidRefs).length>0&&<p>{t('exploration.evidence.invalid_evidence')}: {list(target.invalidRefs).join(' · ')}</p>}
+        <p className="font-medium">{t('exploration.observedControls')}</p>
+        <DocumentFields data={rows(data.targets).filter(o=>o.targetSpecId===target.targetSpecId).map(o=>({label:o.label,state:o.observedState??t('compare.unknown'),scope:o.scopeEvidence??[]}))}/>
         <DocumentFields data={rows(data.observations).filter(o=>list(target.observationIds).includes(String(o.id)))}/>
       </div></details>)}</section>
       {list(a.unvisited).length>0&&<section><h4 className="font-semibold">{t('exploration.evidence.unvisited')}</h4><ul className="list-disc pl-5 text-sm">{list(a.unvisited).map(url=><li key={url} className="break-all">{url}</li>)}</ul></section>}

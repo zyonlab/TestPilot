@@ -105,6 +105,10 @@ export const ExplorationTargetSpecSchema = z
       .object({
         /** 正则源串，不区分大小写，任一命中即可。对控件的可见文案匹配。 */
         label: z.array(z.string()).min(1),
+        /** Opt-in identity normalization; the original label/count remains evidence. */
+        ignoreCountSuffix: z.boolean().optional(),
+        /** All anchors must coexist in one bounded ancestor; not the whole page. */
+        near: z.array(z.string()).max(8).optional(),
         /** 允许的标签或 ARIA 角色（`button` / `tab` / `checkbox` / `input` …）。空 = 不限。 */
         roles: z.array(z.string()).default([]),
         route: z.string().optional(),
@@ -429,6 +433,7 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
     t.ruleRefs.forEach((r, j) => {
       if (!rules.has(r)) errors.push({ code: "dangling_ref", jsonPointer: `/targets/${i}/ruleRefs/${j}`, message: `rule ${r} missing` });
     });
+    (t.match.near??[]).forEach((re,j)=>{try{new RegExp(re,'i');}catch{errors.push({code:'bad_regex',jsonPointer:`/targets/${i}/match/near/${j}`,message:re});}});
     t.match.label.forEach((re, j) => {
       try { new RegExp(re, "i"); } catch { errors.push({ code: "bad_regex", jsonPointer: `/targets/${i}/match/label/${j}`, message: re }); }
     });
