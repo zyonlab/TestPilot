@@ -72,6 +72,13 @@ export function NewProjectDialog({
 
   return (
     <Dialog open={open} onClose={onClose} title={t("projects.newProject")} widthClass="max-w-lg">
+      <div className="mb-4 space-y-2 rounded-lg border border-border p-3">
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" disabled={busy} onClick={() => {setName("");setUrl("https://");}}>{t("example.custom")}</Button>
+          <Button type="button" disabled={busy} onClick={() => {setName("Hyperliquid Testnet");setUrl("https://app.hyperliquid-testnet.xyz/trade");setPlatform("web");setScope("current-url");}}>{t("example.hyperliquid")}</Button>
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">{t("example.projectHint")}</p>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor="np-name" className="mb-1 block text-xs text-muted-foreground">

@@ -144,6 +144,7 @@ export function FieldChatDrawer({
     }
   };
 
+  const examplePrompt = `${t("field.exampleBase")}\n\n${t(field === "rulePack" ? "field.exampleRules" : field === "domainReference" ? "field.exampleReference" : "field.exampleKnowledge")}`;
   const chosen = runs.find((r) => r.runId === runId);
 
   return (
@@ -186,6 +187,12 @@ export function FieldChatDrawer({
       )}
 
       <div className="min-h-0 flex-1 overflow-auto p-3">
+        <details className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
+          <summary className="cursor-pointer text-sm font-medium">{t("field.exampleTitle")}</summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t("field.exampleHint")}</p>
+          <p className="my-3 whitespace-pre-wrap text-sm leading-relaxed">{examplePrompt}</p>
+          <Button type="button" size="sm" disabled={busy} onClick={() => setInput(current => current.trim() ? `${current}\n\n${examplePrompt}` : examplePrompt)}>{t("field.exampleUse")}</Button>
+        </details>
         {turns.length === 0 && (
           <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">{t(`field.hint.${field}`)}</p>
         )}
@@ -249,6 +256,7 @@ export function FieldChatDrawer({
         <div className="flex items-end gap-2">
           <textarea
             className="h-16 min-w-0 flex-1 resize-none rounded-md border border-border bg-background px-2 py-1 text-[0.8125rem]"
+            aria-label={t("field.placeholder")}
             value={input}
             placeholder={t("field.placeholder")}
             onChange={(e) => setInput(e.target.value)}
