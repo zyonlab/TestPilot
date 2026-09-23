@@ -158,3 +158,46 @@ it("用例没全过只记在执行上：运行回到 waiting_review，不用恢�
   await vi.waitFor(() => expect(row(unsure.executionId).status).toBe("unobservable"));
   expect(service.runLedger().outputs.getRun(runId)?.status).toBe("waiting_review");
 });
+
+it('persists every retry, accounts failed-attempt calls before dispatch, and reports zero-call cache as unknown',async()=>{
+ service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+ const observation={version:1,stages:[{stage:'actions',durationMs:12,status:'failed',model:{source:'role-proxy',forwarded:1,blocked:0},failure:{attribution:'infra',retryable:true}}],cache:{session:'unavailable',midscene:'unknown'},retries:[]};
+ const request={requestId:'retry-first',at:new Date().toISOString(),role:'executor',model:'fixture',endpoint:'https://executor.test/v1',thinking:false,status:429,ms:5,forwarded:true};
+ runner.run.mockResolvedValueOnce({status:'failed',infraError:true,failure:{retryable:true,code:'MODEL_UNAVAILABLE'},modelRequests:[request],observation});
+ runner.run.mockResolvedValueOnce({status:'passed',infraError:false,modelRequests:[],observation:{...observation,stages:[]}});
+ const before=runner.run.mock.calls.length;
+ const started=execution.startWorkflowExecution(runId,projectId,{codeRevision,idempotencyKey:'retry-observation',envRef:'usage-probe'});
+ await vi.waitFor(()=>expect(row(started.executionId).status).toBe('passed'),{timeout:12000});
+ const artifact=service.runLedger().readRevision(row(started.executionId).resultRevision,projectId).content as any;
+ expect(artifact.forwardedExecutorCalls).toBe(1);expect(artifact.results[0].attempts).toHaveLength(2);
+ expect(artifact.results[0].attempts[0].observation.stages[0].status).toBe('failed');
+ expect(artifact.results[0].attempts[1].observation.cache.midscene).toBe('unknown');
+ expect(runner.run.mock.calls[before+1][0].opts.modelBudget.maxCalls).toBe(runner.run.mock.calls[before][0].opts.modelBudget.maxCalls-1);
+ expect(artifact.observation.retries).toEqual([{stage:'retry-wait',reason:'retryable-infrastructure',delayMs:8000}]);
+ expect(artifact.observation.stages.filter((s:any)=>s.stage==='validation').length).toBeGreaterThanOrEqual(3);
+},15000);
+
+it('persists dispatch cancellation without guessing the unavailable runner stage',async()=>{
+ service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+ let reject!:(error:Error)=>void;runner.run.mockImplementationOnce(()=>new Promise((_r,j)=>{reject=j;}));
+ const started=execution.startWorkflowExecution(runId,projectId,{codeRevision,idempotencyKey:'rpc-cancel-observation',envRef:'usage-probe'});
+ await vi.waitFor(()=>expect(reject).toBeTypeOf('function'));await execution.cancelWorkflowExecutions(runId,projectId);reject(new Error('EXEC_CANCELLED'));
+ await vi.waitFor(()=>expect(row(started.executionId).resultRevision).toBeTruthy());
+ const artifact=service.runLedger().readRevision(row(started.executionId).resultRevision,projectId).content as any;
+ expect(artifact.status).toBe('cancelled');expect(artifact.forwardedExecutorCalls).toBeNull();
+ expect(artifact.results.find((r:any)=>r.caseId==='c1').attempts[0]).toMatchObject({status:'cancelled',observation:null});
+ expect(artifact.observation.stages).toContainEqual(expect.objectContaining({stage:'dispatch',status:'cancelled',model:{source:'unavailable',forwarded:null,blocked:null}}));
+});
+
+it('keeps compilation timing separate from deterministic code and projects legacy evidence as uncollected',async()=>{
+ service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+ const approvals=await import('../src/approvedRuns.js');
+ const generated=approvals.generateApprovedCode(runId,projectId);expect(generated.revision.id).toBe(codeRevision);
+ const receipts=service.runLedger().listRevisions(projectId,runId).filter(r=>r.name.startsWith('compilation-observation/'));
+ expect(receipts.length).toBeGreaterThan(0);
+ expect(service.runLedger().readRevision(receipts.at(-1)!.id,projectId).content).toMatchObject({observation:{stages:[{stage:'compilation',model:{source:'deterministic',forwarded:0}}]}});
+ const before=receipts.length;approvals.approvedExecutionBundle(runId,projectId,codeRevision);
+ expect(service.runLedger().listRevisions(projectId,runId).filter(r=>r.name.startsWith('compilation-observation/'))).toHaveLength(before);
+ const detail=await import('../src/executionDetail.js');const legacy=execution.listWorkflowExecutions(runId,projectId).find((r:any)=>r.resultRevision&&(service.runLedger().readRevision(r.resultRevision,projectId).content as any).results[0]?.caseId==='c1'&&!(service.runLedger().readRevision(r.resultRevision,projectId).content as any).results[0]?.observation) as any;
+ expect(detail.executionDetail(runId,projectId,legacy.id).cases[0].observation).toBeNull();
+});

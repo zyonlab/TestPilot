@@ -1,3 +1,4 @@
+import { executionObserver, type ExecutionObservation } from '@testpilot/harness-core/execution-observation';
 import { checkPrerequisite, type Preparation, type EnvironmentFact, type PrerequisiteReceipt } from './preparationChecks.js';
 import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
 import {settleOn} from './pageReady.js';
@@ -25,6 +26,7 @@ import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles
 import { executorConnectionFromEnv, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
 
 export interface RunResult {
+  observation?: ExecutionObservation;
   observations?: Array<{step:number;text:string;url:string;capturedAt:number}>;
   prerequisiteChecks?: PrerequisiteReceipt[];
   environmentFacts?: EnvironmentFact[];
@@ -169,6 +171,8 @@ export async function executeRun(
     };
   } = {},
 ): Promise<RunResult> {
+  const observer = executionObserver();
+  observer.begin("session-navigation");
   const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
   const auxiliaryChecks: NonNullable<RunResult["auxiliaryChecks"]> = [];
   const injected = !!opts.injected;
@@ -204,6 +208,7 @@ export async function executeRun(
   const screenshots: string[] = [];
   const pngBuffers: Buffer[] = [];
   const modelRequests: RoleRequestRecord[] = []; let requestSource: RoleRequestRecord[] | undefined, requestOffset = 0;
+  let result: RunResult | undefined;
   let session: Awaited<ReturnType<typeof launchSession>> | undefined;
   let stopApprover: (() => void) | undefined;
   /** 变异体改过这份 DOM，绝不能进池让下一条接着用。 */
@@ -262,6 +267,7 @@ export async function executeRun(
        * 缓存此时已经是新的，同一步再放一遍就过——重试一次，不重试第二次。
        */
       if (!/dispatchMouseEvent.*double value expected/.test((e as Error).message)) throw e;
+      observer.retry("coordinate-replay");
       rlog(`  回放坐标丢失（Midscene 缓存刷新后的第一次），这一步重试一次`);
       await session!.agent.aiAction(t);
     }
@@ -300,6 +306,9 @@ export async function executeRun(
       session = got.session;
       requestOffset = session.modelRequests?.length ?? 0;
       reused = got.reused;
+      requestSource = session.modelRequests;
+      observer.source(() => requestSource, requestOffset);
+      observer.data.cache.session = reused ? "hit" : "miss";
       if (reused) {
         // 回到起点：同一个浏览器、**新的页面**、这条用例自己的 agent（cacheId 按用例）。登录态在浏览器里，不用再跑。
         session = await reopenPage(session, url, launchOpts);
@@ -310,6 +319,7 @@ export async function executeRun(
       session = await launchSession(url, launchOpts);
     }
     requestSource = session.modelRequests;
+    observer.source(() => requestSource, requestOffset);
     if (opts.signal?.aborted) { abortSession(); checkCancelled(); }
     if (injected) logs.push(`injected wallet ${session.injectedAddress}`);
     else if (wallet && session.walletId) {
@@ -318,6 +328,7 @@ export async function executeRun(
     }
     await shot();
     mark("launchMs");
+    observer.begin("authentication");
     // Login flow (登录态): resolve ${secret.*}/${env.*} for execution, but log the
     // TEMPLATE text so credentials never appear in logs/reports.
     await settleOn(session.page,{minMs:600,maxMs:12_000});
@@ -348,6 +359,7 @@ export async function executeRun(
       await session.page.goto(url, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }));
     }
     mark("loginMs");
+    observer.begin("preparation");
     const ready=await settleOn(session.page,{minMs:600,maxMs:12_000});
     checkCancelled();
     if(!ready.settled&&ready.controls===0&&ready.textLen===0)throw new Error('PAGE_NOT_READY: the target page remained blank before execution');
@@ -456,6 +468,7 @@ export async function executeRun(
       rlog(`chain snapshot (before) — ${chainBefore.length} balance(s)`);
     }
     mark("settleMs");
+    observer.begin("actions");
     // Functional oracle: verify the case's expected outcome and record it structurally.
     const oracle: OracleCheck[] = [];
     let assertFailed: string | undefined;
@@ -482,7 +495,7 @@ export async function executeRun(
       snap.judge = out.sampling;
       return true;
     };
-    const checkNow = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
+    const checkNowInner = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
       if (isOpenQuestion(a.statement)) {
         oracle.push({ assertion: a.statement, status: "unobservable", detail: "开放问题：记下，不下判决" });
         rlog(`assert ∅ (after step ${n}) 开放问题——不判`);
@@ -510,12 +523,23 @@ export async function executeRun(
         else { oracle.push({ assertion: a.statement, status: "fail", detail, decidedBy: "judge" }); assertFailed = detail; }
       }
     };
+    const checkNow = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
+      observer.begin("assertions");
+      const before = oracle.length;
+      try { await checkNowInner(a,n); }
+      finally {
+        const checks = oracle.slice(before);
+        if (checks.some(c=>c.status==='fail') || infraError) observer.issue('failed', {attribution:infraError?'infra':'assert',retryable:infraError});
+        else if(checks.some(c=>c.status==='unobservable')) observer.issue('unknown');
+      }
+    };
     const checkAuxiliary = async (a:typeof auxiliaryAssertions[number], step:number) => {
       const offset=oracle.length;
       await checkNow(a,step);
       auxiliaryChecks.push(...oracle.splice(offset).map(check=>({...check,id:a.id,supports:a.supports})));
     };
     for (const [i, step] of steps.entries()) {
+      observer.begin("actions");
       rlog(`step ${i + 1}: ${step}`);
       await withModel(() => act(resolveText(step, ctx)));
       await shot(); await observe(i+1);
@@ -523,6 +547,7 @@ export async function executeRun(
       for (const a of auxiliaryAssertions.filter(x=>x.afterStep===i+1)) await checkAuxiliary(a,i+1);
     }
     mark("stepsMs");
+    observer.begin("assertions");
     /**
      * **变异体到底生效了没有，必须读回来——而且要在步骤跑完之后读。**
      *
@@ -669,13 +694,17 @@ export async function executeRun(
         rlog(`chain assertions skipped — ${redact((e as Error).message, secretVals).slice(0, 70)}`);
       }
     }
+    if (assertFailed) observer.issue("failed", classifyFailure(assertFailed));
+    else if (unobservable) observer.issue("unknown");
     mark("assertMs");
+    observer.begin("cleanup");
     // Required cleanup is part of reproducibility: a failure cannot leave the run green.
     for (const t of opts.postSteps ?? []) {
       try {
         rlog(`teardown: ${t}`);
         await withModel(() => act(resolveText(t, ctx)));
       } catch (e) {
+        observer.issue(opts.signal?.aborted ? "cancelled" : "failed", {attribution:"infra",retryable:false});
         infraError = true;
         assertFailed = assertFailed || "ENV_TEARDOWN_FAILED";
         rlog(`ENV_TEARDOWN_FAILED — ${redact((e as Error).message, secretVals).slice(0, 70)}`);
@@ -684,7 +713,8 @@ export async function executeRun(
     mark("teardownMs");
     const perfMetrics = await capturePerf(session.page).catch(() => ({}) as PerfMetrics);
     checkCancelled();
-    return {
+    return result = {
+      observation: observer.data,
       modelRequests,
       ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
       ...(opts.captureObservations?{observations}:{}),
@@ -710,6 +740,7 @@ export async function executeRun(
     };
   } catch (e) {
     const message = opts.signal?.aborted ? "EXEC_CANCELLED" : redact((e as Error).message, secretVals);
+    observer.issue(opts.signal?.aborted ? "cancelled" : [...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks].some(c=>c.status==='fail') ? "unknown" : "failed", classifyFailure(message));
     logs.push(`error: ${message}`);
     await observe(-999).catch(()=>{});
     // 浏览器本身死了才踢出池；用例层面的异常（规划失败、判据没走到）不踢——下一条 goto 回起点就是干净的，
@@ -720,7 +751,8 @@ export async function executeRun(
     }
     // 出错那一刻停在哪段就记到哪段。
     phases[open] += Date.now() - phaseT;
-    return {
+    return result = {
+      observation: observer.data,
       modelRequests,
       ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
       ...(opts.captureObservations?{observations}:{}),
@@ -746,8 +778,18 @@ export async function executeRun(
     opts.signal?.removeEventListener("abort", abortSession);
     stopApprover?.();
     // 进了池的会话留给下一条；释放由给 key 的那一方在批次结束时做。
-    if (!poolKey) await session?.cleanup();
+    observer.end();
+    if (!poolKey && session) {
+      observer.begin("cleanup");
+      try { await session.cleanup(); }
+      catch {
+        observer.issue("failed", {attribution:"infra",retryable:false});
+        if (result) { result.status = "failed"; result.infraError = true; result.failureReason ??= "ENV_TEARDOWN_FAILED"; result.failure ??= classifyFailure("ENV_TEARDOWN_FAILED"); }
+      }
+    }
+    observer.end();
     modelRequests.push(...(requestSource?.slice(requestOffset) ?? []));
+    if (result) { result.durationMs = Date.now() - t0; if (!requestSource) delete result.modelRequests; }
   }
 }
 

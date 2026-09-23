@@ -1,3 +1,4 @@
+import { executionObserver, readExecutionObservation } from '@testpilot/harness-core/execution-observation';
 import { experienceScope, selectExperience, useRecipe, recordRecipeEvidence, assertRecipeNotRevoked, type ExperienceScope } from './preparationExperience.js';
 import { PrerequisiteCheckSchema, AuxiliaryAssertionSchema, SetupRecipeSchema, type SetupRecipe, type PrerequisiteCheck, type Preparation, type RunResult } from '@testpilot/harness-testing';
 import { isRunning as codexRunning, cancelRun as cancelCodex } from './codex.js';
@@ -176,7 +177,7 @@ export async function preparationStep(runId:string,projectId:string,raw:unknown)
  void trial(b,u,plan).catch(e=>recordFailure(b,u,e));
  return {status:'waiting',caseId:u.caseId,round:u.round};
 }
-function recordFailure(b:Batch,u:Unit,e:any,probe=false){const current=latest(b.runId,b.projectId);if(!current||current.id!==b.id||current.generation!==b.generation||current.status!=='running')return;const item=current.units.find(v=>v.caseId===u.caseId)!;item.status=probe?'planning':item.round>=current.maxRounds?'exhausted':'repair';item.reason=String(e.message).slice(0,1500);item.experienceContext=undefined;const ref=put(current,`${u.caseId}/${probe?'probe-error':'error'}/${randomUUID()}`,{error:item.reason,infraError:true},[probe?u.probePlan!:u.plan!]).id;if(probe)item.probeResult=ref;else item.result=ref;save(current);log(current,`${u.caseId} · ${item.reason}`);}
+function recordFailure(b:Batch,u:Unit,e:any,probe=false){const current=latest(b.runId,b.projectId);if(!current||current.id!==b.id||current.generation!==b.generation||current.status!=='running')return;const item=current.units.find(v=>v.caseId===u.caseId)!;item.status=probe?'planning':item.round>=current.maxRounds?'exhausted':'repair';item.reason=String(e.message).slice(0,1500);item.experienceContext=undefined;const prior=probe?item.probeResult:item.result;const observation=prior?readExecutionObservation((store().readRevision(prior,b.projectId).content as any).observation):null;const ref=put(current,`${u.caseId}/${probe?'probe-error':'error'}/${randomUUID()}`,{error:item.reason,infraError:true,observation},[probe?u.probePlan!:u.plan!]).id;if(probe)item.probeResult=ref;else item.result=ref;save(current);log(current,`${u.caseId} · ${item.reason}`);}
 function preparedChecksPassed(preparation:Preparation,result:Pick<RunResult,'prerequisiteChecks'|'auxiliaryChecks'|'recipeChecks'>){
  const observable=(c:string|PrerequisiteCheck)=>typeof c==='string'||c.checks.every(part=>part.kind!=='unknown');
  if(!preparation.checks.every(check=>observable(check)&&result.prerequisiteChecks?.some(c=>c.statement===(typeof check==='string'?check:check.statement)&&c.status==='pass')))return false;
@@ -187,6 +188,7 @@ function preparedChecksPassed(preparation:Preparation,result:Pick<RunResult,'pre
 }
 async function trial(b:Batch,u:Unit,plan:TextCase,probe=false,probePreparation?:Preparation){
  const controller=new AbortController();active.set(b.runId,controller);const budget=configuredRunBudget();const timer=setTimeout(()=>controller.abort(new Error('trial_timeout')),Math.min(budget.wallMs,b.deadline-Date.now()));timer.unref();
+ const observer=executionObserver();observer.begin("validation",true);
  const startedAt=Date.now();const heartbeat=setInterval(()=>{const current=latest(b.runId,b.projectId);if(current?.id===b.id&&current.generation===b.generation&&current.status==='running')log(current,`${u.caseId} · ${probe?`环境探查 ${u.probeRound}`:`第 ${u.round} 轮试跑`} · 已用时 ${Math.floor((Date.now()-startedAt)/1000)} 秒`);},15000);heartbeat.unref();
  try{
   const detail=store().getRun(b.runId,b.projectId).detail as any;const env=resolveEnvironment(b.projectId,detail.target?.envRef);const context={env:env?.vars??{},secrets:getSecretValues(b.projectId)};const url=resolveText(env?.baseUrl||detail.parameters?.sourceUrl||getProject(b.projectId)!.targetUrl,context);
@@ -195,16 +197,44 @@ async function trial(b:Batch,u:Unit,plan:TextCase,probe=false,probePreparation?:
   if(preparation.recipe)assertRecipeNotRevoked(store(),currentScope(b,u),preparation.recipe);
   const login=caseStartsLoggedOut(plan.precondition)?[]:env?.login?.authRequired?env.login.steps??[]:[];
   const missing=[...login,...setup,...plan.steps,...plan.postSteps].flatMap(text=>{const keys=referencedKeys(text);return [...keys.env.filter(k=>!(k in context.env)).map(k=>'env.'+k),...keys.secret.filter(k=>!(k in context.secrets)).map(k=>'secret.'+k)];});if(missing.length)throw new LedgerError(409,'unresolved_placeholders:'+missing.join(','));
-  guardRun(url,[...login,...setup,...plan.steps,...plan.postSteps],{sideEffectLabels:boundRulePack(b.runId,b.projectId)?.sideEffectLabels});runEnvReset(env?.vars?.TP_RESET_CMD);
+  guardRun(url,[...login,...setup,...plan.steps,...plan.postSteps],{sideEffectLabels:boundRulePack(b.runId,b.projectId)?.sideEffectLabels});observer.begin("reset",true);runEnvReset(env?.vars?.TP_RESET_CMD);observer.begin("dispatch");
   const result=await execOnRunner({execId:`prep-${b.id}-${u.caseId}-${probe?'probe-'+u.probeRound:'trial-'+u.round}`,scopeProjectId:b.projectId,modelSnapshotRunId:b.runId,url:caseEntryUrl(plan.precondition,url),steps:plan.steps,expected:plan.expected,artifactDir:ARTIFACT_DIR,opts:{captureObservations:true,preparation,oracle:plan.oracle,assertions:plan.assertions,postSteps:plan.postSteps,resolve:context,login,storageState:caseStartsLoggedOut(plan.precondition)?null:env?.login?.authRequired?env.login.session:null,authentication:env?.login?.authRequired?{sessionChecks:env.login.sessionChecks,injectedSessionCheck:env.login.injectedSessionCheck}:undefined,extraHeaders:{...resolveMap(env?.headers??{},context),...(env?.login?.authRequired?env.login.session?.headers??{}:{})},query:resolveMap(env?.query??{},context),viewport:env?.viewport,...(detail.parameters?.exploreWallet?{injected:true}:{}),modelBudget:{maxCalls:Math.min(budget.executorCalls,b.maxCalls-b.calls),deadlineAt:Math.min(Date.now()+budget.wallMs,b.deadline)}}},{signal:controller.signal});
-  const current=latest(b.runId,b.projectId);if(!current||current.id!==b.id||current.generation!==b.generation||current.status!=='running')return;const item=current.units.find(v=>v.caseId===u.caseId)!;approved(current,item);
-  const receipt=put(current,`${u.caseId}/${probe?'probe-'+u.probeRound:'round-'+u.round}/result`,result,[probe?u.probePlan!:u.plan!]).id;
+  observer.source(()=>result.modelRequests);
+  if(controller.signal.aborted) observer.issue('cancelled');
+  observer.end();
+  const current=latest(b.runId,b.projectId);
+  if(!current||current.id!==b.id||current.generation!==b.generation) {
+    // A resume may win the race too. Preserve the old attempt without changing the new unit.
+    put(b,`${u.caseId}/generation-${b.generation}/${probe?'probe-'+u.probeRound:'round-'+u.round}/late-result`,{...result,status:'cancelled',observation:readExecutionObservation(result.observation),serviceObservation:observer.data},[probe?u.probePlan!:u.plan!]);
+    if(Array.isArray(result.modelRequests)) {
+      recordModelRequests(b.runId,result.modelRequests,{caseRevision:u.source,executionId:`prep-${b.id}-${u.caseId}-${probe?'probe-'+u.probeRound:'trial-'+u.round}`});
+      const owner=load(b.id,b.runId,b.projectId);owner.calls+=result.modelRequests.filter(r=>r.forwarded).length;save(owner);
+    }
+    return;
+  }
+  const item=current.units.find(v=>v.caseId===u.caseId)!;
+  if(Array.isArray(result.modelRequests)){current.calls+=result.modelRequests.filter(r=>r.forwarded).length;recordModelRequests(b.runId,result.modelRequests,{caseRevision:u.source,executionId:`prep-${b.id}-${u.caseId}-${probe?'probe-'+u.probeRound:'trial-'+u.round}`});}
+  if(current.status!=='running') {
+    const ref=put(current,`${u.caseId}/${probe?'probe-'+u.probeRound:'round-'+u.round}/cancelled`,{...result,status:'cancelled',observation:readExecutionObservation(result.observation),serviceObservation:observer.data},[probe?u.probePlan!:u.plan!]).id;
+    if(probe)item.probeResult=ref;else item.result=ref;save(current);return;
+  }
+  approved(current,item);
+  const receipt=put(current,`${u.caseId}/${probe?'probe-'+u.probeRound:'round-'+u.round}/result`,{...result,observation:readExecutionObservation(result.observation),serviceObservation:observer.data},[probe?u.probePlan!:u.plan!]).id;
   if(probe)item.probeResult=receipt;else item.result=receipt;
   for(const line of (result.logs??[]).slice(-40)) log(current,`${u.caseId} · 第 ${u.round} 轮 · ${line}`);
-  if(Array.isArray(result.modelRequests)){current.calls+=result.modelRequests.filter(r=>r.forwarded).length;recordModelRequests(b.runId,result.modelRequests,{caseRevision:u.source,executionId:`prep-${b.id}-${u.caseId}-${probe?'probe-'+u.probeRound:'trial-'+u.round}`});}
   item.status=probe?'planning':result.status==='passed'&&!result.infraError&&Array.isArray(result.modelRequests)&&result.oracle?.length>0&&preparedChecksPassed(preparation,result)?'verified':item.round>=current.maxRounds?'exhausted':'repair';item.reason=`执行器：${result.status} · ${result.failureReason??result.unobservableReason??''}`;item.experienceContext=undefined;
   if(preparation.recipe)recordRecipeEvidence(store(),currentScope(current,item),current.id,item.caseId,preparation.recipe,receipt,!probe&&item.status==='verified');
   save(current);log(current,`${u.caseId} · 第 ${u.round} 轮 · ${item.status}`, 'running',receipt);
+ }catch(error){
+  observer.issue(controller.signal.aborted?'cancelled':'failed',{attribution:'infra',retryable:false});observer.end();
+  // Keep the measured boundary even if RPC cancellation races the runner receipt.
+  const current=latest(b.runId,b.projectId);
+  if(current?.id===b.id&&current.generation===b.generation){
+    const item=current.units.find(v=>v.caseId===u.caseId)!;
+    const ref=put(current,`${u.caseId}/${probe?'probe-'+u.probeRound:'round-'+u.round}/error-observation`,{status:controller.signal.aborted?'cancelled':'failed',infraError:true,observation:observer.data},[probe?u.probePlan!:u.plan!]).id;
+    if(probe)item.probeResult=ref;else item.result=ref;save(current);
+  }
+  throw error;
  }finally{clearTimeout(timer);clearInterval(heartbeat);if(active.get(b.runId)===controller)active.delete(b.runId);}
 }
 function finish(b:Batch){

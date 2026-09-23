@@ -86,6 +86,10 @@ it("captures a screenshot and perf metrics inside the runner process", async () 
   expect(Object.keys(result.perfMetrics).length).toBeGreaterThan(0);
   expect(result.perfMetrics.loadMs).toBeGreaterThanOrEqual(0);
   expect(result.oracle).toEqual([]);
+  expect(result.observation?.version).toBe(1);
+  expect(result.observation?.stages.map(s=>s.stage)).toContain('session-navigation');
+  expect(result.observation?.stages.every(s=>s.model.source==='role-proxy'&&s.model.forwarded===0)).toBe(true);
+  expect(result.observation?.cache.midscene).toBe('unknown');
 
   // The run reports progress on the bus, so the UI sees a live run without polling.
   const phases = events
@@ -152,5 +156,7 @@ it("cancels a normal execution while page navigation is pending and closes the b
   await requested; expect(await rpc.cancel("cancel-navigate")).toBe(true);
   const result = await pending;
   expect(result.status).toBe("failed"); expect(result.infraError).toBe(true); expect(result.failureReason).toBe("EXEC_CANCELLED");
+  expect(result.observation?.stages[0]).toMatchObject({stage:'session-navigation',status:'cancelled',model:{source:'unavailable',forwarded:null}});
+  expect(result.modelRequests).toBeUndefined();
   expect(await rpc.cancel("cancel-navigate")).toBe(false);
 }, 45_000);

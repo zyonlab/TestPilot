@@ -1,3 +1,5 @@
+import type {ExecutionObservation as Observation, ExecutionAttempt} from '../../../packages/harness-core/src/execution-observation';
+import {ExecutionObservation} from './ExecutionObservation';
 import { useState, type ReactNode } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useT } from '@/lib/prefs';
@@ -8,6 +10,7 @@ import type { RunRecord, VisualDiff } from '@/lib/types';
 
 type Any = Record<string, any>;
 export interface CaseRun {
+  observation?: Observation | null; attempts?: ExecutionAttempt[];
   caseId: string; title: string; steps: string[]; postSteps: string[];
   status: string; infraError: boolean; failure: Any | null; failureReason: string | null;
   durationMs: number | null; startedAt: string | null; entryUrl: string | null; endedAt: string | null;
@@ -89,6 +92,7 @@ export function CaseRunDetail({ item, defaultTab }: { item: CaseRun; defaultTab?
       </span>
     </div>
 
+    <ExecutionObservation value={item.observation} attempts={item.attempts}/>
     <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
       {TABS.map((k) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
         className={`-mb-px border-b-2 px-3 py-1.5 text-xs ${tab === k ? 'border-primary font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>

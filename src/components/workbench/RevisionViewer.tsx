@@ -1,3 +1,4 @@
+import {ExecutionObservation} from './ExecutionObservation';
 import { artifactLabel } from './artifactLabel';
 import { DocumentFields, RulePackDocument, ExplorationDocument } from './ArtifactDocument';
 import { ExplorationGraph, type ExplorationGraphData } from './ExplorationGraph';
@@ -74,6 +75,7 @@ export function RevisionContent({content,kind,projectId,runId}:{content:unknown;
   if(Array.isArray(data.stories)) return <ProductStructure data={data} projectId={projectId} runId={runId}/>;
   if(typeof data.text==='string'||typeof data.specText==='string'||typeof data.notes==='string')return <div className="space-y-6"><Markdown text={String(data.text??data.specText??data.notes)}/><details><summary className="cursor-pointer text-sm">{t('artifact.additional')}</summary><DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>!['text','specText','notes'].includes(k)))}/></details></div>;
   if(typeof data.code==='string')return <pre className="overflow-auto whitespace-pre-wrap text-xs">{data.code}</pre>;
+  if('observation' in data || Array.isArray(data.prerequisiteChecks) || Array.isArray(data.modelRequests) || Array.isArray(data.logs)&&typeof data.status==='string')return <div className="space-y-4"><ExecutionObservation value={data.observation}/>{data.serviceObservation!=null&&<ExecutionObservation value={data.serviceObservation}/>}<DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>!['observation','serviceObservation'].includes(k)))}/></div>;
   return <DocumentFields data={content}/>;
 }
 export function RevisionViewer({projectId,revision,all,onSelect,hideTitle=false}:{hideTitle?:boolean;projectId:string;revision:Revision;all:Revision[];onSelect:(revision:Revision)=>void}) {

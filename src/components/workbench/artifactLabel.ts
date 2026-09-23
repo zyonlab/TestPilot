@@ -12,6 +12,7 @@ export function artifactLabel(name:string,t:(key:string)=>string):string {
     'validated/cases':'workflow.stage.cases',
     'validated/gate':'workflow.stage.gate',
   };
+  if(name.startsWith('compilation-observation/'))return t('observation.stage.compilation');
   if(name.startsWith('g2/'))return t('workflow.kind.code');
   if(name.startsWith('preparation/')){const parts=name.split('/');if(parts[2]==='experience')return t('bench.preparationArtifact.experience');if(parts[3]?.startsWith('context-'))return `${parts[2]} · ${t('bench.preparationArtifact.context')}`;return parts[2]==='instructions'?t('artifact.instructions'):`${parts[2]} · ${parts[3]} · ${t(`bench.preparationArtifact.${parts[4]}`)}`;}
   return labels[name]?t(labels[name]):name.startsWith('knowledge/rulepack/')?`${t('surface.rulePacks')} · ${name.slice('knowledge/rulepack/'.length)}`:name;

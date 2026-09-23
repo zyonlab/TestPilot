@@ -1,14 +1,14 @@
 import {it,expect,vi,beforeEach} from 'vitest';
-const f=vi.hoisted(()=>({calls:[] as string[],fail:false}));
-vi.mock('../src/exec/session.js',()=>({launchSession:async()=>({
+const f=vi.hoisted(()=>({calls:[] as string[],fail:false,cleanupFail:false,launchFail:false,actionFail:false,requests:[] as {forwarded:boolean}[]}));
+vi.mock('../src/exec/session.js',()=>({launchSession:async()=>{if(f.launchFail)throw new Error("Browser has disconnected");return ({
  page:{url:()=> 'https://example.test/',screenshot:async()=>Buffer.from('png'),evaluate:async(fn:Function)=>fn.toString().includes('.split(')?['Ready']:'Ready'},
- agent:{aiAction:async(t:string)=>f.calls.push('act:'+t),aiAssert:async(t:string)=>{f.calls.push('assert:'+t);if(f.fail)throw new Error('Assertion failed: missing content');}},
- cleanup:async()=>{},modelRequests:[]
-}),reopenPage:vi.fn()}));
+ agent:{aiAction:async(t:string)=>{f.calls.push('act:'+t);f.requests.push({forwarded:true});if(f.actionFail)throw new Error('cannot find target');},aiAssert:async(t:string)=>{f.calls.push('assert:'+t);if(f.fail)throw new Error('Assertion failed: missing content');}},
+ cleanup:async()=>{if(f.cleanupFail)throw new Error("cleanup secret failure");},modelRequests:f.requests
+});},reopenPage:vi.fn()}));
 vi.mock('../src/exec/pageReady.js',()=>({settleOn:async()=>({settled:true,controls:1,textLen:5,ms:0})}));
 vi.mock('../src/baselines/perf.js',()=>({capturePerf:async()=>({})}));
-import {executeRun} from '../src/exec/run.js';
-beforeEach(()=>{f.calls=[];f.fail=false;});
+import {executeRun,releaseRunSession} from '../src/exec/run.js';
+beforeEach(()=>{f.calls=[];f.fail=false;f.cleanupFail=false;f.launchFail=false;f.actionFail=false;f.requests=[];});
 const model={baseUrl:'https://fixture.test',apiKey:'fixture',model:'fixture'} as never;
 it('sends top-level and per-step none oracles to the screen judge alongside machine checks',async()=>{
  const result=await executeRun('https://example.test/',['Open','Close'],'Final screen',{executorModel:model,oracle:{kind:'none'},assertions:[
@@ -67,4 +67,39 @@ it('preserves visual acceptance when a supplementary machine check is added',asy
  expect(f.calls).toEqual(['act:Submit','assert:Original summary','assert:Original detailed acceptance']);
  expect(result.status).toBe('failed');expect(result.failureReason).toContain('AUXILIARY_CHECK_NOT_VERIFIED');expect(result.failure?.attribution).toBe('infra');
  expect(result.oracle.map(c=>c.assertion)).toEqual(['Original summary','Original detailed acceptance']);expect(result.auxiliaryChecks?.[0]).toMatchObject({id:'extra',status:'fail'});
+});
+
+it('preserves phase evidence, request source and sensitive-field boundaries on failure',async()=>{
+ f.actionFail=true;f.cleanupFail=true;
+ const r=await executeRun('https://example.test/',['Click'],'Expected',{executorModel:model});
+ expect(r.status).toBe('failed');expect(r.failure?.attribution).toBe('locate');expect(r.failureReason).toBe('cannot find target');
+ expect(r.observation?.stages).toContainEqual(expect.objectContaining({stage:'actions',status:'failed',model:{source:'role-proxy',forwarded:1,blocked:0}}));
+ expect(r.observation?.stages).toContainEqual(expect.objectContaining({stage:'cleanup',status:'failed'}));
+ expect(JSON.stringify(r.observation)).not.toMatch(/example.test|secret|Expected|Click/);
+});
+it('records unknown preparation without inventing business action or cache evidence',async()=>{
+ const r=await executeRun('https://example.test/',['Click'],'Expected',{executorModel:model,preparation:{steps:[],checks:[{statement:'History',checks:[{kind:'unknown',reason:'No baseline'}]}]}});
+ expect(r.observation?.stages).toContainEqual(expect.objectContaining({stage:'preparation',status:'unknown'}));
+ expect(r.observation?.stages.some(s=>s.stage==='actions')).toBe(false);expect(r.observation?.cache.midscene).toBe('unknown');
+});
+it('keeps session launch failure usage unavailable and handles cancellation before launch',async()=>{
+ f.launchFail=true;const r=await executeRun('https://example.test/',[], '',{executorModel:model});
+ expect(r.modelRequests).toBeUndefined();expect(r.observation?.stages[0]).toMatchObject({stage:'session-navigation',status:'failed',model:{forwarded:null,source:'unavailable'}});
+ const controller=new AbortController();controller.abort();const cancelled=await executeRun('https://example.test/',[], '',{executorModel:model,signal:controller.signal});
+ expect(cancelled.observation?.stages[0].status).toBe('cancelled');
+});
+it('does not let browser cleanup failure leave a successful run green',async()=>{
+ f.cleanupFail=true;const r=await executeRun('https://example.test/',[], '',{executorModel:model});
+ expect(r.status).toBe('failed');expect(r.failureReason).toBe('ENV_TEARDOWN_FAILED');
+});
+
+it('reports session reuse only at the actual pool branch, with per-run request offsets',async()=>{
+ const session=await import('../src/exec/session.js');vi.mocked(session.reopenPage).mockImplementation(async s=>s);
+ try {
+  const first=await executeRun('https://example.test/',['Open'],'',{executorModel:model,sessionKey:'observation-pool'});
+  const second=await executeRun('https://example.test/',['Open'],'',{executorModel:model,sessionKey:'observation-pool'});
+  expect(first.observation?.cache.session).toBe('miss');expect(second.observation?.cache.session).toBe('hit');
+  expect(first.modelRequests).toHaveLength(1);expect(second.modelRequests).toHaveLength(1);
+  expect(second.observation?.stages.reduce((n,s)=>n+(s.model.forwarded??0),0)).toBe(1);
+ } finally { await releaseRunSession('observation-pool'); }
 });

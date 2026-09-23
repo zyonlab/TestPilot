@@ -1,3 +1,4 @@
+import { readExecutionObservation, ExecutionAttemptSchema } from '@testpilot/harness-core/execution-observation';
 /**
  * 一次执行的明细：每条用例的执行过程，连同它那条运行记录上的视觉基线、性能基线与 Midscene 报告。
  *
@@ -104,7 +105,9 @@ export function executionDetail(runId: string, projectId: string, executionId: s
       phases: phases ?? null,
       perfMetrics: perfMetrics ?? null,
       screenshots: ((pngPaths ?? []) as string[]).map((p) => p.split("/artifacts/")[1]).filter((p): p is string => !!p && /^exec\/[\w.-]+\.png$/.test(p)),
-      modelCalls: Array.isArray(modelRequests) ? modelRequests.length : null,
+      observation: readExecutionObservation(r.observation),
+      attempts: Array.isArray(r.attempts) ? r.attempts.flatMap((a:unknown)=>{const parsed=ExecutionAttemptSchema.safeParse(a);return parsed.success?[parsed.data]:[];}) : undefined,
+      modelCalls: Array.isArray(modelRequests) && modelRequests.every(r=>typeof r.forwarded==='boolean') ? modelRequests.filter(r=>r.forwarded===true).length : null,
       boardCaseId,
       run: record ? {
         id: record.id,

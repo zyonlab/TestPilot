@@ -16,7 +16,7 @@ beforeAll(async()=>{
  const stories=[{id:'s1',title:'Count',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Increment',designMethod:'boundary',steps:['Click Increment'],expected:'Counter is one',tier:1,readiness:{design:'candidate',execution:'blocked',reason:'Control not located'},key:'increment',sourceRefs:[ref],oracle:{kind:'text',value:'Count: 1'},assertions:[{id:'a1',statement:'Counter is one',ruleRefs:[],oracle:{kind:'text',value:'Count: 1'}}]}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
  const c=approvals.reviewRevisions(run,project)[0];revision=c.revision.id;original=c.content;approvals.decideRevisions(run,project,{items:[{caseId:'c1',revisionId:revision,decision:'approved'}]},{kind:'human',id:'fixture'});
 });
-afterAll(()=>{svc.runLedger().close();db.db.close();vi.unstubAllEnvs();rmSync(dir,{recursive:true,force:true});});
+afterAll(async()=>{await new Promise(r=>setTimeout(r,3100));svc.runLedger().close();db.db.close();vi.unstubAllEnvs();rmSync(dir,{recursive:true,force:true});});
 const result=(status='passed')=>({status,infraError:false,durationMs:5,modelRequests:[],pngPaths:[],logs:['fixture result'],oracle:[{status:status==='passed'?'pass':'fail',decidedBy:'machine'}]});
 async function start(mode:'retry'|'all'='all'){svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);return prep.startPreparation(run,project,{revisionIds:[revision],maxRounds:2,mode});}
 const step=(b:string,body:any)=>prep.preparationStep(run,project,{batchId:b,...body});
@@ -34,7 +34,17 @@ it('sends changed acceptance back to review without calling runner',async()=>{
 });
 it('does not accept late results after cancellation and resumes persisted work',async()=>{
  const b=await start();let resolve!:(v:any)=>void;fake.run.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'Trial'});await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));
- await prep.cancelPreparation(run,project);resolve(result());await new Promise(r=>setTimeout(r,10));expect(prep.preparationStatus(run,project)?.summary.verified).toBe(0);
+ const observed={version:1,stages:[{stage:'actions',status:'completed',durationMs:7,model:{source:'role-proxy',forwarded:1,blocked:0}}],cache:{session:'unavailable',midscene:'unknown'},retries:[]};
+ const request={requestId:'cancelled-receipt',at:new Date().toISOString(),role:'executor',model:'fixture',endpoint:'https://executor.test/v1',thinking:false,status:200,ms:7,forwarded:true};
+ await prep.cancelPreparation(run,project);resolve({...result(),observation:observed,modelRequests:[request]});
+ await vi.waitFor(()=>expect(svc.runLedger().listRevisions(project,run).some(r=>r.name.endsWith('/cancelled'))).toBe(true));
+ expect(prep.preparationStatus(run,project)?.summary.verified).toBe(0);
+ const saved=svc.runLedger().listRevisions(project,run).find(r=>r.name.endsWith('/cancelled'))!;
+ const evidence:any=svc.runLedger().readRevision(saved.id,project).content;
+ expect(evidence).toMatchObject({status:'cancelled',observation:observed,modelRequests:[request]});
+ expect(evidence.serviceObservation.stages).toContainEqual(expect.objectContaining({stage:'dispatch',status:'cancelled',model:{source:'role-proxy',forwarded:1,blocked:0}}));
+ const batch:any=svc.runLedger().db.prepare('SELECT json FROM preparation_batches WHERE id=?').get(b.batchId);expect(JSON.parse(batch.json).calls).toBe(1);
+ const spend=await import('../src/roleSpend.js');expect(spend.runRoleSpend(run,project).roles.find(r=>r.role==='executor')?.calls).toBeGreaterThanOrEqual(1);
  const resumed=await start('retry');expect(resumed.batchId).toBe(b.batchId);expect(prep.preparationStatus(run,project)?.units[0].status).toBe('pending');
  await prep.cancelPreparation(run,project);
 });
@@ -136,4 +146,25 @@ it('delivers a candidate across cases, revalidates it, promotes only from separa
  expect((svc.runLedger().readRevision(experience.id,project).content as any).entries[0].status).toBe('verified-reusable');
  expect((svc.runLedger().readRevision(candidate.revision,project).content as any).recipes[0].status).toBe('candidate');
  const bundle:any=approvals.approvedExecutionBundle(r,project,end.codeRevision);expect(bundle.preparation.c2.recipe).toEqual(recipe);
+});
+
+it('stores measured dispatch failure in preparation receipts without manufacturing model usage',async()=>{
+ const b=await start();fake.run.mockRejectedValueOnce(new Error('runner disconnected'));
+ await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'Try runner'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('repair'));
+ const next:any=await step(b.batchId,{action:'next'});
+ expect(next.result.observation.stages).toContainEqual(expect.objectContaining({stage:'dispatch',status:'failed',model:{source:'unavailable',forwarded:null,blocked:null}}));
+ expect(next.result.modelRequests).toBeUndefined();await prep.cancelPreparation(run,project);
+});
+
+it('retains a cancelled generation receipt and spend when resume wins the race',async()=>{
+ const b=await start();let finish!:(v:any)=>void;fake.run.mockImplementationOnce(()=>new Promise(r=>{finish=r;}));
+ await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'Start old attempt'});
+ await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+ await prep.cancelPreparation(run,project);await start('retry');
+ finish({...result(),modelRequests:[{requestId:'late-old-generation',at:new Date().toISOString(),forwarded:true,role:'executor',model:'fixture',endpoint:'https://executor.test/v1',thinking:false,status:200,ms:1}]});
+ await vi.waitFor(()=>expect(svc.runLedger().listRevisions(project,run).some(r=>r.name.endsWith('/late-result'))).toBe(true));
+ expect(prep.preparationStatus(run,project)?.units[0].status).toBe('pending');expect(prep.preparationStatus(run,project)?.summary.verified).toBe(0);
+ const batch:any=svc.runLedger().db.prepare('SELECT json FROM preparation_batches WHERE id=?').get(b.batchId);expect(JSON.parse(batch.json).calls).toBe(1);
+ await prep.cancelPreparation(run,project);
 });
