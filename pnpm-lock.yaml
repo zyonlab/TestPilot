@@ -143,7 +143,7 @@ importers:
     dependencies:
       '@midscene/web':
         specifier: ^0.30.0
-        version: 0.30.10(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)
+        version: 0.30.10(@playwright/test@1.62.1)(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@testpilot/harness-core':
         specifier: workspace:*
         version: link:../harness-core
@@ -217,7 +217,10 @@ importers:
     dependencies:
       '@midscene/web':
         specifier: ^0.30.0
-        version: 0.30.10(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)
+        version: 0.30.10(@playwright/test@1.62.1)(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)
+      '@playwright/test':
+        specifier: 1.62.1
+        version: 1.62.1
       '@testpilot/harness-core':
         specifier: workspace:*
         version: link:../packages/harness-core
@@ -1324,6 +1327,11 @@ packages:
   '@opentelemetry/semantic-conventions@1.43.0':
     resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
     engines: {node: '>=14'}
+
+  '@playwright/test@1.62.1':
+    resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -4939,6 +4947,32 @@ snapshots:
       '@langfuse/core': 5.11.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/api': 1.9.0
 
+  '@midscene/core@0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.33.1
+      '@azure/identity': 4.5.0
+      '@midscene/recorder': 0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@midscene/shared': 0.30.10
+      '@ui-tars/action-parser': 1.2.3
+      dotenv: 16.6.1
+      https-proxy-agent: 7.0.2
+      js-yaml: 4.1.0
+      jsonrepair: 3.12.0
+      langsmith: 0.3.7(openai@4.81.0(zod@3.24.3))
+      openai: 4.81.0(ws@8.21.3)(zod@3.24.3)
+      semver: 7.5.2
+      socks-proxy-agent: 8.0.4
+      zod: 3.24.3
+    transitivePeerDependencies:
+      - date-fns
+      - encoding
+      - luxon
+      - moment
+      - react
+      - react-dom
+      - supports-color
+      - ws
+
   '@midscene/core@0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.33.1
@@ -4955,6 +4989,25 @@ snapshots:
       semver: 7.5.2
       socks-proxy-agent: 8.0.4
       zod: 3.24.3
+    transitivePeerDependencies:
+      - date-fns
+      - encoding
+      - luxon
+      - moment
+      - react
+      - react-dom
+      - supports-color
+      - ws
+
+  '@midscene/playground@0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@midscene/core': 0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@midscene/shared': 0.30.10
+      cors: 2.8.6
+      dotenv: 16.6.1
+      express: 4.22.2
+      open: 10.1.0
+      uuid: 11.1.0
     transitivePeerDependencies:
       - date-fns
       - encoding
@@ -5012,7 +5065,35 @@ snapshots:
       - encoding
       - supports-color
 
-  '@midscene/web@0.30.10(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)':
+  '@midscene/web@0.30.10(@playwright/test@1.62.1)(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@midscene/core': 0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@midscene/playground': 0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@midscene/shared': 0.30.10
+      cors: 2.8.6
+      dayjs: 1.11.23
+      dotenv: 16.6.1
+      http-server: 14.1.1
+      playwright: 1.62.1
+      socket.io: 4.8.3
+      socket.io-client: 4.8.1
+    optionalDependencies:
+      '@playwright/test': 1.62.1
+      puppeteer: 23.11.1(typescript@5.9.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - date-fns
+      - debug
+      - encoding
+      - luxon
+      - moment
+      - react
+      - react-dom
+      - supports-color
+      - utf-8-validate
+      - ws
+
+  '@midscene/web@0.30.10(@playwright/test@1.62.1)(playwright@1.62.1)(puppeteer@23.11.1(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)':
     dependencies:
       '@midscene/core': 0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)
       '@midscene/playground': 0.30.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.21.3)
@@ -5025,6 +5106,7 @@ snapshots:
       socket.io: 4.8.3
       socket.io-client: 4.8.1
     optionalDependencies:
+      '@playwright/test': 1.62.1
       puppeteer: 23.11.1(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
@@ -5337,6 +5419,10 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.43.0
 
   '@opentelemetry/semantic-conventions@1.43.0': {}
+
+  '@playwright/test@1.62.1':
+    dependencies:
+      playwright: 1.62.1
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -7002,6 +7088,18 @@ snapshots:
       uuid: 10.0.0
     optionalDependencies:
       openai: 4.81.0(ws@8.21.3)(zod@3.25.76)
+
+  langsmith@0.3.7(openai@4.81.0(zod@3.24.3)):
+    dependencies:
+      '@types/uuid': 10.0.0
+      chalk: 4.1.2
+      console-table-printer: 2.16.1
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      semver: 7.8.5
+      uuid: 10.0.0
+    optionalDependencies:
+      openai: 4.81.0(ws@8.21.3)(zod@3.24.3)
 
   lilconfig@3.1.3: {}
 

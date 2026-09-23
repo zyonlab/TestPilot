@@ -1,3 +1,5 @@
+import { STORY_PLANNING_CONTRACT } from './planningContract.js';
+import { ARTIFACT_WRITING_GUIDELINES } from "./readability.js";
 /**
  * Prompts, split the way the model client demands: `stable` never changes within a node
  * type and goes first (that is the half the endpoint's prefix cache can reuse), the
@@ -9,6 +11,8 @@
  */
 
 export const STORIES_STABLE = [
+  STORY_PLANNING_CONTRACT,
+  ...ARTIFACT_WRITING_GUIDELINES,
   "You extract user stories from a product specification.",
   "",
   "A user story names something a person wants to accomplish and why. \"The footer shows",
@@ -34,7 +38,7 @@ export const STORIES_STABLE = [
   "  leave them empty rather than inventing a plausible-sounding user.",
   "- The spec may list FLOWS — paths through the product that were actually walked. Anchor a",
   "  story to one with `flowId`. Several stories may share a flow. A story with no flow",
-  "  behind it is allowed but should be rare — say so by leaving both fields empty.",
+  "  behind it is allowed when supported by requirements or applicable domain rules; leave flow fields empty.",
   "- `activity` is the MODULE the story belongs to, NOT the flow. The spec lists modules",
   "  under 「模块」; use the module's name verbatim. This is the backbone of a story map, and",
   "  a backbone must be COARSER than the body: several stories share one activity. If every",
@@ -65,6 +69,8 @@ export const STORIES_STABLE = [
 ].join("\n");
 
 export const CASES_STABLE = [
+  STORY_PLANNING_CONTRACT,
+  ...ARTIFACT_WRITING_GUIDELINES,
   "You are a senior test designer. Given ONE user story and the specification it came from,",
   "design the text-level test cases for that story.",
   "",
@@ -95,6 +101,7 @@ export const CASES_STABLE = [
   '    {"kind":"url","value":"<part of the address>"}',
   '    {"kind":"count","value":"<a literal>","op":"eq|gte|lte","n":<number>}',
   '    {"kind":"delta","value":"<the label a number sits beside>","direction":"increased|decreased|unchanged","by":<number, optional>}   ← this one is tier 2',
+  '    {"kind":"decimal-equation","scope":{"start":"<unique visible section start>","end":"<unique visible section end>"},"inputs":[{"id":"a","label":"<exact visible label>","unit":"<exact unit>","decimals":2,"rounding":"exact|nearest|truncate"}],"actual":"<result input id>","formula":["a","b","*"],"maxAgeMs":5000} — include at least two inputs; postfix formula uses +,-,*,/ and must not reference the result. Only use observed labels and documented rounding; missing evidence blocks execution.',
   "  Quote the literal EXACTLY as the specification writes it. If the outcome cannot be put",
   "  in any of these forms, then it is tier 3 — say so and leave `oracle` out. Claiming",
   "  tier 1 without an oracle is the one thing that makes the label worthless.",
@@ -361,6 +368,11 @@ export const STORIES_SCHEMA = {
           id: { type: "string", minLength: 1 },
           title: { type: "string", minLength: 1 },
           acceptance: { type: "array", items: { type: "string" } },
+          observationLinks: { type: "array", items: { type: "object", additionalProperties: false, properties: {
+            acceptanceIndex: {type:"integer",minimum:0}, status:{type:"string",enum:["observed","partial","unobserved"]},
+            reason:{type:"string",enum:["not_attempted","route_blocked","requires_session","requires_fixture","budget_exhausted","not_found","insufficient_evidence","observed"]},
+            observationIds:{type:"array",items:{type:"string"}},nextSteps:{type:"array",items:{type:"string"}}
+          },required:["acceptanceIndex","status","reason","observationIds","nextSteps"]} },
           requirementId: { type: "string" },
           // Guided decoding constrains the reply to this schema, so a field the prompt asks
           // for and the schema omits is a field the model is not allowed to produce.
@@ -477,7 +489,12 @@ export const CASES_SCHEMA = {
                * text 类 oracle 带着 `"url":"-"` 之类的占位符回来，`casegen/normalizeOracle.ts` 在 zod 之前剥掉。
                * tier 3 用 `kind: "none"`，剥掉后等于没有 oracle。
                */
-              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "judge", "none"] },
+              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "decimal-equation", "judge", "none"] },
+              scope: { type: "object", properties: { start: { type: "string" }, end: { type: "string" } }, required: ["start", "end"], additionalProperties: false },
+              inputs: { type: "array", items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, unit: { type: "string" }, decimals: { type: "integer" }, rounding: { type: "string", enum: ["exact", "nearest", "truncate"] } }, required: ["id", "label", "unit", "decimals", "rounding"], additionalProperties: false } },
+              actual: { type: "string" },
+              formula: { type: "array", items: { type: "string" } },
+              maxAgeMs: { type: "integer" },
               value: { type: "string" },
               op: { type: "string", enum: ["eq", "neq", "gte", "lte", "exists", "absent", "increased", "decreased", "unchanged"] },
               n: { type: "integer" },
@@ -549,6 +566,7 @@ export const CASES_SCHEMA = {
  * 这里编一句，后面每一层都会把它当成事实。
  */
 export const COMPOSE_STABLE = [
+  ...ARTIFACT_WRITING_GUIDELINES,
   "You organise raw material into a specification. You do not write the specification's",
   "content — you organise what is already there.",
   "",

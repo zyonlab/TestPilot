@@ -1,0 +1,14 @@
+import {readFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+import {verifyEvidence} from '../src/evidenceStudy/integrity.js';
+import {summarize,TaskSchema} from '../src/evidenceStudy/contracts.js';
+const root=resolve(process.argv[2]??'');
+if(!process.argv[2])throw new Error('Usage: verify-evidence-study.ts <evidence-directory>');
+const integrity=verifyEvidence(root);
+const read=(file:string)=>JSON.parse(readFileSync(join(root,file),'utf8'));
+const tasks=read('dataset.json').tasks.map((t:unknown)=>TaskSchema.parse(t));
+const result=summarize(read('trials.json'),tasks);
+if(JSON.stringify(result)!==JSON.stringify(read('result.json').summary))throw new Error('recomputed_score_mismatch');
+const controls=read('injection-controls.json');
+if(controls.length!==tasks.length*3||controls.some((c:any)=>!c.confirmed))throw new Error('unconfirmed_injection');
+console.log(JSON.stringify({integrity,summary:result,verified:true},null,2));

@@ -155,7 +155,7 @@ export function writeModulePlan(runId: string, projectId: string, raw: unknown) 
   }
 
   const revision = l.putRevision({ runId, projectId, name: "validated/modules", kind: "report",
-    content: { ...parsed.data, findings, sections }, sourceRefs: [], parentRevision: prior?.revisionId ?? null },
+    content: { ...parsed.data, findings, sections }, sourceRefs: [...new Set([...l.requireRun(runId,projectId).binding.materialRevisions,...l.listRevisions(projectId,runId).filter(r=>r.name==="product/model-candidate"||r.name==="exploration/report").map(r=>r.id)])], parentRevision: prior?.revisionId ?? null },
     { kind: "system", id: "stage-validator" });
   l.db.prepare(`INSERT INTO run_stage_receipts VALUES (?,?,?,?) ON CONFLICT(runId,stage)
     DO UPDATE SET revisionId=excluded.revisionId, json=excluded.json`)

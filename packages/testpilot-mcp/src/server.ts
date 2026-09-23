@@ -1,3 +1,4 @@
+import { PrerequisiteCheckSchema, AuxiliaryAssertionSchema, SetupRecipeSchema } from '@testpilot/harness-testing';
 /**
  * TestPilot MCP server (stdio) —— 八个确定性工具。
  *
@@ -142,6 +143,11 @@ server.registerTool("execute_approved", {
   title: "Execute approved compiled cases", description: "Starts a project run from a server-verified g2 revision. Checks current human approvals, preserves the oracle and executor snapshot, and returns an execution ID. Reuse idempotencyKey only when retrying the same request.",
   inputSchema: { runId: z.string(), codeRevision: z.string(), idempotencyKey: z.string(), envRef: z.string().optional() },
 }, async ({ runId, ...input }) => { try { return ok(await runs.call(runId, "stages/execute", input)); } catch (e) { return fail(e); } });
+server.registerTool("preparation_step", {
+  title: "Prepare one approved case with runner verification",
+  description: "Persistent sequential preparation loop. next delivers the case, target and probe/trial receipts. probe uses setupSteps to inspect/prepare the real environment, returning screen text, URLs, screenshots and prerequisite checks; optional probeChecks gathers intermediate facts. prerequisiteChecks maps original statements to environment/screen/unknown checks; unmatched prerequisites stay unknown. auxiliaryAssertions adds supporting checks without changing reviewed assertions (supports contains original assertion ids or $expected). Missing narrative evidence is not a blocker: probe first. trial submits a full execution plan and returns immediately; poll next for runner evidence; resolve records blocked/product_defect/needs_review with reason. Only the server can mark verified. Never call formal execution during preparation.",
+  inputSchema: {runId:z.string(),batchId:z.string(),action:z.enum(['next','probe','trial','resolve']),recipe:SetupRecipeSchema.optional(),recipeRef:z.object({id:z.string(),version:z.number().int().positive()}).optional(),prerequisiteChecks:z.array(PrerequisiteCheckSchema).max(80).optional(),auxiliaryAssertions:z.array(AuxiliaryAssertionSchema).max(20).optional(),setupSteps:z.array(z.string()).optional(),probeChecks:z.array(z.string()).optional(),caseId:z.string().optional(),content:z.record(z.unknown()).optional(),status:z.enum(['blocked','product_defect','needs_review']).optional(),reason:z.string().optional()},
+}, async ({runId,...body})=>{try{return ok(await runs.call(runId,'preparation/step',body));}catch(e){return fail(e);}});
 server.registerTool("begin_stage", {title:"Begin a workflow node", description:"Call BEFORE planning or executing each node: modules, instructions, stories, cases, gate, finalize. A paused/cancelled response means stop this turn immediately; do not plan, write or call later nodes. Only explicit user resume may continue the same run.", inputSchema:{runId:z.string(),node:z.enum(['source','modules','instructions','stories','cases','gate','finalize','g2','execution'])}}, async ({runId,node})=>{try{return ok(await runs.call(runId,'begin-stage',{node}));}catch(e){return fail(e);}});
 /**
  * 模块规划节点（docs/v3/history/24 §6、§8）。

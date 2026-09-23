@@ -1,3 +1,4 @@
+import type { WalletSignatureReceipt } from "../domain/injectedSessionEvidence.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Page } from "puppeteer";
@@ -63,13 +64,20 @@ function buildInjectSource(address: string, chainIdHex: string): string {
 export async function setupInjectedWallet(
   page: Page,
   cfg: ChainConfig,
-): Promise<{ address: string; sentTxs: string[] }> {
+): Promise<{ address: string; sentTxs: string[]; signatureReceipts: WalletSignatureReceipt[] }> {
   const provider = new JsonRpcProvider(cfg.rpcUrl, cfg.chainId);
   const wallet = Wallet.fromPhrase(readSeed()).connect(provider);
   const chainIdHex = "0x" + cfg.chainId.toString(16);
   // Every tx the dapp UI triggers passes through here (we ARE the wallet) — record the hash
   // so the run can assert on the wallet's new on-chain record. No polling/listening needed.
   const sentTxs: string[] = [];
+  const signatureReceipts: WalletSignatureReceipt[] = [];
+  const signed = async (method: string, promise: Promise<string>) => {
+    const origin = new URL(page.url()).origin;
+    const signature = await promise;
+    signatureReceipts.push({origin,method,at:Date.now()});
+    return signature;
+  };
 
   const forkRpc = async (method: string, params: unknown[] = []): Promise<unknown> => {
     if (method === "eth_sendTransaction") {
@@ -92,13 +100,13 @@ export async function setupInjectedWallet(
     // (many dapps pass the latter) — getBytes throws on non-hex, so only decode real hex.
     const asMessage = (m: unknown) =>
       typeof m === "string" && /^0x[0-9a-fA-F]*$/.test(m) ? getBytes(m) : (m as string);
-    if (method === "personal_sign") return wallet.signMessage(asMessage(params[0]));
-    if (method === "eth_sign") return wallet.signMessage(asMessage(params[1]));
+    if (method === "personal_sign") return signed(method, wallet.signMessage(asMessage(params[0])));
+    if (method === "eth_sign") return signed(method, wallet.signMessage(asMessage(params[1])));
     if (method === "eth_signTypedData_v4" || method === "eth_signTypedData") {
       const typed = typeof params[1] === "string" ? JSON.parse(params[1] as string) : (params[1] as Record<string, unknown>);
       const types = { ...(typed.types as Record<string, unknown>) };
       delete (types as Record<string, unknown>).EIP712Domain;
-      return wallet.signTypedData(typed.domain, types as never, typed.message as never);
+      return signed(method, wallet.signTypedData(typed.domain, types as never, typed.message as never));
     }
     return provider.send(method, params as never[]);
   };
@@ -130,5 +138,5 @@ export async function setupInjectedWallet(
     }
   });
 
-  return { address: wallet.address, sentTxs };
+  return { address: wallet.address, sentTxs, signatureReceipts };
 }

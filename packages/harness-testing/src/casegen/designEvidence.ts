@@ -1,3 +1,4 @@
+import { executionBlockers } from "./readiness.js";
 import type { TextCase } from "./types.js";
 
 /**
@@ -71,6 +72,9 @@ export function checkDesignEvidence(cases: TextCase[]): EvidenceError[] {
             message: `声称 tier ${c.tier} 却没有任何程序判据：断言 ${a.id} 和用例本身都没给` });
       });
     }
+
+    if (c.readiness?.execution === "ready") for (const issue of executionBlockers(c))
+      push("ready_without_evidence", "readiness", issue);
 
     if (c.risk && !c.priority)
       push("risk_without_priority", "risk", "给了风险理由，却没有给优先级——理由在解释一个不存在的判断");

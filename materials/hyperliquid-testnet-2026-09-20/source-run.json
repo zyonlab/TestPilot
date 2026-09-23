@@ -1,0 +1,26 @@
+{
+  "wfRunId": "run-be86df4d-bb2e-48c4-9596-249d4dc7e157",
+  "created": true,
+  "sourceStatus": "done",
+  "runStatus": "paused",
+  "pausedBefore": "modules",
+  "completion": "partial",
+  "coverage": {
+    "edgesSeen": 7,
+    "edgesWalked": 29,
+    "statesSeen": 20,
+    "targetsAttempted": 11,
+    "targetsBlocked": 1,
+    "targetsFailed": 0,
+    "targetsFound": 13,
+    "targetsNotFound": 3,
+    "targetsObservedOnly": 1,
+    "targetsPlanned": 16,
+    "transitionsAsserted": 27,
+    "visitedUrls": 2
+  },
+  "stopReason": {
+    "kind": "screenCap",
+    "n": 20
+  }
+}

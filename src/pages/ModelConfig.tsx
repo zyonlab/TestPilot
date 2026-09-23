@@ -1,3 +1,4 @@
+import { SessionEvidenceFields, emptyIdentity, readIdentity, writeIdentity } from "@/components/SessionEvidenceFields";
 import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle,
@@ -553,6 +554,7 @@ function blankEnvForm() {
     vars: [{ key: "", value: "" }] as VarRow[],
     headers: [] as VarRow[],
     query: [] as VarRow[],
+    identityChecks: emptyIdentity(),
     authRequired: false,
     steps: "",
     apiLogin: blankApiLogin(),
@@ -571,6 +573,7 @@ function formFromEnv(env: Environment) {
     vars: vars.length ? vars : [{ key: "", value: "" }],
     headers: toRows(env.headers),
     query: toRows(env.query),
+    identityChecks: readIdentity(env.login?.sessionChecks),
     authRequired: !!env.login?.authRequired,
     steps: (env.login?.steps ?? []).join("\n"),
     apiLogin: {
@@ -725,6 +728,7 @@ export function EnvironmentsCard() {
     setDetail("");
     const a = form.apiLogin;
     const login: LoginFlow = {
+      sessionChecks: writeIdentity(form.identityChecks),
       authRequired: form.authRequired,
       steps: form.authRequired
         ? form.steps
@@ -872,6 +876,7 @@ export function EnvironmentsCard() {
             />
           </div>
 
+          <SessionEvidenceFields value={form.identityChecks} onChange={identityChecks=>setForm(f=>({...f,identityChecks}))}/>
           <fieldset className="grid grid-cols-2 gap-3"><legend className="mb-2 text-xs text-muted-foreground">{t('bench.viewport')}</legend><label className="text-xs">{t('bench.viewportWidth')}<input id="envViewportWidth" type="number" min={320} max={7680} placeholder="1024" value={form.viewportWidth} onChange={e=>setForm(f=>({...f,viewportWidth:e.target.value}))} className="mt-1 w-full rounded border border-border bg-background px-3 py-2"/></label><label className="text-xs">{t('bench.viewportHeight')}<input id="envViewportHeight" type="number" min={240} max={4320} placeholder="768" value={form.viewportHeight} onChange={e=>setForm(f=>({...f,viewportHeight:e.target.value}))} className="mt-1 w-full rounded border border-border bg-background px-3 py-2"/></label></fieldset>
 
           {/* Test data (non-secret vars) — batch import + array support */}

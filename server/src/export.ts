@@ -1,8 +1,11 @@
-import { sealExport } from './exportIntegrity.js';
+import type { TextCase } from "@testpilot/harness-testing/casegen";
+import { sealExport, exportHash } from './exportIntegrity.js';
 import { exportOracleFiles } from './exportOracle.js';
 import type { Project, TestCase, Environment } from "./db.js";
 import { buildLayers, flowKey, type LayerMemory, type Layers } from "./exportLayers.js";
 import { getDataset, type Dataset } from "./datasets.js";
+
+type ExportCase = TestCase & { assertions?: TextCase["assertions"] };
 
 /**
  * 文件名。
@@ -113,7 +116,7 @@ export function liftEntryNavigation(
 }
 
 function specForCase(
-  tc: TestCase,
+  tc: ExportCase,
   targetUrl: string,
   up = "./",
   layers?: Layers,
@@ -156,7 +159,17 @@ function specForCase(
   // 不该在这里被偷偷「修好」——`checkBinding` 会把它作为 missing 报出来。
   const dd = !!dataset?.rows.length;
   const T = (s: string): string => (dd ? rowExpr(s) : lit(s));
-  const plan = layers?.plan.get(tc.id);
+  const topNone = tc.oracle?.kind === "none";
+  if (topNone) tc = {...tc, oracle: undefined};
+  const checks = (tc.assertions ?? []).map(a => a.oracle?.kind === "none" ? {...a, oracle: undefined} : a);
+  const bound = (a: NonNullable<TextCase["assertions"]>[number]) => a.afterStep !== undefined && a.afterStep >= 1 && a.afterStep <= tc.steps.length && a.oracle?.kind !== "api";
+  const finalMachine = !!tc.oracle || checks.some(a => a.oracle && !bound(a));
+  const checkSource = (a: NonNullable<TextCase["assertions"]>[number], i: number) => a.oracle?.kind === "judge"
+    ? `  await checkJudge(page, judgeAgent, ${JSON.stringify(a.oracle)});`
+    : a.oracle ? `  await checkOracle(page, ${JSON.stringify(a.oracle)}, assertionBefore${i});`
+    : `  await aiAssert(${T(a.statement)});`;
+  // Preserve step positions: a shared flow must not swallow an intermediate assertion.
+  const plan = checks.length ? undefined : layers?.plan.get(tc.id);
   const usedFlows = new Set<string>();
   const usedActions = new Set<string>();
   const steps = plan
@@ -173,7 +186,10 @@ function specForCase(
           return `  await aiAction(${T(s.text)});`;
         })
         .join("\n")
-    : tc.steps.map((s) => `  await aiAction(${T(s.text)});`).join("\n");
+    : tc.steps.map((s, step) => [
+        `  await aiAction(${T(s.text)});`,
+        ...checks.flatMap((a, i) => bound(a) && a.afterStep === step + 1 ? [checkSource(a, i)] : [])
+      ].join("\n")).join("\n");
   const post = tc.postSteps.length
     ? "\n  // teardown\n" +
       tc.postSteps
@@ -192,12 +208,13 @@ function specForCase(
     (tc.oracle.op === "increased" || tc.oracle.op === "decreased" || tc.oracle.op === "unchanged");
   // judge 判据要模型采样：走 checkJudge，而不是只看页面文字的 checkOracle。
   const judged = tc.oracle?.kind === "judge";
+  const assertionJudged = checks.some(a => a.oracle?.kind === "judge");
   const assert = judged
     ? `  await checkJudge(page, judgeAgent, ${JSON.stringify(tc.oracle)});` + (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
     : tc.oracle
     ? `  await checkOracle(page, ${JSON.stringify(tc.oracle)}${tc.oracle.kind === "delta" || relationalApi ? ", before" : ""});` +
       (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
-    : tc.expected
+    : finalMachine && !topNone ? "" : tc.expected
       ? `  await aiAssert(${T(tc.expected)});`
       : `  await aiAssert("the page reached the expected state");`;
   const trace = tc.requirementId ? ` — req ${tc.requirementId}` : "";
@@ -205,7 +222,7 @@ function specForCase(
   const needsBefore = tc.oracle?.kind === "delta" || relationalApi;
   // 只解构真的用到的 fixture。一条由程序判定的用例不该顺手把判定模型的 fixture 也拉起来——
   // 那既是多余的开销，也让「这条用例到底要不要模型」在源码上看不出来。
-  const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(usesOracle ? [] : ["aiAssert"]), ...(judged ? ["judgeAgent"] : [])];
+  const fixtures = ["page", ...(steps || post ? ["aiAction"] : []), ...(!finalMachine || topNone || checks.some(a => !a.oracle) ? ["aiAssert"] : []), ...(judged || assertionJudged ? ["judgeAgent"] : [])];
   // 只导入真的用到的：一个把整层都 import 进来的 spec，读的人分不清它到底依赖了什么。
   const layerImports = [
     usedFlows.size ? `import { ${[...usedFlows].sort().join(", ")} } from "${up}flows";` : "",
@@ -213,12 +230,18 @@ function specForCase(
   ]
     .filter(Boolean)
     .join("\n");
+  const oracleImports = new Set<string>([
+    ...(usesOracle ? [judged ? "checkJudge" : "checkOracle"] : []),
+    ...(needsBefore ? ["readBefore"] : []),
+    ...checks.flatMap(a => a.oracle ? [a.oracle.kind === "judge" ? "checkJudge" : "checkOracle", "readBefore"] : [])
+  ]);
   const head = `import { test } from "${up}ai";
-${usesOracle ? `import { ${judged ? "checkJudge" : "checkOracle"}${needsBefore ? ", readBefore" : ""} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
+${oracleImports.size ? `import { ${[...oracleImports].join(", ")} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
   // targetUrl 已经是**这条用例自己的入口**（首步的裸导航被提到了这里，见 liftEntryNavigation）。
   const body = `  await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
-${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${post ? "  try {\n" : ""}${steps}
-${assert}${post ? "\n  } finally {" + post + "\n  }" : ""}`;
+${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${checks.map((a, i) => a.oracle ? `  const assertionBefore${i} = await readBefore(page, ${JSON.stringify(a.oracle)});\n` : "").join("")}${post ? "  try {\n" : ""}${steps}
+${assert}
+${checks.flatMap((a,i) => bound(a) ? [] : [checkSource(a,i)]).join("\n")}${post ? "\n  } finally {" + post + "\n  }" : ""}`;
   const title = `[${tags}] ${tc.title}`;
 
   /**
@@ -298,7 +321,7 @@ function ownerBanner(path: string): string {
 
 export function buildExportFiles(
   project: Project,
-  cases: TestCase[],
+  cases: ExportCase[],
   opts: { environments?: Environment[]; secretKeys?: string[];
     /** 这个项目曾经命名过的步骤与前置。给了它，抽取层就只增不减——见 exportLayers 的 LayerMemory。 */
     sticky?: LayerMemory;
@@ -391,7 +414,7 @@ export default defineConfig({
   use: {
     headless: true,
     launchOptions: { executablePath: process.env.TP_CHROMIUM_EXECUTABLE_PATH || undefined },
-    viewport: { width: 1280, height: 800 },
+    viewport: ${JSON.stringify({width:defaultEnv?.viewport?.width ?? 1280,height:defaultEnv?.viewport?.height ?? 800})},
     baseURL: process.env.BASE_URL || ${JSON.stringify(defaultEnv?.baseUrl || project.targetUrl)},
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -479,7 +502,7 @@ ${loginSteps}
    */
   const entryOf = new Map<string, string>();
   const normalized = cases.map((tc) => {
-    const { url, rest } = liftEntryNavigation(tc.steps, defaultEnv?.baseUrl || project.targetUrl);
+    const { url, rest } = tc.assertions?.length ? {url:defaultEnv?.baseUrl || project.targetUrl,rest:tc.steps} : liftEntryNavigation(tc.steps, defaultEnv?.baseUrl || project.targetUrl);
     entryOf.set(tc.id, url);
     // 按**引用**比，不按长度比：`打开 X 并等待 Y` 会留下一步 `等待 Y`，长度一样但内容变了。
     // `liftEntryNavigation` 在不匹配时原样返回同一个数组，所以引用相等就是「没动过」。
@@ -655,12 +678,12 @@ ${cases.map((c) => `- **${c.priority}** \`${c.type}\` ${c.title}`).join("\n")}
    *
    * 只加**指针**，不加内容：run 与 story 的 id，不把材料或审批记录塞进导出。
    */
-  sealExport(files, cases.map(c => ({id:c.id,priority:c.priority,title:c.title,steps:c.steps,postSteps:c.postSteps,expected:c.expected,oracle:c.oracle??null,
+  sealExport(files, cases.map(c => ({id:c.id,priority:c.priority,title:c.title,steps:c.steps,postSteps:c.postSteps,expected:c.expected,oracle:c.oracle??null,assertions:c.assertions??[],
     ...(c.sourceRunId?{sourceRunId:c.sourceRunId}:{}),...(c.storyId?{storyId:c.storyId}:{})})));
   /**
    * 最后一步：给每个文件盖上归属标注，并把这份划分写进清单。
    *
-   * 在 `sealExport` **之后**盖：封印算的是内容哈希，先盖后封会让标注本身进不了校验，
+   * 在 `sealExport` 之后盖，再按最终字节重算哈希，确保标注本身也进校验，
    * 而标注恰恰是这份工程最容易被人删掉的一行。
    * 清单里同时留一份机器可读的 `ownership`——将来做「导出到已有目录」时，
    * 要覆盖哪些、要跳过哪些，不该再靠路径猜一遍。
@@ -676,5 +699,8 @@ ${cases.map((c) => `- **${c.priority}** \`${c.type}\` ${c.title}`).join("\n")}
     const banner = ownerBanner(path);
     if (banner && !files[path]!.startsWith(banner)) files[path] = banner + files[path]!;
   }
+  const manifest = JSON.parse(files["testpilot-manifest.json"]!);
+  manifest.files = Object.fromEntries(Object.entries(files).filter(([p]) => p !== "testpilot-manifest.json").sort(([a],[b]) => a.localeCompare(b)).map(([p, text]) => [p, exportHash(text)]));
+  files["testpilot-manifest.json"] = JSON.stringify(manifest, null, 2) + "\n";
   return files;
 }

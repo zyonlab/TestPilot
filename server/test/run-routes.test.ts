@@ -78,7 +78,7 @@ const stories = { stories: [{ id: "s1", title: "Increment count", role: "visitor
 function cases(ref: string) {
   // acRefs：账本路径上认领准则是契约的一部分，门禁分数也算它（design-gate-v2）。不填的话这条用例
   // 明明点了 Increment，却不算做过 s1/AC-1，分数直接归零。
-  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", tier: 3, designMethod: "boundary", key: "zero-one", sourceRefs: [ref], acRefs: ["s1/AC-1"] }] };
+  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", oracle: {kind: "text", value: "Count equals 1"}, readiness: {design: "candidate", execution: "ready"}, tier: 1, designMethod: "boundary", key: "zero-one", sourceRefs: [ref], acRefs: ["s1/AC-1"] }] };
 }
 it("serves frozen skills and material chunks; refuses stage skipping and untrusted imported cases", async () => {
   const r = await staged("skip-stages");
@@ -166,6 +166,8 @@ it("exports verified ancestry and approval history, and refuses cross-project or
   const first = reviewRevisions(r.runId, projectId)[0];
   const reviewer = { kind: "human" as const, id: "UNIT_TEST_REVIEWER" };
   decideRevisions(r.runId, projectId, { items: [{ caseId: first.caseId, revisionId: first.revision.id, decision: "approved" }] }, reviewer);
+  expect(() => reviseReviewedCase(r.runId, projectId, {caseId:first.caseId, expectedRevision:first.revision.id, content:{...first.content, readiness:{design:'candidate', execution:'ready', requirements:[{id:'funds',kind:'fixture',status:'unverified',evidenceRefs:[]}]}}}, reviewer)).toThrow('execution_not_ready');
+  expect(reviewRevisions(r.runId, projectId)[0].revision.id).toBe(first.revision.id);
   const changed = reviseReviewedCase(r.runId, projectId, { caseId: first.caseId, expectedRevision: first.revision.id, content: { ...first.content, expected: "Counter becomes exactly 1" } }, reviewer);
   const diff = await (await fetch(`${url}/${r.runId}/artifacts/${changed.revision.id}/diff`)).json();
   expect(diff.changes).toEqual([{ path: "/expected", before: "Count equals 1", after: "Counter becomes exactly 1" }]);

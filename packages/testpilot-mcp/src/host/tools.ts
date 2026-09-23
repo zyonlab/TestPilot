@@ -45,12 +45,14 @@ const fail = (e: unknown) => ({ content: [{ type: "text" as const, text: String(
 
 export function registerHostDomains(server: ToolHost, api: HostApi, domains: readonly DomainSpec[] = DOMAINS): void {
   for (const domain of domains) {
-    const names = Object.keys(domain.actions) as [string, ...string[]];
+    const allowed = Object.fromEntries(Object.entries(domain.actions).filter(([, spec]) => !spec.operatorOnly));
+    const names = Object.keys(allowed) as [string, ...string[]];
+    if (!names.length) continue;
     server.registerTool(
       domain.tool,
       {
         title: domain.title,
-        description: `${domain.description}\n\n动作：\n${describeActions(domain)}`,
+        description: `${domain.description}\n\n动作：\n${describeActions({ ...domain, actions: allowed })}`,
         inputSchema: {
           action: z.enum(names),
           /** 路径参数放这里：projectId / runId / caseId 之类。 */
@@ -63,6 +65,7 @@ export function registerHostDomains(server: ToolHost, api: HostApi, domains: rea
         try {
           const action = String(input.action);
           const spec = domain.actions[action];
+          if (spec?.operatorOnly) throw new Error("operator_action_required: use TestPilot Web for this decision");
           if (!spec) throw new Error(`${domain.tool} 没有动作 ${action}`);
           const params = (input.params ?? {}) as Record<string, string | undefined>;
           const path = fillPath(spec, params);

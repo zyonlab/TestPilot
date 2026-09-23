@@ -38,7 +38,7 @@ const graphOf = (edges: StateFlowGraph["transitions"], states: string[] = ["/"])
 describe("覆盖计数由代码算", () => {
   it("50 条边、7 条走过：walked 分子是 7，43 条 observed-only 不计入", () => {
     const edges: StateFlowGraph["transitions"] = [];
-    for (let i = 0; i < 7; i++) edges.push({ from: "/a", to: `/b${i}`, action: { kind: "goto", target: `/b${i}`, selector: "" }, ok: true, walked: true, effect: { controlsAdded: ["x"], controlsRemoved: [], stateChanged: [], textAdded: [] } });
+    for (let i = 0; i < 7; i++) edges.push({ from: "/a", to: `/b${i}`, action: { kind: "goto", target: `/b${i}`, selector: "" }, ok: true, walked: true, effect: { controlsAdded: ["x"], controlsRemoved: [], stateChanged: [], textAdded: [], textRemoved: [] } });
     for (let i = 0; i < 43; i++) edges.push({ from: "/a", to: `/b${i % 7}`, action: { kind: "goto", target: `/b${i}`, selector: "" }, ok: true, walked: false });
     const c = coverageOfGraph(graphOf(edges, ["/a", ...Array.from({ length: 7 }, (_, i) => `/b${i}`)]));
     expect(c).toMatchObject({ edgesSeen: 43, edgesWalked: 7, transitionsAsserted: 7, statesSeen: 8, visitedUrls: 8 });
@@ -81,8 +81,8 @@ describe("CharterTracker：看见 ≠ 试过", () => {
     t.noteState("/", "/", entryControls, 0);
     const pick = t.next("/", entryControls)!;
     t.markAttempted(pick.target.stableId);
-    t.record({ targetId: pick.target.stableId, targetSpecId: pick.spec.id, featureId: pick.spec.featureId, status: "attempted", stateBefore: "/", stateAfter: "/~1", action: { kind: "click", target: "Limit", selector: "#limit" }, effect: { controlsAdded: [], controlsRemoved: [], stateChanged: ["button[button]: Limit: （无） → cls:on"], textAdded: [] }, controlsAfter: [], evidenceRefs: ["sfg:edge:0"], round: 1 });
-    const edges: StateFlowGraph["transitions"] = [{ from: "/", to: "/~1", action: { kind: "click", target: "Limit", selector: "#limit" }, ok: true, walked: true, effect: { controlsAdded: [], controlsRemoved: [], stateChanged: ["x"], textAdded: [] } }];
+    t.record({ targetId: pick.target.stableId, targetSpecId: pick.spec.id, featureId: pick.spec.featureId, status: "attempted", stateBefore: "/", stateAfter: "/~1", action: { kind: "click", target: "Limit", selector: "#limit" }, effect: { controlsAdded: [], controlsRemoved: [], stateChanged: ["button[button]: Limit: （无） → cls:on"], textAdded: [], textRemoved: [] }, controlsAfter: [], evidenceRefs: ["sfg:edge:0"], round: 1 });
+    const edges: StateFlowGraph["transitions"] = [{ from: "/", to: "/~1", action: { kind: "click", target: "Limit", selector: "#limit" }, ok: true, walked: true, effect: { controlsAdded: [], controlsRemoved: [], stateChanged: ["x"], textAdded: [], textRemoved: [] } }];
     const r = t.report(graphOf(edges, ["/", "/~1"]), { kind: "screenCap", n: 8 }, { maxScreens: 8, screens: 8, rounds: 12, maxRounds: 40 });
     expect(r.completion).toBe("partial");
     expect(r.frontier.map((f) => f.targetSpecId)).toEqual(expect.arrayContaining(["T-MARGIN-ISOLATED", "T-REDUCE-ONLY", "T-TPSL"]));
@@ -113,7 +113,7 @@ function fullReport(opts: { tpslReveals: boolean }) {
         label === "Reduce Only" ? "input[checkbox]: Reduce Only: checked=false → checked=true" :
         "button[button]: TP/SL: pressed=false → pressed=true",
       ],
-      textAdded: [],
+      textAdded: [], textRemoved: [],
     };
     edges.push({ from: "/", to: `/~${round}`, action: { kind: "click", target: label, selector: pick.control.selector }, ok: true, walked: true, effect });
     t.record({ targetId: pick.target.stableId, targetSpecId: pick.spec.id, featureId: pick.spec.featureId, status: "attempted", stateBefore: "/", stateAfter: `/~${round}`, action: { kind: "click", target: label, selector: pick.control.selector }, effect, controlsAfter: [...entryControls.map((c) => c.display), ...effect.controlsAdded], evidenceRefs: [`sfg:edge:${edges.length - 1}`], round });
@@ -124,7 +124,7 @@ function fullReport(opts: { tpslReveals: boolean }) {
 describe("ProductModel：功能是 confirmed / unverified / blocked / conflicted 中哪一种", () => {
   it("健康 fixture：面板功能 confirmed，提交类 blocked，输入类 unverified，未发现的 funding 是 blocked 而不是 not_applicable", () => {
     const r = fullReport({ tpslReveals: true });
-    expect(r.completion).toBe("complete");
+    expect(r.completion).toBe("partial");
     const m = buildProductModel({ pack: pack.pack, report: r });
     const v = (id: string) => m.features.find((f) => f.id === id)!;
     expect(v("order.type").verification).toBe("confirmed");
@@ -191,10 +191,10 @@ describe("ContextManifest v2", () => {
 });
 
 describe("buildExplorationReport 直接调用", () => {
-  it("没有任何目标被发现时全部 not_found，completion 仍按停止原因判", () => {
+  it("没有任何目标被发现时全部 not_found，未找到的目标保留在 frontier，completion 为 partial", () => {
     const r = buildExplorationReport({ charter, graph: graphOf([]), targets: [], observations: [], stop: { kind: "dry", n: 3 }, budget: { maxScreens: 8, screens: 1, rounds: 3, maxRounds: 40 } });
     expect(r.coverage.targetsNotFound).toBe(charter.featureTargets.length);
-    expect(r.completion).toBe("complete");
+    expect(r.completion).toBe("partial");
     expect(r.unknowns).toHaveLength(charter.featureTargets.length);
   });
 });
@@ -216,7 +216,7 @@ describe("闸门文案：点出一道门不算把功能验了", () => {
     schemaVersion: "exploration-report.v1", charterId: "c", entryUrl: "https://x.test/", rulePack: { id: "p", version: "1", hash: "h" },
     stateAbstraction: "route", states: [{ id: "/", route: "/", title: "t" }], targets: [], plannedTargets: [],
     observations: [{ id: "o1", targetId: "/::T1::Place Order", targetSpecId: "T1", featureId: "f1", status: "attempted",
-      stateBefore: "/", round: 1, controlsAfter: [], evidenceRefs: [], effect: { controlsAdded: added, controlsRemoved: [], stateChanged: [], textAdded: [] } }],
+      stateBefore: "/", round: 1, controlsAfter: [], evidenceRefs: [], effect: { controlsAdded: added, controlsRemoved: [], stateChanged: [], textAdded: [], textRemoved: [] } }],
     frontier: [], coverage: {}, budget: {}, completion: {}, stopReason: "exhausted",
   });
   const verdict = (gateLabels: string[], added: string[]) => {

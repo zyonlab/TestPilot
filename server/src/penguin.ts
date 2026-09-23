@@ -590,6 +590,7 @@ export function watchRun(opts: {
    * 第二个运行时（`claudecode.ts`）的 session 是我们自己 spawn 的子进程，活着就是 running——
    * 看门狗的其余部分（产物、events.jsonl、超时）对两边一样，所以只把这一问抽出来。
    */
+  errorOf?: () => string | undefined;
   stateOf?: () => "running" | "idle" | "gone" | "unknown";
 }): void {
   const started = Date.now();
@@ -693,11 +694,11 @@ export function watchRun(opts: {
           return opts.onDone({ status: "failed", error: (e as Error).message });
         }
       }
-      const why = timedOut
+      const why = opts.errorOf?.() ?? (timedOut
         ? `超过 ${Math.round(timeoutMs / 60000)} 分钟还没有 gate.json`
         : diedQuietly
           ? `session ${opts.sessionId} 已经停了，而 ${opts.outDir} 里没有 gate.json——agent 中途停下了（看 trace）`
-          : "session 不在了，而产物没写完";
+          : "session 不在了，而产物没写完");
       emit({ runId: opts.runId, node: "gate", phase: "error", at: new Date().toISOString(), error: why });
       return opts.onDone({ status: "failed", error: why });
     }

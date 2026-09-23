@@ -28,10 +28,17 @@ function MaterialForm({ projectId, onCreated }: { projectId: string; onCreated: 
 }
 export function CaseEditor({ item, onSave, disabled }: { item: ReviewCase; onSave: (content: ReviewCase['content']) => void; disabled: boolean }) {
   const t = useT(), [steps, setSteps] = useState(item.content.steps.join('\n')), [expected, setExpected] = useState(item.content.expected), [oracle, setOracle] = useState(item.content.oracle ? JSON.stringify(item.content.oracle, null, 2) : ''), [error, setError] = useState(false);
-  return <form onSubmit={e => { e.preventDefault(); try { const content = { ...item.content, steps: steps.split('\n').filter(s => s.trim()), expected, oracle: oracle.trim() ? JSON.parse(oracle) : undefined }; setError(false); onSave(content); } catch { setError(true); } }} className="mt-3 space-y-3">
+  const originalReadiness = item.content.readiness as {design?: string; execution?: string; reason?: string; requirements?: unknown[]} | undefined;
+  const [readiness,setReadiness]=useState(originalReadiness?.execution??''),[reason,setReason]=useState(originalReadiness?.reason??'');
+  return <form onSubmit={e => { e.preventDefault(); try { const content = { ...item.content, ...(readiness?{readiness:{...originalReadiness,design:originalReadiness?.design??'candidate',execution:readiness,reason}}:{}), steps: steps.split('\n').filter(s => s.trim()), expected, oracle: oracle.trim() ? JSON.parse(oracle) : undefined }; setError(false); onSave(content); } catch { setError(true); } }} className="mt-3 space-y-3">
     <label className="block text-xs">{t('workflow.steps')}<textarea required className={field} rows={4} value={steps} onChange={e => setSteps(e.target.value)} /></label>
     <label className="block text-xs">{t('workflow.expected')}<textarea required className={field} rows={3} value={expected} onChange={e => setExpected(e.target.value)} /></label>
     <label className="block text-xs">{t('workflow.oracle')}<textarea className={`${field} font-mono`} rows={4} value={oracle} onChange={e => setOracle(e.target.value)} /></label>
+    <fieldset className="rounded border border-border p-3 space-y-3"><legend className="text-sm">{t('workflow.readinessEdit')}</legend>
+      <p className="text-xs text-muted-foreground">{t('workflow.readinessEditHint')}</p>
+      <label className="block text-xs">{t('workflow.executionReadiness')}<select className={field} value={readiness} onChange={e=>setReadiness(e.target.value)}><option value="">—</option>{['ready','requires-fixture','requires-session','blocked','not-executable'].map(v=><option key={v} value={v}>{t(`workflow.readiness.${v}`)}</option>)}</select></label>
+      <label className="block text-xs">{t('workflow.readinessReason')}<textarea className={field} rows={3} value={reason} onChange={e=>setReason(e.target.value)} required={!!readiness}/></label>
+    </fieldset>
     <p className="text-xs text-muted-foreground">{t('workflow.newRevisionHelp')}</p>{error && <p role="alert" className="text-bad">{t('workflow.invalidJson')}</p>}<Button type="submit" disabled={disabled}>{t('workflow.saveRevision')}</Button>
   </form>;
 }
@@ -85,7 +92,7 @@ export function RunDetail({ projectId, run, refresh }: { projectId: string; run:
           <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => setArtifactId(c.revision.id)}>{t('workflow.lineage')}</Button><Button size="sm" disabled={busy} onClick={() => setEditing(editing === c.caseId ? '' : c.caseId)}>{t('workflow.edit')}</Button></div>
           {editing === c.caseId && <CaseEditor key={c.revision.id} item={c} disabled={busy} onSave={content => void action('review', { caseId: c.caseId, expectedRevision: c.revision.id, content }, 'PATCH')} />}
         </section>)}
-        <div className="flex flex-wrap gap-3 border-t border-border pt-4"><Button variant="primary" disabled={busy || !approved.length} onClick={() => void action('stages/g2', { revisionIds: approved.map(c => c.revision.id) })}>{t('workflow.compile')}</Button>{code && <Button disabled={busy || resumable || !compiledReady || run.status === 'executing'} onClick={() => void action('stages/execute', { codeRevision: code.id, idempotencyKey: 'assigned-by-action' })}>{t('workflow.execute')}</Button>}</div>
+        <div className="flex flex-wrap gap-3 border-t border-border pt-4"><Button variant="primary" disabled={busy || !approved.length} onClick={() => void action('preparation/start', { revisionIds: approved.map(c => c.revision.id) })}>{t('workflow.compile')}</Button>{code && <Button disabled={busy || resumable || !compiledReady || run.status === 'executing'} onClick={() => void action('stages/execute', { codeRevision: code.id, idempotencyKey: 'assigned-by-action' })}>{t('workflow.execute')}</Button>}</div>
       </section>}
       {executions.length > 0 && <section className="space-y-3"><h3 className="font-semibold">{t('workflow.executions')}</h3>{executions.map(e => <div key={e.id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-border p-3 text-xs"><span className="font-mono">{short(e.id)}</span><State value={e.status} />{e.resultRevision && <Button onClick={() => setArtifactId(e.resultRevision!)}>{t('workflow.evidence')}</Button>}</div>)}
         {/* 一次执行只看自己看不出东西：同样的通过数，失败的可能是完全不同的几条。 */}

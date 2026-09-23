@@ -15,3 +15,7 @@ it('never converts explicit agent or obsolete reviewer credentials into operator
     expect(() => reviewerPrincipal({ headers: { authorization } })).toThrow('operator_action_required');
   }
 });
+
+it('refuses marked host requests even when they omit the run token', () => {
+  expect(() => reviewerPrincipal({ headers: { 'x-testpilot-actor': 'agent' } })).toThrow('operator_action_required');
+});

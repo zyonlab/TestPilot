@@ -83,3 +83,14 @@ export function assertBoardApproval(kase: NonNullable<ReturnType<typeof getCase>
   if (canonicalJSON(expectedActions) !== canonicalJSON({ approvedRevision: link.revisionId, ...actions(kase) })) throw new LedgerError(409, "approved_actions_changed_without_revision");
 }
 
+
+/** Export assertions from the approved immutable revision, not the legacy board columns. */
+export function exportApprovedCases(cases: Array<NonNullable<ReturnType<typeof getCase>>>) {
+  return cases.map(kase => {
+    const link = boardBinding(kase.id);
+    if (!link) return kase;
+    assertBoardApproval(kase);
+    const current = reviewRevisions(link.runId, link.projectId).find(c => c.revision.id === link.revisionId)!;
+    return { ...kase, assertions: current.content.assertions };
+  });
+}

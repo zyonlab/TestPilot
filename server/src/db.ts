@@ -446,6 +446,8 @@ export type RunStatus = "passed" | "failed" | "unobservable" | "notRun" | "runni
 
 export type TargetPlatform = "web" | "ios" | "android";
 export interface Project {
+  explorationMaxScreens?: number; // 0 = unlimited
+  explorationScope?: "current-url" | "rules";
   id: string;
   name: string;
   targetUrl: string;
@@ -637,6 +639,8 @@ export interface ApiLoginConfig {
 }
 // Environment: per-project target + non-secret vars + a reusable login flow.
 export interface LoginFlow {
+  injectedSessionCheck?: import("@testpilot/harness-testing/domain").InjectedSessionCheck;
+  sessionChecks?: import("@testpilot/harness-testing/domain").SessionCheck[];
   authRequired?: boolean; // when true, cases run the login steps first
   steps?: string[]; // login actions; may reference env/secret placeholders
   apiLogin?: ApiLoginConfig; // API-style login config (alternative to UI steps)
@@ -840,6 +844,8 @@ let seq = 1000;
 export const newId = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
 
 /* ---- projects ---- */
+if (!projCols.has("explorationMaxScreens")) db.exec("ALTER TABLE projects ADD COLUMN explorationMaxScreens INTEGER NOT NULL DEFAULT 8");
+if (!projCols.has("explorationScope")) db.exec("ALTER TABLE projects ADD COLUMN explorationScope TEXT NOT NULL DEFAULT 'rules'");
 type ProjectRow = Omit<Project, "materials"> & { materialsJson: string };
 const rowToProject = (r: ProjectRow): Project => ({
   ...r,
@@ -856,6 +862,8 @@ export function createProject(
   targetUrl: string,
   targetPlatform: TargetPlatform = "web",
   materials: string[] = [],
+  explorationMaxScreens = 8,
+  explorationScope: "current-url" | "rules" = "current-url",
 ): Project {
   const p: Project = {
     id: newId("prj"),
@@ -863,23 +871,23 @@ export function createProject(
     targetUrl,
     targetPlatform,
     createdAt: new Date().toISOString(),
-    materials,
+    materials, explorationMaxScreens, explorationScope,
   };
   db.prepare(
-    "INSERT INTO projects (id,name,targetUrl,targetPlatform,createdAt,materialsJson) VALUES (?,?,?,?,?,?)",
-  ).run(p.id, p.name, p.targetUrl, p.targetPlatform, p.createdAt, JSON.stringify(p.materials));
+    "INSERT INTO projects (id,name,targetUrl,targetPlatform,createdAt,materialsJson,explorationMaxScreens,explorationScope) VALUES (?,?,?,?,?,?,?,?)",
+  ).run(p.id, p.name, p.targetUrl, p.targetPlatform, p.createdAt, JSON.stringify(p.materials), explorationMaxScreens, explorationScope);
   return p;
 }
 export function updateProject(
   id: string,
-  patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials">>,
+  patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials" | "explorationMaxScreens" | "explorationScope">>,
 ): Project | undefined {
   const cur = getProject(id);
   if (!cur) return undefined;
   const next = { ...cur, ...patch };
   db.prepare(
-    "UPDATE projects SET name=?, targetUrl=?, targetPlatform=?, materialsJson=? WHERE id=?",
-  ).run(next.name, next.targetUrl, next.targetPlatform, JSON.stringify(next.materials ?? []), id);
+    "UPDATE projects SET name=?, targetUrl=?, targetPlatform=?, materialsJson=?, explorationMaxScreens=?, explorationScope=? WHERE id=?",
+  ).run(next.name, next.targetUrl, next.targetPlatform, JSON.stringify(next.materials ?? []), next.explorationMaxScreens ?? 8, next.explorationScope ?? "rules", id);
   return next;
 }
 // Delete a project and everything under it (cases, runs, baselines, envs, secrets, batches).
@@ -1256,6 +1264,7 @@ export function upsertEnvironment(
     // only overwrite it when the caller explicitly provides `session` (object or null).
     login: input.login
       ? {
+          ...existing?.login,
           ...input.login,
           session:
             input.login.session !== undefined

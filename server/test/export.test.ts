@@ -33,6 +33,13 @@ const kase = (over: Partial<TestCase>): TestCase =>
   ({ ...base, id: "c1", title: "t", steps: [{ order: 1, text: "点击 Login" }], ...over }) as TestCase;
 
 describe("what the exported suite uses as its verdict", () => {
+  it('retains final screen assertions when there is no final machine oracle', () => {
+    const tc={...kase({title:'screen lifecycle',expected:'Primary final result'}),assertions:[{statement:'Additional final condition',oracle:{kind:'none' as const}}]};
+    const spec=Object.entries(buildExportFiles(project,[tc])).find(([p])=>p.endsWith('.spec.ts'))![1];
+    expect(spec).toContain('aiAssert("Primary final result")');
+    expect(spec).toContain('aiAssert("Additional final condition")');
+    expect(spec.indexOf('aiAssert("Additional final condition")')).toBeGreaterThan(spec.indexOf('await aiAction('));
+  });
   it("settles a tier-1 case with a program, not with a model looking at a screenshot", () => {
     const files = buildExportFiles(project, [
       kase({ title: "密码错误被拒绝", expected: "显示 Epic sadface", tier: 1, oracle: { kind: "text", value: "Epic sadface" } }),
@@ -264,4 +271,34 @@ describe("入口导航不交给视觉模型", () => {
     const spec = buildExportFiles(project, [nav("打开设置面板", "点击 Login")])["tests/s-01/甲.spec.ts"]!;
     expect(spec).toContain('aiAction("打开设置面板")');
   });
+});
+
+
+describe("approved workflow export parity", () => {
+  it("keeps step assertions before the next action, final assertions and environment viewport", () => {
+    const c = {...kase({title:"toggle",steps:[{order:1,text:"Open dialog"},{order:2,text:"Close dialog"}],expected:"closed"}), assertions:[
+      {id:"a",statement:"open",afterStep:1,oracle:{kind:"text" as const,value:"Email"}},
+      {id:"b",statement:"closed",oracle:{kind:"text" as const,value:"Email",absent:true}}
+    ]};
+    const files = buildExportFiles(project,[c],{environments:[{id:"e",name:"desktop",projectId:"p1",baseUrl:project.targetUrl,vars:{},isDefault:true,viewport:{width:1440,height:1000}} as never]});
+    const spec = files["tests/_/toggle.spec.ts"];
+    const first = spec.indexOf('await checkOracle(page, {"kind":"text","value":"Email"}');
+    expect(first).toBeGreaterThan(spec.indexOf('await aiAction("Open dialog")'));
+    expect(first).toBeLessThan(spec.indexOf('await aiAction("Close dialog")'));
+    expect(spec).toContain('"absent":true');
+    expect(spec).not.toContain('aiAssert("closed")');
+    expect(files["playwright.config.ts"]).toContain('viewport: {"width":1440,"height":1000}');
+    expect(JSON.parse(files["testpilot-manifest.json"]).cases[0].assertions).toEqual(c.assertions);
+  });
+});
+
+it('exports explicit none as visual assertions rather than an unobservable machine oracle', () => {
+  const c={...kase({title:'visual-none',expected:'Chart appears',oracle:{kind:'none'}}),assertions:[
+    {id:'v',statement:'Chart has axes',oracle:{kind:'none' as const}},
+    {id:'u',statement:'Same page',oracle:{kind:'url' as const,value:'example.test'}}
+  ]};
+  const spec=buildExportFiles(project,[c])['tests/_/visual-none.spec.ts'];
+  expect(spec).toContain('await aiAssert("Chart appears")');expect(spec).toContain('await aiAssert("Chart has axes")');
+  expect(spec).not.toContain('checkOracle(page, {"kind":"none"}');
+  expect(spec).toContain('checkOracle(page, {"kind":"url"');
 });

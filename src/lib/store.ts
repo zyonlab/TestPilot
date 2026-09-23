@@ -44,11 +44,12 @@ interface StoreState {
     targetUrl: string,
     targetPlatform?: TargetPlatform,
     materials?: string[],
+    explorationMaxScreens?: number, explorationScope?: "current-url" | "rules",
   ) => Promise<Project | undefined>;
   /** Rename / re-point / switch ends. */
   updateProject: (
     id: string,
-    patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform">>,
+    patch: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "explorationMaxScreens" | "explorationScope">>,
   ) => Promise<void>;
   select: (id: string) => void;
   patchCase: (id: string, patch: Partial<TestCase>) => Promise<void>;
@@ -177,9 +178,9 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
-  createProject: async (name, targetUrl, targetPlatform = "web", materials = []) => {
+  createProject: async (name, targetUrl, targetPlatform = "web", materials = [], explorationMaxScreens = 8, explorationScope = "current-url") => {
     try {
-      const { project } = await api.createProject(name, targetUrl, targetPlatform, materials);
+      const { project } = await api.createProject(name, targetUrl, targetPlatform, materials, explorationMaxScreens, explorationScope);
       set((s) => ({ projects: [...s.projects, project] }));
       await get().selectProject(project.id);
       return project;

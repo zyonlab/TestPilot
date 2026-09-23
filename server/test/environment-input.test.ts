@@ -35,3 +35,9 @@ describe("环境保存：没说的字段不出现在 patch 里", () => {
     expect(environmentPatch({ name: "x" } as never)).toEqual({});
   });
 });
+
+it('validates visible session evidence configuration without treating it as a session grant',()=>{
+ expect(()=>environmentPatch({login:{sessionChecks:[{capability:'wallet-session',checks:[]}]}})).toThrow();
+ const sessionChecks=[{capability:'session',checks:[{kind:'connected',label:'Signed in'}]}];
+ expect(environmentPatch({login:{sessionChecks}}).login).toEqual({sessionChecks});
+});

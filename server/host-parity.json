@@ -77,7 +77,7 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/baselines/approve",
-   "host": "tp_case.approve_visual_baseline"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
   {
    "source": "index.ts",
@@ -113,7 +113,7 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/cases/:id/perf-baseline/approve",
-   "host": "tp_case.approve_perf_baseline"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
   {
    "source": "index.ts",
@@ -286,6 +286,12 @@
   {
    "source": "index.ts",
    "method": "POST",
+   "path": "/api/evals/registered",
+   "host": "tp_eval.compare_registered"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
    "path": "/api/evals/score",
    "host": "tp_eval.score"
   },
@@ -327,6 +333,36 @@
   },
   {
    "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evidence-studies/:id/files/:file",
+   "host": "tp_eval.evidence_file"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evidence-studies/:id/review",
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evidence-studies/:id",
+   "host": "tp_eval.evidence_study"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/evidence-studies",
+   "host": "tp_eval.evidence_studies"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/evidence-studies",
+   "host": "tp_eval.start_evidence_study"
+  },
+  {
+   "source": "index.ts",
    "method": "POST",
    "path": "/api/examples/uniswap",
    "host": "tp_system.load_example"
@@ -347,7 +383,13 @@
    "source": "index.ts",
    "method": "POST",
    "path": "/api/gold/:capability",
-   "host": "tp_eval.set_gold"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/gold",
+   "host": "tp_eval.draft_gold"
   },
   {
    "source": "index.ts",
@@ -731,7 +773,7 @@
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/executions/baseline",
-   "host": "tp_execution.set_baseline"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
   {
    "source": "runRoutes.ts",
@@ -755,13 +797,31 @@
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/modules/freeze",
-   "host": "tp_stage.freeze_modules"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/preparation/start",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/preparation/step",
+   "status": "todo"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/progress",
+   "status": "todo"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/regression-candidates/:candidateId",
-   "host": "tp_review.decide_candidate"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
   {
    "source": "runRoutes.ts",
@@ -780,6 +840,12 @@
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/report",
    "host": "tp_run.report"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/rerun",
+   "status": "todo"
   },
   {
    "source": "runRoutes.ts",
@@ -803,13 +869,13 @@
    "source": "runRoutes.ts",
    "method": "PATCH",
    "path": "/api/projects/:projectId/workflow-runs/:runId/review",
-   "host": "tp_review.amend"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
   {
    "source": "runRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/review",
-   "host": "tp_review.decide"
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
   {
    "source": "runRoutes.ts",
@@ -1161,8 +1227,8 @@
   }
  ],
  "baseline": {
-  "covered": 190,
-  "reachable": 190,
-  "rate": 1
+  "covered": 188,
+  "reachable": 192,
+  "rate": 0.9792
  }
 }

@@ -31,17 +31,30 @@ try {
     const stateFile = `${process.env.TP_RUN_GRANT_FILE}.stop-state`;
     let nudges = 0;
     try { const prior = JSON.parse(readFileSync(stateFile, "utf8")); if (prior.runId === runId) nudges = Number(prior.nudges) || 0; } catch { /* First stop attempt. */ }
+    const response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/stages/status`, {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(10000),
+    });
+    const status = await response.json();
+    if (response.ok && status.finalized) {
+      answer({ decision: "stop", reason: `${runId} 服务端阶段凭证完整，等待用户复核`, output: { runId, complete: true, evidence: "server-finalization" } });
+      process.exit(0);
+    }
+    if (response.ok) {
+      const checkpointResponse = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/checkpoint`, {
+        headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000),
+      });
+      const checkpoint = await checkpointResponse.json();
+      if (checkpointResponse.ok && checkpoint.runId === runId && checkpoint.stages?.some(stage => stage.node === 'modules' && stage.phase === 'waiting_review')) {
+        answer({ decision: 'stop', reason: `${runId} 等待模块树人工冻结，不能继续后续阶段`, output: { runId, complete: false, needsHuman: true, evidence: 'server-module-review' } });
+        process.exit(0);
+      }
+    }
     if (nudges >= MAX_NUDGES) {
       answer({ decision: "stop", reason: `${runId} 阶段验证仍未通过，已达到提醒上限；这不是通过或合入许可`, output: { runId, complete: false, blocked: true, gaveUp: true, nudges } });
       process.exit(0);
     }
     writeFileSync(stateFile, JSON.stringify({ runId, nudges: nudges + 1 }), { mode: 0o600 });
-    const response = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/stages/status`, {
-      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(10000),
-    });
-    const status = await response.json();
-    if (response.ok && status.finalized) answer({ decision: "stop", reason: `${runId} 服务端阶段凭证完整，等待用户复核`, output: { runId, complete: true, evidence: "server-finalization" } });
-    else answer({ decision: "continue", input: `运行 ${runId} 尚未被服务端 finalize 接纳。检查 get_project_run，按 instructions → retrieve_spec → write_stories → write_cases → gate_run → finalize_run 补齐。若服务失败，报告原错误。`, output: { runId, complete: false } });
+    answer({ decision: "continue", input: `运行 ${runId} 尚未被服务端 finalize 接纳。检查 get_project_run，按 instructions → retrieve_spec → write_stories → write_cases → gate_run → finalize_run 补齐。若服务失败，报告原错误。`, output: { runId, complete: false } });
     process.exit(0);
   }
 

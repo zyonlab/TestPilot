@@ -98,7 +98,14 @@ export class RunLedger {
     const registration = this.registration(runId, projectId);
     const { json: _json, ...publicRow } = row;
     return { ...publicRow, id: runId, status: String(row.status), detail, provenance: registration ? "registered" : "unknown", binding: registration?.binding ?? null, principal: registration?.input.createdBy ?? null,
-      nodes: this.nodeStates(runId), revisions: this.listRevisions(projectId, runId) };
+      nodes: this.nodeStates(runId).map(event => {
+        if (event.node !== 'g2' || event.phase !== 'done' || !event.revisionId) return event;
+        const artifact = this.readRevision(event.revisionId, projectId);
+        const content = artifact.content as { compilation?: string; cases?: unknown[] };
+        if (content.compilation !== 'approved-midscene-actions-v2') return event;
+        // Preserve the historical compile event, but do not present it as trial verification.
+        return { ...event, phase: 'blocked' as const, message: `旧版仅静态编译 ${content.cases?.length ?? 0} 条；尚未逐条试跑验证，请启动执行准备。` };
+      }), revisions: this.listRevisions(projectId, runId) };
   }
   sealInputs(runId: string, projectId: string, revisionIds: string[]) {
     return this.db.transaction(() => {
@@ -190,7 +197,17 @@ export class RunLedger {
       .run(event.runId, event.node, event.attempt, event.sequence, canonicalJSON(event));
   }
   nodeStates(runId: string): RunEvent[] {
-    return (this.db.prepare("SELECT json FROM workflow_node_states WHERE runId=? ORDER BY node").all(runId) as Array<{ json: string }>).map(r => RunEventSchema.parse(JSON.parse(r.json))).filter(e => !(this.registration(runId)?.input.parameters?.stageControlVersion === 1 && e.id.startsWith("bus-")));
+    const events = (this.db.prepare("SELECT json FROM workflow_node_states WHERE runId=? ORDER BY node").all(runId) as Array<{ json: string }>).map(r => RunEventSchema.parse(JSON.parse(r.json))).filter(e => !(this.registration(runId)?.input.parameters?.stageControlVersion === 1 && e.id.startsWith("bus-")));
+    // A dead host cannot still own a running node. Keep stored events intact for audit.
+    const run = this.outputs.getRun(runId);
+    const status = String(run?.status);
+    if (!['failed','cancelled','interrupted','infra_error','budget_exhausted','paused'].includes(status)) return events;
+    const detail = (run?.detail ?? {}) as Record<string, unknown>;
+    return events.map(event => (event.phase === 'running' || event.phase === 'queued' && event.message?.startsWith('Continuation requested')) ? {
+      ...event, phase: (status === 'cancelled' ? 'cancelled' : status === 'paused' ? 'blocked' : 'failed') as RunEvent['phase'],
+      message: typeof detail.error === 'string' ? detail.error : `Run stopped: ${status}`,
+    } : event);
+
   }
   rebuild() {
     const corruptRuns = new Set<string>();

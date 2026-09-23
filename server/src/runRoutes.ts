@@ -1,3 +1,4 @@
+import { startPreparation, preparationStep, preparationStatus } from './preparation.js';
 import { controls, setControls, beginStage, stageEvent } from './workflowControls.js';
 import { runRoleSpend } from './roleSpend.js';
 import { runReport } from "./runReport.js";
@@ -16,7 +17,7 @@ import { flushDecisionDelivery } from "./decisionDelivery.js";
 import { startWorkflowExecution, listWorkflowExecutions, cancelWorkflowExecutions } from "./workflowExecution.js";
 import { executionBaseline, setExecutionBaseline, compareToBaseline } from "./executionBaseline.js";
 import { writeModulePlan, modulePlanState, freezeModulePlan } from "./moduleStage.js";
-import { createWebWorkflow, workflowCheckpoint, cancelProjectWorkflow, resumeProjectWorkflow } from "./workflowOps.js";
+import { rerunProjectNode, createWebWorkflow, workflowCheckpoint, cancelProjectWorkflow, resumeProjectWorkflow } from "./workflowOps.js";
 
 export function runRouter() {
   const router = Router({ mergeParams: true });
@@ -46,10 +47,22 @@ export function runRouter() {
   router.get("/:runId/spend", wrap((req, res) => res.json(runRoleSpend(req.params.runId, req.params.projectId))));
   // 归因报表：四节点成绩单 + 成本 + 单元 + 门禁 + 执行，按固定规则归到六层（runReport.ts）。
   router.get("/:runId/report", wrap((req, res) => res.json(runReport(req.params.runId, req.params.projectId))));
+  router.get('/:runId/progress', wrap((req, res) => {
+    const ledger = runLedger(), run = ledger.getRun(req.params.runId, req.params.projectId);
+    const node = req.query.node;
+    if (typeof node !== 'string' || !['source','modules','instructions','stories','cases','gate','finalize','g2','execution','review'].includes(node)) throw new LedgerError(400, 'invalid_node');
+    const progress = node === 'stories' || node === 'cases' ? unitStatus(req.params.runId, req.params.projectId, node) : node === 'g2' ? preparationStatus(req.params.runId, req.params.projectId) : null;
+    const events = ledger.db.prepare('SELECT json FROM workflow_events WHERE runId=? AND node=? ORDER BY rowid DESC LIMIT 100').all(req.params.runId,node) as {json:string}[];
+    res.json({status:run.status, node:run.nodes.find(n=>n.node===node), progress,
+      events:[...events.map(e=>JSON.parse(e.json)), ...run.revisions.filter(r=>r.name.startsWith(`units/${node}/`)).map(r=>({id:r.id,at:r.createdAt,phase:'done',artifactName:r.name}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-100), error:run.detail.error});
+  }));
   router.get("/:runId/checkpoint", wrap((req, res) => res.json(workflowCheckpoint(req.params.runId, req.params.projectId))));
   router.post("/:runId/cancel", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await cancelProjectWorkflow(req.params.runId, req.params.projectId)); }));
-  router.post("/:runId/resume", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await resumeProjectWorkflow(req.params.runId, req.params.projectId)); }));
+  router.post("/:runId/rerun", wrap(async (req,res) => { reviewerPrincipal(req); res.status(202).json(await rerunProjectNode(req.params.runId,req.params.projectId,req.body)); }));
+  router.post("/:runId/resume", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await resumeProjectWorkflow(req.params.runId, req.params.projectId, req.body?.mode === 'next-node')); }));
   router.get("/:runId/review", wrap((req, res) => res.json({ cases: reviewRevisions(req.params.runId, req.params.projectId), compiled: compiledReadiness(req.params.runId,req.params.projectId) })));
+  router.post('/:runId/preparation/start', wrap(async (req,res)=>{reviewerPrincipal(req);res.status(202).json(await startPreparation(req.params.runId,req.params.projectId,req.body));}));
+  router.post('/:runId/preparation/step', wrap(async (req,res)=>{authorizeRun(req.params.runId,req.headers.authorization?.replace(/^Bearer /,''));res.json(await preparationStep(req.params.runId,req.params.projectId,req.body));}));
   router.get("/:runId/executions", wrap((req, res) => res.json({ executions: listWorkflowExecutions(req.params.runId, req.params.projectId) })));
   // 执行基线与对比：判决集的基线，不是逐步截图——被测对象是实时行情页，截图基线在它上面每次都红。
   router.get("/:runId/executions/baseline", wrap((req, res) => res.json({ baseline: executionBaseline(req.params.runId, req.params.projectId) ?? null })));
@@ -97,7 +110,12 @@ export function runRouter() {
       const start=beginStage(req.params.runId,req.params.projectId,{node:action==='execute'?'execution':'g2'});
       if(['paused','cancelled','failed'].includes(start.status))return res.json(start);
     }
-    const result=await handler(req.params.runId, req.params.projectId, req.body);
+    let result;
+    try { result=await handler(req.params.runId, req.params.projectId, req.body); }
+    catch(error) {
+      if(action==='g2')stageEvent(req.params.runId,req.params.projectId,'g2','blocked',error instanceof LedgerError?error.code.slice(0,1900):'preparation_failed');
+      throw error;
+    }
     if(action==='g2'){const r=result as {status:string;revision:{id:string}};stageEvent(req.params.runId,req.params.projectId,'g2',r.status==='ready_to_execute'?'done':'blocked',undefined,r.revision.id);}
     res.json(result);
   }));
@@ -123,7 +141,7 @@ export function runRouter() {
      * `validated/` 与 `units/` 两个前缀只能由服务端的 stage 服务写。规划器要留探针，
      * 换个名字就行。
      */
-    if (typeof name === "string" && /^(validated|units|regression-candidate)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
+    if (typeof name === "string" && /^(validated|units|regression-candidate|preparation|g2)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
     res.json(runLedger().putRevision({ projectId: req.params.projectId, runId: req.params.runId, name,
       kind: kind as ArtifactRevision["kind"], content, mediaType, sourceRefs, parentRevision }, { kind: "agent", id: "host-import" }));
   }));

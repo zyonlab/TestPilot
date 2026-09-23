@@ -1,3 +1,4 @@
+import { ExplorationSettings } from '@/components/ExplorationSettings';
 import { navigateProject } from '@/lib/projectContext';
 import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
@@ -34,6 +35,8 @@ export function NewProjectDialog({
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://");
   const [platform, setPlatform] = useState<TargetPlatform>("web");
+  const [maxScreens,setMaxScreens]=useState(20);
+  const [scope,setScope]=useState<"current-url"|"rules">("current-url");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -43,7 +46,7 @@ export function NewProjectDialog({
     if (!open) return;
     setName("");
     setUrl("https://");
-    setPlatform("web");
+    setPlatform("web"); setMaxScreens(20); setScope("current-url");
     setBusy(false);
     setFailed(false);
   }, [open]);
@@ -54,7 +57,7 @@ export function NewProjectDialog({
     if (!valid || busy) return;
     setBusy(true);
     setFailed(false);
-    const project = await createProject(name.trim(), url.trim(), platform, []);
+    const project = await createProject(name.trim(), url.trim(), platform, [], maxScreens, scope);
     setBusy(false);
     // 没建成就**不关**。关掉再什么都不说，等于告诉人「成了」——
     // 而他要到下次翻项目列表时才发现没有。
@@ -114,6 +117,7 @@ export function NewProjectDialog({
         </div>
       </div>
 
+      {platform === "web" && <div className="mt-4"><ExplorationSettings maxScreens={maxScreens} scope={scope} onChange={(n,s)=>{setMaxScreens(n);setScope(s);}}/></div>}
       {failed && (
         <p className="mt-3 flex items-start gap-1.5 text-[0.75rem] text-bad">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />

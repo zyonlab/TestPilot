@@ -52,8 +52,9 @@ describe("变异注不进去的时候", () => {
     const r = await runDetectionEval({ wfRunId: "wf-1", defects: ["no-error"], limit: 1 });
     expect(r.mutants[0]!.applied).toBe("no");
     expect(r.notApplied).toBe(1);
-    // 全部注不进去时分母为零，分数是 0 但 notApplied 说明了它是什么意思。
-    expect(r.mutationScore).toBe(0);
+    // 没有可评变异时不能用零分冒充有效测量。
+    expect(r.mutationScore).toBeNull();
+    expect(r.validity).toBe("unobservable");
     // 健康版那一轮照跑（它在量误报率，跟变异无关）；关键是**变异那一轮一条都不跑**——
     // 在健康版上再跑一整轮，除了烧钱什么也说明不了。所以总执行数就是健康版那一条。
     expect(executed).toEqual(["c1"]);
@@ -74,7 +75,9 @@ describe("变异注不进去的时候", () => {
     stubFetch(() => `<html>${n++}</html>`); // 两遍健康版就不一样
     const r = await runDetectionEval({ wfRunId: "wf-1", defects: ["no-error"], limit: 1 });
     expect(r.mutants[0]!.applied).toBe("unknown");
-    // unknown 仍然要跑：说不准的时候按「可能注进去了」处理，宁可多花一轮也不误判成没发生。
-    expect(executed.length).toBeGreaterThan(0);
+    // unknown 不执行变异，也不计分；只有健康对照运行。
+    expect(executed).toEqual(["c1"]);
+    expect(r.mutationScore).toBeNull();
+    expect(r.unknownInjection).toBe(1);
   });
 });

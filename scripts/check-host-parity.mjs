@@ -41,10 +41,15 @@ function main() {
      * 没有就退回 todo（除非人显式标了 uiOnly）。
      */
     const byRoute = new Map();
-    for (const [name, { spec }] of actionIndex()) byRoute.set(`${spec.method} ${spec.path}`, name);
+    for (const [name, { spec }] of actionIndex()) byRoute.set(`${spec.method} ${spec.path}`, { name, operatorOnly: spec.operatorOnly });
     for (const [key, row] of declared) {
+      const action = byRoute.get(key);
+      if (action?.operatorOnly) {
+        row.uiOnly = "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作";
+        delete row.host; delete row.status; continue;
+      }
       if (row.uiOnly) continue;
-      const host = byRoute.get(key);
+      const host = action?.name;
       if (host) { row.host = host; delete row.status; }
       else { delete row.host; row.status = "todo"; }
     }
@@ -72,6 +77,10 @@ function main() {
   for (const r of [...declared.values()])
     if (r.host && !actions.has(r.host))
       problems.push(`${routeKey(r)} 标了 host:"${r.host}"，而 registry 里没有这个动作。`);
+
+  for (const r of declared.values())
+    if (r.host && actionIndex().get(r.host)?.spec.operatorOnly)
+      problems.push(`${routeKey(r)} 是人工专属动作，不能计入宿主可调用覆盖。`);
 
   const rows = [...declared.values()];
   for (const r of rows) {

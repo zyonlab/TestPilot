@@ -1,0 +1,107 @@
+{
+  "transport": "actual MCP SDK client -> Codex plugin stdio entry -> local preview server",
+  "modelGenerationRun": false,
+  "goldModified": false,
+  "results": [
+    {
+      "step": "tools/list",
+      "evalActions": [
+        "scoreboard",
+        "paired_scoreboard",
+        "gold",
+        "evals",
+        "eval",
+        "score",
+        "paired",
+        "detection",
+        "specs",
+        "run_spec",
+        "spec_from_critique",
+        "subject"
+      ]
+    },
+    {
+      "step": {
+        "action": "set_gold",
+        "params": {
+          "capability": "codex-walkthrough-nonexistent"
+        },
+        "body": {
+          "action": "freeze"
+        }
+      },
+      "isError": true,
+      "output": [
+        "MCP error -32602: Input validation error: Invalid arguments for tool tp_eval: Invalid enum value. Expected 'scoreboard' | 'paired_scoreboard' | 'gold' | 'evals' | 'eval' | 'score' | 'paired' | 'detection' | 'specs' | 'run_spec' | 'spec_from_critique' | 'subject', received 'set_gold' at action"
+      ]
+    },
+    {
+      "step": {
+        "action": "specs"
+      },
+      "isError": false,
+      "output": [
+        {
+          "id": "domain-perp",
+          "preflight": {
+            "ready": false,
+            "classification": "diagnostic",
+            "issues": [
+              "eval_gold_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "runtime-compare",
+          "preflight": {
+            "ready": false,
+            "classification": "diagnostic",
+            "issues": [
+              "eval_runtime_unsupported",
+              "eval_graph_missing"
+            ],
+            "goldHash": "b9175427eb04731c0bd439ac38e8b652d92201989d145c9aea7303bbf0e43d2d",
+            "items": 12
+          }
+        }
+      ]
+    },
+    {
+      "step": {
+        "action": "run_spec",
+        "params": {
+          "id": "domain-perp"
+        }
+      },
+      "isError": true,
+      "output": [
+        "POST /api/evals/specs/domain-perp/run → 400: eval_gold_unavailable"
+      ]
+    },
+    {
+      "step": {
+        "action": "run_spec",
+        "params": {
+          "id": "runtime-compare"
+        }
+      },
+      "isError": true,
+      "output": [
+        "POST /api/evals/specs/runtime-compare/run → 400: eval_runtime_unsupported"
+      ]
+    },
+    {
+      "step": {
+        "action": "evals"
+      },
+      "isError": false,
+      "output": [
+        "{\"evals\":[]}"
+      ]
+    }
+  ],
+  "agentFreezeHttp": {
+    "status": 403,
+    "code": "operator_action_required"
+  }
+}

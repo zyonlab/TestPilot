@@ -1,3 +1,7 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 import { it, expect } from "vitest";
 import { buildExportFiles } from "../src/export.js";
 
@@ -32,4 +36,19 @@ it("没有来源的用例不硬塞一个空指针——「没说」和「说了�
 it("同一批用例导出两次逐字节一致——重复集成不该产生差异", () => {
   const cases = [kase({ sourceRunId: "run-abc" })];
   expect(buildExportFiles(project, cases)).toEqual(buildExportFiles(project, cases));
+});
+
+
+it("a fresh export passes its own verifier and edited assertions fail verification", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tp-export-verifier-"));
+  try {
+    const files = buildExportFiles(project, [kase()]);
+    for (const [name, text] of Object.entries(files)) { const p=join(dir,name);mkdirSync(dirname(p),{recursive:true});writeFileSync(p,text); }
+    const env={...process.env,CI:"",TP_APPROVED_EXPORT_SHA256:""};
+    expect(spawnSync(process.execPath,["scripts/verify-export.mjs"],{cwd:dir,env,encoding:"utf8"}).status).toBe(0);
+    const spec=Object.keys(files).find(p=>p.endsWith(".spec.ts"))!;
+    writeFileSync(join(dir,spec),files[spec]+"\n// changed verdict\n");
+    const changed=spawnSync(process.execPath,["scripts/verify-export.mjs"],{cwd:dir,env,encoding:"utf8"});
+    expect(changed.status).not.toBe(0);expect(changed.stderr).toContain("EXPORT_FILE_CHANGED");
+  } finally {rmSync(dir,{recursive:true,force:true});}
 });

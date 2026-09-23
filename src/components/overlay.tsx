@@ -7,29 +7,43 @@ import { useT } from "@/lib/prefs";
 // Locks body scroll while at least one overlay is open (ref-counted so nested
 // overlays don't clobber each other's restore).
 let scrollLocks = 0;
+let bodyOverflow = "";
 function useBodyScrollLock(active: boolean) {
   useEffect(() => {
     if (!active) return;
+    if (scrollLocks === 0) bodyOverflow = document.body.style.overflow;
     scrollLocks += 1;
-    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       scrollLocks -= 1;
-      if (scrollLocks === 0) document.body.style.overflow = prev;
+      if (scrollLocks === 0) document.body.style.overflow = bodyOverflow;
     };
   }, [active]);
 }
 
-// Escape-to-close, shared by both primitives.
-function useEscapeToClose(active: boolean, onClose: () => void) {
+// Only the top layer handles Escape; callbacks may change without reordering layers.
+const escapeLayers: Array<{ token: symbol; layer: number }> = [];
+function useEscapeToClose(active: boolean, onClose: () => void, layer = 0) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!active) return;
+    const entry = { token: Symbol(), layer };
+    escapeLayers.push(entry);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      const top = escapeLayers.reduce<typeof entry | undefined>((best, item) =>
+        !best || item.layer >= best.layer ? item : best, undefined);
+      if (e.key === "Escape" && !e.defaultPrevented && top === entry) {
+        e.preventDefault();
+        closeRef.current();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, onClose]);
+    return () => {
+      escapeLayers.splice(escapeLayers.indexOf(entry), 1);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [active, layer]);
 }
 
 /**
@@ -98,10 +112,13 @@ export function Drawer({
   resizeKey,
   defaultWidth = 880,
   fullscreen = false,
+  layer = 0,
   tabs,
   children,
 }: {
   open: boolean;
+  /** Higher layers sit above their parent drawer. */
+  layer?: number;
   onClose: () => void;
   title?: React.ReactNode;
   widthClass?: string;
@@ -153,10 +170,13 @@ export function Drawer({
     widths.set(resizeKey, next);
   };
   useBodyScrollLock(open);
-  useEscapeToClose(open, onClose);
+  useEscapeToClose(open, onClose, layer);
 
   useEffect(() => {
-    if (open) panelRef.current?.focus();
+    if (!open) return;
+    const previous = document.activeElement;
+    panelRef.current?.focus();
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, [open]);
 
   useEffect(() => {
@@ -187,7 +207,7 @@ export function Drawer({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50" style={{ zIndex: 50 + layer * 10 }}>
       {/* scrim */}
       <div
         className="absolute inset-0 bg-black/25 motion-safe:transition-opacity"

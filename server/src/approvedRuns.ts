@@ -1,3 +1,5 @@
+import { validatePreparedBundle } from './preparation.js';
+import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import {caseEntryUrl} from './caseEntry.js';
 import {getProject} from './db.js';
 import { z } from "zod";
@@ -45,6 +47,10 @@ export function reviseReviewedCase(runId: string, projectId: string, raw: unknow
     const prior = reviewRevisions(runId, projectId).find(r => r.caseId === input.caseId);
     if (!prior || prior.revision.id !== input.expectedRevision) throw new LedgerError(409, "review_revision_conflict");
     if (input.content.id !== input.caseId || input.content.storyId !== prior.content.storyId) throw new LedgerError(409, "review_case_identity_frozen");
+    if (input.content.readiness?.execution === 'ready') {
+      const blockers=executionBlockers(input.content);
+      if(blockers.length) throw new LedgerError(409, `execution_not_ready:${JSON.stringify(blockers)}`);
+    }
     const revision = ledger().putRevision({ runId, projectId, name: prior.revision.name, kind: "cases", content: input.content,
       sourceRefs: prior.revision.sourceRefs, parentRevision: prior.revision.id }, principal);
     ledger().db.prepare("UPDATE reviewed_case_heads SET revisionId=? WHERE runId=? AND caseId=?").run(revision.id, runId, input.caseId);
@@ -92,6 +98,8 @@ export function generateApprovedCode(runId: string, projectId: string, raw: unkn
     const selected = input.revisionIds ? input.revisionIds.map(id => { const c = approved.find(c => c.revision.id === id); if (!c) throw new LedgerError(409, "case_revision_not_approved"); return c; }) : approved;
     if (!selected.length || new Set(selected.map(c => c.caseId)).size !== selected.length) throw new LedgerError(409, "approved_cases_required");
     selected.sort((a, b) => a.caseId.localeCompare(b.caseId));
+    const notReady = selected.map(c => ({ id: c.caseId, reasons: executionBlockers(c.content) })).filter(c => c.reasons.length);
+    if (notReady.length) throw new LedgerError(409, `execution_not_ready:${JSON.stringify(notReady)}`);
     /**
      * **这次运行自己声明的地址优先于项目级的那个。**
      *
@@ -140,6 +148,7 @@ export function approvedExecutionBundle(runId: string, projectId: string, revisi
   const artifact = ledger().readRevision(revisionId, projectId);
   if (artifact.revision.runId !== runId || artifact.revision.kind !== "code") throw new LedgerError(409, "execution_revision_conflict");
   const content = artifact.content as CodeBundle & { approvedRevisions: string[]; approvalsHash: string };
+  if ((content as any).compilation === 'host-prepared-v1') return validatePreparedBundle(runId,projectId,content);
   const fresh = generateApprovedCode(runId, projectId, { revisionIds: content.approvedRevisions });
   /**
    * 重编一次再比对：**要执行的必须是现在这个编译器产出的代码**。
@@ -157,6 +166,7 @@ export function compiledReadiness(runId: string, projectId: string) {
  const code=codeRevisions.find(r=>r.id===selectedRevision)??codeRevisions.at(-1);
  if(!code)return {codeRevision:null,ready:false,reason:'code_required'};
  const content=ledger().readRevision(code.id,projectId).content as {approvedRevisions?:string[];approvalsHash?:string;compilation?:string;gate?:unknown};
+ if(content.compilation==='host-prepared-v1'){try{validatePreparedBundle(runId,projectId,content);return {codeRevision:code.id,revisionIds:content.approvedRevisions??[],ready:true,reason:null};}catch{return {codeRevision:code.id,revisionIds:content.approvedRevisions??[],ready:false,reason:'preparation_approval_changed'};}}
  const current=reviewRevisions(runId,projectId);const selected=(content.approvedRevisions??[]).map(id=>current.find(c=>c.revision.id===id&&c.approval?.decision==='approved'));
  const complete=selected.length>0&&selected.every(Boolean);
  const hash=complete?contentHash(canonicalJSON(selected.map(c=>({revisionId:c!.revision.id,eventId:c!.approval!.id})).sort((a,b)=>a.revisionId.localeCompare(b.revisionId)))):null;

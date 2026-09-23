@@ -178,8 +178,8 @@ export const api = {
   // ---- persistence (backend is the source of truth) ----
   /* ---- 07 P5：成本 / 记分板 / gold ---- */
   getCost: (projectId: string, last = 10) => get<CostReport>(`/api/projects/${projectId}/cost?last=${last}`, 15000),
-  getScoreboard: (capability?: string) =>
-    get<{ capabilities: string[]; entries: ScoreboardRow[]; penguinUrl?: string; activeVersion?: { version: string; generation: number; policy: { memory: string } } }>(`/api/scoreboard${capability ? `?capability=${encodeURIComponent(capability)}` : ""}`),
+  getScoreboard: (capability?: string, includeArchived = false) =>
+    get<{ capabilities: string[]; entries: ScoreboardRow[]; diagnostics?: Array<{id:string;status:string;error?:string;graphId:string;projectId?:string}>; penguinUrl?: string; activeVersion?: { version: string; generation: number; policy: { memory: string } } }>(`/api/scoreboard?includeArchived=${includeArchived ? "1" : "0"}${capability ? `&capability=${encodeURIComponent(capability)}` : ""}`),
   pairedScoreboard: (a: ScoreboardRow, b: ScoreboardRow, goldPath: string) =>
     post<{ entry: Record<string, unknown> }>("/api/scoreboard/paired", { a, b, goldPath }, 120000),
   getGold: (capability: string) => get<GoldState>(`/api/gold/${encodeURIComponent(capability)}`),
@@ -194,10 +194,11 @@ export const api = {
     targetUrl: string,
     targetPlatform: TargetPlatform = "web",
     materials: string[] = [],
-  ) => post<{ project: Project }>("/api/projects", { name, targetUrl, targetPlatform, materials }, 8000),
+    explorationMaxScreens = 8, explorationScope: "current-url" | "rules" = "current-url",
+  ) => post<{ project: Project }>("/api/projects", { name, targetUrl, targetPlatform, materials, explorationMaxScreens, explorationScope }, 8000),
   updateProject: (
     id: string,
-    body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "materials">>,
+    body: Partial<Pick<Project, "name" | "targetUrl" | "targetPlatform" | "explorationMaxScreens" | "explorationScope" | "materials">>,
   ) => patch<{ project: Project }>(`/api/projects/${id}`, body),
   deleteProject: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
   getCases: (projectId?: string) =>
@@ -236,7 +237,7 @@ export const api = {
       vars: Record<string, string | string[]>;
       headers: Record<string, string>;
       query: Record<string, string>;
-      login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null };
+      login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null; sessionChecks?: import("./types").LoginFlow["sessionChecks"] };
       isDefault: boolean; capabilities?: string[]; injectWallet?: boolean;
       viewport?: {width?:number;height?:number};
     },

@@ -8,7 +8,7 @@ rule 8e94627a  One story per distinct user-visible capability. Do not inven
 rule 27712ea0  Each rule in the spec is tagged with its altitude: `[screen]
 rule fe838992  Rules about refusals — a validation message, an error state,
 rule 01f33bf0  `role` is who wants it and `benefit` is what they get from i
-rule e4279dd1  The spec may list FLOWS — paths through the product that wer
+rule 0abae343  The spec may list FLOWS — paths through the product that wer
 rule e87f5ad2  `activity` is the MODULE the story belongs to, NOT the flow.
 rule e0d91dfc  `acceptance` is written as Given / When / Then, one entry pe
 rule 1810de2c  Keep the spec's own ids when it has them (US-01 and so on);
@@ -64,7 +64,7 @@ rule bf648e58  When the budget of stories is smaller than the material, spr
 - `role` 是谁想要，`benefit` 是他得到什么。**两个都从规格里来**；
   规格没写就**留空**，不要编一个听起来很合理的用户。空字符串是一个诚实的回答，缺席不是。
 - 规格可能列出 FLOWS——真的被走过的路径。用 `flowId` 把故事挂上去。几条故事可以共用一条流程。
-  挂不上流程的故事是允许的，但应该很少——那就把两个字段都留空，明说这件事。
+  有需求或适用领域规则支持的故事，即使没有已走过的流程也允许成立；此时把流程字段留空，不编造关联。
 - `activity` 是故事所属的**模块**，**不是流程**。规格在「模块」下面列了模块，逐字用它的名字。
   这是故事地图的骨架，而**骨架必须比躯体粗**：几条故事共用一个 activity。
   每条故事都有自己的 activity，地图就退化成一张横过来的列表——而那正是地图要避免的。
@@ -90,3 +90,25 @@ rule bf648e58  When the budget of stories is smaller than the material, spr
 ## 写完之后
 
 只说写了哪个文件、几条故事。**不要评价这批故事好不好**——那是门禁和人的事。
+
+
+## 逐条件探索证据
+
+“界面观察不到”是证据覆盖缺口，不代表功能不存在，也不自动等于 requires-fixture。
+故事用 observationLinks 逐 acceptanceIndex（从 0 起）关联本轮真实 observationIds。
+每项记录 status（observed / partial / unobserved）、reason（not_attempted / route_blocked / requires_session / requires_fixture / budget_exhausted / not_found / insufficient_evidence / observed）及 nextSteps。
+没有证据写 unobserved 和空 observationIds；不能编造记录 ID、实际路径或已核验状态。
+点击过某个功能不等于验证了全部验收条件。nextSteps 只是尚未执行的建议，必须与探索日志中的实际动作区分。
+多步路径没有走完时说明最后到达的状态和具体阻塞；静态观察不继承仅在状态变更测试中需要的夹具要求。
+
+
+## 节点输入与验证边界
+
+模块规划消费探索产物、产品模型与领域规则，规划业务范围；用户故事消费已审核模块树及相关需求依据；用例设计消费故事和验收条件，设计步骤、预期与前提。保留上游 revision 和需求引用，不要求上一步已执行过下一步的业务流程。
+
+故事验收条件描述产品应有行为。探索未覆盖时将状态保存在 observationLinks，不得因此追加「【待确认：界面观察不到】」或 requires-fixture。只有产品范围不明、需求冲突才提出需求待确认；纯假设不能冒充需求。
+
+用例设计可在未执行时完成。登录、测试数据、控件定位、数值判据等就绪情况单独记录，留给执行准备核验；不能由 unobserved 自动推导 requires-fixture，也不能把它自动改成 ready。执行和报告仍须真实证据，不能为了提高 ready 数量跳过门禁。
+
+
+逐验收条件检查提供的 observations（动作、controlsAfter、effect、前后状态）。已有记录支持条件的一部分时引用对应 ID 并标 partial；只有完整支持结果才标 observed。记录尝试过但不能证实结果时可引用并标 unobserved/insufficient_evidence，不能一律留空或标 not_attempted。仅同功能但不支持该条件的记录属于相关候选，不冒充条件证据。nextSteps 描述从已到达状态到缺失结果还差的具体操作，不统一填“按验收执行”。

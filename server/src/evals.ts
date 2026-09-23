@@ -1,4 +1,6 @@
 import { dataPath } from "./datadir.js";
+import { randomUUID, createHash } from "node:crypto";
+import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +27,7 @@ import {
   traced,
 } from "@testpilot/harness-core";
 import { collectEvidence, critique } from "@testpilot/harness-testing";
-import { allOutputs, getGraph, nodeOutput, outputStore, runPromptDigest, startRun, type RunTarget } from "./graphs.js";
+import { allOutputs, getGraph, getGraphVersion, cancelRun, nodeOutput, outputStore, runPromptDigest, startRun, type RunTarget } from "./graphs.js";
 import { bus } from "./procs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +46,7 @@ const REPO_ROOT = resolve(__dirname, "..", "..");
 
 export interface EvalArm {
   label: string;
+  runtime?: string;
   ablate?: string[];
   /** Per-node parameter overrides, e.g. { gate: { minNegativeRatio: 0.5 } }. */
   params?: Record<string, Record<string, unknown>>;
@@ -74,6 +77,7 @@ export interface PairedEvalRequest {
   casesNode?: string;
   a: EvalArm;
   b: EvalArm;
+  timeoutMs?: number;
   /** 来自 `evals/*.json` 时带上它；界面上临时拼的一次评测没有。 */
   spec?: EvalSpecRef;
 }
@@ -92,7 +96,7 @@ export interface ArmResult {
   heldOutCoverage: number;
   covered: string[];
   cases: number;
-  spend: { calls: number; tokens: number; ms: number };
+  spend: { calls: number; tokens: number; ms: number } | null;
   gateScore?: number;
 }
 
@@ -114,7 +118,10 @@ export interface PairedEvalResult {
    */
   flips: Array<{ id: string; title: string; from: "a" | "b" }>;
   coverageDelta: ReturnType<typeof comparePaired>;
-  costDelta: { calls: number; tokens: number; ms: number };
+  costDelta: { calls: number; tokens: number; ms: number } | null;
+  validity: "valid";
+  classification: "diagnostic";
+  goldHash: string;
   methodMix: { a: Record<string, { expected: number; covered: number }>; b: Record<string, { expected: number; covered: number }> };
   startedAt: string;
   finishedAt?: string;
@@ -192,9 +199,11 @@ export const listEvals = (limit = 30): Array<Record<string, unknown>> =>
   ).map(({ json, ...row }) => {
     try {
       const detail = JSON.parse(json ?? "{}") as {
+        projectId?: string; capability?: string; validity?: string; classification?: string; error?: string; spec?: { title?: string };
         prediction?: { expected: string; observed: string; significant: boolean; matched?: boolean };
       };
-      return detail.prediction ? { ...row, prediction: detail.prediction } : row;
+      return { ...row, projectId: detail.projectId, capability: detail.capability, validity: detail.validity ?? "legacy", classification: detail.classification ?? "legacy",
+        error: detail.error, title: detail.spec?.title, ...(detail.prediction ? { prediction: detail.prediction } : {}) };
     } catch {
       return row;
     }
@@ -248,9 +257,12 @@ export function evalSubject(graphId: string): {
 }
 
 function loadGold(goldPath?: string, graphId?: string): { gold: GoldChecklist; path: string } {
-  const path = goldPath ?? (graphId && GRAPH_GOLD[graphId]) ?? "benchmark/casegen/gold.json";
+  const path = goldPath ?? (graphId && GRAPH_GOLD[graphId]);
+  if (!path) throw new Error("eval_gold_required");
   const full = path.startsWith("/") ? path : resolve(REPO_ROOT, path);
-  return { gold: JSON.parse(readFileSync(full, "utf8")) as GoldChecklist, path };
+  const gold = JSON.parse(readFileSync(full, "utf8")) as GoldChecklist;
+  if (!Array.isArray(gold.items) || !gold.items.length || gold.items.some(i => !i.id || !i.match)) throw new Error("eval_gold_invalid");
+  return { gold, path };
 }
 
 /** Cases out of whatever the scoring node produced, whichever stage it belongs to. */
@@ -268,9 +280,12 @@ export async function scoreRun(req: {
   /** Also ask the model about the items the keyword rules missed. Slower, not comparable. */
   semantic?: boolean;
 }): Promise<Record<string, unknown>> {
-  const run = outputStore.getRun(req.wfRunId) as { graphId?: string } | undefined;
+  const run = outputStore.getRun(req.wfRunId) as { graphId?: string; status?: string } | undefined;
   if (!run) throw new Error(`no such run: ${req.wfRunId}`);
-  const { gold, path } = loadGold(req.goldPath, run.graphId);
+  if (!["done", "completed"].includes(String(run.status))) throw new EvalInvalidError("eval_run_not_completed", req.wfRunId);
+  const { gold: completeGold, path } = loadGold(req.goldPath, run.graphId);
+  const gold = { ...completeGold, items: completeGold.items.filter(item => !item.heldOut) };
+  if (!gold.items.length) throw new EvalInvalidError("eval_development_items_missing");
 
   const outputs = await allOutputs(req.wfRunId);
   const nodeId =
@@ -307,7 +322,7 @@ export async function scoreRun(req: {
     nodeId,
     coverage: coverage.coverage,
     structural,
-    heldOut: coverage.heldOut,
+    classification: "diagnostic",
     cases: cases.length,
     /*
      * **矩阵要的是身份，不只是计数。**
@@ -382,8 +397,52 @@ function sameConfiguration(a: EvalArm, b: EvalArm): boolean {
       ablate: [...(arm.ablate ?? [])].sort(),
       params: arm.params ?? {},
       graphVersion: arm.graphVersion ?? null,
+      runtime: arm.runtime ?? "graph",
     });
   return key(a) === key(b);
+}
+
+
+export class EvalInvalidError extends Error {
+  constructor(public readonly code: string, public readonly runId?: string) { super(code); }
+}
+const armInput = z.object({ label: z.string().min(1), runtime: z.string().optional(), ablate: z.array(z.string()).optional(),
+  params: z.record(z.record(z.unknown())).optional(), graphVersion: z.number().int().positive().optional() });
+const pairedInput = z.object({ graphId: z.string().min(1), goldPath: z.string().min(1), a: armInput, b: armInput,
+  casesNode: z.string().optional(), timeoutMs: z.number().int().min(1000).max(7200000).optional() }).passthrough();
+export interface EvalPreflight { ready: boolean; classification: "diagnostic"; issues: string[]; goldHash?: string; items?: number }
+/** Never start a model to discover that the experiment cannot measure its declared change. */
+export function preflightPairedEval(raw: unknown): EvalPreflight {
+  const parsed = pairedInput.safeParse(raw);
+  if (!parsed.success) return { ready: false, classification: "diagnostic", issues: ["eval_request_invalid"] };
+  const req = parsed.data;
+  const issues: string[] = [];
+  for (const arm of [req.a, req.b]) {
+    // Graph runs use the internal node planner, not native host runtimes.
+    if (arm.runtime !== undefined && arm.runtime !== "graph") issues.push("eval_runtime_unsupported");
+    if (parseAblation(arm.ablate).unknown.length) issues.push("eval_ablation_unknown");
+    const graph = arm.graphVersion ? getGraphVersion(req.graphId, arm.graphVersion) : getGraph(req.graphId);
+    if (!graph) issues.push("eval_graph_missing");
+    else if (!graph.nodes.some(n => n.id === (req.casesNode ?? "gate"))) issues.push("eval_cases_node_missing");
+  }
+  let goldHash: string | undefined, items: number | undefined;
+  try { const loaded = loadGold(req.goldPath, req.graphId); items = loaded.gold.items.filter(i => !i.heldOut).length;
+    if (!items) issues.push("eval_development_items_missing");
+    goldHash = createHash("sha256").update(JSON.stringify(loaded.gold)).digest("hex");
+  } catch { issues.push("eval_gold_unavailable"); }
+  return { ready: !issues.length, classification: "diagnostic", issues: [...new Set(issues)], goldHash, items };
+}
+export function requirePairedEval(raw: unknown): EvalPreflight {
+  const check = preflightPairedEval(raw);
+  if (!check.ready) throw new EvalInvalidError(check.issues[0]);
+  return check;
+}
+/** HTTP uses a synchronous admission boundary and gets an ID before asynchronous work. */
+export function startPairedEval(req: PairedEvalRequest): { id: string; status: "running" } {
+  requirePairedEval(req);
+  const id = `eval-${randomUUID()}`;
+  void runPairedEval(req, id).catch(() => undefined); // terminal record is persisted by runPairedEval
+  return { id, status: "running" };
 }
 
 async function runArm(req: PairedEvalRequest, arm: EvalArm, gold: GoldChecklist): Promise<ArmResult> {
@@ -400,9 +459,11 @@ async function runArm(req: PairedEvalRequest, arm: EvalArm, gold: GoldChecklist)
     params: arm.params,
     graphVersion: arm.graphVersion,
   });
-  const detail = await waitForRun(started.wfRunId);
+  const detail = await waitForRun(started.wfRunId, req.timeoutMs ?? 600_000);
+  if (!["done", "completed"].includes(String(detail.status))) throw new EvalInvalidError("eval_run_not_completed", started.wfRunId);
   const nodeId = req.casesNode ?? "gate";
   const output = await nodeOutput(started.wfRunId, nodeId).catch(() => undefined);
+  if (!output || !Array.isArray((output as { cases?: unknown }).cases)) throw new EvalInvalidError("eval_output_missing", started.wfRunId);
   const cases = casesOf(output);
   const coverage = scoreCoverage(gold, cases);
 
@@ -418,14 +479,16 @@ async function runArm(req: PairedEvalRequest, arm: EvalArm, gold: GoldChecklist)
     heldOutCoverage: coverage.heldOut.coverage,
     covered: coverage.hits.map((h) => h.goldId),
     cases: cases.length,
-    spend: (detail.spend as ArmResult["spend"]) ?? { calls: 0, tokens: 0, ms: 0 },
+    spend: (detail.spend as ArmResult["spend"]) ?? null,
     gateScore: (output as { gate?: { score?: number } })?.gate?.score,
   };
 }
 
 /** Poll the run record until the run finishes. Runs are minutes long; events drive the UI. */
-async function waitForRun(wfRunId: string): Promise<Record<string, unknown>> {
+async function waitForRun(wfRunId: string, timeoutMs: number): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
+    if (Date.now() >= deadline) { await cancelRun(wfRunId).catch(() => undefined); throw new EvalInvalidError("eval_timeout", wfRunId); }
     const row = outputStore.getRun(wfRunId);
     if (row && row.status !== "running")
       return { status: row.status, ...((row.detail as Record<string, unknown>) ?? {}) };
@@ -437,16 +500,19 @@ async function waitForRun(wfRunId: string): Promise<Record<string, unknown>> {
  * Run both arms and subtract. Sequential, not parallel: the model admits one call at a
  * time anyway, and overlapping the arms would make each one's duration meaningless.
  */
-export async function runPairedEval(req: PairedEvalRequest): Promise<PairedEvalResult> {
-  const { gold, path } = loadGold(req.goldPath, req.graphId);
-  const id = `eval-${Date.now().toString(36)}`;
+export async function runPairedEval(req: PairedEvalRequest, id = `eval-${randomUUID()}`): Promise<PairedEvalResult> {
+  const preflight = requirePairedEval(req);
+  const { gold: completeGold, path } = loadGold(req.goldPath, req.graphId);
+  // Interactive diagnostics may only expose development items. Hidden evaluation stays in trusted release gates.
+  const gold = { ...completeGold, items: completeGold.items.filter(i => !i.heldOut) };
   const startedAt = new Date().toISOString();
-  save({ id, graphId: req.graphId, startedAt, status: "running", detail: { a: req.a, b: req.b } });
+  save({ id, graphId: req.graphId, startedAt, status: "running", detail: { id, classification: "diagnostic", spec: req.spec, request: req, goldHash: preflight.goldHash } });
   bus.publish("eval.started", { id, graphId: req.graphId, arms: [req.a.label, req.b.label] }, {});
 
   try {
     const a = await runArm(req, req.a, gold);
     const b = await runArm(req, req.b, gold);
+    if (promptDrift(a, b)) throw new EvalInvalidError("eval_prompt_drift");
 
     // The paired unit is a gold item, not a case: "did each arm cover this requirement".
     const pairs: PairedBinary[] = gold.items.map((item) => ({
@@ -457,6 +523,7 @@ export async function runPairedEval(req: PairedEvalRequest): Promise<PairedEvalR
 
     const result: PairedEvalResult = {
       id,
+      validity: "valid", classification: "diagnostic", goldHash: preflight.goldHash!,
       graphId: req.graphId,
       gold: path,
       a,
@@ -471,13 +538,11 @@ export async function runPairedEval(req: PairedEvalRequest): Promise<PairedEvalR
         })),
       coverageDelta: comparePaired([
         { id: "coverage", a: a.coverage, b: b.coverage },
-        { id: "heldOut", a: a.heldOutCoverage, b: b.heldOutCoverage },
+        // Descriptive delta only; the two dataset slices are not independent trials.
       ]),
-      costDelta: {
-        calls: b.spend.calls - a.spend.calls,
-        tokens: b.spend.tokens - a.spend.tokens,
-        ms: b.spend.ms - a.spend.ms,
-      },
+      costDelta: a.spend && b.spend ? {
+        calls: b.spend.calls - a.spend.calls, tokens: b.spend.tokens - a.spend.tokens, ms: b.spend.ms - a.spend.ms,
+      } : null,
       methodMix: {
         a: methodMix(gold, scoreCoverageFor(gold, a.covered)),
         b: methodMix(gold, scoreCoverageFor(gold, b.covered)),
@@ -512,8 +577,9 @@ export async function runPairedEval(req: PairedEvalRequest): Promise<PairedEvalR
       graphId: req.graphId,
       startedAt,
       finishedAt: new Date().toISOString(),
-      status: "failed",
-      detail: { error: (e as Error).message },
+      status: e instanceof EvalInvalidError ? "invalid" : "failed",
+      detail: { id, validity: "invalid", classification: "diagnostic", error: (e as Error).message,
+        ...(e instanceof EvalInvalidError ? { runId: e.runId } : {}), request: req },
     });
     bus.publish("eval.finished", { id, error: (e as Error).message }, {});
     throw e;
@@ -626,7 +692,7 @@ export interface DetectionEvalResult {
   wfRunId: string;
   /** Cases that failed on the healthy build. Every one of them is a false alarm. */
   falseAlarms: string[];
-  falseAlarmRate: number;
+  falseAlarmRate: number | null;
   /**
    * **这一版滑向哪一边**（US-19 的第三问）。
    *
@@ -662,7 +728,9 @@ export interface DetectionEvalResult {
     applied: "yes" | "no" | "unknown";
   }>;
   /** 注不进去的那些**不进分母**：没发生的实验不该拉低分数。 */
-  mutationScore: number;
+  mutationScore: number | null;
+  unknownInjection: number;
+  validity: "valid" | "unobservable";
   notApplied: number;
   cases: number;
   note: string;
@@ -684,11 +752,12 @@ export interface DetectionEvalResult {
  * exists — this is the version that is honest with the data actually on hand.
  */
 export async function runDetectionEval(req: DetectionEvalRequest): Promise<DetectionEvalResult> {
-  const id = `det-${Date.now().toString(36)}`;
+  const id = `det-${randomUUID()}`;
   const startedAt = new Date().toISOString();
   // Recorded before the work starts: an evaluation that only appears when it finishes
   // vanishes entirely if anything restarts, and then nobody knows it ever ran.
   save({ id, graphId: req.wfRunId, startedAt, status: "running", detail: { request: req } });
+  try {
   const bundle = (await nodeOutput(req.wfRunId, req.node ?? "repair")) as
     | { code?: Array<{ caseId: string; title: string; actions: unknown[]; uses: string[] }>; fragments?: unknown[] }
     | undefined;
@@ -729,9 +798,12 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
 
   // 1. The healthy build. A failure here says nothing about the product.
   const falseAlarms: string[] = [];
+  const healthyPassed = new Set<string>();
+  let healthyEvaluated = 0;
   for (const c of code) {
     const outcome = await run(c, baseUrl);
-    if (outcome.status === "failed" && outcome.failKind !== "infra") falseAlarms.push(c.caseId);
+    if (outcome.status === "passed") { healthyPassed.add(c.caseId); healthyEvaluated++; }
+    if (outcome.status === "failed" && outcome.failKind !== "infra") { falseAlarms.push(c.caseId); healthyEvaluated++; }
   }
 
   // 2. Each fault in turn.
@@ -740,7 +812,7 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
   for (const defect of wanted) {
     const applied = await probeApplied(defect);
     // 注不进去就别跑：一整轮用例跑在健康版上，除了烧钱什么也说明不了。
-    if (applied === "no") {
+    if (applied !== "yes") {
       mutants.push({ defect, title: DEFECT_TITLES[defect] ?? defect, killed: false, killedBy: [], ran: 0, applied });
       bus.publish("eval.mutant", { id, defect, killed: false, applied }, {});
       continue;
@@ -749,9 +821,9 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
     let ran = 0;
     for (const c of code) {
       // A case that already cries wolf on the healthy build cannot be credited with a kill.
-      if (falseAlarms.includes(c.caseId)) continue;
-      ran += 1;
+      if (!healthyPassed.has(c.caseId)) continue;
       const outcome = await run(c, withDefect(defect));
+      if (outcome.status === "passed" || (outcome.status === "failed" && outcome.failKind !== "infra")) ran += 1;
       if (outcome.status === "failed" && outcome.failKind !== "infra") killedBy.push(c.caseId);
     }
     mutants.push({ defect, title: DEFECT_TITLES[defect] ?? defect, killed: killedBy.length > 0, killedBy, ran, applied });
@@ -762,21 +834,23 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
     id,
     wfRunId: req.wfRunId,
     falseAlarms,
-    falseAlarmRate: code.length ? Number((falseAlarms.length / code.length).toFixed(3)) : 0,
+    falseAlarmRate: healthyEvaluated ? Number((falseAlarms.length / healthyEvaluated).toFixed(3)) : null,
     mutants,
     // 分母只算真的注进去了的。没发生的实验不该拉低分数——那会把工具自己的失败
     // 伪装成用例集的盲区，而虚低的那部分看起来像真发现。
     mutationScore: (() => {
-      const graded = mutants.filter((m) => m.applied !== "no");
-      return graded.length ? Number((graded.filter((m) => m.killed).length / graded.length).toFixed(3)) : 0;
+      const graded = mutants.filter((m) => m.applied === "yes" && m.ran > 0);
+      return graded.length ? Number((graded.filter((m) => m.killed).length / graded.length).toFixed(3)) : null;
     })(),
     notApplied: mutants.filter((m) => m.applied === "no").length,
+    unknownInjection: mutants.filter((m) => m.applied === "unknown").length,
+    validity: mutants.some(m => m.applied === "yes" && m.ran > 0) ? "valid" : "unobservable",
     cases: code.length,
     leaning: (() => {
-      const graded = mutants.filter((m) => m.applied !== "no");
-      if (!graded.length && !code.length) return "undetermined" as const;
+      const graded = mutants.filter((m) => m.applied === "yes" && m.ran > 0);
+      if (!graded.length) return "undetermined" as const;
       const caught = graded.length ? graded.filter((m) => m.killed).length / graded.length : 0;
-      const noisy = falseAlarms.length / (code.length || 1);
+      const noisy = falseAlarms.length / (healthyEvaluated || 1);
       // 与 detect.ts 同一条阈值，只是输入换成能诚实拿到的那两个。
       if (noisy >= 0.5) return "false-alarms" as const;
       if (caught < 0.5) return "silence" as const;
@@ -784,13 +858,17 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
     })(),
     note:
       "mutation score is a suite-level number: a fault counts as caught if any case notices it. " +
-      "Faults that could not be injected are excluded from the denominator, not counted as survivors. " +
+      "Unconfirmed and absent injections are excluded. With no confirmed injections the score is null. " +
       "Per-case precision/recall would need labels that do not exist for these cases.",
     startedAt,
     finishedAt: new Date().toISOString(),
   };
   save({ id, graphId: req.wfRunId, startedAt, finishedAt: result.finishedAt, status: "done", detail: result });
   return result;
+  } catch (error) {
+    save({ id, graphId: req.wfRunId, startedAt, finishedAt: new Date().toISOString(), status: "invalid", detail: { id, validity: "invalid", error: (error as Error).message } });
+    throw error;
+  }
 }
 
 /** Same treatment as workflow runs: an evaluation cannot stay "running" across a restart. */
@@ -828,4 +906,37 @@ function scoreCoverageFor(gold: GoldChecklist, covered: string[]): CoverageResul
     heldOut: { coverage: 0, hits: [], misses: [] },
     totals: { gold: gold.items.length, heldOut: 0, cases: 0 },
   };
+}
+
+/** Compare immutable, finalized native-host outputs. This never launches or substitutes a runtime. */
+export async function evaluateRegisteredRuns(raw: unknown) {
+  const req = z.object({projectId:z.string().min(1),a:z.string().min(1),b:z.string().min(1),capability:z.string().regex(/^[a-z0-9][a-z0-9-]*$/)}).parse(raw);
+  if (req.a === req.b) throw new Error('eval_distinct_runs_required');
+  const {runLedger} = await import('./runService.js');
+  const {registeredStageProducts} = await import('./runStages.js');
+  const {requireFrozenReviewedGold} = await import('./gold.js');
+  const {benchmarkMetadata} = await import('./benchmarkCatalog.js');
+  const meta=benchmarkMetadata(resolve(REPO_ROOT,'benchmark',req.capability));
+  if(meta.archived || meta.projectId !== req.projectId)throw new Error('eval_gold_project_mismatch');
+  const dataset=requireFrozenReviewedGold(req.capability);
+  const gold={...dataset.gold,items:dataset.gold.items.filter(i=>i.split === "dev" && !i.heldOut)} as GoldChecklist;
+  if(!gold.items.length)throw new Error('eval_development_items_missing');
+  const ledger=runLedger();
+  const read=(id:string)=>{
+    const run=ledger.requireRun(id,req.projectId);
+    if(!["waiting_review","completed","done"].includes(ledger.getRun(id,req.projectId).status))throw new Error("eval_run_not_completed");
+    if(!registeredStageProducts(id).finalized)throw new Error('eval_run_not_finalized');
+    const revision=ledger.listRevisions(req.projectId,id).filter(r=>r.name==='validated/cases').sort((a,b)=>b.revision-a.revision)[0];
+    if(!revision)throw new Error('eval_output_missing');
+    const content=ledger.readRevision(revision.id,req.projectId).content as {cases?:unknown[]};
+    if(!Array.isArray(content.cases))throw new Error('eval_output_missing');
+    const coverage=scoreCoverage(gold,casesOf(content));
+    return {label:run.binding.models.runtime,wfRunId:id,coverage:coverage.coverage,cases:content.cases.length,revisionId:revision.id,contentHash:revision.contentHash,binding:run.binding};
+  };
+  const a=read(req.a), b=read(req.b);
+  if(!a.binding.materialsHash || a.binding.materialsHash!==b.binding.materialsHash)throw new Error('eval_materials_mismatch');
+  const id=`eval-${randomUUID()}`,at=new Date().toISOString();
+  const result={id,projectId:req.projectId,capability:req.capability,validity:'valid',classification:'diagnostic',goldHash:dataset.hash,a,b,costDelta:null,request:req,note:'Same source materials; native host models and planning may differ. Descriptive development coverage only, not a causal runtime comparison or release decision.'};
+  save({id,graphId:'registered-host-outputs',startedAt:at,finishedAt:at,status:'done',detail:result});
+  return result;
 }

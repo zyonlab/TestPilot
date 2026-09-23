@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 /**
  * 测试有自己的数据目录。
@@ -14,6 +14,8 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   test: {
+    // Exported Playwright suites are runtime evidence, not Vitest unit-test sources.
+    exclude: [...configDefaults.exclude, '**/.data*/**'],
     env: {
       TP_DATA_DIR: ".data-test",
       TP_INSTANCE: "test",

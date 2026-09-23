@@ -70,6 +70,6 @@
 
 ## 产品结构与跨模块故事
 
-`modules` 与 `stories` 是同一份产物。模块可用 `parentId` 引用上层模块，`kind` 为 `module`、`submodule`、`function`；根模块的 parentId 为空。层级来自实际材料，不能根据惯例补出未观察到的功能。Web 注册阶段拒绝重复模块 ID、循环及悬空父模块。
+`modules` 与 `stories` 是同一份产物。模块可用 `parentId` 引用上层模块，`kind` 为 `module`、`submodule`、`function`；根模块的 parentId 为空。层级优先沿用已审核模块规划，结合产品需求、适用领域规则和探索材料。未观察到不代表功能不存在；不能仅凭惯例虚构没有需求依据的功能。Web 注册阶段拒绝重复模块 ID、循环及悬空父模块。
 
 一条跨模块故事保留一个 `id`，用多个 `moduleIds` 引用有关模块，不为每个模块复制故事。旧产物仅有 `activity` 时，视图可以按模块名匹配，但不能声称那是模型明确给出的模块引用。

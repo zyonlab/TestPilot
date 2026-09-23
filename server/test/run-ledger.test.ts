@@ -69,3 +69,16 @@ it("migrates alongside old workflow rows without inventing provenance", () => {
   expect(restarted.getRun("legacy", "p")).toMatchObject({ status: "done", provenance: "unknown", binding: null });
   expect(restarted.integrity().ok).toBe(true);
 });
+
+it('projects stopped runs without leaving running nodes or altering saved evidence', () => {
+  const { ledger } = setup(); const { runId } = ledger.register(input(), actor);
+  ledger.appendEvent({id:'active-case',runId,node:'cases',attempt:0,sequence:0,phase:'running',at:new Date().toISOString()},'p');
+  ledger.appendEvent({id:'saved-story',runId,node:'stories',attempt:0,sequence:0,phase:'done',at:new Date().toISOString()},'p');
+  ledger.db.prepare("UPDATE wf_runs SET status='failed' WHERE id=?").run(runId);
+  expect(ledger.getRun(runId,'p').nodes.find(n=>n.node==='cases')?.phase).toBe('failed');
+  expect(ledger.getRun(runId,'p').nodes.find(n=>n.node==='stories')?.phase).toBe('done');
+  const original=ledger.db.prepare('SELECT json FROM workflow_events WHERE id=?').get('active-case') as {json:string};
+  expect(JSON.parse(original.json).phase).toBe('running');
+  ledger.db.prepare("UPDATE wf_runs SET status='cancelled' WHERE id=?").run(runId);
+  expect(ledger.nodeStates(runId).find(n=>n.node==='cases')?.phase).toBe('cancelled');
+});
