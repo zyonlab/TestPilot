@@ -1,3 +1,4 @@
+import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
 import { ExplorationAttemptSchema, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
 import { LedgerError } from './runLedger.js';
@@ -272,6 +273,7 @@ app.use("/api/projects/:id/workflow-runs", express.json({ limit: "48mb" }));
 app.use(express.json({ limit: "16mb" }));
 app.use("/api", intentPolicy);
 app.use("/api/projects/:projectId/workflow-runs", runRouter());
+app.use("/api/projects/:projectId/artifact-comparisons", artifactComparisonRouter());
 // 项目回归集：人批准过的回归候选（regressionCandidates.ts）。defect 是要一直跑的用例，rejection 是给生成器的反例评测项。
 app.get("/api/projects/:id/regression-suite", async (req, res) => {
   const { regressionSuite } = await import("./regressionCandidates.js");

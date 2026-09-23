@@ -1,3 +1,4 @@
+import {recordImplementation} from "./implementationVersion.js";
 import { bindDomainReference } from "./domainReferences.js";
 import { bindCurrentRulePack } from "./rulePacks.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -70,6 +71,7 @@ export function registerHostRun(projectId: string, input: HostRegisterInput, res
       model: input.model ?? null, thinking: null, identityEvidence: input.model ? "host-reported" : "unknown" } }));
   const registered = runLedger().register({ ...(reservedRunId ? { id: reservedRunId } : {}), projectId, externalId: input.externalId, idempotencyKey: input.idempotencyKey, binding,
     parameters: { ...(input.parameters ?? {}), targetUrl: getProject(projectId)!.targetUrl, requestDigest } }, { kind: "agent", id: runtime });
+  recordImplementation(runLedger(),registered.runId,projectId);
   const executor = projectModelConnection(projectId, "executor");
   db.prepare("INSERT OR IGNORE INTO run_model_snapshots (runId,projectId,bindingJson,connectionsEnc,createdAt) VALUES (?,?,?,?,?)")
     .run(registered.runId, projectId, canonicalJSON(binding.models), encryptSecret(JSON.stringify({ executor })), new Date().toISOString());
@@ -84,6 +86,7 @@ export function registerHostRun(projectId: string, input: HostRegisterInput, res
 export function registerWebRun(runId: string, projectId: string, models: RunModels, parameters: Record<string, unknown> = {}) {
   if (runLedger().registration(runId, projectId)) return runLedger().getRun(runId, projectId);
   runLedger().register({ id: runId, projectId, externalId: runId, idempotencyKey: runId, binding: emptyRunBinding(models), parameters: { ...parameters, targetUrl: getProject(projectId)!.targetUrl } }, { kind: "system", id: "web" });
+  recordImplementation(runLedger(),runId,projectId);
   return runLedger().getRun(runId, projectId);
 }
 export function freezeRunMaterials(runId: string, projectId: string, directory: string): string {
