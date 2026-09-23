@@ -1,3 +1,4 @@
+import { LedgerError } from './runLedger.js';
 import { recoverPreparations } from './preparation.js';
 import { trackSourceSession } from "./sourceSessions.js";
 import { benchmarkCatalog } from "./benchmarkCatalog.js";
@@ -1126,6 +1127,8 @@ async function runAndPersistCase(
    */
   if (body?.expected !== undefined && body.expected !== c.expected) throw new Error("test_intent_frozen");
   assertBoardApproval(c, body);
+  const reviewedExecution=exportApprovedCases([c])[0];
+  if('lifecycle' in reviewedExecution && reviewedExecution.lifecycle)throw new LedgerError(409,'lifecycle_requires_workflow_execution');
   const resetLog = runEnvReset(env?.vars?.TP_RESET_CMD);
   const exec = await execOnRunner({
     execId: `${c.id}-${Date.now()}`,

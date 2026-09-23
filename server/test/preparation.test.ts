@@ -151,8 +151,10 @@ it('delivers a candidate across cases, revalidates it, promotes only from separa
 it('stores measured dispatch failure in preparation receipts without manufacturing model usage',async()=>{
  const b=await start();fake.run.mockRejectedValueOnce(new Error('runner disconnected'));
  await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'Try runner'});
- await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('repair'));
- const next:any=await step(b.batchId,{action:'next'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('blocked'));
+ const saved=svc.runLedger().listRevisions(project,run).find(r=>r.name.startsWith(`preparation/${b.batchId}/c1/error/`))!;
+ const next:any={result:svc.runLedger().readRevision(saved.id,project).content};
+ expect(next.result.lifecycle.safeToRetry).toBe(false);
  expect(next.result.observation.stages).toContainEqual(expect.objectContaining({stage:'dispatch',status:'failed',model:{source:'unavailable',forwarded:null,blocked:null}}));
  expect(next.result.modelRequests).toBeUndefined();await prep.cancelPreparation(run,project);
 });
@@ -167,4 +169,34 @@ it('retains a cancelled generation receipt and spend when resume wins the race',
  expect(prep.preparationStatus(run,project)?.units[0].status).toBe('pending');expect(prep.preparationStatus(run,project)?.summary.verified).toBe(0);
  const batch:any=svc.runLedger().db.prepare('SELECT json FROM preparation_batches WHERE id=?').get(b.batchId);expect(JSON.parse(batch.json).calls).toBe(1);
  await prep.cancelPreparation(run,project);
+});
+
+it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle and formal dispatch; freezes obligations',async()=>{
+ const stage=await import('../src/runStages.js');
+ const p=db.createProject('Lifecycle service boundary','http://localhost:9876').id;
+ const r=svc.registerHostRun(p,{runtime:'codex',externalId:'lifecycle',idempotencyKey:'lifecycle',materials:[{name:'resource.md',text:'Create an isolated resource and delete it after verification. Ready screen.'}]}).runId;
+ stage.loadRunInstructions(r,p);const ref=stage.retrieveRunSpec(r,p,{query:'resource',budgetTokens:2000}).chunks[0].id;
+ const identity='owned-${env.TP_LIFECYCLE_ID}',check=(value:string,kind='text')=>({statement:value,checks:[{kind:'screen',statement:value,oracle:{kind,value}}]});
+ const lifecycle={version:1,mode:'controlled',rationale:'Own isolated resource',sourceRefs:[ref],supports:['$expected'],baseline:[check('Ready')],resources:[{id:'r',sourceRef:ref,identity,establishAfterStep:1,established:check(identity),ownership:check(identity)}],cleanup:[{id:'clean',resourceId:'r',postStep:1,verified:check(identity,'noText')}]};
+ const stories=[{id:'s1',title:'Resource',acceptance:[]}];
+ stage.writeRunStage(r,p,'stories',{stories});stage.writeRunStage(r,p,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Resource',designMethod:'boundary',precondition:['Ready'],steps:['Click Create '+identity],postSteps:['Click Delete '+identity],expected:'Resource visible',oracle:{kind:'text',value:'Resource'},tier:1,key:'resource',sourceRefs:[ref],lifecycle,readiness:{design:'candidate',execution:'blocked',reason:'Needs trial'}}]});const gate=stage.gateRun(r,p);expect(gate.report.findings.filter(f=>f.severity==='warn')).toEqual([]);stage.finalizeRun(r,p);
+ const reviewed=approvals.reviewRevisions(r,p)[0];approvals.decideRevisions(r,p,{items:[{caseId:'c1',revisionId:reviewed.revision.id,decision:'approved'}]},{kind:'human',id:'test-human'});
+ const b=await prep.startPreparation(r,p,{revisionIds:[reviewed.revision.id],maxRounds:2});
+ const call=(body:any)=>prep.preparationStep(r,p,{batchId:b.batchId,caseId:'c1',...body});
+ fake.run.mockResolvedValueOnce({...result(),prerequisiteChecks:[{statement:'Ready',status:'pass'}]});
+ await call({action:'probe',setupSteps:[],prerequisiteChecks:[check('Ready')],reason:'Read initial screen'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,p)?.units[0].status).toBe('planning'));
+ expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toBeUndefined();expect(fake.run.mock.calls.at(-1)?.[0].steps).toEqual([]);
+ const receipt={version:1,status:'pass',checks:[],cleanup:[{id:'clean',resourceId:'r',postStep:1,status:'pass',detail:'Absent'}],pendingResources:[],safeToRetry:false};
+ fake.run.mockResolvedValueOnce({...result(),prerequisiteChecks:[{statement:'Ready',status:'pass'}],lifecycle:receipt});
+ await call({action:'trial',content:reviewed.content,reason:'Trial exact reviewed lifecycle'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,p)?.summary.verified).toBe(1));
+ expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toEqual(lifecycle);expect(fake.run.mock.calls.at(-1)?.[0].opts.resolve.env.TP_LIFECYCLE_ID).toBeUndefined();
+ const frozen:any=await call({action:'next'});const bundle=approvals.approvedExecutionBundle(r,p,frozen.codeRevision);expect(bundle.cases[0].lifecycle).toEqual(lifecycle);
+ const execution=await import('../src/workflowExecution.js');fake.run.mockResolvedValueOnce({...result(),lifecycle:receipt});
+ const formal=execution.startWorkflowExecution(r,p,{codeRevision:frozen.codeRevision,idempotencyKey:'formal-lifecycle'});
+ await vi.waitFor(()=>expect(execution.listWorkflowExecutions(r,p).find(x=>x.id===formal.executionId)?.status).toBe('passed'));
+ expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toEqual(lifecycle);expect(fake.run.mock.calls.at(-1)?.[0].opts.sourceRefs).toEqual([ref]);
+ const b2=await prep.startPreparation(r,p,{revisionIds:[reviewed.revision.id],mode:'all'});
+ expect((await prep.preparationStep(r,p,{batchId:b2.batchId,caseId:'c1',action:'trial',content:{...reviewed.content,lifecycle:{...lifecycle,cleanup:[]}},reason:'Cannot drop cleanup'})).status).toBe('needs_review');
 });

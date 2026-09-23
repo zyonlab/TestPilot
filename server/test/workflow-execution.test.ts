@@ -161,9 +161,9 @@ it("用例没全过只记在执行上：运行回到 waiting_review，不用恢�
 
 it('persists every retry, accounts failed-attempt calls before dispatch, and reports zero-call cache as unknown',async()=>{
  service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
- const observation={version:1,stages:[{stage:'actions',durationMs:12,status:'failed',model:{source:'role-proxy',forwarded:1,blocked:0},failure:{attribution:'infra',retryable:true}}],cache:{session:'unavailable',midscene:'unknown'},retries:[]};
+ const observation={version:1,stages:[{stage:'session-navigation',durationMs:12,status:'failed',model:{source:'role-proxy',forwarded:1,blocked:0},failure:{attribution:'infra',retryable:true}}],cache:{session:'unavailable',midscene:'unknown'},retries:[]};
  const request={requestId:'retry-first',at:new Date().toISOString(),role:'executor',model:'fixture',endpoint:'https://executor.test/v1',thinking:false,status:429,ms:5,forwarded:true};
- runner.run.mockResolvedValueOnce({status:'failed',infraError:true,failure:{retryable:true,code:'MODEL_UNAVAILABLE'},modelRequests:[request],observation});
+ runner.run.mockResolvedValueOnce({status:'failed',infraError:true,failure:{retryable:true,code:'MODEL_UNAVAILABLE'},lifecycle:{version:1,status:'unknown',checks:[],cleanup:[],pendingResources:[],safeToRetry:true},modelRequests:[request],observation});
  runner.run.mockResolvedValueOnce({status:'passed',infraError:false,modelRequests:[],observation:{...observation,stages:[]}});
  const before=runner.run.mock.calls.length;
  const started=execution.startWorkflowExecution(runId,projectId,{codeRevision,idempotencyKey:'retry-observation',envRef:'usage-probe'});
@@ -200,4 +200,14 @@ it('keeps compilation timing separate from deterministic code and projects legac
  expect(service.runLedger().listRevisions(projectId,runId).filter(r=>r.name.startsWith('compilation-observation/'))).toHaveLength(before);
  const detail=await import('../src/executionDetail.js');const legacy=execution.listWorkflowExecutions(runId,projectId).find((r:any)=>r.resultRevision&&(service.runLedger().readRevision(r.resultRevision,projectId).content as any).results[0]?.caseId==='c1'&&!(service.runLedger().readRevision(r.resultRevision,projectId).content as any).results[0]?.observation) as any;
  expect(detail.executionDetail(runId,projectId,legacy.id).cases[0].observation).toBeNull();
+});
+it('never retries a potentially dirty attempt despite a retryable infrastructure error',async()=>{
+ service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+ const before=runner.run.mock.calls.length;
+ runner.run.mockResolvedValueOnce({status:'failed',infraError:true,failure:{retryable:true,code:'MODEL_UNAVAILABLE'},modelRequests:[],oracle:[],logs:[],pngPaths:[],lifecycle:{version:1,status:'unknown',checks:[],cleanup:[],pendingResources:[{id:'r1',identity:'run-resource',reason:'Session lost'}],safeToRetry:false}});
+ const started=execution.startWorkflowExecution(runId,projectId,{codeRevision,idempotencyKey:'dirty-no-retry',envRef:'usage-probe'});
+ await vi.waitFor(()=>expect(row(started.executionId).status).toBe('infra_error'));
+ expect(runner.run.mock.calls.length-before).toBe(1);
+ const artifact=service.runLedger().readRevision(row(started.executionId).resultRevision,projectId).content as any;
+ expect(artifact.results[0].lifecycle.pendingResources[0].id).toBe('r1');expect(artifact.results[0].attempts).toHaveLength(1);
 });

@@ -1,3 +1,4 @@
+import { LIFECYCLE_INSTRUCTIONS } from '@testpilot/harness-testing/casegen';
 import { STORY_PLANNING_CONTRACT, storyPlanningIssues } from '@testpilot/harness-testing/casegen';
 import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
@@ -825,6 +826,7 @@ export function unitContract(
           "  NEVER write a step that begins 确认/验证/检查/assert/verify/ensure and then describes what the screen shows (\"确认右侧区域显示任务列表\", \"verify the panel shows the list\"). That is a state, not an action: the browser agent can only DO things, so it gives up and the case dies before any oracle runs. A state the case starts from goes in precondition[]; a state the case ends in goes in assertions[]. If you need the product to be in that state, write the ACTION that puts it there (\"点击「已完成」标签\").",
           "  Nor a step that is pure looking (\"查看面板方向按钮区域\", \"observe the Size input area\"). Looking is not an operation the browser can perform; if the case only needs to know what is on screen, that belongs in the oracle and in assertions[], and the case may legitimately have just one step: the navigation.",
           "Name a control the way the page shows it AND where it sits when the label is not unique — \"click Balances in the tab row of the account panel in the lower half of the page\", not \"switch to Balances\". One observation per step; a step that asks for four things at once makes the planner give up.",
+          LIFECYCLE_INSTRUCTIONS,
           "postSteps put the product back. Any case that changes state — an order placed, a toggle flipped, a mode switched, a tab left somewhere else — MUST say how it undoes that, or its second run faces a different product than its first and nobody sees the difference. A read-only case leaves postSteps empty.",
           "Do not lower a P0 because a fixture is missing; keep the case, mark readiness.execution and say why.",
           ...(next.repair ? ["",

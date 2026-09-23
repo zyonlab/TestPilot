@@ -1,3 +1,4 @@
+import { lifecycleIssues } from '../exec/lifecycle.js';
 import { tierOf } from "../exec/oracle.js";
 import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from "./types.js";
 import { isOpenQuestion } from "../exec/stepSemantics.js";
@@ -27,7 +28,7 @@ export interface GateOptions {
   acceptanceInScore?: boolean;
   /** Below this share of negative/boundary cases, an all-happy-path suite is called out. */
   minNegativeRatio?: number;
-  /** A case that verifies one thing has few steps; a case with twenty verifies nothing. */
+  /** @deprecated Lifecycle obligations replace step-count heuristics. Kept for old callers. */
   maxSteps?: number;
   minSteps?: number;
   /** Ablation: stop judging assertion hardness (tier + vagueness). */
@@ -196,13 +197,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
 
   // 2. Structure and granularity.
   for (const c of cases) {
-    if (c.steps.length > cfg.maxSteps)
-      add("granularity", `${c.steps.length} steps — a case that verifies one thing needs few`, c.id, "warn", {
-        args: { n: c.steps.length },
-        field: "steps",
-      });
-    if (c.steps.length < cfg.minSteps)
-      add("granularity", "no steps", c.id, "warn", { args: { n: 0 }, field: "steps" });
+    for(const issue of lifecycleIssues(c)) add('lifecycle',issue,c.id,c.lifecycle?'warn':'info',{field:'steps'});
     if (!c.expected.trim())
       add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
     if (cfg.gradeOracles && VAGUE.test(c.expected))

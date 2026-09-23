@@ -10,6 +10,22 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "lifecycle.contract": { zh: "生命周期义务", en: "Lifecycle obligations", ja: "ライフサイクル義務" },
+  "lifecycle.receipt": { zh: "实际生命周期回执", en: "Lifecycle receipts", ja: "ライフサイクル実行記録" },
+  "lifecycle.unknown": { zh: "未知：旧产物未提供可验证的生命周期证据", en: "Unknown: this artifact has no verifiable lifecycle evidence", ja: "不明：検証可能なライフサイクル証拠がありません" },
+  "lifecycle.bindings": { zh: "来源与验收绑定", en: "Source and acceptance bindings", ja: "出典と受入条件の紐付け" },
+  "lifecycle.baseline": { zh: "前置与基线", en: "Prerequisites and baseline", ja: "前提条件と基準" },
+  "lifecycle.establish": { zh: "建立与验证", en: "Establishment and verification", ja: "作成と検証" },
+  "lifecycle.ownership": { zh: "资源归属", en: "Resource ownership", ja: "リソース所有権" },
+  "lifecycle.cleanup": { zh: "清理与补偿", en: "Cleanup and compensation", ja: "後処理と補償" },
+  "lifecycle.pending": { zh: "待处理资源；禁止自动重试", en: "Pending resources; automatic retry disabled", ja: "未処理リソース；自動再試行不可" },
+  "lifecycle.evidence": { zh: "查看验证契约", en: "View verification contract", ja: "検証契約を表示" },
+  "lifecycle.mode.read-only": { zh: "只读或拒绝路径", en: "Read-only or rejection path", ja: "読み取り専用・拒否経路" },
+  "lifecycle.mode.controlled": { zh: "受控资源", en: "Controlled resources", ja: "管理対象リソース" },
+  "lifecycle.status.pass": { zh: "已验证", en: "Verified", ja: "検証済み" },
+  "lifecycle.status.fail": { zh: "失败", en: "Failed", ja: "失敗" },
+  "lifecycle.status.unknown": { zh: "未知", en: "Unknown", ja: "不明" },
+  "lifecycle.status.not-run": { zh: "未执行", en: "Not run", ja: "未実行" },
   "observation.title": {"zh": "分阶段观测", "en": "Execution observations", "ja": "実行段階の計測"},
   "observation.missing": {"zh": "未采集阶段观测", "en": "Stage observations not collected", "ja": "段階の計測は未収集"},
   "observation.attempt": {"zh": "第 {n} 次尝试", "en": "Attempt {n}", "ja": "試行 {n}"},

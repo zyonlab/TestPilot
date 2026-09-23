@@ -23,6 +23,7 @@ rule 93e0a850  `sourceRefs` names the specification sections this case was
 rule bad5598d  A suite that is all happy path is a bad suite. Cover the ref
 rule 0be8129a  Design at most the number of cases stated as CASE BUDGET in
 rule 6c6015b6  `priority` says how much it costs to ship this broken, not h
+rule 0de90497  Every new case includes lifecycle version 1. Completeness is
 rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 -->
 
@@ -167,3 +168,21 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 故事验收条件描述产品应有行为。探索未覆盖时将状态保存在 observationLinks，不得因此追加「【待确认：界面观察不到】」或 requires-fixture。只有产品范围不明、需求冲突才提出需求待确认；纯假设不能冒充需求。
 
 用例设计可在未执行时完成。登录、测试数据、控件定位、数值判据等就绪情况单独记录，留给执行准备核验；不能由 unobserved 自动推导 requires-fixture，也不能把它自动改成 ready。执行和报告仍须真实证据，不能为了提高 ready 数量跳过门禁。
+
+## 生命周期义务（版本 1）
+
+每条新用例给出 `lifecycle`，完整性按业务义务判断，不按固定步数、平均步数或泊松分布判断。
+`version:1`；`mode:read-only|controlled`；`rationale` 说明；`sourceRefs` 引用本用例真实来源；
+`supports` 绑定 `$expected` 或原断言 id；`baseline` 是同屏确定性检查，逐条以原文 statement 覆盖每个 precondition。
+检查形状是 `{statement,checks:[{kind:"screen",statement,oracle:{kind:"text"|"noText",value}}]}`，
+不得用模型声明代替执行回执，不调用被测接口。
+
+只读或拒绝路径可以很短，使用 `resources:[]`、`cleanup:[]`；拒绝断言必须证明未产生资源。
+受控资源仍在现有 `steps` 建立，在 `postSteps` 清理，不能另造脚本：
+`resources:[{id,sourceRef,identity,establishAfterStep,established,ownership}]`；
+`cleanup:[{id,resourceId,postStep,verified}]`。步骤编号从 1 起。
+`identity` 必须包含字面量 `${env.TP_LIFECYCLE_ID}`（执行器每次生成新值），创建步骤与清理步骤明确引用整个 identity。
+`ownership` 同屏证据要包含该 identity 和项目提供的账户/上下文。每个资源必须有失败补偿；执行器先验证新身份不存在。
+目前仅支持本次执行建立的资源；需要修改共享既有 fixture 而没有隔离身份时，readiness 明确 blocked，不能虚构归属。
+前置、基线、身份、归属和清理依据来自项目材料。准备器不能删改已审核义务或移动其步骤绑定。
+低影响 recipe 仍只允许 none/ui-only；旧产物缺契约为 unknown，不自动补成 verified。

@@ -1,3 +1,4 @@
+import { lifecycleExecution, lifecycleIssues, LifecycleSchema, type Lifecycle, type LifecycleReceipt } from './lifecycle.js';
 import { executionObserver, type ExecutionObservation } from '@testpilot/harness-core/execution-observation';
 import { checkPrerequisite, type Preparation, type EnvironmentFact, type PrerequisiteReceipt } from './preparationChecks.js';
 import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
@@ -9,7 +10,7 @@ import { pickLocator, locatorUsable, type LocatorHint } from "./locators.js";
 // database, baselines or artifacts — those live in the gateway, which is why this can run
 // in the runner process.
 import { launchSession, reopenPage } from "./session.js";
-import { createHash } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { acquireSession, evictSession, releaseSession, replaceSession } from "./sessionPool.js";
 import type { RunPhases } from "../report.js";
 import { startPopupApprover } from "./wallet.js";
@@ -26,6 +27,8 @@ import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles
 import { executorConnectionFromEnv, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
 
 export interface RunResult {
+  lifecycle?: LifecycleReceipt;
+  businessStatus?: "passed" | "failed" | "unobservable";
   observation?: ExecutionObservation;
   observations?: Array<{step:number;text:string;url:string;capturedAt:number}>;
   prerequisiteChecks?: PrerequisiteReceipt[];
@@ -95,6 +98,9 @@ export async function executeRun(
     signal?: AbortSignal;
     captureObservations?: boolean;
     preparation?: Preparation;
+    lifecycle?: Lifecycle;
+    sourceRefs?: string[];
+    precondition?: string[];
     modelBudget?: RoleProxyBudget;
     executorModel?: RoleModelConnection;
     injected?: boolean;
@@ -177,7 +183,7 @@ export async function executeRun(
   const auxiliaryChecks: NonNullable<RunResult["auxiliaryChecks"]> = [];
   const injected = !!opts.injected;
   const wallet = !injected && !!opts.wallet;
-  const ctx: ResolveContext = opts.resolve ?? { env: {}, secrets: {} };
+  const ctx: ResolveContext = { env: {...opts.resolve?.env, TP_LIFECYCLE_ID: randomUUID()}, secrets: opts.resolve?.secrets ?? {} };
   const secretVals = Object.values(ctx.secrets);
   const rlog = (s: string) => logs.push(redact(s, secretVals));
   const startedAt = new Date().toISOString();
@@ -208,12 +214,27 @@ export async function executeRun(
   const screenshots: string[] = [];
   const pngBuffers: Buffer[] = [];
   const modelRequests: RoleRequestRecord[] = []; let requestSource: RoleRequestRecord[] | undefined, requestOffset = 0;
+  const oracle: OracleCheck[] = [];
   let result: RunResult | undefined;
   let session: Awaited<ReturnType<typeof launchSession>> | undefined;
   let stopApprover: (() => void) | undefined;
   /** 变异体改过这份 DOM，绝不能进池让下一条接着用。 */
   const poolKey = opts.sessionKey && !opts.mutation ? opts.sessionKey : undefined;
   let reused = false;
+  let sessionClosed = false;
+  const lifecycle = lifecycleExecution(opts.lifecycle, opts.postSteps ?? [], {
+    check: check => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
+      if(!session || sessionClosed || opts.signal?.aborted || session.page.isClosed?.()) throw new Error('SESSION_UNAVAILABLE');
+      // A failed snapshot is unknown, never evidence of resource absence.
+      const text = await session.page.evaluate(()=>document.body?.innerText ?? '');
+      if(!String(text).trim())throw new Error('SCREEN_UNAVAILABLE');
+      return {text:String(text),url:session.page.url(),capturedAt:Date.now()};
+    }, assert:async()=>{throw new Error('LIFECYCLE_REQUIRES_SCREEN_ORACLE');},resolve:t=>resolveText(t,ctx),redact:t=>redact(t,secretVals)}),
+    resolve:t=>redact(resolveText(t,ctx),secretVals),
+    redact:t=>redact(t,secretVals),
+    act:async t=>{rlog(`teardown: ${t}`);await withModel(()=>act(resolveText(t,ctx)));},
+    available:()=>!!session && !sessionClosed && !opts.signal?.aborted && !session.page.isClosed?.(),
+  });
   const checkCancelled = () => { if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED"); };
   const abortSession = () => { if (poolKey) void evictSession(poolKey).catch(() => {}); else void session?.cleanup().catch(() => {}); };
   /**
@@ -228,6 +249,7 @@ export async function executeRun(
   const byLocator = async (t: string): Promise<boolean> => {
     const hit = pickLocator(t, opts.locators ?? []);
     if (!hit) return false;
+    let clicking=false;
     try {
       // Puppeteer，不是 Playwright：这里没有 locator().count()，用 $$ 取全部匹配。
       const page = session!.page as unknown as {
@@ -238,10 +260,12 @@ export async function executeRun(
       const text = els.length === 1 ? await page.evaluate((el) => (el as unknown as HTMLElement).innerText ?? "", els[0]!) : "";
       const verdict = locatorUsable(hit.label, els.length, text);
       if (!verdict.ok) { rlog(`  定位提示${verdict.why}（${hit.label}），交回模型`); return false; }
+      clicking=true;
       await els[0]!.click();
       rlog(`  定位提示命中：${hit.label}`);
       return true;
     } catch (e) {
+      if(clicking)throw e;
       rlog(`  定位提示用不了（${hit.label}：${String((e as Error).message).slice(0, 60)}），交回模型`);
       return false;
     }
@@ -266,7 +290,7 @@ export async function executeRun(
        * 这一次仍拿 undefined 坐标去点，`dispatchMouseEvent … params.x: double value expected`。
        * 缓存此时已经是新的，同一步再放一遍就过——重试一次，不重试第二次。
        */
-      if (!/dispatchMouseEvent.*double value expected/.test((e as Error).message)) throw e;
+      if (!lifecycle.receipt.safeToRetry || !/dispatchMouseEvent.*double value expected/.test((e as Error).message)) throw e;
       observer.retry("coordinate-replay");
       rlog(`  回放坐标丢失（Midscene 缓存刷新后的第一次），这一步重试一次`);
       await session!.agent.aiAction(t);
@@ -279,12 +303,18 @@ export async function executeRun(
   };
   try {
     checkCancelled();
+    if(opts.lifecycle?.mode==='controlled' && opts.preparation?.steps.length && (!opts.preparation.recipe || JSON.stringify(opts.preparation.steps)!==JSON.stringify(opts.preparation.recipe.steps) || !['none','ui-only'].includes(opts.preparation.recipe.sideEffects)))throw new Error('LIFECYCLE_UNCONTROLLED_PREPARATION');
+    if(opts.lifecycle){
+      LifecycleSchema.parse(opts.lifecycle);
+      const issues=lifecycleIssues({lifecycle:opts.lifecycle,steps,postSteps:opts.postSteps??[],sourceRefs:opts.sourceRefs,precondition:opts.precondition,assertions:opts.assertions?.filter((a):a is typeof a & {id:string}=>!!a.id)});
+      if(issues.length)throw new Error('LIFECYCLE_INVALID: '+issues.join(', '));
+    }
     opts.signal?.addEventListener("abort", abortSession, { once: true });
     if (opts.rowLabel) rlog(`data row ${opts.rowLabel}`);
     logs.push(`navigate → ${url}${injected ? " (injected wallet)" : wallet ? " (with MetaMask)" : ""}`);
     const dataOpts = {
       signal: opts.signal, modelBudget: opts.modelBudget,
-      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],login:opts.login??[],resolve:opts.resolve??null,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
+      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],lifecycle:opts.lifecycle??null,login:opts.login??[],resolve:ctx,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
       executorModel: opts.executorModel ?? executorConnectionFromEnv(),
       extraHeaders: opts.extraHeaders,
       query: opts.query,
@@ -390,9 +420,12 @@ export async function executeRun(
         if(receipt.status!=='pass')throw new Error(`PREREQUISITE_NOT_VERIFIED: recipe ${phase}: ${receipt.statement}: ${receipt.detail}`);
       }
     };
+    if(opts.lifecycle)LifecycleSchema.parse(opts.lifecycle);
+    await lifecycle.baseline();
     await recipeCheck('entry');
     // Preparation checks happen in this browser, before any business test step.
     for (const [i, step] of (opts.preparation?.steps ?? []).entries()) {
+      lifecycle.beforePreparation();
       rlog(`prepare ${i+1}: ${step}`);
       await withModel(() => act(resolveText(step,ctx)));
       await shot(); await observe(-(i+1));
@@ -470,7 +503,7 @@ export async function executeRun(
     mark("settleMs");
     observer.begin("actions");
     // Functional oracle: verify the case's expected outcome and record it structurally.
-    const oracle: OracleCheck[] = [];
+
     let assertFailed: string | undefined;
     let unobservable: string | undefined;
     let infraError = false;
@@ -541,7 +574,9 @@ export async function executeRun(
     for (const [i, step] of steps.entries()) {
       observer.begin("actions");
       rlog(`step ${i + 1}: ${step}`);
+      lifecycle.beforeStep(i+1);
       await withModel(() => act(resolveText(step, ctx)));
+      await lifecycle.afterStep(i+1);
       await shot(); await observe(i+1);
       for (const a of (opts.assertions ?? []).filter((x) => stepBound(x) && x.afterStep === i + 1)) await checkNow(a, i + 1);
       for (const a of auxiliaryAssertions.filter(x=>x.afterStep===i+1)) await checkAuxiliary(a,i+1);
@@ -697,20 +732,6 @@ export async function executeRun(
     if (assertFailed) observer.issue("failed", classifyFailure(assertFailed));
     else if (unobservable) observer.issue("unknown");
     mark("assertMs");
-    observer.begin("cleanup");
-    // Required cleanup is part of reproducibility: a failure cannot leave the run green.
-    for (const t of opts.postSteps ?? []) {
-      try {
-        rlog(`teardown: ${t}`);
-        await withModel(() => act(resolveText(t, ctx)));
-      } catch (e) {
-        observer.issue(opts.signal?.aborted ? "cancelled" : "failed", {attribution:"infra",retryable:false});
-        infraError = true;
-        assertFailed = assertFailed || "ENV_TEARDOWN_FAILED";
-        rlog(`ENV_TEARDOWN_FAILED — ${redact((e as Error).message, secretVals).slice(0, 70)}`);
-      }
-    }
-    mark("teardownMs");
     const perfMetrics = await capturePerf(session.page).catch(() => ({}) as PerfMetrics);
     checkCancelled();
     return result = {
@@ -740,17 +761,19 @@ export async function executeRun(
     };
   } catch (e) {
     const message = opts.signal?.aborted ? "EXEC_CANCELLED" : redact((e as Error).message, secretVals);
-    observer.issue(opts.signal?.aborted ? "cancelled" : [...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks].some(c=>c.status==='fail') ? "unknown" : "failed", classifyFailure(message));
+    observer.issue(opts.signal?.aborted ? "cancelled" : [...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='fail') ? "unknown" : "failed", classifyFailure(message));
     logs.push(`error: ${message}`);
     await observe(-999).catch(()=>{});
-    // 浏览器本身死了才踢出池；用例层面的异常（规划失败、判据没走到）不踢——下一条 goto 回起点就是干净的，
-    // 踢掉就要重起浏览器再跑一遍登录态，正是复用要省的那两段。
+    sessionClosed = /Target closed|Session closed|Browser has disconnected|Navigating frame was detached|Protocol error/.test(message);
+    // Closed sessions cannot compensate; other failures retain the live page until finally attempts cleanup.
     if (poolKey && /Target closed|Session closed|Browser has disconnected|Navigating frame was detached|Protocol error \((Target|Browser|Page)\./.test(message)) {
       await evictSession(poolKey);
       session = undefined;
     }
     // 出错那一刻停在哪段就记到哪段。
     phases[open] += Date.now() - phaseT;
+    phaseT = Date.now();
+    open = "teardownMs";
     return result = {
       observation: observer.data,
       modelRequests,
@@ -759,8 +782,8 @@ export async function executeRun(
       ...(opts.preparation?{prerequisiteChecks,...(opts.preparation.recipe?{recipeChecks}:{})}:{}),
       ...(opts.captureObservations || opts.preparation ? {environmentFacts:environmentFacts.map(f=>({...f,value:typeof f.value==='string'?redact(f.value,secretVals):f.value}))} : {}),
       phases,
-      status: [...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks].some(c=>c.status==='fail') ? "unobservable" : "failed",
-      ...([...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') ? {unobservableReason:message} : {}),
+      status: !opts.signal?.aborted && [...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='fail') ? "unobservable" : "failed",
+      ...([...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='unknown') ? {unobservableReason:message} : {}),
       ...(mutationApplied === undefined ? {} : { mutationApplied }),
       durationMs: Date.now() - t0,
       startedAt,
@@ -769,12 +792,32 @@ export async function executeRun(
       pngBuffers,
       sinceMs,
       perfMetrics: {},
-      oracle: [],
+      oracle,
       failureReason: message,
       infraError: isInfraError(message),
       failure: classifyFailure(message),
     };
   } finally {
+    observer.begin("cleanup");
+    const cleanupStarted=Date.now();
+    let lifecycleReceipt:LifecycleReceipt;
+    try { lifecycleReceipt=await lifecycle.finish(); }
+    catch(e){lifecycleReceipt=lifecycle.receipt;lifecycleReceipt.status='unknown';lifecycleReceipt.safeToRetry=false;lifecycleReceipt.pendingResources.push({id:'unknown',identity:'unknown',reason:redact(String(e),secretVals)});}
+    phases.teardownMs += Date.now() - cleanupStarted;
+    if(result){
+      result.businessStatus=result.status;
+      result.lifecycle=lifecycleReceipt;
+      if((opts.lifecycle && lifecycleReceipt.status!=='pass') || lifecycleReceipt.status==='fail' || lifecycleReceipt.pendingResources.length || lifecycleReceipt.cleanup.some(c=>c.status==='fail'||c.status==='unknown')){
+        observer.issue(lifecycleReceipt.status==='fail'?'failed':'unknown',{attribution:'infra',retryable:false});
+        if(result.status==='passed')result.status=lifecycleReceipt.status==='fail'?'failed':'unobservable';
+        result.failureReason ??= 'LIFECYCLE_CLEANUP_NOT_VERIFIED';
+        result.failure ??= classifyFailure('ENV_TEARDOWN_FAILED');
+      }
+    }
+    // A business action may have taken effect before throwing. Never reuse that session.
+    if(poolKey && (result?.status!=='passed' || lifecycleReceipt.pendingResources.length)) {
+      await evictSession(poolKey).catch(()=>{}); session=undefined;
+    }
     opts.signal?.removeEventListener("abort", abortSession);
     stopApprover?.();
     // 进了池的会话留给下一条；释放由给 key 的那一方在批次结束时做。
@@ -784,7 +827,7 @@ export async function executeRun(
       try { await session.cleanup(); }
       catch {
         observer.issue("failed", {attribution:"infra",retryable:false});
-        if (result) { result.status = "failed"; result.infraError = true; result.failureReason ??= "ENV_TEARDOWN_FAILED"; result.failure ??= classifyFailure("ENV_TEARDOWN_FAILED"); }
+        if (result) { result.status = "failed"; if(result.businessStatus === "passed") result.infraError = true; result.failureReason ??= "ENV_TEARDOWN_FAILED"; result.failure ??= classifyFailure("ENV_TEARDOWN_FAILED"); }
       }
     }
     observer.end();

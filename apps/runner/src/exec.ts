@@ -47,6 +47,9 @@ export interface ExecSpec {
   opts: {
     captureObservations?: boolean;
     preparation?: Preparation;
+    lifecycle?: import("@testpilot/harness-testing").Lifecycle;
+    sourceRefs?: string[];
+    precondition?: string[];
     executorModel?: RoleModelConnection;
     modelBudget?: { maxCalls?: number; deadlineAt?: number };
     injected?: boolean;

@@ -1,3 +1,4 @@
+import { unavailableLifecycle } from '@testpilot/harness-testing';
 import { executionObserver, readExecutionObservation, type ExecutionAttempt } from '@testpilot/harness-core/execution-observation';
 import type { Preparation } from '@testpilot/harness-testing';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
@@ -66,7 +67,7 @@ export function missingPlaceholders(texts: string[], context: { env: Record<stri
   const missing = new Set<string>();
   for (const text of texts) {
     const { env, secret } = referencedKeys(text);
-    for (const key of env) if (!(key in context.env)) missing.add(`env.${key}`);
+    for (const key of env) if (key !== 'TP_LIFECYCLE_ID' && !(key in context.env)) missing.add(`env.${key}`);
     for (const key of secret) if (!(key in context.secrets)) missing.add(`secret.${key}`);
   }
   return [...missing].sort();
@@ -192,7 +193,7 @@ async function perform(row: ExecutionRow) {
         const start = performance.now(); observer.begin("dispatch"); observer.source(()=>undefined);
         try { const result = await execOnRunner({ execId, scopeProjectId: row.projectId, modelSnapshotRunId: row.runId, url: caseEntryUrl(kase.precondition,env.url),
         steps: kase.steps, expected: kase.expected, artifactDir: ARTIFACT_DIR,
-        opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,
+        opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,lifecycle:kase.lifecycle,sourceRefs:kase.sourceRefs,precondition:kase.precondition,
           // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
           ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState, authentication: env.authentication }),
           resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locators: env.locators,
@@ -222,7 +223,7 @@ async function perform(row: ExecutionRow) {
         } catch (error) {
           observer.issue(cancelled()?'cancelled':'failed',{attribution:'infra',retryable:false});
           attempts.push({attempt:attempts.length+1,status:cancelled()?'cancelled':'unknown',durationMs:performance.now()-start,observation:null});
-          results.push({caseId:kase.id,status:cancelled()?'cancelled':'unobservable',infraError:true,attempts});
+          results.push({caseId:kase.id,lifecycle:unavailableLifecycle(kase.lifecycle,kase.postSteps),status:cancelled()?'cancelled':'unobservable',infraError:true,attempts});
           throw error;
         } finally { observer.end(); }
       };
@@ -243,7 +244,7 @@ async function perform(row: ExecutionRow) {
       let result = await attempt();
 
       for (let tries = 1; tries <= RETRYABLE_INFRA_TRIES; tries++) {
-        if (!result.infraError || (result.failure as { retryable?: boolean } | undefined)?.retryable !== true) break;
+        if (result.lifecycle?.safeToRetry !== true || !result.infraError || (result.failure as { retryable?: boolean } | undefined)?.retryable !== true) break;
         if (cancelled() || controller.signal.aborted || Date.now() >= deadlineAt || !caseUsageComplete || calls >= budget.executorCalls) break;
         const waitMs = 8_000 * 2 ** (tries - 1);
         phase(row, "running", undefined, `${kase.id} · ${(result.failure as { code?: string } | undefined)?.code ?? "infra"} · ${waitMs / 1000}s 后重试（第 ${tries}/${RETRYABLE_INFRA_TRIES} 次）`);
@@ -280,6 +281,7 @@ async function perform(row: ExecutionRow) {
       if (!usageComplete) throw new LedgerError(409, "executor_usage_unavailable");
       validatedBundle();
       if (controller.signal.aborted || result.modelRequests?.some(r => r.error === "BUDGET_EXHAUSTED")) { status = "budget_exhausted"; break; }
+      if(result.lifecycle?.pendingResources.length){status='infra_error';break;}
       if (result.infraError) { status = "infra_error"; break; }
       if (result.status === "unobservable") status = status === "failed" ? status : "unobservable";
       else if (result.status === "failed") status = "failed";

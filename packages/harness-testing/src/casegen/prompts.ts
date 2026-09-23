@@ -1,3 +1,4 @@
+import { LIFECYCLE_INSTRUCTIONS, LIFECYCLE_JSON_SCHEMA } from './lifecycleContract.js';
 import { STORY_PLANNING_CONTRACT } from './planningContract.js';
 import { ARTIFACT_WRITING_GUIDELINES } from "./readability.js";
 /**
@@ -163,6 +164,7 @@ export const CASES_STABLE = [
    * 的用例反复跑，每跑一遍留一条 John Doe，冻结基线从 10 个 owner 涨到 13 个。
    * 冻结基线校验是**事后**拦住它的；源头在这里。
    */
+  "- " + LIFECYCLE_INSTRUCTIONS,
   "- `postSteps` puts the product back. If the case creates, edits or deletes anything,",
   "  give the actions that undo it — delete what was added, restore what was changed.",
   "  A case that leaves a record behind poisons every later run of itself: the second run",
@@ -535,6 +537,7 @@ export const CASES_SCHEMA = {
            * 和这份 schema 对齐，漏一个就红。
            */
           priority: { type: "string", enum: ["P0", "P1", "P2"] },
+          lifecycle: LIFECYCLE_JSON_SCHEMA,
           postSteps: { type: "array", items: { type: "string", minLength: 1 } },
         },
         /**
@@ -548,7 +551,7 @@ export const CASES_SCHEMA = {
          * 靠语气不如靠约束。判据本身也支持这么做：我**要求**每条用例都带一个优先级判断，
          * 而 postSteps 空数组是一个真实的答案（「只读，没什么要收拾的」），不是缺省。
          */
-        required: ["title", "designMethod", "steps", "expected", "tier", "key", "priority", "postSteps", "oracle"],
+        required: ["title", "designMethod", "steps", "expected", "tier", "key", "priority", "postSteps", "oracle", "lifecycle"],
       },
     },
   },

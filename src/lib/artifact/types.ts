@@ -92,6 +92,7 @@ export interface ArtifactCase {
   requirementId?: string;
   /** 把产品放回去的动作。写操作的用例没有它，就会毒化它自己以后的每一次运行。 */
   postSteps?: string[];
+  lifecycle?: unknown;
   findings: ArtifactFinding[];
   code?: string;
   codeBlocked?: boolean;

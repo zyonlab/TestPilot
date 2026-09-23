@@ -95,12 +95,13 @@ export async function execOnRunner(spec: ExecSpec, control?: { signal?: AbortSig
   const rpc = supervisor.rpc<RunnerApi>(id);
   if (!rpc) throw new Error(`runner ${id} has no RPC channel`);
   let abort!: () => void;
-  const stopped = new Promise<never>((_, reject) => { abort = () => { void rpc.cancel(spec.execId).catch(() => {}); reject(control?.signal?.reason ?? new Error("EXEC_CANCELLED")); }; });
+  let receiptGrace:ReturnType<typeof setTimeout>|undefined;
+  const stopped = new Promise<never>((_, reject) => { abort = () => { void rpc.cancel(spec.execId).catch(() => {}); receiptGrace=setTimeout(()=>reject(control?.signal?.reason ?? new Error("EXEC_CANCELLED")),3000); }; });
   control?.signal?.addEventListener("abort", abort, { once: true });
   try {
     const result = await Promise.race([rpc.exec(spec), stopped]);
     return { ...result, runnerId: id };
-  } finally { control?.signal?.removeEventListener("abort", abort); }
+  } finally { if(receiptGrace)clearTimeout(receiptGrace); control?.signal?.removeEventListener("abort", abort); }
 }
 
 /**

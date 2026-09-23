@@ -1,3 +1,4 @@
+import {LifecycleDetail} from '@/components/workbench/LifecycleDetail';
 import { useT } from "@/lib/prefs";
 import { cn } from "@/lib/cn";
 import { Field, Chip } from "./Field";
@@ -170,6 +171,7 @@ export function CaseBody({
         产品和第一次不同，而这个差别一直看不见，直到某个计数断言毫无道理地挂掉。
         实测踩过：一批「新增主人」的用例反复跑，冻结基线从 10 个 owner 涨到 13 个。
       */}
+      <LifecycleDetail contract={kase.lifecycle}/>
       <Field label={t("artifact.cleanup")} empty={t("artifact.noCleanup")} tone="muted">
         {!!kase.postSteps?.length && (
           <ol className="space-y-0.5">

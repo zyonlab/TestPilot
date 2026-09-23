@@ -20,3 +20,20 @@ it('renders actual translated failure, unknown usage, attempts and legacy receip
   expect(receipt).toContain(translate('observation.stage.preparation',lang));
  }
 });
+
+import {LifecycleDetail} from '../../src/components/workbench/LifecycleDetail';
+it('renders lifecycle obligations, pending resources and not-run evidence in three languages',()=>{
+ const c={version:1,mode:'read-only',rationale:'Read screen',sourceRefs:['spec#1'],supports:['$expected'],baseline:[{statement:'Ready',checks:[{kind:'screen',statement:'Ready',oracle:{kind:'text',value:'Ready'}}]}],resources:[],cleanup:[]};
+ const r={version:1,status:'unknown',checks:[],cleanup:[{id:'clean',postStep:1,status:'not-run',detail:'Session closed'}],pendingResources:[{id:'r1',identity:'run-owned-123',reason:'Cancelled'}],safeToRetry:false};
+ for(const lang of ['zh','en','ja'] as const){state.lang=lang;
+  const html=renderToStaticMarkup(<LifecycleDetail contract={c} value={r} receipt/>);
+  expect(html).toContain('run-owned-123');expect(html).toContain(translate('lifecycle.status.not-run',lang));expect(html).toContain(translate('lifecycle.pending',lang));expect(html).not.toContain('lifecycle.');
+  expect(renderToStaticMarkup(<LifecycleDetail/>)).toContain(translate('lifecycle.unknown',lang));
+  const prep=renderToStaticMarkup(<RevisionContent kind="report" content={{status:'failed',logs:[],lifecycle:r}}/>);expect(prep).toContain('run-owned-123');
+ }
+});
+it('fails closed on malformed lifecycle artifacts without crashing or duplicating unknown',()=>{
+ state.lang='en';
+ const html=renderToStaticMarkup(<LifecycleDetail contract={{version:1,resources:{}}} value={{version:1,checks:'bad',cleanup:{}}} receipt/>);
+ expect(html.split(translate('lifecycle.unknown','en'))).toHaveLength(2);
+});

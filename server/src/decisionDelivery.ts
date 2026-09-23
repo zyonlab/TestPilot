@@ -91,6 +91,6 @@ export function exportApprovedCases(cases: Array<NonNullable<ReturnType<typeof g
     if (!link) return kase;
     assertBoardApproval(kase);
     const current = reviewRevisions(link.runId, link.projectId).find(c => c.revision.id === link.revisionId)!;
-    return { ...kase, assertions: current.content.assertions };
+    return { ...kase, assertions: current.content.assertions, lifecycle:current.content.lifecycle };
   });
 }
