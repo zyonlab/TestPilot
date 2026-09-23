@@ -23,7 +23,7 @@ try{
   await page.getByLabel(t('showInputs'),{exact:true}).check();await page.getByText('Shared requirement',{exact:true}).first().waitFor();
   await page.getByLabel(t('showInputs'),{exact:true}).uncheck();
   await page.getByLabel(t('reason'),{exact:true}).fill('Synthetic acceptance review only; this is not a real human evaluation.');
-  await page.locator('fieldset input[type=checkbox]').first().check();await page.getByRole('button',{name:t('saveReview'),exact:true}).click();
+  await page.getByLabel(t('reviewGlobal'),{exact:true}).check();await page.getByLabel(/^spec.md/).first().check();await page.getByRole('button',{name:t('saveReview'),exact:true}).click();
   await page.getByText('Synthetic acceptance review only; this is not a real human evaluation.',{exact:true}).waitFor();
   await page.screenshot({path:resolve(out,lang+'.png'),fullPage:true});
   await page.reload();await page.locator('summary').filter({hasText:t('title')}).click();
@@ -33,7 +33,9 @@ try{
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile document overflow');
  await page.screenshot({path:resolve(out,'mobile.png'),fullPage:true});
+ await page.getByRole('button',{name:translate('compare.saveReview','ja'),exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:resolve(out,'mobile-review.png'),fullPage:true});
+ const other=createProject('Synthetic isolated comparison owner','https://other.test').id;await page.goto(base+'#/?'+new URLSearchParams({open:'evals',project:other}));await page.reload();await page.locator('summary').filter({hasText:translate('compare.title','ja')}).click();await page.getByLabel(translate('compare.history','ja'),{exact:true}).waitFor();assert.equal(await page.getByLabel(translate('compare.history','ja'),{exact:true}).locator('option').count(),1);
  assert.deepEqual(errors,[]);
- writeFileSync(resolve(out,'result.json'),JSON.stringify({synthetic:true,project,runs,languages:['zh','en','ja'],checks:['create','paired-output','paired-input','review','reload','mobile'],errors},null,2));
+ writeFileSync(resolve(out,'result.json'),JSON.stringify({synthetic:true,project,runs,languages:['zh','en','ja'],checks:['create','paired-output','paired-input','review','global-review','reload','mobile','project-isolation'],errors},null,2));
  console.log(JSON.stringify({passed:true,evidence:out,project}));
 }catch(e){console.log((await page.locator('body').innerText()).slice(0,7000));await page.screenshot({path:resolve(out,'failure.png'),fullPage:true});throw e;}finally{await browser.close();svc.runLedger().close();db.close();}

@@ -7,6 +7,7 @@ import {workflowBase,type Revision} from '@/lib/workflowRuns';
 import {RevisionContent} from './RevisionViewer';
 import {Button} from '@/components/ui';
 
+const requestedComparison=()=>typeof window==='undefined'?'':new URLSearchParams(window.location.hash.split('?')[1]).get('comparison')??'';
 type Saved={revision:Revision;comparison:ArtifactComparison;reviews:{revision:Revision;review:ComparisonReview}[]};
 async function request<T>(path:string,signal?:AbortSignal,body?:unknown):Promise<T>{
   const response=await fetch(`${API_BASE}/api/${path}`,{signal,credentials:'include',...(body!==undefined?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
@@ -28,6 +29,8 @@ function ArtifactPane({projectId,revisions,label}:{projectId:string;revisions:Re
 }
 export function ComparisonSummary({value}:{value:ArtifactComparison}){
   const t=useT();return <div className="space-y-3">
+    <p className="text-sm font-medium">{t(`compare.mode.${value.mode}`)} · {t(`compare.node.${value.node}`)}</p>
+    <div className="grid gap-3 md:grid-cols-2">{(['a','b'] as const).map(arm=><div key={arm} className="min-w-0 rounded border border-border p-3"><p className="text-sm font-medium">{t(`compare.${arm}`)}</p><a className="break-all font-mono text-xs text-primary underline" href={`#/?open=canvas&project=${encodeURIComponent(value.projectId)}&run=${encodeURIComponent(value[arm].runId)}`}>{value[arm].runId}</a></div>)}</div>
     <p className="rounded border border-warn/30 bg-warn-soft p-3 text-sm">{t('compare.boundary')}</p>
     <div className="overflow-x-auto"><table className="w-full text-left text-xs"><caption className="mb-2 text-left font-medium">{t('compare.versions')}</caption><thead><tr>{['field','a','b','status'].map(k=><th key={k} className="p-2">{t(`compare.${k}`)}</th>)}</tr></thead><tbody>{value.differences.map(d=><tr key={d.field} className="border-t border-border"><th className="p-2">{d.field.startsWith('inputs.')?`${t('compare.inputs')} · ${t(`compare.node.${d.field.slice(7)}`)}`:t(`compare.field.${d.field}`)}</th><td className="max-w-36 break-all p-2" title={d.a??''}>{d.a?.slice(0,16)??t('compare.unknown')}</td><td className="max-w-36 break-all p-2" title={d.b??''}>{d.b?.slice(0,16)??t('compare.unknown')}</td><td className="p-2">{t(`compare.status.${d.status}`)}</td></tr>)}</tbody></table></div>
     <div className="overflow-x-auto"><table className="w-full text-left text-sm"><caption className="mb-2 text-left font-medium">{t('compare.global')}</caption><thead><tr><th>{t('compare.node')}</th><th>A</th><th>B</th></tr></thead><tbody>{comparisonNodes.map(n=><tr key={n} className="border-t border-border"><th className="p-2">{t(`compare.node.${n}`)}</th>{[value.a,value.b].map((a,i)=><td className="p-2" key={i}>{a.nodes[n].outputs.length?`${a.nodes[n].outputs.length} ${t('compare.artifacts')}`:t('compare.noOutput')}</td>)}</tr>)}</tbody></table></div>
@@ -36,7 +39,7 @@ export function ComparisonSummary({value}:{value:ArtifactComparison}){
 function ComparisonWorkbench({projectId}:{projectId:string}){
   const t=useT(),runs=useProjectRuns(projectId);
   const [a,setA]=useState(''),[b,setB]=useState(''),[mode,setMode]=useState<ComparisonMode>('pipeline'),[node,setNode]=useState<ComparisonNode|'all'>('all');
-  const [history,setHistory]=useState<Revision[]>([]),[id,setId]=useState(''),[saved,setSaved]=useState<Saved|null>(null),[version,setVersion]=useState(0);
+  const [history,setHistory]=useState<Revision[]>([]),[id,setId]=useState(requestedComparison),[saved,setSaved]=useState<Saved|null>(null),[version,setVersion]=useState(0);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[view,setView]=useState<ComparisonNode>('source'),[input,setInput]=useState(false);
   const [reviewGlobal,setReviewGlobal]=useState(false),[dimension,setDimension]=useState<ComparisonReview['dimension']>('overall'),[verdict,setVerdict]=useState<ComparisonVerdict>('incomparable'),[note,setNote]=useState(''),[evidence,setEvidence]=useState<string[]>([]);
   const base=`projects/${encodeURIComponent(projectId)}/artifact-comparisons`;
@@ -72,6 +75,6 @@ function ComparisonWorkbench({projectId}:{projectId:string}){
   </div>;
 }
 export function ArtifactComparisons({projectId}:{projectId:string}){
-  const t=useT(),[open,setOpen]=useState(false);
-  return <details className="rounded-lg border border-border bg-card p-4" onToggle={e=>setOpen(e.currentTarget.open)}><summary className="cursor-pointer text-base font-semibold">{t('compare.title')}</summary>{open&&<ComparisonWorkbench key={projectId} projectId={projectId}/>}</details>;
+  const t=useT(),[open,setOpen]=useState(()=>!!requestedComparison());
+  return <details open={open} className="rounded-lg border border-border bg-card p-4" onToggle={e=>setOpen(e.currentTarget.open)}><summary className="cursor-pointer text-base font-semibold">{t('compare.title')}</summary>{open&&<ComparisonWorkbench key={projectId} projectId={projectId}/>}</details>;
 }

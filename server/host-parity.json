@@ -680,6 +680,30 @@
    "host": "tp_project.update"
   },
   {
+   "source": "artifactComparisons.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/artifact-comparisons/:id/reviews",
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/artifact-comparisons/:id",
+   "host": "tp_eval.read_artifact_comparison"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/artifact-comparisons",
+   "host": "tp_eval.artifact_comparisons"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/artifact-comparisons",
+   "host": "tp_eval.compare_artifacts"
+  },
+  {
    "source": "modelProfilesRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/model-profiles/:role/probe",
@@ -1227,8 +1251,8 @@
   }
  ],
  "baseline": {
-  "covered": 188,
-  "reachable": 192,
-  "rate": 0.9792
+  "covered": 191,
+  "reachable": 195,
+  "rate": 0.9795
  }
 }

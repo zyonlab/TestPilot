@@ -27,7 +27,7 @@ export function comparisonArm(l:RunLedger,projectId:string,selection:z.infer<typ
     return r;
   }):latest(all.filter(r=>nodeOf(r)));
   if(new Set(chosen.map(r=>r.name)).size!==chosen.length)throw new LedgerError(400,'comparison_duplicate_artifact');
-  const record=(name:string)=>{const r=all.filter(r=>r.name===name).at(-1);return r?l.readRevision(r.id,projectId).content as Record<string,unknown>:null;};
+  const record=(name:string)=>{const r=all.filter(r=>r.name===name&&r.createdBy.kind==='system').at(-1);return r?l.readRevision(r.id,projectId).content as Record<string,unknown>:null;};
   const impl=record('implementation/registration'),attempt=record('exploration/attempt');
   const scalar=(v:unknown)=>typeof v==='string'&&v?v:null;
   const nodes=Object.fromEntries(comparisonNodes.map(node=>{
@@ -63,7 +63,7 @@ export function createComparison(l:RunLedger,projectId:string,raw:unknown){
 }
 export function readComparison(l:RunLedger,projectId:string,id:string){
   const record=l.readRevision(id,projectId);
-  if(!record.revision.name.startsWith('comparison/')||(record.content as ArtifactComparison)?.schemaVersion!=='artifact-comparison.v1')throw new LedgerError(404,'comparison_missing');
+  if(record.revision.createdBy.kind!=='system'||record.revision.createdBy.id!=='artifact-comparator'||record.revision.kind!=='evaluation'||!record.revision.name.startsWith('comparison/')||(record.content as ArtifactComparison)?.schemaVersion!=='artifact-comparison.v1')throw new LedgerError(404,'comparison_missing');
   return {revision:record.revision,comparison:record.content as ArtifactComparison,reviews:l.listRevisions(projectId,record.revision.runId).filter(r=>r.name.startsWith(`comparison-review/${id}/`)).map(r=>({revision:r,review:l.readRevision(r.id,projectId).content as ComparisonReview}))};
 }
 export function reviewComparison(l:RunLedger,projectId:string,id:string,raw:unknown,actor:Principal){
@@ -80,7 +80,7 @@ export function artifactComparisonRouter(){
   const router=Router({mergeParams:true});
   router.use((req,res,next)=>{try{assertProject((req.params as {projectId:string}).projectId);next();}catch(e){res.status(404).json({error:(e as Error).message});}});
   const wrap=(fn:(req:any,res:any)=>void)=>(req:any,res:any)=>{try{fn(req,res);}catch(e){res.status(e instanceof LedgerError?e.status:400).json({error:(e as Error).message});}};
-  router.get('/',wrap((req,res)=>res.json({comparisons:runLedger().listRevisions(req.params.projectId).filter(r=>r.name.startsWith('comparison/')).reverse()})));
+  router.get('/',wrap((req,res)=>res.json({comparisons:runLedger().listRevisions(req.params.projectId).filter(r=>r.name.startsWith('comparison/')&&r.kind==='evaluation'&&r.createdBy.kind==='system'&&r.createdBy.id==='artifact-comparator').reverse()})));
   router.post('/',wrap((req,res)=>res.status(201).json({revision:createComparison(runLedger(),req.params.projectId,req.body)})));
   router.get('/:id',wrap((req,res)=>res.json(readComparison(runLedger(),req.params.projectId,req.params.id))));
   router.post('/:id/reviews',wrap((req,res)=>res.status(201).json({revision:reviewComparison(runLedger(),req.params.projectId,req.params.id,req.body,reviewerPrincipal(req))})));

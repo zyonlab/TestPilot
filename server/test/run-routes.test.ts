@@ -44,7 +44,7 @@ it("imports revisions once, rejects reserved gate output and ignores a forged hu
   // 名字也是保留的：门禁判过的 validated/* 与单元循环的 units/* 只能由服务端写。
   // 2026-09-11 实测：门禁把 validated/cases 判为不通过之后，规划器用这条路由把它
   // 从 53 条用例覆盖成了 1 条探针用例（docs/v3/history/23 的 F-1）。
-  for (const name of ["validated/cases", "units/cases/cases:US-1", "retrieval/forged"]) {
+  for (const name of ["validated/cases", "units/cases/cases:US-1", "retrieval/forged", "implementation/registration", "comparison/forged", "comparison-review/forged"]) {
     const res = await post(`/${r.runId}/artifacts`, { ...body, name }, r.writeToken);
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe("reserved_artifact_name");
@@ -60,7 +60,7 @@ it("Web material snapshots stay fixed when the original directory changes", asyn
   const view = service.freezeRunMaterials("web-one", projectId, source);
   writeFileSync(join(source, "a.md"), "changed");
   expect(service.freezeRunMaterials("web-one", projectId, source)).toBe(view);
-  const rev = service.runLedger().listRevisions(projectId, "web-one")[0];
+  const rev = service.runLedger().listRevisions(projectId, "web-one").find(r=>r.kind==="material")!;
   expect(readFileSync(join(view, `${rev.contentHash}.md`), "utf8")).toBe("original");
   service.registerWebRun("web-two", projectId, models.binding);
   service.freezeRunMaterials("web-two", projectId, source);

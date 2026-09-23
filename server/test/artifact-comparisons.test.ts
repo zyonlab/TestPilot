@@ -32,3 +32,21 @@ it('rejects cross-project, cross-run revisions, missing paired outputs and chang
  expect(()=>createComparison(l,p,{...req,node:'execution'})).toThrow('comparison_no_paired_outputs');
  writeFileSync(join(dir,'revision-blobs',b.output.contentHash),'tampered');expect(()=>createComparison(l,p,req)).toThrow('revision_content_changed');
 });
+it('HTTP review derives its actor from the operator boundary and rejects an agent credential',async()=>{
+ const express=(await import('express')).default,{artifactComparisonRouter}=await import('../src/artifactComparisons.js');
+ const a=arm('http-a'),b=arm('http-b'),app=express();app.use(express.json());app.use('/api/projects/:projectId/artifact-comparisons',artifactComparisonRouter());
+ const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/projects/${p}/artifact-comparisons`;
+ try{
+  const made=await fetch(base,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({a:{runId:a.id},b:{runId:b.id},node:'all',mode:'pipeline'})});expect(made.status).toBe(201);const {revision}=await made.json();
+  const review={node:'all',dimension:'overall',verdict:'incomparable',note:'Synthetic API boundary acceptance only.',evidence:[a.output.id,b.output.id]};
+  const post=(headers:Record<string,string>)=>fetch(`${base}/${revision.id}/reviews`,{method:'POST',headers:{'content-type':'application/json',...headers},body:JSON.stringify(review)});
+  expect((await post({'x-testpilot-actor':'agent'})).status).toBe(403);expect((await post({})).status).toBe(201);
+  const saved=await (await fetch(`${base}/${revision.id}`)).json();expect(saved.reviews[0].review.actor).toEqual({kind:'human',id:'local-operator'});expect(saved.reviews[0].review.identityEvidence).toBe('local-action-source');
+ }finally{await new Promise<void>(r=>server.close(()=>r()));}
+});
+it('delivers the versioned state and evaluation instructions through the real host-stage response',async()=>{
+ const a=arm('instructions'),stages=await import('../src/runStages.js');
+ const receipt=stages.loadRunInstructions(a.id,p) as {files:{path:string;text:string}[];loadedDigest:string};
+ const runner=receipt.files.find(f=>f.path==='skills/testpilot-run-c/SKILL.md');expect(runner?.text).toContain('compare_artifacts');expect(runner?.text).toContain('状态条件与证据边界');
+ expect(l.requireRun(a.id,p).binding.loadedDigest).toBe(receipt.loadedDigest);expect(stages.loadRunInstructions(a.id,p)).toEqual(receipt);
+});
