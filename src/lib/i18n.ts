@@ -10,6 +10,9 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "field.sourcesEmpty": {zh:"还没有可引用的运行材料。可以直接描述需求，或参考下方示例起草；之后有了探索材料再补充核对。",en:"No run materials are available yet. Describe your requirements or start from the example below, then check the draft against exploration materials when available.",ja:"参照できる実行資料はまだありません。要件を説明するか下の例から下書きを作成し、探索資料ができたら照合できます。"},
+  "field.sourcesLoading": {zh:"正在查找可引用的运行材料…",en:"Loading available run materials…",ja:"参照できる実行資料を読み込み中…"},
+  "field.sourcesError": {zh:"运行材料暂时加载失败，可继续通过对话起草。重新打开此窗口可重试。",en:"Run materials could not be loaded. You can still draft by chat. Reopen this panel to retry.",ja:"実行資料を読み込めませんでした。会話で下書きを続けられます。再試行するには開き直してください。"},
   "field.exampleReference": {zh:"输出领域参考：逐条列出有依据的不变量和可见判据；未经确认的业务关系标为【假设】，不得作为失败判据。",en:"Draft a domain reference: list supported invariants and visible checks as bullets; label unconfirmed relationships as hypotheses, never failure criteria.",ja:"ドメイン参照：根拠のある不変条件と画面上の判定を箇条書きにし、未確認事項は仮説として失敗判定に使用しないでください。"},
   "example.hyperliquid": {"zh": "Hyperliquid Testnet · 合约交易示例", "en": "Hyperliquid Testnet · Perpetual trading example", "ja": "Hyperliquid Testnet · 無期限契約取引の例"},
   "example.custom": {"zh": "自定义项目", "en": "Custom project", "ja": "カスタムプロジェクト"},
@@ -4330,7 +4333,7 @@ export const dict: Record<string, Entry> = {
     en: "Discuss requirements, generate a draft, then apply it to the form. Examples are starting points; facts come from your information and selected run materials. Unconfirmed content is marked. Applying does not start a run.",
     ja: "要件を相談して下書きを作り、確認後にフォームへ戻します。例は参考で、根拠は提供情報と選択した実行資料です。未確認事項を明記し、実行は自動開始しません。",
   },
-  "field.evidence": { zh: "证据取自这次运行", en: "Evidence comes from this run", ja: "根拠とする実行" },
+  "field.evidence": { zh: "引用已有运行的材料（可选）", en: "Use materials from a previous run (optional)", ja: "過去の実行資料を参照（任意）" },
   "field.noRun": { zh: "不选运行（只靠对话）", en: "No run (from the conversation only)", ja: "実行を選ばない" },
   "field.runCounts": { zh: "材料 {m} 份 · 模块 {k}", en: "{m} material(s) · {k} modules", ja: "資料 {m} 件 · モジュール {k}" },
   "field.runEmpty": { zh: "这次运行没有材料：起草出来的东西没有任何可核对的来源。", en: "This run has no material: nothing in the draft will be checkable.", ja: "この実行には資料がありません。" },

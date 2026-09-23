@@ -56,6 +56,7 @@ export function FieldChatDrawer({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [runs, setRuns] = useState<RunRow[]>([]);
+  const [sourcesState, setSourcesState] = useState<"loading" | "ready" | "error">("loading");
   const [runId, setRunId] = useState(fixedRunId ?? "");
   const [draft, setDraft] = useState<Draft>();
   const [applyError, setApplyError] = useState("");
@@ -64,15 +65,20 @@ export function FieldChatDrawer({
   useEffect(() => {
     if (fixedRunId) return;
     const c = new AbortController();
+    setSourcesState("loading");
+    setRuns([]);
+    setRunId("");
     void fetch(`${API_BASE}/api/chat/fields?projectId=${encodeURIComponent(projectId)}`, { signal: c.signal })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d: { runs?: RunRow[] }) => {
-        const rows = d.runs ?? [];
+        if (c.signal.aborted) return;
+        const rows = (d.runs ?? []).filter(r => r.materials > 0);
+        setSourcesState("ready");
         setRuns(rows);
         // 默认选**手里有材料的最近一次**——最近一次运行未必采到过东西。
         setRunId((cur) => cur || rows.find((r) => r.materials > 0)?.runId || "");
       })
-      .catch(() => {});
+      .catch(() => { if (!c.signal.aborted) setSourcesState("error"); });
     return () => c.abort();
   }, [projectId, fixedRunId]);
 
@@ -164,7 +170,7 @@ export function FieldChatDrawer({
         {t("field.rule")}
       </p>
 
-      {!fixedRunId && (
+      {!fixedRunId && sourcesState === "ready" && runs.length > 0 && (
         <label className="flex flex-col gap-1 border-b border-border px-4 py-2 text-[0.75rem]">
           <span className="text-muted-foreground">{t("field.evidence")}</span>
           <select
@@ -184,6 +190,12 @@ export function FieldChatDrawer({
           {runId && chosen && chosen.materials === 0 && <span className="text-warn">{t("field.runEmpty")}</span>}
           {!runId && <span className="text-warn">{t("field.noRunWarn")}</span>}
         </label>
+      )}
+
+      {!fixedRunId && (sourcesState !== "ready" || runs.length === 0) && (
+        <p role="status" className="border-b border-border px-4 py-2 text-xs leading-relaxed text-muted-foreground">
+          {t(sourcesState === "loading" ? "field.sourcesLoading" : sourcesState === "error" ? "field.sourcesError" : "field.sourcesEmpty")}
+        </p>
       )}
 
       <div className="min-h-0 flex-1 overflow-auto p-3">
