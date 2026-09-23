@@ -1,3 +1,4 @@
+import {explorationEnvironment} from './explorationReuse.js';
 import { ExplorationAttemptSchema, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
 import { LedgerError } from './runLedger.js';
 import { recoverPreparations } from './preparation.js';
@@ -1628,6 +1629,7 @@ setAgentObserver(async (input) => {
 
   if (sourceAttempt) {
     ExplorationAttemptSchema.parse(sourceAttempt);
+    if(sourceAttempt.environmentHash!==undefined && sourceAttempt.environmentHash!==explorationEnvironment(projectId!,envRef,!!wallet))throw new Error('exploration_environment_changed_before_dispatch');
     if (sourceAttempt.runId !== workflowRunId || sourceAttempt.projectId !== projectId || sourceAttempt.entryUrl !== target) throw new Error('exploration_attempt_mismatch');
   }
   const live = interactiveSession(`observe-${projectId ?? "adhoc"}`, projectId);

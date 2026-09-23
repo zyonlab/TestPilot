@@ -211,3 +211,17 @@ it('never retries a potentially dirty attempt despite a retryable infrastructure
  const artifact=service.runLedger().readRevision(row(started.executionId).resultRevision,projectId).content as any;
  expect(artifact.results[0].lifecycle.pendingResources[0].id).toBe('r1');expect(artifact.results[0].attempts).toHaveLength(1);
 });
+it('old execution snapshots without locator context still dispatch and never revive raw hints',async()=>{
+ service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+ const vault=await import('../src/vault.js'),decrypt=vault.decryptSecret;
+ const legacy=vi.spyOn(vault,'decryptSecret').mockImplementation(value=>{
+  const plain=decrypt(value);try{const data=JSON.parse(plain);if('locatorContexts' in data){delete data.locatorContexts;delete data.locatorEnvironmentHash;delete data.locatorPageVersion;delete data.locatorMaterialsHash;data.locators=[{label:'Increment',selector:'#old'}];return JSON.stringify(data);}}catch{}
+  return plain;
+ });
+ try{
+  runner.run.mockResolvedValueOnce({status:'passed',infraError:false,durationMs:5,modelRequests:[],pngPaths:[],logs:[],oracle:[{status:'pass'}]});
+  const started=execution.startWorkflowExecution(runId,projectId,{codeRevision,idempotencyKey:'legacy-context',envRef:'usage-probe'});
+  await vi.waitFor(()=>expect(row(started.executionId).status).toBe('passed'));
+  const opts=runner.run.mock.calls.at(-1)![0].opts;expect(opts.locatorContext).toBeUndefined();expect(opts.locators).toBeUndefined();
+ }finally{legacy.mockRestore();}
+});

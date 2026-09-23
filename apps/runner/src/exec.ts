@@ -67,7 +67,9 @@ export interface ExecSpec {
     extraHeaders?: Record<string, string>;
     query?: Record<string, string>;
     /** 探索记下的控件文案与选择器；执行时先试它，验不过就交回模型。见 run.ts 的 byLocator。 */
-    locators?: Array<{ label: string; selector: string; featureId?: string }>;
+    locators?: import("@testpilot/harness-testing").LocatorHint[];
+    locatorRuntimeScope?:import("@testpilot/harness-testing").LocatorRuntimeScope;
+    locatorContext?: import("@testpilot/harness-testing").LocatorContext;
     storageState?: StorageState | null;
     /** A check a program settles. When present the model is never asked for the verdict. */
     oracle?: MachineOracle;

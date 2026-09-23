@@ -4,7 +4,7 @@ import { checkPrerequisite, type Preparation, type EnvironmentFact, type Prerequ
 import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
 import {settleOn} from './pageReady.js';
 import { cacheDigest } from './cache.js';
-import { pickLocator, locatorUsable, type LocatorHint } from "./locators.js";
+import { matchingLocators, validateLocator, type LocatorHint, type LocatorContext, type LocatorReuseReceipt, type LocatorRuntimeScope } from "./locators.js";
 // The executor: drive Midscene steps against a target, capture what a run leaves behind
 // (screenshots, perf metrics, oracle results) and hand it back. It knows nothing about the
 // database, baselines or artifacts — those live in the gateway, which is why this can run
@@ -27,6 +27,7 @@ import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles
 import { executorConnectionFromEnv, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
 
 export interface RunResult {
+  evidenceReuse?: LocatorReuseReceipt;
   lifecycle?: LifecycleReceipt;
   businessStatus?: "passed" | "failed" | "unobservable";
   observation?: ExecutionObservation;
@@ -143,6 +144,8 @@ export async function executeRun(
      * 少一次模型调用是附带的好处，不是目的；目的是让「这个词在页面上出现十三次」不再是失败。
      */
     locators?: LocatorHint[];
+    locatorContext?: LocatorContext;
+    locatorRuntimeScope?:LocatorRuntimeScope;
     /**
      * A check a program can settle. When present it decides the case and the model is
      * never asked — which is what makes a tier-1 label mean something at execution time.
@@ -246,27 +249,26 @@ export async function executeRun(
    * 这一步能不能直接用探索记下的选择器点掉。返回 false 就交回模型。
    * 只处理**点击**：填值、断言、滚动都还是模型的事。
    */
-  const byLocator = async (t: string): Promise<boolean> => {
-    const hit = pickLocator(t, opts.locators ?? []);
-    if (!hit) return false;
+  const evidenceReuse:LocatorReuseReceipt={context:opts.locatorContext??null,events:[]};
+  const byLocator = async (t:string):Promise<boolean>=>{
+    const matches=matchingLocators(t,opts.locatorContext?.hints??opts.locators??[]);
+    const hit=matches[0];
+    const record=(status:'used'|'fallback'|'action-error',reason:string)=>evidenceReuse.events.push({label:hit?.label,source:hit?.source,status,reason});
+    if(matches.length!==1){record('fallback',matches.length?'ambiguous_label':'no_candidate');return false;}
     let clicking=false;
-    try {
-      // Puppeteer，不是 Playwright：这里没有 locator().count()，用 $$ 取全部匹配。
-      const page = session!.page as unknown as {
-        $$(s: string): Promise<Array<{ click(): Promise<void> }>>;
-        evaluate<T, A>(fn: (el: A) => T, arg: A): Promise<T>;
-      };
-      const els = await page.$$(hit.selector);
-      const text = els.length === 1 ? await page.evaluate((el) => (el as unknown as HTMLElement).innerText ?? "", els[0]!) : "";
-      const verdict = locatorUsable(hit.label, els.length, text);
-      if (!verdict.ok) { rlog(`  定位提示${verdict.why}（${hit.label}），交回模型`); return false; }
+    try{
+      const els=await session!.page.$$(hit!.selector);
+      if(els.length!==1){record('fallback','target_changed');return false;}
+      const reason=await validateLocator(session!.page,hit!,opts.locatorContext,opts.locatorRuntimeScope);
+      if(reason){record('fallback',reason);return false;}
+      const same=await session!.page.evaluate((el,sel)=>el.isConnected&&document.querySelector(sel)===el,els[0]!,hit!.selector);
+      if(!same){record('fallback','target_changed');return false;}
       clicking=true;
       await els[0]!.click();
-      rlog(`  定位提示命中：${hit.label}`);
-      return true;
-    } catch (e) {
+      record('used','current_ui_validated');return true;
+    }catch(e){
+      record(clicking?'action-error':'fallback',clicking?'action_attempted_no_retry':'validation_error');
       if(clicking)throw e;
-      rlog(`  定位提示用不了（${hit.label}：${String((e as Error).message).slice(0, 60)}），交回模型`);
       return false;
     }
   };
@@ -736,6 +738,7 @@ export async function executeRun(
     checkCancelled();
     return result = {
       observation: observer.data,
+      evidenceReuse,
       modelRequests,
       ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
       ...(opts.captureObservations?{observations}:{}),
@@ -776,6 +779,7 @@ export async function executeRun(
     open = "teardownMs";
     return result = {
       observation: observer.data,
+      evidenceReuse,
       modelRequests,
       ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
       ...(opts.captureObservations?{observations}:{}),
@@ -803,6 +807,7 @@ export async function executeRun(
     let lifecycleReceipt:LifecycleReceipt;
     try { lifecycleReceipt=await lifecycle.finish(); }
     catch(e){lifecycleReceipt=lifecycle.receipt;lifecycleReceipt.status='unknown';lifecycleReceipt.safeToRetry=false;lifecycleReceipt.pendingResources.push({id:'unknown',identity:'unknown',reason:redact(String(e),secretVals)});}
+    if(evidenceReuse.events.some(e=>e.status==='action-error'))lifecycleReceipt.safeToRetry=false;
     phases.teardownMs += Date.now() - cleanupStarted;
     if(result){
       result.businessStatus=result.status;

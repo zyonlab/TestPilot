@@ -1,3 +1,4 @@
+import { LocatorEvidenceSchema } from '../exec/locatorEvidence.js';
 import { z } from "zod";
 import { assessExploration, ExplorationAssessmentSchema, ExplorationAttemptSchema } from "./explorationEvidence.js";
 import { SfgActionSchema, type StateFlowGraph } from "../exec/sfg.js";
@@ -44,6 +45,7 @@ export const EffectSchema = z
 export const ObservationSchema = z
   .object({
     id: z.string().min(1),
+    locatorEvidence:LocatorEvidenceSchema.optional(),
     targetId: z.string().min(1),
     targetSpecId: DomainIdSchema,
     featureId: DomainIdSchema,

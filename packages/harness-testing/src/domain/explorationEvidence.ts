@@ -6,6 +6,7 @@ import type { InteractionTarget, Observation } from './report.js';
 /** Identity originates before dispatch, travels through RPC, and is echoed by the collector. */
 export const ExplorationAttemptSchema = z.object({
   attemptId: z.string().uuid(), runId: z.string().min(1), projectId: z.string().min(1),
+  environmentHash:z.string().min(1).nullable().optional(), pageVersion:z.string().min(1).nullable().optional(), inputFingerprint:z.string().min(1).optional(),
   entryUrl: z.string().url(), scopeHash: z.string().min(1), startedAt: z.string().datetime(),
 }).strict();
 export type ExplorationAttempt = z.infer<typeof ExplorationAttemptSchema>;

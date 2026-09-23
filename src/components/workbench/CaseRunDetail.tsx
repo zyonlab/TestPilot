@@ -1,3 +1,4 @@
+import {EvidenceReuse} from './EvidenceReuse';
 import {LifecycleDetail} from './LifecycleDetail';
 import type {ExecutionObservation as Observation, ExecutionAttempt} from '../../../packages/harness-core/src/execution-observation';
 import {ExecutionObservation} from './ExecutionObservation';
@@ -11,6 +12,7 @@ import type { RunRecord, VisualDiff } from '@/lib/types';
 
 type Any = Record<string, any>;
 export interface CaseRun {
+  evidenceReuse?:unknown;
   lifecycle?: unknown; lifecycleContract?: unknown; businessStatus?: string;
   observation?: Observation | null; attempts?: ExecutionAttempt[];
   caseId: string; title: string; steps: string[]; postSteps: string[];
@@ -95,7 +97,7 @@ export function CaseRunDetail({ item, defaultTab }: { item: CaseRun; defaultTab?
     </div>
 
     <LifecycleDetail contract={item.lifecycleContract} value={item.lifecycle} receipt/>
-    <ExecutionObservation value={item.observation} attempts={item.attempts}/>
+    <EvidenceReuse value={item.evidenceReuse}/><ExecutionObservation value={item.observation} attempts={item.attempts}/>
     <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
       {TABS.map((k) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
         className={`-mb-px border-b-2 px-3 py-1.5 text-xs ${tab === k ? 'border-primary font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>

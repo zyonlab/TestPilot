@@ -98,7 +98,15 @@ export function freezeRunMaterials(runId: string, projectId: string, directory: 
       else if (/\.(md|txt)$/.test(entry.name)) files.push({ name: `${prefix}${entry.name}`, text: readFileSync(join(dir, entry.name), "utf8") });
     } };
     walk(directory);
-    revisions = files.map(f => runLedger().putRevision({ runId, projectId, name: f.name, kind: "material", content: f.text, mediaType: "text/markdown" }, { kind: "system", id: "web" }));
+    const generated=runLedger().listRevisions(projectId,runId).filter(r=>r.name==='exploration.md'&&r.kind==='material'&&r.createdBy.kind==='system'&&r.createdBy.id==='explorer').sort((a,b)=>b.revision-a.revision)[0];
+    revisions = files.map(f => {
+      if(f.name==='exploration.md'&&generated){
+        // The generator bound exact bytes, not a later file that happens to share its name.
+        if(contentHash(f.text)!==generated.contentHash)throw new LedgerError(409,'exploration_material_changed');
+        return runLedger().readRevision(generated.id,projectId).revision;
+      }
+      return runLedger().putRevision({runId,projectId,name:f.name,kind:'material',content:f.text,mediaType:'text/markdown'},{kind:'system',id:'web'});
+    });
     runLedger().sealInputs(runId, projectId, revisions.map(r => r.id));
   }
   return materializeInputs(runId, projectId, revisions);

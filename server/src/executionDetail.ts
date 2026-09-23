@@ -91,6 +91,7 @@ export function executionDetail(runId: string, projectId: string, executionId: s
       caseId: r.caseId as string,
       title: (source?.content?.title ?? r.caseId) as string,
       steps: (source?.content?.steps ?? []) as string[],
+      evidenceReuse:r.evidenceReuse??null,
       lifecycle: r.lifecycle ?? null,
       lifecycleContract: source?.content?.lifecycle ?? null,
       businessStatus: r.businessStatus ?? null,

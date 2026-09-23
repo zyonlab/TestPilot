@@ -10,32 +10,9 @@ const obs = (over: Record<string, unknown>) => ({
   stateBefore: "/", controlsAfter: [], evidenceRefs: [], round: 1, ...over,
 });
 
-it("只收点击动作的文案与选择器，goto 与 probe 不进表", () => {
-  const hints = locatorHints({ observations: [
-    obs({ action: { kind: "click", target: "Balances", selector: "#tab-balances" } }),
-    obs({ id: "obs-2", action: { kind: "goto", target: "/trade", selector: "" } }),
-    obs({ id: "obs-3", action: { kind: "probe", target: "空提交", selector: "#submit" } }),
-    obs({ id: "obs-4", action: { kind: "click", target: "", selector: "#nameless" } }),
-    obs({ id: "obs-5", status: "observed_only" }),
-  ] } as never);
-  expect(hints).toEqual([{ label: "Balances", selector: "#tab-balances", featureId: "f.a" }]);
-});
-
-it("同一个文案取最后一次——那是最接近最终页面结构的一次", () => {
-  const hints = locatorHints({ observations: [
-    obs({ action: { kind: "click", target: "Cross", selector: "#old" } }),
-    obs({ id: "obs-2", action: { kind: "click", target: "Cross", selector: "#new" } }),
-  ] } as never);
-  expect(hints).toHaveLength(1);
-  expect(hints[0]!.selector).toBe("#new");
-});
-
-it("长文案排前面：执行侧按包含匹配，更具体的那个先被看到", () => {
-  const hints = locatorHints({ observations: [
-    obs({ action: { kind: "click", target: "Buy", selector: "#buy" } }),
-    obs({ id: "obs-2", action: { kind: "click", target: "Buy / Long", selector: "#buy-long" } }),
-  ] } as never);
-  expect(hints.map((h) => h.label)).toEqual(["Buy / Long", "Buy"]);
+it("legacy observations without collection identity are unknown, including duplicate labels", () => {
+ expect(locatorHints({observations:[obs({action:{kind:'click',target:'Open',selector:'#old'}}),obs({action:{kind:'click',target:'Open',selector:'#new'}})]} as never)).toEqual([]);
+ expect(pickLocator('Click Open',[{label:'Open',selector:'#old'},{label:'Open',selector:'#new'}])).toBeUndefined();
 });
 
 it("只有会按下控件的动词才用提示；查看、填值都交给模型", () => {

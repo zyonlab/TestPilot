@@ -1,3 +1,4 @@
+import {inspectLocator, type LocatorEvidence} from './locatorEvidence.js';
 import { randomUUID, createHash } from "node:crypto";
 import { assessExploration, ExplorationAttemptSchema, explorationExecId, type ExplorationAttempt, type ExplorationAssessment } from "../domain/explorationEvidence.js";
 import {authenticationState,shouldRunLogin} from "./authentication.js";
@@ -2037,6 +2038,7 @@ export async function runObserve(
        * 「验证入口页 Funding 数值」「验证入口页 Countdown 数值」就是这么来的。
        */
       const before = current;
+      let locatorEvidence:LocatorEvidence|undefined;
       if (next.kind === "goto") triedGoto.add(next.href);
       else triedClick.add(next.key);
       // 页内切换按「路由::组::文案」记，同一项不再切第二次。选择器会随重渲染变，文案不会。
@@ -2219,6 +2221,8 @@ export async function runObserve(
            * 所以：路径上的控件文案对不上，就按文案（以及 charter 声明的容器）重新找。
            * 找不到唯一的一个就不点——宁可这一轮空过，也不要一次点错被记成点对。
            */
+          const inspected=await inspectLocator(page,next.selector).catch(()=>undefined);
+          if(inspected?.ok && inspected.evidence.label===next.label)locatorEvidence=inspected.evidence;
           const clicked = (await page.evaluate(((({ sel, label, within }: { sel: string; label: string; within?: string[] }) => {
             /**
              * 这段在浏览器里跑，**不能出现具名函数**：tsx 会给 `const f = () => {}` 套一层
@@ -2280,6 +2284,7 @@ export async function runObserve(
             pick[0]!.click();
             return "relocated";
           }) as unknown) as (arg: never) => unknown, { sel: next.selector, label: next.label, within: next.within })) as string;
+          if (clicked !== "selector") locatorEvidence=undefined;
           if (clicked !== "selector") note(`第 ${rounds} 轮：${next.label} 的路径已经过时（${clicked}）`);
           if (clicked.startsWith("ambiguous")) {
             // 没点成要如实记：留空的话回执上是 `found_not_activated`，读起来像「预算没到」。
@@ -2421,6 +2426,7 @@ export async function runObserve(
             targetSpecId: next.charter.specId,
             featureId: next.charter.featureId,
             status: "attempted",
+            locatorEvidence,
             stateBefore: cameFrom,
             stateAfter: toId,
             action: { kind: "click", target: next.label, selector: next.selector },

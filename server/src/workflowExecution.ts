@@ -17,7 +17,7 @@ import { getProject, resolveEnvironment, getSecretValues, ARTIFACT_DIR } from ".
 import { encryptSecret, decryptSecret } from "./vault.js";
 import { execOnRunner, cancelExecution } from "./exec.js";
 import { recordWorkflowCaseRun } from "./workflowRunRecord.js";
-import { locatorHints } from "@testpilot/harness-testing/exec";
+import {selectExplorationContext,dispatchedEnvironment} from "./explorationReuse.js";
 import { runEnvReset, guardRun } from "./executionPolicy.js";
 import { LedgerError, contentHash } from "./runLedger.js";
 import { captureExecutionMemory } from './runMemory.js';
@@ -121,17 +121,13 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
    * 用例里不会有选择器——它是端无关的。选择器留在这里，执行时先试、验不过就交回模型，
    * 见 `exec/run.ts` 的 `byLocator`。没有探索回执的 run（纯 spec 来源）拿到空表，行为不变。
    */
-  const report = ledger().listRevisions(projectId, runId).filter((r) => r.name === "exploration/report")
-    .sort((a, b) => a.revision - b.revision).at(-1);
-  const reportContent = report ? ledger().readRevision(report.id, projectId).content : undefined;
-  const locators = reportContent ? locatorHints(reportContent as Parameters<typeof locatorHints>[0]) : [];
   const selected = input.caseIds ? bundle.cases.filter((c) => input.caseIds!.includes(c.id)) : bundle.cases;
   const blocked = ((bundle as {compilation?:string}).compilation === 'host-prepared-v1' ? [] : selected).map(c => ({ id: c.id, reasons: executionBlockers(c) })).filter(c => c.reasons.length);
   if (blocked.length) throw new LedgerError(409, `execution_not_ready:${JSON.stringify(blocked)}`);
   const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
-    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locators, visualThresholdPct: env?.visualThresholdPct };
+    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
   // 不可逆步骤默认放行；额外词来自这次运行绑定的规则包，只有整机打开 GUARD_STRICT 时才生效。
   /**
    * **占位符没解析就不要跑。**
@@ -196,7 +192,7 @@ async function perform(row: ExecutionRow) {
         opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,lifecycle:kase.lifecycle,sourceRefs:kase.sourceRefs,precondition:kase.precondition,
           // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
           ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState, authentication: env.authentication }),
-          resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locators: env.locators,
+          resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locatorContext: env.locatorContexts?.[kase.id],locatorRuntimeScope:{projectId:row.projectId,runId:row.runId,entryUrl:caseEntryUrl(kase.precondition,env.url),environmentHash:env.locatorEnvironmentHash,pageVersion:env.locatorPageVersion,materialsHash:env.locatorMaterialsHash,loggedOut:caseStartsLoggedOut(kase.precondition)},
           /**
            * **带钱包探索出来的用例，执行时也要带钱包。**
            *
