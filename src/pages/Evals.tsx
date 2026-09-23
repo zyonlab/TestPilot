@@ -1,3 +1,4 @@
+import {ArtifactComparisons} from "@/components/workbench/ArtifactComparisons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, CircleAlert, Clock3, Loader2, Play, RefreshCw } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
@@ -105,6 +106,7 @@ export function EvalsPage() {
     <TopBar title={t("nav.evals")} hint={t("evaldesk.subtitle")} />
     <div className="flex-1 overflow-auto bg-background p-4 md:p-6">
       <div className="mx-auto max-w-6xl space-y-6">
+        {projectId && <ArtifactComparisons key={projectId} projectId={projectId}/>}
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
           <div className="max-w-2xl"><h1 className="text-2xl font-semibold tracking-tight">{t("evaldesk.title")}</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">{t("evaldesk.description")}</p></div>
           <Button onClick={refresh} disabled={loading || starting}><RefreshCw className="mr-2 h-4 w-4" />{t("evaldesk.refresh")}</Button>
