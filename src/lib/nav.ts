@@ -29,7 +29,7 @@ const from = (id: string, glyph: string, title?: string): NavItem => ({
 export const NAV: NavGroup[] = [
   { title: "bench.workflow", items: [{id:"canvas",title:"bench.title",glyph:"⌘"}] },
   { title: "nav.audit", items: [from("review", "◧"), from("artifacts", "◇"), from("runs", "▶"), from("baselines", "≡")] },
-  { title: "nav.evals", items: [from("scoreboard", "◑"), from("gold", "★")] },
+  { title: "nav.evals", items: [from("evals", "◑"), from("gold", "★")] },
   { title: "nav.project", items: [from("settings", "⚙", "nav.settings")] },
 ];
 

@@ -1,0 +1,2429 @@
+{
+  "at": "2026-09-19T16:07:02.169429+00:00",
+  "projectId": "prj-mu7sqa2s-1001",
+  "scope": "https://app.hyperliquid-testnet.xyz/trade only",
+  "reviewMode": "User-delegated assistant review, not independent human annotation",
+  "goldHash": "33b232928b0b3d4e",
+  "runs": [
+    {
+      "id": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+      "status": "completed",
+      "nodes": [
+        {
+          "id": "stage-4604437a-2110-43f3-abbf-2f9a8165c8e9",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "cases",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:13:43.091Z",
+          "revisionId": "rev-1209dcbc-d8c6-4691-8498-9110ff2638ff"
+        },
+        {
+          "id": "execution-7c8c7df3-074b-4208-806e-aa4ad80c1463",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "execution",
+          "attempt": 0,
+          "sequence": 22,
+          "phase": "done",
+          "at": "2026-09-19T04:54:44.956Z",
+          "revisionId": "rev-1f939ba2-b448-44db-9e0a-8322f55c13e1"
+        },
+        {
+          "id": "stage-00aa378e-d0b6-4f71-9128-7bb875bd613e",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "finalize",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "waiting_review",
+          "at": "2026-09-19T04:13:55.203Z",
+          "revisionId": "rev-b32b9739-e39d-4955-95c6-5af427991f47"
+        },
+        {
+          "id": "stage-a22c3d70-883e-43c6-abd6-e18c7c4a9d3a",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "g2",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:46:34.802Z",
+          "revisionId": "rev-b0a2774e-c747-4b25-890b-7331947c289f"
+        },
+        {
+          "id": "stage-af8765cb-15aa-480f-b528-adf4235b1be7",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "gate",
+          "attempt": 0,
+          "sequence": 3,
+          "phase": "done",
+          "at": "2026-09-19T04:13:49.523Z",
+          "revisionId": "rev-c7e9820d-1b1a-4988-9173-64a37318ae4f"
+        },
+        {
+          "id": "stage-04752ff3-05a9-4218-b975-6d698b81cd3d",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "instructions",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:09:18.905Z",
+          "revisionId": "rev-a62a95a4-3516-4139-a390-f45170e9f55a"
+        },
+        {
+          "id": "stage-9d4fa132-e30c-4705-83c8-c39e57c2786b",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "modules",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:10:50.895Z",
+          "revisionId": "rev-c3ca08e6-87f4-4bfd-8d6a-585fd6c5b345"
+        },
+        {
+          "id": "stage-cd78fea4-8979-4c82-9a0e-0dd1b88d8cc6",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "review",
+          "attempt": 0,
+          "sequence": 0,
+          "phase": "done",
+          "at": "2026-09-19T04:14:54.248Z"
+        },
+        {
+          "id": "stage-426b6cb4-74bf-4987-b4a8-45cdbfe97c8c",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "source",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:09:00.423Z"
+        },
+        {
+          "id": "stage-46543ee7-83ab-4ba8-876d-a631458a7af8",
+          "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+          "node": "stories",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:12:10.306Z",
+          "revisionId": "rev-ba710123-f7d9-403e-825d-12ac38800e5b"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": "rev-67b10ab0-cf16-43b5-861c-573286447c51",
+          "name": "knowledge/domain-reference"
+        },
+        {
+          "id": "rev-d4eae5cf-6702-47f5-8c3b-061c4b70ea0b",
+          "name": "0-scope.md.md"
+        },
+        {
+          "id": "rev-efad30a4-94fe-4f87-b591-7f4a899af133",
+          "name": "1-trade-observed.md.md"
+        },
+        {
+          "id": "rev-9d5b2e58-800d-4c8c-a33b-7f5f91fe6715",
+          "name": "2-interactions.md.md"
+        },
+        {
+          "id": "rev-a62a95a4-3516-4139-a390-f45170e9f55a",
+          "name": "validated/instructions"
+        },
+        {
+          "id": "rev-c3ca08e6-87f4-4bfd-8d6a-585fd6c5b345",
+          "name": "validated/modules"
+        },
+        {
+          "id": "rev-8f08b430-b4ed-433d-aae4-b3d2a721b400",
+          "name": "report/acceptance-index"
+        },
+        {
+          "id": "rev-ba710123-f7d9-403e-825d-12ac38800e5b",
+          "name": "validated/stories"
+        },
+        {
+          "id": "rev-71c3cc24-0f86-48cb-885b-af14517e7f34",
+          "name": "validated/cases"
+        },
+        {
+          "id": "rev-f15d7b93-b106-4b10-b0b0-259a3a5f9d84",
+          "name": "validated/gate"
+        },
+        {
+          "id": "rev-1209dcbc-d8c6-4691-8498-9110ff2638ff",
+          "name": "validated/cases"
+        },
+        {
+          "id": "rev-c7e9820d-1b1a-4988-9173-64a37318ae4f",
+          "name": "validated/gate"
+        },
+        {
+          "id": "rev-b32b9739-e39d-4955-95c6-5af427991f47",
+          "name": "validated/finalize"
+        },
+        {
+          "id": "rev-c5ed82bb-1ce5-4741-bf73-b138c963368f",
+          "name": "review/case/C-01"
+        },
+        {
+          "id": "rev-787cc2a1-6164-4ae0-94ca-8c8f7850290f",
+          "name": "review/case/C-02"
+        },
+        {
+          "id": "rev-a81386d3-827c-40c8-905c-e978fa49681e",
+          "name": "review/case/C-03"
+        },
+        {
+          "id": "rev-32ae403f-3590-4647-aef9-5d2da7a06e92",
+          "name": "review/case/C-04"
+        },
+        {
+          "id": "rev-493b5fe0-c915-4d01-a091-3cb330d97272",
+          "name": "review/case/C-05"
+        },
+        {
+          "id": "rev-856129e3-f390-48ed-908e-8ed5322de568",
+          "name": "review/case/C-06"
+        },
+        {
+          "id": "rev-cca8d54c-9ff8-44dc-8ed9-a6d1f81bbb02",
+          "name": "g2/v2/c651f32c0d95e52125489e5f9f008c6c077bb4e371466fc646c6aea7eb25f4a7-fa5605748eab"
+        },
+        {
+          "id": "rev-59abaefd-3906-457c-a44b-2c7984b4d429",
+          "name": "execution/exec-9d83f1f5-3891-4d5b-bde7-87a9bfe47d04"
+        },
+        {
+          "id": "rev-21f0b0be-af64-4e5e-a32d-21a92fec9224",
+          "name": "execution/exec-50df03f5-886d-4a13-9e6f-5f3ec3cfeabd"
+        },
+        {
+          "id": "rev-996bc728-8698-4e6c-8f94-ccc91704de04",
+          "name": "gate"
+        },
+        {
+          "id": "rev-b0a2774e-c747-4b25-890b-7331947c289f",
+          "name": "g2/v2/2628f8fb8b54f73f63b73ee058bbaa31f1292856e82da5d6a0f666dcc4b8400c-fa5605748eab"
+        },
+        {
+          "id": "rev-1f939ba2-b448-44db-9e0a-8322f55c13e1",
+          "name": "execution/exec-235ead27-e1db-4f9b-b7cc-2cb26c5a12f4"
+        }
+      ],
+      "gates": [
+        {
+          "revision": "rev-f15d7b93-b106-4b10-b0b0-259a3a5f9d84",
+          "passed": false,
+          "score": 0,
+          "findings": [
+            {
+              "caseId": "C-01",
+              "message": "assertion names no observable phenomenon: \"Trades 面板展示逐笔成交价格、数量与时间。\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-01",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-02",
+              "message": "assertion names no observable phenomenon: \"盘口面板显示 Spread。\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-04",
+              "message": "assertion names no observable phenomenon: \"页面下方账户面板显示 No open orders yet。\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-05",
+              "message": "assertion names no observable phenomenon: \"页内连接弹层显示 Log in with Email。\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "message": "only 0% of cases are negative or boundary — a suite that is all happy path is not a suite",
+              "rule": "negative-ratio",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-01/AC-1",
+                "storyId": "S-01"
+              },
+              "message": "S-01/AC-1 要求用户动手（When 点击该面板 Trades），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-02/AC-1",
+                "storyId": "S-02"
+              },
+              "message": "S-02/AC-1 要求用户动手（When 点击 Order Book），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-02/AC-2",
+                "storyId": "S-02"
+              },
+              "message": "S-02/AC-2 要求用户动手（When 点击 Order Book），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-1",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-1 要求用户动手（When 点击表单 Limit），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-2",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-2 要求用户动手（When 点击表单 Limit），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-3",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-3 要求用户动手（When 点击交易表单 Market），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-4",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-4 要求用户动手（When 点击交易表单 Market），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-04/AC-1",
+                "storyId": "S-04"
+              },
+              "message": "S-04/AC-1 要求用户动手（When 点击 Open Orders），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-05/AC-1",
+                "storyId": "S-05"
+              },
+              "message": "S-05/AC-1 要求用户动手（When 点击 Connect），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-06/AC-1",
+                "storyId": "S-06"
+              },
+              "message": "S-06/AC-1 要求用户动手（When 点击弹层右上角 X），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-06/AC-2",
+                "storyId": "S-06"
+              },
+              "message": "S-06/AC-2 要求用户动手（When 点击弹层右上角 X），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-01",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-02",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-03",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-04",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-05",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-06",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-01",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-02",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-03",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-04",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-05",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-06",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-01",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-04",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-05",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-06",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            }
+          ]
+        },
+        {
+          "revision": "rev-c7e9820d-1b1a-4988-9173-64a37318ae4f",
+          "passed": true,
+          "score": 1,
+          "findings": [
+            {
+              "caseId": "C-01",
+              "message": "assertion names no observable phenomenon: \"点击 Trades 后，面板显示逐笔成交价格、数量与时间。\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-01",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "message": "only 0% of cases are negative or boundary — a suite that is all happy path is not a suite",
+              "rule": "negative-ratio",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-01",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-02",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-03",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-04",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-05",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-06",
+              "field": "designMethod",
+              "message": "claims state-transition but gives no design evidence",
+              "rule": "design-evidence-missing",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-01",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-02",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-03",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-04",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-05",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-06",
+              "field": "covers",
+              "message": "claims to be a state-transition case but names no transition",
+              "rule": "no-transition",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-01",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-05",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "state-transition"
+              },
+              "caseId": "C-06",
+              "field": "designMethod",
+              "message": "labelled \"state-transition\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+      "status": "waiting_review",
+      "nodes": [
+        {
+          "id": "stage-5f7bd760-e327-465d-bd32-0cf46ba09b4b",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "cases",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:43:03.948Z",
+          "revisionId": "rev-d51eb126-d02e-4267-b996-99f0efae1f11"
+        },
+        {
+          "id": "stage-4529bed3-68f3-40ed-bf1b-6b5c227faf76",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "finalize",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "waiting_review",
+          "at": "2026-09-19T04:43:19.564Z",
+          "revisionId": "rev-54b8a419-9fc5-4c0c-8b35-966ec16a8729"
+        },
+        {
+          "id": "stage-69876f2d-89e7-4ba0-8911-a9a373933cdf",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "gate",
+          "attempt": 0,
+          "sequence": 3,
+          "phase": "done",
+          "at": "2026-09-19T04:43:12.664Z",
+          "revisionId": "rev-3e70c1db-5947-4672-b7db-a7e5bf5b6edd"
+        },
+        {
+          "id": "stage-aa3e072e-1423-417f-94d6-dc3fe8918e3d",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "instructions",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:10:23.325Z",
+          "revisionId": "rev-d4207bd9-412a-430f-8c7f-da498e1a9142"
+        },
+        {
+          "id": "stage-b50dfa03-f8d2-4611-948a-eea0f687e1a8",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "modules",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:13:56.730Z",
+          "revisionId": "rev-068c06d8-e0bf-440b-b3e6-8285a836e15a"
+        },
+        {
+          "id": "stage-01d9ff26-2963-4551-b89f-3b00172f4b58",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "source",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:09:30.966Z"
+        },
+        {
+          "id": "stage-8d223e3a-a1aa-4c12-8b78-7df3c2d4e595",
+          "runId": "run-127d04ed-878f-47a5-91a3-b30abea921f8",
+          "node": "stories",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:22:45.765Z",
+          "revisionId": "rev-de58029f-06b4-4f2b-bd22-64d534e3725d"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": "rev-a307f223-997f-4fcf-8bdf-f09969ea1df7",
+          "name": "knowledge/domain-reference"
+        },
+        {
+          "id": "rev-cc6577fa-679e-4ef7-803e-eaf082eed1d5",
+          "name": "0-scope.md.md"
+        },
+        {
+          "id": "rev-f6c220f9-f3f7-471c-81dd-804883b7d7f3",
+          "name": "1-trade-observed.md.md"
+        },
+        {
+          "id": "rev-dda63f8c-28bb-4e24-9039-dc296bcbb987",
+          "name": "2-interactions.md.md"
+        },
+        {
+          "id": "rev-d4207bd9-412a-430f-8c7f-da498e1a9142",
+          "name": "validated/instructions"
+        },
+        {
+          "id": "rev-068c06d8-e0bf-440b-b3e6-8285a836e15a",
+          "name": "validated/modules"
+        },
+        {
+          "id": "rev-b0342030-dcbf-424f-9f70-e1417ff8bfed",
+          "name": "report/acceptance-index"
+        },
+        {
+          "id": "rev-4e53eab8-a7b9-4f38-b8bd-f2dcf2cb920a",
+          "name": "validated/stories"
+        },
+        {
+          "id": "rev-d7551f4b-ab06-4994-a9b9-26103120383e",
+          "name": "report/acceptance-index"
+        },
+        {
+          "id": "rev-de58029f-06b4-4f2b-bd22-64d534e3725d",
+          "name": "validated/stories"
+        },
+        {
+          "id": "rev-de00bd11-c497-4a86-9ced-294d666831f0",
+          "name": "validated/cases"
+        },
+        {
+          "id": "rev-15e97707-2f77-49e8-809b-72b6d33f6ecd",
+          "name": "validated/gate"
+        },
+        {
+          "id": "rev-d51eb126-d02e-4267-b996-99f0efae1f11",
+          "name": "validated/cases"
+        },
+        {
+          "id": "rev-3e70c1db-5947-4672-b7db-a7e5bf5b6edd",
+          "name": "validated/gate"
+        },
+        {
+          "id": "rev-54b8a419-9fc5-4c0c-8b35-966ec16a8729",
+          "name": "validated/finalize"
+        },
+        {
+          "id": "rev-c1af7d4e-d838-4488-83ab-0522de58499b",
+          "name": "gate"
+        }
+      ],
+      "gates": [
+        {
+          "revision": "rev-15e97707-2f77-49e8-809b-72b6d33f6ecd",
+          "passed": false,
+          "score": 0,
+          "findings": [
+            {
+              "caseId": "C-01",
+              "message": "assertion names no observable phenomenon: \"订单簿的 Size 与 Total 两个列头括号里写的品种，和页面顶部行情条上的品种标签是同一个品种\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-01",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-07",
+              "message": "assertion names no observable phenomenon: \"交易表单下方的 Order Value 显示 N/A\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-08",
+              "message": "assertion names no observable phenomenon: \"账户面板的列表区显示 No open orders yet\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-11",
+              "message": "assertion names no observable phenomenon: \"页内弹层上显示 Log in with Email\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-12",
+              "message": "assertion names no observable phenomenon: \"地址栏仍然停在 /trade，没有跳到别的路由\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-14",
+              "message": "assertion names no observable phenomenon: \"页面上仍然显示未连接态的 Connect 入口\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "acId": "S-01/AC-1",
+                "storyId": "S-01"
+              },
+              "message": "S-01/AC-1 要求用户动手（When 点击顶部导航里的 Trade），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-02/AC-1",
+                "storyId": "S-02"
+              },
+              "message": "S-02/AC-1 要求用户动手（When 点击市场信息面板的 Order Book 确保当前是盘口视图），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-1",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-1 要求用户动手（When 点击该面板的 Trades），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-2",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-2 要求用户动手（When 判断切换是否成功），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-04/AC-1",
+                "storyId": "S-04"
+              },
+              "message": "S-04/AC-1 要求用户动手（When 点击该面板的 Order Book），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-05/AC-1",
+                "storyId": "S-05"
+              },
+              "message": "S-05/AC-1 要求用户动手（When 在交易表单点击 Limit），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-06/AC-1",
+                "storyId": "S-06"
+              },
+              "message": "S-06/AC-1 要求用户动手（When 在交易表单点击 Market），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-06/AC-3",
+                "storyId": "S-06"
+              },
+              "message": "S-06/AC-3 要求用户动手（When 执行这次回退），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-07/AC-1",
+                "storyId": "S-07"
+              },
+              "message": "S-07/AC-1 要求用户动手（When 在交易表单点击 Market 确认当前是市价单），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-08/AC-1",
+                "storyId": "S-08"
+              },
+              "message": "S-08/AC-1 要求用户动手（When 点击 Size 输入框但不输入任何字符），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-09/AC-1",
+                "storyId": "S-09"
+              },
+              "message": "S-09/AC-1 要求用户动手（When 点击页面下方的 Open Orders），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-10/AC-1",
+                "storyId": "S-10"
+              },
+              "message": "S-10/AC-1 要求用户动手（When 点击 Open Orders），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-11/AC-1",
+                "storyId": "S-11"
+              },
+              "message": "S-11/AC-1 要求用户动手（When 点击页面下方的 Positions 标签），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-12/AC-1",
+                "storyId": "S-12"
+              },
+              "message": "S-12/AC-1 要求用户动手（When 点击页面下方的 Positions 标签），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-13/AC-1",
+                "storyId": "S-13"
+              },
+              "message": "S-13/AC-1 要求用户动手（When 点击 Connect），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-14/AC-1",
+                "storyId": "S-14"
+              },
+              "message": "S-14/AC-1 要求用户动手（When 点击 Connect 打开连接弹层），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-15/AC-1",
+                "storyId": "S-15"
+              },
+              "message": "S-15/AC-1 要求用户动手（When 点击弹层右上角的 X），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-16/AC-1",
+                "storyId": "S-16"
+              },
+              "message": "S-16/AC-1 要求用户动手（When 点击弹层右上角的 X 关掉它），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-14",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-07",
+              "field": "steps",
+              "message": "creates or changes something and never puts it back — it poisons every later run of itself",
+              "rule": "no-cleanup",
+              "severity": "info"
+            }
+          ]
+        },
+        {
+          "revision": "rev-3e70c1db-5947-4672-b7db-a7e5bf5b6edd",
+          "passed": true,
+          "score": 1,
+          "findings": [
+            {
+              "caseId": "C-01",
+              "message": "assertion names no observable phenomenon: \"订单簿的 Size 与 Total 两个列头括号里写的品种，和页面顶部行情条上的品种标签是同一个品种\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-01",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-07",
+              "message": "assertion names no observable phenomenon: \"交易表单下方的 Order Value 显示 N/A\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-08",
+              "message": "assertion names no observable phenomenon: \"账户面板的列表区显示 No open orders yet\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-11",
+              "message": "assertion names no observable phenomenon: \"页内弹层上显示 Log in with Email\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-12",
+              "message": "assertion names no observable phenomenon: \"地址栏仍然停在 /trade，没有跳到别的路由\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-14",
+              "message": "assertion names no observable phenomenon: \"产品拒绝把这次被放弃的连接当成成功：页面上仍然显示未连接态的 Connect 入口\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-15",
+              "message": "assertion names no observable phenomenon: \"顶部行情条上显示 Open Interest 这个字段名\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "caseId": "C-16",
+              "message": "assertion names no observable phenomenon: \"账户面板同一屏上显示 Withdraw 入口\"",
+              "rule": "oracle-vague",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-07",
+              "field": "steps",
+              "message": "creates or changes something and never puts it back — it poisons every later run of itself",
+              "rule": "no-cleanup",
+              "severity": "info"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+      "status": "failed",
+      "nodes": [
+        {
+          "id": "stage-5461ed82-6b69-4c08-9eba-4859a8b489e9",
+          "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+          "node": "cases",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:05:25.452Z",
+          "revisionId": "rev-9f6d2e82-ba73-4643-8355-256913ced271"
+        },
+        {
+          "id": "stage-113f3b89-55ed-4637-bd16-65e515f2f6c3",
+          "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+          "node": "gate",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "blocked",
+          "at": "2026-09-19T04:05:37.112Z",
+          "revisionId": "rev-2db48282-15dc-49bc-a6f7-7a69df16a559"
+        },
+        {
+          "id": "stage-fc411139-24e9-459f-b079-53883a1a7361",
+          "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+          "node": "instructions",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T03:58:35.773Z",
+          "revisionId": "rev-ad390d39-f173-4302-9b01-dec375298456"
+        },
+        {
+          "id": "stage-9289d359-bf60-4daa-9697-90cc9848cd9f",
+          "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+          "node": "modules",
+          "attempt": 0,
+          "sequence": 3,
+          "phase": "done",
+          "at": "2026-09-19T04:03:23.434Z",
+          "revisionId": "rev-cf5f1312-a8ad-4527-af8a-e89f5b0365d8"
+        },
+        {
+          "id": "stage-0a460002-d6d5-4beb-8e89-aaad61967ee1",
+          "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+          "node": "source",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T03:58:10.475Z"
+        },
+        {
+          "id": "stage-5bee49cf-85ce-4af4-8bfe-fa8f610a7729",
+          "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+          "node": "stories",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:04:40.535Z",
+          "revisionId": "rev-4af5320e-397d-49ea-a6b1-d06d08968364"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": "rev-514882b8-2b94-45aa-860c-3c8d59d5f9ed",
+          "name": "knowledge/domain-reference"
+        },
+        {
+          "id": "rev-32ff07d6-5e71-4bae-a2a2-433f4ebd1b0d",
+          "name": "0-scope.md.md"
+        },
+        {
+          "id": "rev-7014ae3c-6079-460a-a7dd-ae666ab0c11b",
+          "name": "1-trade-observed.md.md"
+        },
+        {
+          "id": "rev-ad390d39-f173-4302-9b01-dec375298456",
+          "name": "validated/instructions"
+        },
+        {
+          "id": "rev-cf5f1312-a8ad-4527-af8a-e89f5b0365d8",
+          "name": "validated/modules"
+        },
+        {
+          "id": "rev-80f85961-3180-49a9-a274-18980dbf442c",
+          "name": "report/acceptance-index"
+        },
+        {
+          "id": "rev-4af5320e-397d-49ea-a6b1-d06d08968364",
+          "name": "validated/stories"
+        },
+        {
+          "id": "rev-9f6d2e82-ba73-4643-8355-256913ced271",
+          "name": "validated/cases"
+        },
+        {
+          "id": "rev-2db48282-15dc-49bc-a6f7-7a69df16a559",
+          "name": "validated/gate"
+        }
+      ],
+      "gates": [
+        {
+          "revision": "rev-2db48282-15dc-49bc-a6f7-7a69df16a559",
+          "passed": false,
+          "score": 0,
+          "findings": [
+            {
+              "message": "only 0% of cases are negative or boundary — a suite that is all happy path is not a suite",
+              "rule": "negative-ratio",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-2",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-2 要求用户动手（When 阅读 Size 输入区域），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-3",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-3 要求用户动手（When 需要确认切换方向、输入数量或提交后的结果），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-04/AC-1",
+                "storyId": "S-04"
+              },
+              "message": "S-04/AC-1 要求用户动手（When 阅读风险设置入口），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-04/AC-2",
+                "storyId": "S-04"
+              },
+              "message": "S-04/AC-2 要求用户动手（When 需要确认 Isolated、杠杆及止盈止损的页内弹层或切换结果），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-06/AC-3",
+                "storyId": "S-06"
+              },
+              "message": "S-06/AC-3 要求用户动手（When 需要确认 Connect、Deposit、Withdraw 或历史标），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-01",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-02",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-03",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-04",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-05",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-06",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "message": "story S-01 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事",
+              "rule": "story-no-actor",
+              "severity": "info"
+            },
+            {
+              "message": "story S-02 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事",
+              "rule": "story-no-actor",
+              "severity": "info"
+            },
+            {
+              "message": "story S-03 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事",
+              "rule": "story-no-actor",
+              "severity": "info"
+            },
+            {
+              "message": "story S-04 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事",
+              "rule": "story-no-actor",
+              "severity": "info"
+            },
+            {
+              "message": "story S-05 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事",
+              "rule": "story-no-actor",
+              "severity": "info"
+            },
+            {
+              "message": "story S-06 说不出谁想要它、能得到什么——它更像一条界面事实，而不是一条用户故事",
+              "rule": "story-no-actor",
+              "severity": "info"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+      "status": "cancelled",
+      "nodes": [
+        {
+          "id": "stage-6a131fea-4acd-4603-be35-8a9874177b0a",
+          "runId": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+          "node": "cases",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:30:46.847Z",
+          "revisionId": "rev-afc22ec0-71b6-40f7-8e49-3a645b10794b"
+        },
+        {
+          "id": "stage-4bd83a95-21c7-48ad-ad67-af8d1bee5629",
+          "runId": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+          "node": "gate",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "blocked",
+          "at": "2026-09-19T04:30:51.927Z",
+          "revisionId": "rev-143863c0-6285-4d29-aaf2-f6cd2fd0fffd"
+        },
+        {
+          "id": "stage-40e0534f-7ac7-4e04-90ce-86007600dc3a",
+          "runId": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+          "node": "instructions",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:04:19.997Z",
+          "revisionId": "rev-f8e43e37-0abb-4780-9631-e2c740d7e444"
+        },
+        {
+          "id": "stage-2d65607a-b1a1-4e52-b268-8257e7e2b1ac",
+          "runId": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+          "node": "modules",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:06:41.980Z",
+          "revisionId": "rev-b9f3c85a-105d-4d08-896f-0c576d6b69fe"
+        },
+        {
+          "id": "stage-9a436e95-eab8-4206-869d-1af8b4c85343",
+          "runId": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+          "node": "source",
+          "attempt": 0,
+          "sequence": 1,
+          "phase": "done",
+          "at": "2026-09-19T04:03:58.889Z"
+        },
+        {
+          "id": "stage-12fff5b6-3387-44b8-8f34-a75ed4f03287",
+          "runId": "run-9269ab4b-d246-4729-93e7-469e1b78ab1e",
+          "node": "stories",
+          "attempt": 0,
+          "sequence": 2,
+          "phase": "done",
+          "at": "2026-09-19T04:17:06.072Z",
+          "revisionId": "rev-062b587a-8524-47c9-bad3-b8e5669c6e59"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": "rev-dbb7563e-4061-4224-a8fb-9d990ed1b66a",
+          "name": "knowledge/domain-reference"
+        },
+        {
+          "id": "rev-ce697b74-93bc-4959-b8e8-0f7605727552",
+          "name": "0-scope.md.md"
+        },
+        {
+          "id": "rev-ea19db7e-eaea-4d69-af80-6f2ad579ef95",
+          "name": "1-trade-observed.md.md"
+        },
+        {
+          "id": "rev-f8e43e37-0abb-4780-9631-e2c740d7e444",
+          "name": "validated/instructions"
+        },
+        {
+          "id": "rev-b9f3c85a-105d-4d08-896f-0c576d6b69fe",
+          "name": "validated/modules"
+        },
+        {
+          "id": "rev-370ffd23-9684-4340-9d3b-e72a01bec381",
+          "name": "report/acceptance-index"
+        },
+        {
+          "id": "rev-7a7d76a7-399d-42e4-8dff-127b2a6e4f12",
+          "name": "validated/stories"
+        },
+        {
+          "id": "rev-c50f9d22-0752-4c0f-a621-eb2540612964",
+          "name": "report/acceptance-index"
+        },
+        {
+          "id": "rev-062b587a-8524-47c9-bad3-b8e5669c6e59",
+          "name": "validated/stories"
+        },
+        {
+          "id": "rev-afc22ec0-71b6-40f7-8e49-3a645b10794b",
+          "name": "validated/cases"
+        },
+        {
+          "id": "rev-143863c0-6285-4d29-aaf2-f6cd2fd0fffd",
+          "name": "validated/gate"
+        }
+      ],
+      "gates": [
+        {
+          "revision": "rev-143863c0-6285-4d29-aaf2-f6cd2fd0fffd",
+          "passed": false,
+          "score": 0,
+          "findings": [
+            {
+              "args": {},
+              "caseId": "C-03",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-04",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-06",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-07",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-09",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-15",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-19",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "args": {},
+              "caseId": "C-20",
+              "field": "expected",
+              "message": "judged by a model — reserve tier 3 for what nothing else can decide",
+              "rule": "tier",
+              "severity": "info"
+            },
+            {
+              "message": "only 30% of cases are negative or boundary — a suite that is all happy path is not a suite",
+              "rule": "negative-ratio",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-01/AC-2",
+                "storyId": "S-01"
+              },
+              "message": "S-01/AC-2 要求用户动手（When 点击下单表单里的「Unified」按钮），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-02/AC-2",
+                "storyId": "S-02"
+              },
+              "message": "S-02/AC-2 要求用户动手（When 读取「24h Volume」与「Open Interest」两栏），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-03/AC-4",
+                "storyId": "S-03"
+              },
+              "message": "S-03/AC-4 要求用户动手（When 点击「Trades」标签再点回「Order Book」标签），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-04/AC-4",
+                "storyId": "S-04"
+              },
+              "message": "S-04/AC-4 要求用户动手（When 【待确认：界面观察不到】「Trades」标签下的成交列表本次未捕获，），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-05/AC-1",
+                "storyId": "S-05"
+              },
+              "message": "S-05/AC-1 要求用户动手（When 读取下单表单最下方的提交控件），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-05/AC-2",
+                "storyId": "S-05"
+              },
+              "message": "S-05/AC-2 要求用户动手（When 在「Size」输入框里填入数量「1」），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-05/AC-6",
+                "storyId": "S-05"
+              },
+              "message": "S-05/AC-6 要求用户动手（When 【待确认：界面观察不到】点击「Connect」之后出现的钱包选择弹层），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-06/AC-2",
+                "storyId": "S-06"
+              },
+              "message": "S-06/AC-2 要求用户动手（When 点击「Limit」），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-07/AC-1",
+                "storyId": "S-07"
+              },
+              "message": "S-07/AC-1 要求用户动手（When 点击「Unified」），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-07/AC-3",
+                "storyId": "S-07"
+              },
+              "message": "S-07/AC-3 要求用户动手（When 读取数量输入区），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-08/AC-2",
+                "storyId": "S-08"
+              },
+              "message": "S-08/AC-2 要求用户动手（When 点击「Open Orders」标签），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "acId": "S-09/AC-4",
+                "storyId": "S-09"
+              },
+              "message": "S-09/AC-4 要求用户动手（When 【待确认：界面观察不到】未连接钱包时点击「Deposit」或「Wit），却没有任何用例认领它",
+              "rule": "acceptance-uncovered",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-01",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-03",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-04",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-05",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-06",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-07",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-09",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-10",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-11",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-13",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-15",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-17",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-22",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-23",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-25",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-26",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "caseId": "C-27",
+              "field": "steps",
+              "message": "除了导航之外没有任何动作，步骤只是看：打开 https://app.hyperliquid-testnet.xyz/trade",
+              "rule": "case-without-action",
+              "severity": "warn"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-11",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-12",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-15",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-18",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-21",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            },
+            {
+              "args": {
+                "method": "negative"
+              },
+              "caseId": "C-22",
+              "field": "designMethod",
+              "message": "labelled \"negative\", but nothing in the case shows that method at work",
+              "rule": "method-mismatch",
+              "severity": "info"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "executions": [
+    {
+      "id": "exec-235ead27-e1db-4f9b-b7cc-2cb26c5a12f4",
+      "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+      "projectId": "prj-mu7sqa2s-1001",
+      "codeRevision": "rev-b0a2774e-c747-4b25-890b-7331947c289f",
+      "status": "passed",
+      "environmentHash": "50b7d20b9d691c9837880d991df737b1cd98966a6529d0612a498ae65f6ef465",
+      "resultRevision": "rev-1f939ba2-b448-44db-9e0a-8322f55c13e1",
+      "startedAt": "2026-09-19T04:46:41.011Z",
+      "results": [
+        {
+          "caseId": "C-01",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7wuvua-1001",
+          "oracle": [
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            },
+            {
+              "assertion": "点击 Trades 后，面板显示逐笔成交价格、数量与时间。",
+              "decidedBy": "judge",
+              "status": "pass"
+            },
+            {
+              "assertion": "Trades 面板显示逐笔成交价格",
+              "decidedBy": "judge",
+              "status": "pass"
+            },
+            {
+              "assertion": "Trades 面板显示逐笔成交数量",
+              "decidedBy": "judge",
+              "status": "pass"
+            },
+            {
+              "assertion": "Trades 面板显示逐笔成交时间，不限定具体读数",
+              "decidedBy": "judge",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-02",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7wy5by-1002",
+          "oracle": [
+            {
+              "assertion": "切回 Order Book 后，盘口面板显示「Spread」。",
+              "decidedBy": "machine",
+              "detail": "找到「Spread」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "盘口面板显示 Price",
+              "decidedBy": "machine",
+              "detail": "找到「Price」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            },
+            {
+              "assertion": "盘口 Size 列单位与当前页面品种一致",
+              "decidedBy": "judge",
+              "status": "pass"
+            },
+            {
+              "assertion": "盘口 Total 列单位与当前页面品种一致",
+              "decidedBy": "judge",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        }
+      ],
+      "finishedAt": "2026-09-19T04:54:44.942Z",
+      "forwardedExecutorCalls": 14,
+      "usageComplete": true
+    },
+    {
+      "id": "exec-50df03f5-886d-4a13-9e6f-5f3ec3cfeabd",
+      "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+      "projectId": "prj-mu7sqa2s-1001",
+      "codeRevision": "rev-cca8d54c-9ff8-44dc-8ed9-a6d1f81bbb02",
+      "status": "unobservable",
+      "environmentHash": "50b7d20b9d691c9837880d991df737b1cd98966a6529d0612a498ae65f6ef465",
+      "resultRevision": "rev-21f0b0be-af64-4e5e-a32d-21a92fec9224",
+      "startedAt": "2026-09-19T04:27:30.533Z",
+      "results": [
+        {
+          "caseId": "C-01",
+          "status": "unobservable",
+          "failureReason": null,
+          "unobservableReason": "tier 3：没有机器判据，交由判屏",
+          "runRecordId": "run-mu7w3r7w-1019",
+          "oracle": [
+            {
+              "assertion": "点击 Trades 后，面板显示逐笔成交价格、数量与时间。",
+              "decidedBy": "machine",
+              "detail": "tier 3：没有机器判据，交由判屏",
+              "status": "unobservable"
+            },
+            {
+              "assertion": "Trades 面板显示逐笔成交价格",
+              "decidedBy": "machine",
+              "detail": "tier 3：没有机器判据，交由判屏",
+              "status": "unobservable"
+            },
+            {
+              "assertion": "Trades 面板显示逐笔成交数量",
+              "decidedBy": "machine",
+              "detail": "tier 3：没有机器判据，交由判屏",
+              "status": "unobservable"
+            },
+            {
+              "assertion": "Trades 面板显示逐笔成交时间，不限定具体读数",
+              "decidedBy": "machine",
+              "detail": "tier 3：没有机器判据，交由判屏",
+              "status": "unobservable"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-02",
+          "status": "unobservable",
+          "failureReason": null,
+          "unobservableReason": "tier 3：没有机器判据，交由判屏",
+          "runRecordId": "run-mu7w6ysk-1021",
+          "oracle": [
+            {
+              "assertion": "切回 Order Book 后，盘口面板显示「Spread」。",
+              "decidedBy": "machine",
+              "detail": "找到「Spread」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "盘口面板显示 Price",
+              "decidedBy": "machine",
+              "detail": "找到「Price」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "盘口 Size 列单位与当前页面品种一致",
+              "decidedBy": "machine",
+              "detail": "tier 3：没有机器判据，交由判屏",
+              "status": "unobservable"
+            },
+            {
+              "assertion": "盘口 Total 列单位与当前页面品种一致",
+              "decidedBy": "machine",
+              "detail": "tier 3：没有机器判据，交由判屏",
+              "status": "unobservable"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-03",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7w9lrk-1024",
+          "oracle": [
+            {
+              "assertion": "交易表单出现 Price (USDC) 输入字段",
+              "decidedBy": "machine",
+              "detail": "找到「Price (USDC)」",
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单显示 TIF",
+              "decidedBy": "machine",
+              "detail": "找到「TIF」",
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单显示 GTC",
+              "decidedBy": "machine",
+              "detail": "找到「GTC」",
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单不再显示 Price (USDC)。",
+              "decidedBy": "machine",
+              "detail": "确认没有「Price (USDC)」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单不再显示 TIF",
+              "decidedBy": "machine",
+              "detail": "确认没有「TIF」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单不再显示 GTC",
+              "decidedBy": "machine",
+              "detail": "确认没有「GTC」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单的 Size 输入字段仍可见",
+              "decidedBy": "machine",
+              "detail": "找到「Size」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-04",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7wdh3r-1025",
+          "oracle": [
+            {
+              "assertion": "切换到 Open Orders 后，页面下方账户面板显示「No open orders yet」。",
+              "decidedBy": "machine",
+              "detail": "找到「No open orders yet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "页面下方账户面板不显示 No open positions yet",
+              "decidedBy": "machine",
+              "detail": "确认没有「No open positions yet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-05",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7wfq1o-1027",
+          "oracle": [
+            {
+              "assertion": "打开连接弹层后显示「Log in with Email」。",
+              "decidedBy": "machine",
+              "detail": "找到「Log in with Email」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 Default Wallet",
+              "decidedBy": "machine",
+              "detail": "找到「Default Wallet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 WalletConnect",
+              "decidedBy": "machine",
+              "detail": "找到「WalletConnect」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 OKX Wallet",
+              "decidedBy": "machine",
+              "detail": "找到「OKX Wallet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 Coinbase Wallet",
+              "decidedBy": "machine",
+              "detail": "找到「Coinbase Wallet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-06",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7wk8ii-1028",
+          "oracle": [
+            {
+              "assertion": "连接弹层显示 Log in with Email",
+              "decidedBy": "machine",
+              "detail": "找到「Log in with Email」",
+              "status": "pass"
+            },
+            {
+              "assertion": "关闭连接弹层后，「Log in with Email」从页面消失。",
+              "decidedBy": "machine",
+              "detail": "确认没有「Log in with Email」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "页面顶部仍显示未连接态 Connect 入口",
+              "decidedBy": "machine",
+              "detail": "找到「Connect」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        }
+      ],
+      "finishedAt": "2026-09-19T04:43:55.948Z",
+      "forwardedExecutorCalls": 24,
+      "usageComplete": true
+    },
+    {
+      "id": "exec-9d83f1f5-3891-4d5b-bde7-87a9bfe47d04",
+      "runId": "run-14c808d9-6019-4088-b95e-a256f4c691c7",
+      "projectId": "prj-mu7sqa2s-1001",
+      "codeRevision": "rev-cca8d54c-9ff8-44dc-8ed9-a6d1f81bbb02",
+      "status": "failed",
+      "environmentHash": "d48969868dab5bff5e2aa2331cfdd6167c9e6f75547a63cae05164360ddf9c68",
+      "resultRevision": "rev-59abaefd-3906-457c-a44b-2c7984b4d429",
+      "startedAt": "2026-09-19T04:15:37.877Z",
+      "results": [
+        {
+          "caseId": "C-01",
+          "status": "failed",
+          "failureReason": "AI model failed to locate: \nThe 'Trades' tab is not found in the market information panel. The available tabs are 'Chart' and 'Funding'.\nError: AI model failed to locate: \nThe 'Trades' tab is not found in the market information panel. The available tabs are 'Chart' and 'Funding'.\n    at Insight.locate (webpack://midscene/core/src/insight/index.ts:213:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.executor (webpack://midscene/core/src/agent/tasks.ts:251:19)\n    at async Executor.flush (webpack://midscene/core/src/ai-model/action-executor.ts:127:25)\n    at async TaskExecutor.action (webpack://midscene/core/src/agent/tasks.ts:843:7)\n    at async PuppeteerAgent.aiAction (webpack://midscene/core/src/agent/agent.ts:722:34)\n    at async act (/Users/admin/Midscene/testpilot/packages/harness-testing/src/exec/run.ts:239:7)\n    at async <anonymous> (/Users/admin/Midscene/testpilot/apps/runner/src/main.ts:182:12)\n    at async executeRun (/Users/admin/Midscene/testpilot/packages/harness-testing/src/exec/run.ts:435:7)\n    at async execCase (/Users/admin/Midscene/testpilot/apps/runner/src/exec.ts:103:59)",
+          "unobservableReason": null,
+          "runRecordId": "run-mu7vm6sy-1001",
+          "oracle": [],
+          "endedAt": null
+        },
+        {
+          "caseId": "C-02",
+          "status": "failed",
+          "failureReason": "AI model failed to locate: \nThe 'Trades' tab is not found in the market information panel. The available tabs are 'Chart' and 'Funding'.\nError: AI model failed to locate: \nThe 'Trades' tab is not found in the market information panel. The available tabs are 'Chart' and 'Funding'.\n    at Insight.locate (webpack://midscene/core/src/insight/index.ts:213:13)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.executor (webpack://midscene/core/src/agent/tasks.ts:251:19)\n    at async Executor.flush (webpack://midscene/core/src/ai-model/action-executor.ts:127:25)\n    at async TaskExecutor.action (webpack://midscene/core/src/agent/tasks.ts:843:7)\n    at async PuppeteerAgent.aiAction (webpack://midscene/core/src/agent/agent.ts:722:34)\n    at async act (/Users/admin/Midscene/testpilot/packages/harness-testing/src/exec/run.ts:239:7)\n    at async <anonymous> (/Users/admin/Midscene/testpilot/apps/runner/src/main.ts:182:12)\n    at async executeRun (/Users/admin/Midscene/testpilot/packages/harness-testing/src/exec/run.ts:435:7)\n    at async execCase (/Users/admin/Midscene/testpilot/apps/runner/src/exec.ts:103:59)",
+          "unobservableReason": null,
+          "runRecordId": "run-mu7vo5fv-1003",
+          "oracle": [],
+          "endedAt": null
+        },
+        {
+          "caseId": "C-03",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7vrjiv-1006",
+          "oracle": [
+            {
+              "assertion": "交易表单出现 Price (USDC) 输入字段",
+              "decidedBy": "machine",
+              "detail": "找到「Price (USDC)」",
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单显示 TIF",
+              "decidedBy": "machine",
+              "detail": "找到「TIF」",
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单显示 GTC",
+              "decidedBy": "machine",
+              "detail": "找到「GTC」",
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单不再显示 Price (USDC)。",
+              "decidedBy": "machine",
+              "detail": "确认没有「Price (USDC)」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单不再显示 TIF",
+              "decidedBy": "machine",
+              "detail": "确认没有「TIF」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单不再显示 GTC",
+              "decidedBy": "machine",
+              "detail": "确认没有「GTC」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "交易表单的 Size 输入字段仍可见",
+              "decidedBy": "machine",
+              "detail": "找到「Size」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-04",
+          "status": "failed",
+          "failureReason": "Failed to plan actions: 当前页面下方没有显示账户面板标签栏，无法找到 Open Orders 标签。需要先找到并打开账户面板。\nError: Failed to plan actions: 当前页面下方没有显示账户面板标签栏，无法找到 Open Orders 标签。需要先找到并打开账户面板。\n    at assert (file:///Users/admin/Midscene/testpilot/node_modules/.pnpm/@midscene+shared@0.30.10/node_modules/@midscene/shared/dist/es/utils.mjs:36:27)\n    at plan (webpack://midscene/core/src/ai-model/llm-planning.ts:195:3)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.executor (webpack://midscene/core/src/agent/tasks.ts:671:28)\n    at async Executor.flush (webpack://midscene/core/src/ai-model/action-executor.ts:134:25)\n    at async TaskExecutor.action (webpack://midscene/core/src/agent/tasks.ts:812:22)\n    at async PuppeteerAgent.aiAction (webpack://midscene/core/src/agent/agent.ts:722:34)\n    at async act (/Users/admin/Midscene/testpilot/packages/harness-testing/src/exec/run.ts:239:7)\n    at async <anonymous> (/Users/admin/Midscene/testpilot/apps/runner/src/main.ts:182:12)\n    at async executeRun (/Users/admin/Midscene/testpilot/packages/harness-testing/src/exec/run.ts:435:7)",
+          "unobservableReason": null,
+          "runRecordId": "run-mu7vsyg4-1010",
+          "oracle": [],
+          "endedAt": null
+        },
+        {
+          "caseId": "C-05",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7vvaow-1012",
+          "oracle": [
+            {
+              "assertion": "打开连接弹层后显示「Log in with Email」。",
+              "decidedBy": "machine",
+              "detail": "找到「Log in with Email」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 Default Wallet",
+              "decidedBy": "machine",
+              "detail": "找到「Default Wallet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 WalletConnect",
+              "decidedBy": "machine",
+              "detail": "找到「WalletConnect」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 OKX Wallet",
+              "decidedBy": "machine",
+              "detail": "找到「OKX Wallet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "连接弹层显示 Coinbase Wallet",
+              "decidedBy": "machine",
+              "detail": "找到「Coinbase Wallet」",
+              "heldBefore": false,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        },
+        {
+          "caseId": "C-06",
+          "status": "passed",
+          "failureReason": null,
+          "unobservableReason": null,
+          "runRecordId": "run-mu7vyr8f-1015",
+          "oracle": [
+            {
+              "assertion": "连接弹层显示 Log in with Email",
+              "decidedBy": "machine",
+              "detail": "找到「Log in with Email」",
+              "status": "pass"
+            },
+            {
+              "assertion": "关闭连接弹层后，「Log in with Email」从页面消失。",
+              "decidedBy": "machine",
+              "detail": "确认没有「Log in with Email」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "页面顶部仍显示未连接态 Connect 入口",
+              "decidedBy": "machine",
+              "detail": "找到「Connect」",
+              "heldBefore": true,
+              "status": "pass"
+            },
+            {
+              "assertion": "地址仍为 https://app.hyperliquid-testnet.xyz/trade",
+              "decidedBy": "machine",
+              "detail": "地址 https://app.hyperliquid-testnet.xyz/trade",
+              "status": "pass"
+            }
+          ],
+          "endedAt": "https://app.hyperliquid-testnet.xyz/trade"
+        }
+      ],
+      "finishedAt": "2026-09-19T04:27:13.170Z",
+      "forwardedExecutorCalls": 17,
+      "usageComplete": true
+    }
+  ],
+  "evals": {
+    "evals": [
+      {
+        "id": "eval-2f52d798-5031-4a50-a969-99933d8a3931",
+        "graphId": "registered-host-outputs",
+        "startedAt": "2026-09-19T04:44:10.763Z",
+        "finishedAt": "2026-09-19T04:44:10.763Z",
+        "status": "done",
+        "projectId": "prj-mu7sqa2s-1001",
+        "capability": "ui-trade-20260919",
+        "validity": "valid",
+        "classification": "diagnostic"
+      }
+    ]
+  },
+  "finalConclusion": {
+    "latestCaseResults": "6/6 passed across full run plus targeted retest",
+    "notSingleFullRerun": true,
+    "targetedExecution": "exec-235ead27-e1db-4f9b-b7cc-2cb26c5a12f4",
+    "completedAt": "2026-09-19T04:54:44.942Z",
+    "evaluationId": "eval-2f52d798-5031-4a50-a969-99933d8a3931",
+    "codexDevelopmentRuleCoverage": 0,
+    "claudeDevelopmentRuleCoverage": 1,
+    "devItems": 1,
+    "heldoutItems": 1,
+    "claudeCasesExecuted": false,
+    "tests": {
+      "vitest": 1451,
+      "hooks": 26,
+      "scripts": 7,
+      "hostParity": "184/184"
+    },
+    "export": {
+      "tests": 6,
+      "assertions": 25,
+      "files": 28,
+      "manifestHash": "a4dc1c129894be0dd98eeae889c8954be6ad5a25c925a8223ccd123b4ccb7c92",
+      "verified": true,
+      "playwrightList": true,
+      "separatelyExecuted": false
+    }
+  }
+}

@@ -36,6 +36,7 @@
     "test": "pnpm -r --filter './packages/**' --filter './apps/**' --filter './server' test",
     "server:dev": "pnpm --filter testpilot-server dev",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "test:harness-readiness": "node scripts/harness-readiness.mjs",
     "test:hooks": "node --test \"plugins/testpilot/hooks/test/*.test.mjs\"",
     "check:drift": "node scripts/check-drift.mjs",
     "check:host-parity": "tsx scripts/check-host-parity.mjs",

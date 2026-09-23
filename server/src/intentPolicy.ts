@@ -53,7 +53,7 @@ export function intentPolicy(req: Request, res: Response, next: NextFunction) {
       const run = runLedger().registration(decodeURIComponent(review[1]));
       if (run) return res.status(409).json({ code: 'versioned_review_required', href: `#/?open=wfruns&run=${encodeURIComponent(run.runId)}` });
     }
-    if (/^\/audit\/[^/]+\/labels$/.test(req.path) || /^\/cases\/[^/]+\/(baselines\/approve|perf-baseline\/approve|baseline-verdict|quarantine)$/.test(req.path) || /^\/gold(?:\/|$)/.test(req.path)) reviewerPrincipal(req);
+    if (/^\/audit\/[^/]+\/labels$/.test(req.path) || /^\/cases\/[^/]+\/(baselines\/approve|perf-baseline\/approve|baseline-verdict|quarantine)$/.test(req.path) || (/^\/gold(?:\/|$)/.test(req.path) && !(req.path === '/gold' && req.method === 'POST'))) reviewerPrincipal(req);
     next();
   } catch (error) { const e = error instanceof LedgerError ? error : new LedgerError(400, 'intent_request_invalid'); res.status(e.status).json({ code: e.code }); }
 }

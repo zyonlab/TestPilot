@@ -1,3 +1,4 @@
+import { DecimalEquationSchema, evaluateDecimalEquation } from "./decimalEquation.js";
 import { compareDecimal, compareDecimalChange } from './decimal.js';
 import { z } from "zod";
 
@@ -23,6 +24,7 @@ import { z } from "zod";
  */
 
 export const MachineOracleSchema = z.discriminatedUnion("kind", [
+  DecimalEquationSchema,
   /**
    * `none`：tier 3 用的那一个——**判决要模型看一眼屏幕**，没有程序能核对的形式。
    *
@@ -106,6 +108,7 @@ export type MachineOracle = z.infer<typeof MachineOracleSchema>;
 export interface PageSnapshot {
   text: string;
   url: string;
+  capturedAt?: number;
   /** 只有 api 判据会填：对接口的一次观察。见 `apiOracle.ts`。 */
   api?: { value?: unknown; error?: string };
   /** 只有 judge 判据会填：这一屏上的几次采样。见 `exec/judge.ts`。 */
@@ -183,6 +186,7 @@ export function tierOf(oracle: MachineOracle): 1 | 2 | 3 {
 
 export function describeOracle(oracle: MachineOracle): string {
   switch (oracle.kind) {
+    case "decimal-equation": return "同快照十进制公式核验";
     // 明说自己没有机器判据的那一种：执行时由模型看屏幕表态（tier 3）。
     case "none":
       return "由模型看屏幕判定（没有机器判据）";
@@ -290,6 +294,7 @@ export function evaluateOracle(
   before?: PageSnapshot,
 ): OracleVerdict {
   switch (oracle.kind) {
+    case "decimal-equation": return evaluateDecimalEquation(oracle, after);
     /**
      * `none` 不是一个能跑的判据：它宣称的正是「这里没有机器判据」。
      * 交给判屏那条路，而不是在这里假装判过——`skipped` 和 `pass` 不是一回事。

@@ -20,6 +20,8 @@ export interface ActionSpec {
   params?: readonly string[];
   /** 这个动作要不要运行写入凭证（`stages/*` 这类）。 */
   needsRunGrant?: boolean;
+  /** Local operator decision; never exposed to the planning agent. */
+  operatorOnly?: boolean;
   /** 请求体的形状。不给就是没有请求体。 */
   body?: z.ZodTypeAny;
   /**
@@ -52,7 +54,7 @@ const project: DomainSpec = {
     create: {
       summary: "新建项目。name 与 targetUrl 必填，缺了就问人，不要编一个地址",
       method: "POST", path: "/api/projects", mutates: true,
-      body: z.object({ name: z.string().min(1), targetUrl: z.string().url(), targetPlatform: z.string().optional() }),
+      body: z.object({ name: z.string().min(1), targetUrl: z.string().url(), targetPlatform: z.string().optional(), explorationMaxScreens: z.number().int().min(0).max(50).optional(), explorationScope: z.enum(["current-url", "rules"]).optional() }),
     },
     update: { summary: "改项目（名字、目标地址）", method: "PATCH", path: "/api/projects/:id", params: ["id"], mutates: true, body: json },
     remove: { summary: "删项目。不可撤销，动手前先跟人确认", method: "DELETE", path: "/api/projects/:id", params: ["id"], mutates: true },
@@ -126,7 +128,7 @@ const stage: DomainSpec = {
     retrieve: { summary: "检索材料段落，返回的 chunk id 才能写进 sourceRefs", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/retrieve", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     modules: { summary: "提议模块树", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/modules", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     modules_state: { summary: "读模块树状态：提了没、冻没冻、机检说了什么", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/modules/state", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
-    freeze_modules: { summary: "冻结模块树。**这是人的决定**——把树摆给人看，人点头了再调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/modules/freeze", params: ["projectId", "runId"], mutates: true, body: json },
+    freeze_modules: { operatorOnly: true, summary: "冻结模块树。**这是人的决定**——把树摆给人看，人点头了再调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/modules/freeze", params: ["projectId", "runId"], mutates: true, body: json },
     stories: { summary: "整份写用户故事（开了工作单元的运行会被拒，改用 tp_unit）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/stories", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     cases: { summary: "整份写文本用例（同上）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/cases", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     gate: { summary: "跑设计门禁，返回可操作的 findings", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/gate", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
@@ -178,11 +180,11 @@ const review: DomainSpec = {
   actions: {
     list: { summary: "读这次运行待复核的用例与它们的修订", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"] },
     history: { summary: "读复核历史", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/review-history", params: ["projectId", "runId"] },
-    decide: { summary: "写复核决定（approved / rejected）。人点头了再调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"], mutates: true, body: json },
-    amend: { summary: "修订一条已有的复核决定", method: "PATCH", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"], mutates: true, body: json },
+    decide: { operatorOnly: true, summary: "写复核决定（approved / rejected）。人点头了再调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"], mutates: true, body: json },
+    amend: { operatorOnly: true, summary: "修订一条已有的复核决定", method: "PATCH", path: "/api/projects/:projectId/workflow-runs/:runId/review", params: ["projectId", "runId"], mutates: true, body: json },
     candidates: { summary: "列出这次运行的回归候选（执行判定失败、或被驳回且写了理由的用例）", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates", params: ["projectId", "runId"] },
     propose_candidates: { summary: "从一次执行里收判定失败的用例作回归候选（默认最近一次；环境失败与定位失败不收）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates", params: ["projectId", "runId"], mutates: true, body: json },
-    decide_candidate: { summary: "批准或驳回一条回归候选（approved / dismissed）。**这是人的决定**，人说了才调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates/:candidateId", params: ["projectId", "runId", "candidateId"], mutates: true, body: json },
+    decide_candidate: { operatorOnly: true, summary: "批准或驳回一条回归候选（approved / dismissed）。**这是人的决定**，人说了才调", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/regression-candidates/:candidateId", params: ["projectId", "runId", "candidateId"], mutates: true, body: json },
     regression_suite: { summary: "读项目回归集：人批准过的缺陷用例与反例评测项", method: "GET", path: "/api/projects/:id/regression-suite", params: ["id"] },
   },
 };
@@ -195,7 +197,7 @@ const execution: DomainSpec = {
   actions: {
     list: { summary: "列出这次运行的执行批次", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions", params: ["projectId", "runId"] },
     baseline: { summary: "读当前的判决集基线", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions/baseline", params: ["projectId", "runId"] },
-    set_baseline: { summary: "把某次执行立为基线。**这是人的决定**", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/executions/baseline", params: ["projectId", "runId"], mutates: true, body: json },
+    set_baseline: { operatorOnly: true, summary: "把某次执行立为基线。**这是人的决定**", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/executions/baseline", params: ["projectId", "runId"], mutates: true, body: json },
     compare: { summary: "把一次执行和基线比：哪几条翻了", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions/compare", params: ["projectId", "runId"] },
     detail: { summary: "读一次执行的明细：每条用例的步骤日志、判据、截图、视觉基线、性能基线与 Midscene 报告地址", method: "GET", path: "/api/projects/:projectId/workflow-runs/:runId/executions/detail/:executionId", params: ["projectId", "runId", "executionId"] },
   },
@@ -224,8 +226,8 @@ const kase: DomainSpec = {
     refine: { summary: "让模型改写一条用例（自愈不许动 oracle）", method: "POST", path: "/api/cases/:id/refine", params: ["id"], mutates: true, body: json },
     quarantine: { summary: "把不稳定的用例隔离：照跑但不进门禁", method: "POST", path: "/api/cases/:id/quarantine", params: ["id"], mutates: true, body: json },
     recompute_flakiness: { summary: "重算这条用例的不稳定度", method: "POST", path: "/api/cases/:id/recompute-flakiness", params: ["id"], mutates: true, body: json },
-    approve_visual_baseline: { summary: "批准视觉基线。**这是人的决定**", method: "POST", path: "/api/cases/:id/baselines/approve", params: ["id"], mutates: true, body: json },
-    approve_perf_baseline: { summary: "批准性能基线。**这是人的决定**", method: "POST", path: "/api/cases/:id/perf-baseline/approve", params: ["id"], mutates: true, body: json },
+    approve_visual_baseline: { operatorOnly: true, summary: "批准视觉基线。**这是人的决定**", method: "POST", path: "/api/cases/:id/baselines/approve", params: ["id"], mutates: true, body: json },
+    approve_perf_baseline: { operatorOnly: true, summary: "批准性能基线。**这是人的决定**", method: "POST", path: "/api/cases/:id/perf-baseline/approve", params: ["id"], mutates: true, body: json },
     baseline_verdict: { summary: "对判决集基线表态", method: "POST", path: "/api/cases/:id/baseline-verdict", params: ["id"], mutates: true, body: json },
     // 绑定没有独立的写入路由：改绑定走 `update`（PATCH /api/cases/:id）的 dataKey 字段。
     data_binding: { summary: "读用例绑定的数据集与列", method: "GET", path: "/api/cases/:id/data-binding", params: ["id"] },
@@ -305,7 +307,14 @@ const evaluation: DomainSpec = {
     scoreboard: { summary: "读记分板：各能力的当前得分与翻转次数", method: "GET", path: "/api/scoreboard" },
     paired_scoreboard: { summary: "读配对评测的记分板", method: "POST", path: "/api/scoreboard/paired", mutates: true, body: json },
     gold: { summary: "读某个能力的 gold（冻结，只读）", method: "GET", path: "/api/gold/:capability", params: ["capability"] },
-    set_gold: { summary: "写 gold。**冻结集，动它要非常确定**", method: "POST", path: "/api/gold/:capability", params: ["capability"], mutates: true, body: json },
+    compare_registered: { summary: "比较同项目已定稿的两次宿主运行；要求人工冻结 Gold，仅读开发项", method: "POST", path: "/api/evals/registered", mutates: true, body: json },
+    evidence_studies: { summary: "列出导出器对照实验及有边界的提升证据", method: "GET", path: "/api/evidence-studies" },
+    start_evidence_study: { summary: "按固定协议启动真实模型生成与浏览器缺陷检出实验；不自动发布", method: "POST", path: "/api/evidence-studies", mutates: true, body: json },
+    evidence_study: { summary: "读取实验绑定、指标和审计结论", method: "GET", path: "/api/evidence-studies/:id", params: ["id"] },
+    evidence_file: { summary: "读取冻结协议、原始记录或截图", method: "GET", path: "/api/evidence-studies/:id/files/:file", params: ["id","file"] },
+    review_evidence: { operatorOnly: true, summary: "操作员审阅有边界的提升证据，不等于发布", method: "POST", path: "/api/evidence-studies/:id/review", params: ["id"], mutates: true, body: json },
+    draft_gold: { summary: "创建项目关联的未复核 Gold 草稿；不授予人工确认或冻结", method: "POST", path: "/api/gold", mutates: true, body: json },
+    set_gold: { operatorOnly: true, summary: "写 gold。**冻结集，动它要非常确定**", method: "POST", path: "/api/gold/:capability", params: ["capability"], mutates: true, body: json },
     evals: { summary: "列出评测定义（两臂只差一件事的那些对照）", method: "GET", path: "/api/evals" },
     eval: { summary: "读一个评测", method: "GET", path: "/api/evals/:id", params: ["id"] },
     score: { summary: "给一次运行打分", method: "POST", path: "/api/evals/score", mutates: true, body: json },

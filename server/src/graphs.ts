@@ -76,6 +76,7 @@ interface ResolvedTarget {
   /** 这个被测对象要多大的视口。不配就是 undefined，执行层沿用默认。 */
   viewport?: { width?: number; height?: number };
   login: string[];
+  authentication?: Pick<Environment["login"], "sessionChecks" | "injectedSessionCheck">;
   describe: string;
   /** 这个环境是**点名要的**，还是没人选、拿了默认的那一个。 */
   envPick: "named" | "default" | "none";
@@ -129,9 +130,10 @@ function resolveTarget(target: RunTarget): ResolvedTarget {
     extraHeaders: { ...resolveMap(env?.headers ?? {}, ctx), ...(useSession ? session?.headers ?? {} : {}) },
     query: resolveMap(env?.query ?? {}, ctx),
     storageState: useSession ? session : null,
+    authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined,
     ...(env?.viewport?.width || env?.viewport?.height ? { viewport: env.viewport } : {}),
-    // A captured session replaces the login steps; otherwise the flow runs them.
-    login: env?.login?.authRequired && !useSession ? env.login.steps ?? [] : [],
+    // Keep login steps as a fallback when restored-session checks fail.
+    login: env?.login?.authRequired ? env.login.steps ?? [] : [],
     describe: `${project?.name ?? "no project"} / ${env?.name ?? "no environment"}`,
     envPick: !env ? "none" : target.envRef ? "named" : "default",
     urlFrom,
@@ -222,6 +224,7 @@ function makeExecutor(
           // run resolves them — same environment, same secrets, same redaction.
           resolve: t.ctx,
           login: t.login,
+          authentication: t.authentication,
           extraHeaders: t.extraHeaders,
           query: t.query,
           storageState: t.storageState,

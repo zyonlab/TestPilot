@@ -1,3 +1,4 @@
+import type {SessionCheck,InjectedSessionCheck} from "@testpilot/harness-testing/domain";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -22,6 +23,7 @@ import {
   type WalletDappTestSpec,
   type WalletDappTestResult,
   type RunResult,
+  type Preparation,
   type WalletCheckResult,
 } from "@testpilot/harness-testing";
 import type { ChainAssertion, MachineOracle, StorageState } from "@testpilot/harness-testing";
@@ -43,6 +45,8 @@ export interface ExecSpec {
   /** Where step screenshots are written. Refs travel back, bytes do not. */
   artifactDir: string;
   opts: {
+    captureObservations?: boolean;
+    preparation?: Preparation;
     executorModel?: RoleModelConnection;
     modelBudget?: { maxCalls?: number; deadlineAt?: number };
     injected?: boolean;
@@ -52,6 +56,7 @@ export interface ExecSpec {
     cacheId?: string;
     /** 批次级浏览器复用的 key（07 T-28）。 */
     sessionKey?: string;
+    authentication?: {sessionChecks?:SessionCheck[];injectedSessionCheck?:InjectedSessionCheck};
     login?: string[];
     postSteps?: string[];
     resolve?: ResolveContext;

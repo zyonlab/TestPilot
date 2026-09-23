@@ -21,6 +21,7 @@ export interface ApiLoginConfig {
 }
 
 export interface LoginFlow {
+  sessionChecks?: { capability: "session" | "wallet-connected" | "wallet-identity" | "wallet-session" | "trading-authorized"; checks: { kind: "connected" | "address" | "network" | "authorized"; label: string }[] }[];
   authRequired?: boolean;
   steps?: string[];
   apiLogin?: ApiLoginConfig | null; // API-style login config (no UI driving)
@@ -71,6 +72,8 @@ export interface Step {
 /** Which end this project is tested on. web3 and chain assertions are web-only (US-01). */
 export type TargetPlatform = "web" | "ios" | "android";
 export interface Project {
+  explorationMaxScreens?: number; // 0 = unlimited
+  explorationScope?: "current-url" | "rules";
   id: string;
   name: string;
   targetUrl: string;
@@ -399,4 +402,4 @@ export interface ScoreboardRow {
 }
 export interface GoldItem { sourceRefs?: string[]; expected?: string; ruleFamily?: string; split?: "train" | "dev" | "heldout"; reviewReceipt?: { reviewer: string; at: string; contentHash: string }; id: string; title: string; story?: string; designMethod?: string; expectTier?: number; heldOut?: boolean; match: Record<string, unknown>; anchors?: string[]; stale?: boolean }
 export interface GoldFile { reviewPolicy?: "individual-v1"; id: string; items: GoldItem[]; outOfScope?: string[] }
-export interface GoldState { capability: string; dir: string; draft: GoldFile | null; gold: GoldFile | null; frozenHash: string | null; currentHash: string | null; checklist: string[] }
+export interface GoldState { projectId?: string; reviewIssues?: string[]; archived?: boolean; archiveReason?: string; capability: string; dir: string; draft: GoldFile | null; gold: GoldFile | null; frozenHash: string | null; currentHash: string | null; checklist: string[] }

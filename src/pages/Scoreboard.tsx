@@ -1,4 +1,5 @@
 import { useStore } from '@/lib/store';
+import {EvidenceStudy} from '@/components/EvidenceStudy';
 import { useProjectRuns } from '@/lib/useProjectRuns';
 import { useEffect, useMemo, useState } from "react";
 import { TopBar } from "@/components/TopBar";
@@ -10,7 +11,11 @@ import type { ScoreboardRow } from "@/lib/types";
  * 记分板（07 T-18）：每行一个 binding。人看到的是「哪一版生成器、哪个模型、哪个运行时、在哪条谱系上得了几分」。
  * 不提供编辑——记分板由工具追加。正式配对由外部评估工具完成；此页只读展示。
  */
-const b = (r: ScoreboardRow, k: string): unknown => (r.binding as Record<string, unknown> | undefined)?.[k] ?? r[k];
+const b = (r: ScoreboardRow, k: string): unknown => {
+  if (k === "heldOut") return r.heldOutCoverage ?? r.heldOut;
+  if (k === "tokens") return (r.binding?.spend as {tokens?: number} | undefined)?.tokens ?? r.tokens;
+  return r.binding?.[k] ?? r[k];
+};
 const num = (v: unknown): string => (typeof v === "number" ? (v <= 1 ? `${Math.round(v * 100)}%` : String(v)) : v && typeof v === "object" ? num((v as Record<string, unknown>).coverage ?? (v as Record<string, unknown>).score) : "—");
 
 export function ScoreboardPage() {
@@ -21,21 +26,28 @@ export function ScoreboardPage() {
   const [allRows, setRows] = useState<ScoreboardRow[]>([]);
   const [caps, setCaps] = useState<string[]>([]);
   const [cap, setCap] = useState<string>("");
-  const [penguinUrl,setPenguinUrl] = useState("http://127.0.0.1:7365");
-  const [activeVersion,setActiveVersion] = useState<string>("—");
-  const [error, setError] = useState<string>("");
-
+  const [error, setError] = useState("");
+  const [loading,setLoading] = useState(true);
+  const [revision,setRevision] = useState(0);
+  const [diagnostics,setDiagnostics] = useState<Array<{id:string;status:string;error?:string;graphId:string;projectId?:string}>>([]);
   useEffect(() => {
-    api.getScoreboard(cap || undefined).then((r) => { setRows(r.entries); setCaps(r.capabilities); if(r.penguinUrl)setPenguinUrl(r.penguinUrl);if(r.activeVersion)setActiveVersion(`${r.activeVersion.version} · ${r.activeVersion.generation}`); }).catch((e) => setError(String(e.message ?? e)));
-  }, [cap]);
+    let active = true; setLoading(true); setError("");
+    api.getScoreboard(undefined, scope === 'research').then(r => {
+      if (!active) return;
+      setRows(r.entries); setCaps(r.capabilities); setDiagnostics(r.diagnostics ?? []);
+      setCap(old => r.capabilities.includes(old) ? old : "");
+    }).catch(e => { if (active) setError(String(e.message ?? e)); }).finally(()=>{if(active)setLoading(false);});
+    return () => { active = false; };
+  }, [scope, revision]);
 
-  const rows=scope==='research'?allRows:allRows.filter(row=>projectRuns.runs.some(run=>run.id===row.runId));
+  const visibleDiagnostics = diagnostics.filter(row=>scope==="research" || (!!projectId && row.projectId===projectId));
+  const rows=allRows.filter(row=>(!cap || row.capability===cap) && (scope==='research' || (!!projectId && (row.projectId===projectId || projectRuns.runs.some(run=>run.id===row.runId)))));
   const groups = useMemo(() => {
     const m = new Map<string, number[]>();
-    rows.forEach((r, i) => { const g = JSON.stringify([b(r,"goldHash"),b(r,"inputHash"),b(r,"runtime"),b(r,"model")]); m.set(g, [...(m.get(g) ?? []), i]); });
+    rows.forEach((r, i) => { const g = JSON.stringify([b(r,"goldHash"),b(r,"inputHash"),b(r,"materialsHash"),b(r,"runtime"),b(r,"model"),b(r,"skillVersion"),b(r,"promptsDigest")]); m.set(g, [...(m.get(g) ?? []), i]); });
     return m;
   }, [rows]);
-  const cols = ["capability", "runId", "runtime", "skillVersion", "model", "promptsDigest", "materialsHash", "inputHash", "goldHash", "coverage", "heldOut", "gate", "tokens", "n"];
+  const cols = ["capability", "runId", "runtime", "skillVersion", "model", "promptsDigest", "materialsHash", "inputHash", "goldHash", "coverage", "heldOut", "gate", "tokens"];
   return (
     <div className="flex h-full flex-col">
       <TopBar title={t("surface.scoreboard")} hint={t("scoreboard.hint")} />
@@ -48,13 +60,13 @@ export function ScoreboardPage() {
           </select>
         </label>
         <span className="text-muted-foreground">{t("scoreboard.groups")}: {groups.size}</span>
-        <a className="rounded border px-3 py-1" href={penguinUrl} target="_blank" rel="noreferrer">{t('scoreboard.openPenguin')}</a>
-        <span className="text-xs text-muted-foreground"><code>{activeVersion}</code></span>
+        <button className="rounded border px-3 py-1" onClick={()=>setRevision(v=>v+1)}>{t("evaldesk.refresh")}</button>
       </div>
-      {error && <div className="px-4 text-sm text-destructive">{error}</div>}
+      {(error || (scope === "project" && projectRuns.error)) && <div role="alert" className="px-4 text-sm text-destructive">{error || projectRuns.error}</div>}<p className="px-4 py-3 text-sm text-muted-foreground">{t("scoreboard.sourceNote")}</p>
       <div className="flex-1 overflow-auto px-4">
-        {rows.length === 0 ? (
-          <div className="py-8 text-sm text-muted-foreground">{t("scoreboard.empty")}</div>
+        <div className="my-4"><EvidenceStudy readOnly /></div>
+        {loading ? <p role="status" className="py-8">{t("evaldesk.loading")}</p> : rows.length === 0 ? (
+          <div className="py-8 text-sm text-muted-foreground">{t(scope === "project" && !projectId ? "scoreboard.selectProject" : "scoreboard.empty")}</div>
         ) : (
           <table className="w-full text-[0.75rem]">
             <thead><tr className="text-left text-muted-foreground">{cols.map((c) => <th key={c} className="py-1 pr-3">{c}</th>)}</tr></thead>
@@ -72,6 +84,7 @@ export function ScoreboardPage() {
             </tbody>
           </table>
         )}
+        {<section className="my-6 border-t border-border pt-4"><h2 className="text-sm font-semibold">{t("scoreboard.diagnostics")}</h2><p className="my-2 text-xs text-muted-foreground">{t("scoreboard.diagnosticNote")}</p>{visibleDiagnostics.map(row=><a key={row.id} className="my-2 block rounded border border-border p-3 text-xs" href={`#/?open=evals&evalId=${encodeURIComponent(row.id)}`}>{row.id} · {row.graphId} · {row.status}{row.error ? ` · ${row.error}` : ""}</a>)}{!visibleDiagnostics.length && <p className="text-xs text-muted-foreground">{t("evaldesk.emptyRuns")}</p>}</section>}
       </div>
     </div>
   );

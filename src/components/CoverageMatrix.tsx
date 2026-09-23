@@ -39,12 +39,13 @@ interface Score {
 export function CoverageMatrix({ runs }: { runs: Array<{ id: string; label: string }> }) {
   const t = useT();
   const [runId, setRunId] = useState("");
+  const [goldPath, setGoldPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [score, setScore] = useState<Score | null>(null);
 
   const score1 = async () => {
-    if (!runId) return;
+    if (!runId || !goldPath.trim()) return;
     setBusy(true);
     setError("");
     setScore(null);
@@ -52,7 +53,7 @@ export function CoverageMatrix({ runs }: { runs: Array<{ id: string; label: stri
       const res = await fetch(`${API_BASE}/api/evals/score`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wfRunId: runId }),
+        body: JSON.stringify({ wfRunId: runId, goldPath: goldPath.trim() }),
       });
       const body = (await res.json()) as { score?: Score; error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -81,7 +82,8 @@ export function CoverageMatrix({ runs }: { runs: Array<{ id: string; label: stri
             </option>
           ))}
         </Select>
-        <Button variant="primary" disabled={!runId || busy} onClick={() => void score1()}>
+        <input aria-label={t("evaldesk.dataset")} placeholder={t("evaldesk.datasetPath")} value={goldPath} onChange={event => setGoldPath(event.target.value)} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm" />
+        <Button variant="primary" disabled={!runId || !goldPath.trim() || busy} onClick={() => void score1()}>
           {busy ? t("matrix.scoring") : t("matrix.score")}
         </Button>
       </div>

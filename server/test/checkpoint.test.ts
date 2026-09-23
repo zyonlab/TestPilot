@@ -54,7 +54,10 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("U-64 · 反复中断再接上", () => {
   it("崩了三次接三次：步骤史累加，接上的地方每次都对", async () => {
-    const { wfRunId } = await startRun({ graphId: GRAPH, budget: { calls: 100 } });
+    // This test supplies each segment itself. Starting a real graph races its docs node
+    // against segment(), duplicating history depending on machine load.
+    const wfRunId = `wf-segments-${crypto.randomUUID()}`;
+    outputStore.saveRun({id:wfRunId,graphId:GRAPH,graphVersion:1,status:"running",startedAt:new Date().toISOString(),detail:{budget:{calls:100},nodes:[]}});
 
     await segment(wfRunId, ["docs"], { calls: 3, tokens: 300 });
     kill();

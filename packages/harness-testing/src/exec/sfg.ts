@@ -73,13 +73,14 @@ export const SfgTransitionSchema = z.object({
       controlsRemoved: z.array(z.string()).default([]),
       stateChanged: z.array(z.string()).default([]),
       textAdded: z.array(z.string()).default([]),
+    textRemoved: z.array(z.string()).default([]),
     })
     .optional(),
 });
 export type SfgTransition = z.infer<typeof SfgTransitionSchema>;
 
 export const SfgStateSchema = z.object({
-  /** 稳定标识：`<路由>#<抽象出来的状态序号>`。 */
+  /** 稳定标识：`<路由>~<抽象出来的状态序号>`（内部标识，不是 URL）。 */
   id: z.string().min(1),
   /** 路由。同一路由的不同可见状态是它的子节点，不是另一条路由。 */
   route: z.string().default(""),

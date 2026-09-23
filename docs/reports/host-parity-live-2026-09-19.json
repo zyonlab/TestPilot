@@ -1,0 +1,30 @@
+[
+  {
+    "runtime": "claude-code",
+    "toolCount": 46,
+    "schemaHash": "abcbb92edefc287863cfc6d32195ba61ce36902bb4496fa18f3ea2438c17b41a",
+    "compare": {
+      "content": [
+        {
+          "type": "text",
+          "text": "POST /api/evals/registered → 400: human_frozen_gold_required"
+        }
+      ],
+      "isError": true
+    }
+  },
+  {
+    "runtime": "codex",
+    "toolCount": 46,
+    "schemaHash": "abcbb92edefc287863cfc6d32195ba61ce36902bb4496fa18f3ea2438c17b41a",
+    "compare": {
+      "content": [
+        {
+          "type": "text",
+          "text": "POST /api/evals/registered → 400: human_frozen_gold_required"
+        }
+      ],
+      "isError": true
+    }
+  }
+]

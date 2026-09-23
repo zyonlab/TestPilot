@@ -1,3 +1,4 @@
+import { sessionCapability, verifySessionChecks, type SessionCheck } from "./sessionEvidence.js";
 import type { ExplorationCharter } from "./charter.js";
 import { activationBlocker, matchTarget, type ControlLike } from "./charter.js";
 import type { ExplorationTargetSpec } from "./rules.js";
@@ -47,9 +48,15 @@ export class CharterTracker {
 
   private readonly stateChangeSpecs: ExplorationTargetSpec[];
 
-  constructor(readonly charter: ExplorationCharter, available: string[] = []) {
-    this.available = new Set(available);
+  constructor(readonly charter: ExplorationCharter, available: string[] = [], private readonly sessionChecks: SessionCheck[] = []) {
+    this.available = new Set(available.filter(cap => !sessionCapability(cap)));
     this.stateChangeSpecs = charter.featureTargets.filter((t) => t.sideEffect === "state-change");
+  }
+
+  setInjectedSessionEvidence(verified: boolean) {
+    for (const cap of ['wallet-connected','wallet-identity','wallet-session']) {
+      if (verified) this.available.add(cap); else this.available.delete(cap);
+    }
   }
 
   /** 稳定 id：路由 + 目标 + 文案。不吃 nth-of-type——交易页重渲染后路径会漂，文案不会。 */
@@ -59,6 +66,11 @@ export class CharterTracker {
 
   /** 看到一屏：把命中 charter 的控件登记成 InteractionTarget（看见 ≠ 试过）。 */
   noteState(stateId: string, route: string, elements: ControlLike[], round: number): InteractionTarget[] {
+    const verification = verifySessionChecks(this.sessionChecks, elements.map(c => c.label));
+    for (const result of verification) {
+      if (result.verified) this.available.add(result.capability);
+      else this.available.delete(result.capability);
+    }
     const found: InteractionTarget[] = [];
     for (const spec of this.charter.featureTargets)
       for (const c of elements) {
@@ -237,7 +249,10 @@ export class CharterTracker {
      */
     const durability = (t: ExplorationTargetSpec): number =>
       t.sideEffect === "state-change" ? 0 : t.action === "fill" ? 2 : 1;
-    const durableFirst = [...this.charter.featureTargets].sort((a, b) => durability(a) - durability(b));
+    // Cover a new business target before repeating an already exercised target on another route.
+    const visitedSpec = (id: string) => this.observations.some(o=>o.targetSpecId===id && ['attempted','observed_only','skipped_equivalent'].includes(o.status));
+    const coverageFirst = [...this.charter.featureTargets].sort((a,b)=>Number(visitedSpec(a.id))-Number(visitedSpec(b.id)));
+    const durableFirst = [...coverageFirst].sort((a, b) => durability(a) - durability(b));
     if (this.chainCaps.size) {
       const onChain = this.charter.featureTargets.filter((t) => [...this.chainCaps].some((c) => this.deps(t).has(c)));
       const step = this.pick(chained, route, elements, false, reachable) ?? this.pick(onChain, route, elements, true);
@@ -250,7 +265,7 @@ export class CharterTracker {
       this.chainStalled = 0;
     }
     const ready = this.pick(chained, route, elements, false, reachable)
-      ?? this.pick(this.charter.featureTargets, route, elements, false, reachable);
+      ?? this.pick(coverageFirst, route, elements, false, reachable);
     if (ready) { this.pickReady.set(ready.target.stableId, true); return ready; }
     const last = this.pick(durableFirst, route, elements, true);
     if (last) this.pickReady.set(last.target.stableId, false);
@@ -291,15 +306,15 @@ export class CharterTracker {
     if (obs.status === "attempted") {
       const spec = this.charter.featureTargets.find((t) => t.id === obs.targetSpecId);
       // 这一步刚产出的前提单独记一份：下一轮先找「在等它的那个目标」，链才连得上。
-      this.lastProvided = new Set(spec?.provides ?? []);
-      for (const cap of spec?.provides ?? []) this.available.add(cap);
+      this.lastProvided = new Set((spec?.provides ?? []).filter(cap => !sessionCapability(cap)));
+      for (const cap of this.lastProvided) this.available.add(cap);
       // 产出的前提还有人要 → 链还在走；走到终点（产出没人要，或压根没产出）→ 链结束。
       const ready = this.pickReady.get(obs.targetId) ?? false;
       // 回执里说清这一步是**链上的一步**还是**扫到的**：两者的证据分量不一样，
       // 而且链断在哪一步、为什么断，只有这一行看得出来。
       if (!obs.reason) obs.reason = ready ? "chain" : "sweep";
       if (ready)
-        for (const cap of spec?.provides ?? []) if (this.consumers(cap).length) this.chainCaps.add(cap);
+        for (const cap of this.lastProvided) if (this.consumers(cap).length) this.chainCaps.add(cap);
       if (!ready || (spec && !spec.provides.some((c) => this.consumers(c).length))) this.chainCaps.clear();
     } else if (obs.status === "blocked" || obs.status === "failed") this.lastProvided = new Set();
     return obs;

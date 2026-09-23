@@ -1,3 +1,6 @@
+import { artifactLabel } from './artifactLabel';
+import { DocumentFields, RulePackDocument, ExplorationDocument } from './ArtifactDocument';
+import { ExplorationGraph, type ExplorationGraphData } from './ExplorationGraph';
 import {ExecutionReport} from './ExecutionReport';
 import {GateReport} from './GateReport';
 import {TextCaseDetail} from './TextCaseDetail';
@@ -53,21 +56,27 @@ function ModulePlan({data}:{data:Record<string,unknown>}){
 }
 
 export function RevisionContent({content,kind,projectId,runId}:{content:unknown;kind:string;projectId?:string;runId?:string}) {
+  const t=useT();
   if(typeof content==='string')return <Markdown text={content}/>;
-  if(!content||typeof content!=='object')return <pre>{JSON.stringify(content,null,2)}</pre>;
+  if(!content||typeof content!=='object')return <DocumentFields data={content}/>;
   const data=content as Record<string,unknown>;
+  if(data.schemaVersion==='product-rule-pack.v1')return <RulePackDocument data={{rulePack:data}}/>;
+  if(data.rulePack&&typeof data.rulePack==='object'&&Array.isArray((data.rulePack as Record<string,unknown>).rules))return <RulePackDocument data={data}/>;
+  if(data.schemaVersion==='exploration-report.v1')return <ExplorationDocument data={data}/>;
+  if(data.schemaVersion==='product-model.v1')return <DocumentFields data={data}/>;
+  if(data.graph && typeof data.graph==='object' && Array.isArray((data.graph as ExplorationGraphData).states) && Array.isArray((data.graph as ExplorationGraphData).transitions)) return <div className="space-y-5"><ExplorationGraph graph={data.graph as ExplorationGraphData}/>{data.report&&typeof data.report==='object'?<ExplorationDocument data={data.report as Record<string,unknown>}/>:null}{typeof data.notes==='string'&&<details><summary className="cursor-pointer font-medium">{t('artifact.notes')}</summary><Markdown text={data.notes}/></details>}</div>;
   if(kind==='gate')return <GateReport data={data}/>;
   if(kind==='cases'&&typeof data.id==='string'&&Array.isArray(data.steps))return <RevisionContent kind="cases" content={{cases:[data]}}/>;
   if(kind==='execution')return <ExecutionReport data={data} projectId={projectId} runId={runId}/>;
   if(kind==='code'&&Array.isArray(data.code))return <div className="space-y-4">{data.code.map((c,i)=>{const row=c as Record<string,unknown>;return <article key={i} className="rounded border border-border p-4"><h3 className="font-medium">{String(row.caseId??'')} · {String(row.title??'')}</h3>{row.entryUrl!=null&&<p className="mt-2 break-words text-xs text-muted-foreground">{String(row.entryUrl)}</p>}<pre className="mt-3 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3 text-xs">{String(row.code??'')}</pre></article>;})}</div>;
   if(Array.isArray(data.cases))return <CaseList cases={data.cases as Record<string,unknown>[]}/>;
   if(Array.isArray(data.modules)&&!Array.isArray(data.stories))return <ModulePlan data={data}/>;
-  if(Array.isArray(data.stories)) return <ProductStructure data={data}/>;
-  if(typeof data.text==='string'||typeof data.specText==='string'||typeof data.notes==='string')return <Markdown text={String(data.text??data.specText??data.notes)}/>;
+  if(Array.isArray(data.stories)) return <ProductStructure data={data} projectId={projectId} runId={runId}/>;
+  if(typeof data.text==='string'||typeof data.specText==='string'||typeof data.notes==='string')return <div className="space-y-6"><Markdown text={String(data.text??data.specText??data.notes)}/><details><summary className="cursor-pointer text-sm">{t('artifact.additional')}</summary><DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>!['text','specText','notes'].includes(k)))}/></details></div>;
   if(typeof data.code==='string')return <pre className="overflow-auto whitespace-pre-wrap text-xs">{data.code}</pre>;
-  return <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-4 text-xs" aria-label={kind}>{JSON.stringify(content,null,2)}</pre>;
+  return <DocumentFields data={content}/>;
 }
-export function RevisionViewer({projectId,revision,all,onSelect}:{projectId:string;revision:Revision;all:Revision[];onSelect:(revision:Revision)=>void}) {
+export function RevisionViewer({projectId,revision,all,onSelect,hideTitle=false}:{hideTitle?:boolean;projectId:string;revision:Revision;all:Revision[];onSelect:(revision:Revision)=>void}) {
   const t=useT(),[state,setState]=useState<{key:string;content?:unknown;error?:string}>({key:''});
   const key=projectId+':'+revision.runId+':'+revision.id;
   useEffect(()=>{const c=new AbortController();setState({key});
@@ -75,8 +84,12 @@ export function RevisionViewer({projectId,revision,all,onSelect}:{projectId:stri
   },[projectId,revision.id,revision.runId,key]);
   const ready=state.key===key&&state.content!==undefined;
   return <section className="min-w-0 space-y-4" aria-label={t('workflow.artifactDetail')}>
-    <header className="flex flex-wrap items-center justify-between gap-3"><h2 className="break-words font-medium">{revision.name} · v{revision.revision}</h2><a className="text-sm text-primary underline" href={`${API_BASE}/api/${workflowBase(projectId)}/${revision.runId}/artifacts/${revision.id}/export`}>{t('workflow.download')}</a></header>
+    <header className="flex flex-wrap items-center justify-between gap-3">{!hideTitle&&<h2 className="break-words font-medium">{artifactLabel(revision.name,t)} · v{revision.revision}</h2>}<a className="ml-auto text-sm text-primary underline" href={`${API_BASE}/api/${workflowBase(projectId)}/${revision.runId}/artifacts/${revision.id}/export`}>{t('workflow.download')}</a></header>
+    {revision.name.startsWith('knowledge/')&&all.filter(r=>r.runId===revision.runId&&r.name===revision.name&&r.kind===revision.kind).length>1&&<div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-muted-foreground">{t('bench.knowledgeVersions')}</span>
+      {all.filter(r=>r.runId===revision.runId&&r.name===revision.name&&r.kind===revision.kind).map(r=><Button key={r.id} size="sm" disabled={r.id===revision.id} onClick={()=>onSelect(r)}>v{r.revision}{r.id!==revision.id&&r.contentHash===revision.contentHash? ` · ${t('bench.sameKnowledge')}`:''}</Button>)}
+    </div>}
     {state.error?<p role="alert" className="text-bad">{t('workflow.artifactFailed')} · {state.error}</p>:!ready?<p role="status">{t('workflow.loading')}</p>:<RevisionContent content={state.content} kind={revision.kind} projectId={projectId} runId={revision.runId}/>}
-    <details className="border-t border-border pt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">{t('workflow.sources')}</summary><p className="my-3 break-all">{revision.runId} · {revision.id}<br/>SHA256 {revision.contentHash}</p><div className="flex flex-wrap gap-2">{revision.sourceRefs.map(id=>{const r=all.find(x=>x.id===id);return r?<Button key={id} size="sm" onClick={()=>onSelect(r)}>{r.name} · v{r.revision}</Button>:<span key={id}>{id}</span>;})}</div>{ready&&<pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(state.content,null,2)}</pre>}</details>
+    <details className="border-t border-border pt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">{t('artifact.sourceData')}</summary><p className="my-3 break-all">{revision.runId} · {revision.id}<br/>SHA256 {revision.contentHash}</p><div className="flex flex-wrap gap-2">{revision.sourceRefs.map(id=>{const r=all.find(x=>x.id===id);return r?<Button key={id} size="sm" onClick={()=>onSelect(r)}>{artifactLabel(r.name,t)} · v{r.revision}</Button>:<span key={id}>{id}</span>;})}</div>{ready&&<pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(state.content,null,2)}</pre>}</details>
   </section>;
 }

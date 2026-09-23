@@ -61,3 +61,15 @@ describe("diffScreens", () => {
     expect(d.textAdded).toEqual(["二"]);
   });
 });
+
+ it("ignores collector headings but retains actual page changes", () => {
+   const before={controls:[],text:"===== 入口页 =====\nOpen Orders"};
+   const same={controls:[],text:"===== 第 2 屏 =====\nOpen Orders"};
+   expect(diffScreens(before,same).changed).toBe(false);
+   const changed=diffScreens(before,{controls:[],text:"===== 第 3 屏 =====\nNo open orders yet"});
+   expect(changed.textAdded).toEqual(["No open orders yet"]);
+   expect(changed.textRemoved).toEqual(["Open Orders"]);
+ });
+ it("counts disappearing visible text as a change", () => {
+   expect(diffScreens({controls:[],text:"Validation error"},{controls:[],text:""}).changed).toBe(true);
+ });

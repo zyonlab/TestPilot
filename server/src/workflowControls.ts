@@ -1,5 +1,6 @@
+import { STORY_PLANNING_CONTRACT } from '@testpilot/harness-testing/casegen';
 import { randomUUID } from 'node:crypto';
-import {materialSections, frozenModules } from './moduleStage.js';
+import {materialSections, frozenModules, modulePlanState } from './moduleStage.js';
 import {caseStructureContract} from './workUnits.js';
 import { z } from 'zod';
 import { runLedger } from './runService.js';
@@ -30,7 +31,7 @@ const STORY_CONTRACT=[
   'FILL EVERY LEAF: write at least two stories for each leaf module (a leaf is a module no other module has as parent). The server reports every leaf without a story back to you; a leaf you cannot fill means the tree is finer than the product, and that is worth saying out loud rather than leaving the leaf empty.',
   'CITE PER CRITERION: each acceptance criterion states precondition, trigger and business result, and ends with the material section it follows from, written inline as (依据 <file>.md#N). A criterion whose source cannot be named is a guess.',
   'JUDGE, DO NOT INVENTORY: an acceptance criterion says what must be TRUE about the product, not what the screen lists. If a criterion only asserts that a field is displayed, say instead what would be wrong if that field were absent, stale, or contradicted another field on the same screen.',
-  'TWO KINDS OF UNKNOWN, LABELLED DIFFERENTLY: 【待确认：界面观察不到】 is a coverage gap — the domain knowledge raises a question this observation cannot answer. 【待确认：与领域知识冲突】 is a product defect lead — two materials, or a material and the screen, say different things; name both sections. Volatile readings (live counters, prices, countdowns, running totals, and whatever the rule pack lists under volatileReadings) may only be asserted as existing or as a relation between two readings.',
+  STORY_PLANNING_CONTRACT,
   'ONE CRITERION PER INDEPENDENTLY CHECKABLE RESULT — the count comes from the story, not from a quota. A set of stories whose acceptance counts are all identical was filled to a number rather than derived; some stories carry one criterion and some carry five.',
   'A CONTRADICTION MUST SURVIVE RE-READING BOTH SECTIONS: before labelling one, quote what each section actually says. If the observation does contain what you were about to call missing, it is not a contradiction — drop it. A wrong contradiction costs more than a missing one, because someone will go check it.',
   'SWEEP THE DOMAIN MATERIAL BEFORE YOU FINISH: walk the domain document section by section and ask of each one — does the observed UI contradict it, or leave a question it raises unanswerable? Each contradiction becomes a 【待确认：与领域知识冲突】 criterion naming both sections. Reporting zero contradictions across an entire domain document claims the product is perfectly consistent with it; claim that only if you actually walked every section.',
@@ -40,7 +41,7 @@ const STORY_CONTRACT=[
    */
   'CLAIM A DECLARED ROLE: when the unit materials carry roles, every story names one of THEM verbatim (id or name) and its benefit is that role\'s goal in this context. Two roles reading the same screen do not want the same thing; a batch where every story carries the same role has not asked who is looking.',
   'PRIORITY IS READ OFF THE LIFECYCLE, NOT OFF IMPORTANCE: when the unit materials carry lifecycle stages, every story sets priority and, if it sits on the main chain, lifecycleId naming that stage. P0 = the chain breaks without it (the user cannot finish one full pass of the product). P1 = the chain still runs but the result can be wrong or unrecoverable. P2 = everything else. A rule with riskFloor P0 forces P0 regardless. Every stage needs at least one P0 story; a stage with none is reported back to you.',
-  'Ground hierarchy in observed materials; do not invent unobserved functionality. For Explore set derivedFrom=exploration.',
+  'Ground hierarchy in exploration, product requirements and applicable normative rules; do not infer nonexistence from missing observations or invent unsupported functionality. For Explore set derivedFrom=exploration.',
 ].join(' ');
 /**
  * **模块这一步此前什么契约都没发。**
@@ -55,13 +56,14 @@ const STORY_CONTRACT=[
  * 别写在散文里让它猜**（冻结的树、可引段号已经这么做了）。
  */
 const MODULE_CONTRACT=[
+  'Consume exploration materials and the product model together with domain references and rules. Plan module scope, not executable tests. Missing exploration is a coverage gap, not proof that a supported module is out of scope.',
   'Return {modules:[...], outOfScope:[...]}. Each module: id (stable, dot-free unless you also set parentId), name, parentId (null for a root), purpose (one sentence: what a user does here), evidence (section ids), featureIds (the features this module covers).',
   'THE TREE MUST BE AT LEAST TWO LEVELS: 3–7 roots, and every root has children. A flat list of modules is rejected as `module_tree_is_a_list` — the tree exists to be COARSER than the stories; if it is 1:1 with them it provides no structure.',
   'HIERARCHY LIVES IN parentId, NOT IN THE NAME: an id like `market.book` with no parentId is rejected as `module_fake_hierarchy`. If the id carries a dot prefix, parentId must be exactly that prefix.',
   'EVIDENCE IS COPIED, NOT WRITTEN: every evidence entry must be one of the ids in the `sections` array of this response, verbatim. Anything else is rejected as `module_evidence_unknown`. A module with no evidence cannot say which material it was read from.',
   'EVERY FEATURE MUST BE CLAIMED BY A LEAF: this response carries `features` — the product model this run already has. Put each feature id into the featureIds of the leaf that covers it. Features nobody claims never reach any downstream unit: their domain rules silently stop flowing, and the stories still look written. Dropping all of them is an error, not a warning.',
   'EVERY SECTION NEEDS A HOME: each id in `sections` is either cited by some module or declared in outOfScope with a reason. Unclaimed sections are reported back as `material_section_unclaimed`.',
-  'OUT OF SCOPE MEANS THE SECTION DOES NOT DESCRIBE THIS PRODUCT\'S BEHAVIOUR (a definition, a rule about how to write tests, the exploration\'s own receipt). It does NOT mean "I could not see it on screen" — that is a coverage gap and belongs in a story\'s 【待确认】, not here.',
+  'OUT OF SCOPE MEANS THE SECTION DOES NOT DESCRIBE THIS PRODUCT\'S BEHAVIOUR (a definition, a rule about how to write tests, the exploration\'s own receipt). It does NOT mean "I could not see it on screen" — that is an exploration coverage gap to record separately from requirement acceptance, not here.',
   'The `checks` array in this response is the full list of rules the server will judge your proposal by, with severity. Read it before you write: an error rejects the whole proposal, and the response names which rule and which module.',
 ].join(' ');
 /**
@@ -95,9 +97,15 @@ function modelFeatures(runId:string,projectId:string):Array<{id:string;name?:str
   return (model.features??[]).map(f=>({id:f.id,...(f.name?{name:f.name}:{}),...(f.moduleId?{moduleId:f.moduleId}:{})}));
 }
 export function stageEvent(runId:string,projectId:string,node:string,phase:RunEvent['phase'],message?:string,revisionId?:string){const l=table();const last=l.nodeStates(runId).find(n=>n.node===node);const attempt=last?.attempt??0;const sequence=(l.db.prepare('SELECT COALESCE(MAX(sequence),-1)+1 AS n FROM workflow_events WHERE runId=? AND node=? AND attempt=?').get(runId,node,attempt) as {n:number}).n;l.appendEvent({id:`stage-${randomUUID()}`,runId,node,attempt,sequence,phase,at:new Date().toISOString(),...(message?{message}:{}),...(revisionId?{revisionId}:{})},projectId);}
-export function beginStage(runId:string,projectId:string,raw:unknown){const {node}=z.object({node:z.enum(nodes)}).parse(raw);return table().db.transaction(()=>{const run=table().getRun(runId,projectId);if(['paused','cancelled','failed','interrupted'].includes(run.status))return {status:run.status,instruction:'Stop this turn. The user must explicitly resume this run.'};const control=controls(runId,projectId);const prior=table().nodeStates(runId).find(s=>s.node===node);if(prior?.phase==='done')return {status:'done',node};if(control.breakpoints.includes(node)&&!prior){save(runId,{...control,pausedAt:node});stageEvent(runId,projectId,node,'blocked','Breakpoint: paused before execution');table().db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(runId);return {status:'paused',node,instruction:'Stop this turn without planning or writing this stage. The user will resume this same run.'};}stageEvent(runId,projectId,node,'running');
+export function beginStage(runId:string,projectId:string,raw:unknown){const {node}=z.object({node:z.enum(nodes)}).parse(raw);return table().db.transaction(()=>{const run=table().getRun(runId,projectId);if(['paused','cancelled','failed','interrupted'].includes(run.status))return {status:run.status,instruction:'Stop this turn. The user must explicitly resume this run.'};if(['stories','cases','gate','finalize','g2','execution'].includes(node)){const plan=modulePlanState(runId,projectId);if(plan.exists&&!plan.frozen)return {status:'paused',node,code:'module_plan_requires_human_freeze',instruction:'Stop this turn. A human must freeze the proposed module tree in TestPilot Web.'};}const control=controls(runId,projectId);const prior=table().nodeStates(runId).find(s=>s.node===node);if(prior?.phase==='done')return {status:'done',node};if(control.breakpoints.includes(node)&&!prior){save(runId,{...control,pausedAt:node});stageEvent(runId,projectId,node,'blocked','Breakpoint: paused before execution');table().db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(runId);return {status:'paused',node,instruction:'Stop this turn without planning or writing this stage. The user will resume this same run.'};}stageEvent(runId,projectId,node,'running');
 if(['source','instructions','stories','cases','gate','finalize'].includes(node))table().db.prepare("UPDATE wf_runs SET status='running' WHERE id=?").run(runId);
 const knowledge=table().listRevisions(projectId,runId).filter(r=>r.name.startsWith('knowledge/')).map(r=>({revision:r.id,...table().readRevision(r.id,projectId).content as {roles?:string[]}})).filter(k=>k.roles?.includes(node));
+if(node!=='source'){
+ const name='context/'+node;
+ const previous=table().listRevisions(projectId,runId).filter(r=>r.name===name).at(-1);
+ table().putRevision({runId,projectId,name,kind:'report',content:{node,knowledge:knowledge.map(k=>({revision:k.revision})),evidence:'begin-stage-delivery'},sourceRefs:knowledge.map(k=>k.revision),parentRevision:previous?.id??null},{kind:'system',id:'context-recorder'});
+}
+
 /**
  * 故事节点开工时，**把冻结的模块树当数据交出去**，不是只在话术里说。
  *
@@ -115,6 +123,8 @@ const allowedModuleIds=node==='stories'?(frozenModules(runId,projectId)??[]).map
  * 「自己去数材料里有哪些段」不是模型该做的事，那是账本上的事实。
  */
 const citableSections=node==='modules'?materialSections(runId,projectId):[];
-return {status:'running',node,knowledge,outputLanguage:table().requireRun(runId,projectId).input.parameters.outputLanguage??'source',...(allowedModuleIds.length?{moduleIds:allowedModuleIds}:{}),...(citableSections.length?{sections:citableSections}:{}),...(node==='stories'?{structureContract:STORY_CONTRACT}:{}),...(node==='cases'?{structureContract:caseStructureContract()}:{}),...(node==='modules'?{structureContract:MODULE_CONTRACT,checks:MODULE_CHECKS,features:modelFeatures(runId,projectId)}:{})};})();}
+const inputNames=node==='modules'?['product/model-candidate','exploration/report']:node==='stories'?['validated/modules','product/model-candidate']:node==='cases'?['validated/stories']:node==='gate'?['validated/cases']:node==='g2'?['validated/cases','validated/gate']:node==='execution'?['validated/cases']: [];
+const upstreamInputs=inputNames.flatMap(name=>{const r=table().listRevisions(projectId,runId).filter(r=>r.name===name).at(-1);return r?[{name,revision:r.id,content:table().readRevision(r.id,projectId).content}]:[];});
+return {status:'running',node,upstreamInputs,knowledge,outputLanguage:table().requireRun(runId,projectId).input.parameters.outputLanguage??'source',...(allowedModuleIds.length?{moduleIds:allowedModuleIds}:{}),...(citableSections.length?{sections:citableSections}:{}),...(node==='stories'?{structureContract:STORY_CONTRACT}:{}),...(node==='cases'?{structureContract:caseStructureContract()}:{}),...(node==='modules'?{structureContract:MODULE_CONTRACT,checks:MODULE_CHECKS,features:modelFeatures(runId,projectId)}:{})};})();}
 export function resumeControls(runId:string,projectId:string){const c=controls(runId,projectId);save(runId,{breakpoints:c.breakpoints.filter(n=>n!==c.pausedAt)});return c.pausedAt;}
-export function requireStageStarted(runId:string,projectId:string,node:string){const l=table(),run=l.requireRun(runId,projectId);if(['paused','cancelled','interrupted'].includes(l.getRun(runId,projectId).status))throw new LedgerError(409,'run_requires_explicit_resume');if(run.input.parameters?.stageControlVersion===1&&!l.nodeStates(runId).some(n=>n.node===node&&['running','done','waiting_review'].includes(n.phase)))throw new LedgerError(409,'begin_stage_required');}
+export function requireStageStarted(runId:string,projectId:string,node:string){const l=table(),run=l.requireRun(runId,projectId);if(['paused','cancelled','interrupted'].includes(l.getRun(runId,projectId).status))throw new LedgerError(409,'run_requires_explicit_resume');if(['stories','cases','gate','finalize','g2','execution'].includes(node)){const plan=modulePlanState(runId,projectId);if(plan.exists&&!plan.frozen)throw new LedgerError(409,'module_plan_requires_human_freeze');}if(run.input.parameters?.stageControlVersion===1&&!l.nodeStates(runId).some(n=>n.node===node&&['running','done','waiting_review'].includes(n.phase)))throw new LedgerError(409,'begin_stage_required');}

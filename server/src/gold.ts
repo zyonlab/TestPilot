@@ -1,3 +1,4 @@
+import { benchmarkMetadata } from "./benchmarkCatalog.js";
 import { canonicalJSON, type Principal } from '@testpilot/harness-core/run-contracts';
 import { createHash } from 'node:crypto';
 /**
@@ -7,7 +8,7 @@ import { createHash } from 'node:crypto';
  * 冻结不可撤销：冻结即谱系，`goldHash` 写进 README 的 `## goldHash` 段；冻结后再改任何一条都被拒——
  * 真要改，那是新谱系（`newLineage: true`），从头建基线。规则本身在 `benchmark/<cap>/README.md` 与 `00-架构 §3`。
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { goldHashOfFile } from "testpilot-mcp/contracts";
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
@@ -40,7 +41,11 @@ export interface GoldFile {
   outOfScope?: string[];
 }
 export interface GoldState {
+  projectId?: string;
+  reviewIssues?: string[];
   capability: string;
+  archived?: boolean;
+  archiveReason?: string;
   dir: string;
   draft: GoldFile | null;
   gold: GoldFile | null;
@@ -121,6 +126,10 @@ export function readGoldState(cap: string, root = REPO_ROOT): GoldState {
   const dir = capDir(cap, root);
   return {
     capability: cap,
+    projectId: benchmarkMetadata(dir).projectId,
+    reviewIssues: (() => { const file = withStale(readJson<GoldFile>(join(dir, "gold.json")), dir); return file ? [...validate(file), ...(file.reviewPolicy === "individual-v1" ? reviewedGold(file) : ["individual_review_required"]), ...file.items.filter(i=>i.stale).map(i=>`${i.id}: stale`)] : ["saved_gold_required"]; })(),
+    archived: !!benchmarkMetadata(dir).archived,
+    archiveReason: benchmarkMetadata(dir).reason,
     dir,
     draft: withStale(readJson<GoldFile>(join(dir, "gold.draft.json")), dir),
     gold: withStale(readJson<GoldFile>(join(dir, "gold.json")), dir),
@@ -161,6 +170,7 @@ function reviewedGold(file: GoldFile): string[] {
 /** 保存复核后的 gold.json。冻结之后拒绝，除非明说是新谱系。 */
 export function saveGold(cap: string, file: GoldFile, opts: { newLineage?: boolean; root?: string; actor?: Principal; reviewedItemIds?: string[] } = {}): { path: string; hash: string; heldOut: number } {
   const dir = capDir(cap, opts.root);
+  if (benchmarkMetadata(dir).archived) throw new Error("benchmark_archived_read_only");
   const frozen = frozenHashOf(dir);
   const previous = readJson<GoldFile>(join(dir, "gold.json")), draft = readJson<GoldFile>(join(dir, "gold.draft.json"));
   if ([previous?.reviewPolicy,draft?.reviewPolicy,file.reviewPolicy].includes("individual-v1")) {
@@ -185,12 +195,16 @@ export function saveGold(cap: string, file: GoldFile, opts: { newLineage?: boole
 function unfreeze(dir: string): void {
   const readme = join(dir, "README.md");
   if (!existsSync(readme)) return;
-  writeFileSync(readme, readFileSync(readme, "utf8").replace(HASH_LINE, "goldHash: （新谱系，未冻结）"));
+  const text = readFileSync(readme, "utf8");
+  // Legacy READMEs store the hash as a bare value inside this section.
+  // Clearing only the labelled form leaves those lineages permanently frozen.
+  writeFileSync(readme, text.replace(HASH_IN_SECTION, "## goldHash\n\n新谱系，未冻结。\n").replace(HASH_LINE, "goldHash: （新谱系，未冻结）"));
 }
 
 /** 冻结：算 sha256 前 16 位，写进 README 的 `## goldHash` 段。不可撤销。 */
 export function freezeGold(cap: string, root = REPO_ROOT): { hash: string; readme: string } {
   const dir = capDir(cap, root);
+  if (benchmarkMetadata(dir).archived) throw new Error("benchmark_archived_read_only");
   const path = join(dir, "gold.json");
   if (!existsSync(path)) throw new Error(`benchmark/${cap} 还没有 gold.json，先复核再冻结`);
   const file = readJson<GoldFile>(path)!;
@@ -216,4 +230,25 @@ export function requireFrozenReviewedGold(cap: string, root = REPO_ROOT) {
   const problems = [...validate(state.gold), ...reviewedGold(state.gold)];
   if (problems.length || state.gold.items.some(i => i.stale) || !state.gold.items.some(i => i.heldOut)) throw new Error('reviewed_gold_invalid_or_stale');
   return { gold: state.gold, hash: state.frozenHash };
+}
+
+/** A new draft is an unreviewed candidate, never a human decision or a frozen dataset. */
+export function createGoldDraft(cap: string, file: GoldFile, projectId: string, root = REPO_ROOT) {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(cap)) throw new Error('invalid_capability');
+  if (file.id !== cap) throw new Error('gold_id_mismatch');
+  const errors = validate(file);
+  if (errors.length) throw new Error(errors.join('; '));
+  const dir = join(root, 'benchmark', cap);
+  if (existsSync(dir)) throw new Error('benchmark_already_exists');
+  const clean: GoldFile = { ...file, reviewPolicy: 'individual-v1', items: file.items.map(({ reviewReceipt: _receipt, ...item }) => item) };
+  mkdirSync(join(root, 'benchmark'), {recursive:true});
+  mkdirSync(dir);
+  for (const name of ['materials', 'rubric', 'held-out']) {
+    mkdirSync(join(dir, name));
+    writeFileSync(join(dir, name, '.gitkeep'), '');
+  }
+  writeFileSync(join(dir,'gold.draft.json'), JSON.stringify(clean,null,2)+'\n', {flag:'wx'});
+  writeFileSync(join(dir,'catalog.json'), JSON.stringify({projectId,archived:false},null,2)+'\n');
+  writeFileSync(join(dir,'README.md'), '# '+cap+'\n\n候选清单，等待人工逐项复核。gold.json 还不存在；冻结之前禁止正式评分。\n');
+  return readGoldState(cap,root);
 }

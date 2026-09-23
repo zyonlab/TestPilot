@@ -21,6 +21,13 @@ vi.mock("../src/runtimes.js", () => {
 });
 
 describe("penguinRun.startRun 把 ablate 交给运行时", () => {
+  it('module review is not a missing-final-artifact failure; real crashes remain visible', async () => {
+    const { completionDiagnostics } = await import('../src/penguinRun.js');
+    const missing = 'session 已经停了，而产物目录里没有 gate.json——agent 中途停下了（看 trace）';
+    expect(completionDiagnostics('waiting_review', missing)).toEqual({error:undefined,adapterDiagnostic:missing});
+    expect(completionDiagnostics('failed', missing).error).toBe(missing);
+    expect(completionDiagnostics('waiting_review', 'process exited with code 1').error).toBe('process exited with code 1');
+  });
   it("body.ablate → rt.startRun({ ablate })", async () => {
     const rt = await import("../src/runtimes.js");
     const { startRun } = await import("../src/penguinRun.js");
@@ -28,7 +35,7 @@ describe("penguinRun.startRun 把 ablate 交给运行时", () => {
     const call = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(call?.ablate).toEqual(["domain-reference"]);
   });
-  it("Web 发起的 Claude Code 运行不带托管规划模型、工作区按运行分开；Codex 仍拒绝", async () => {
+  it("Web 发起的 Claude Code 运行不带托管规划模型、工作区按运行分开；Codex 走相同宿主契约", async () => {
     const rt = await import("../src/runtimes.js");
     const { startRun } = await import("../src/penguinRun.js");
     const calls = (rt as unknown as { __startRun: { mock: { calls: unknown[][] } } }).__startRun.mock.calls;
@@ -37,7 +44,13 @@ describe("penguinRun.startRun 把 ablate 交给运行时", () => {
     const call = calls[before]?.[0] as Record<string, unknown> | undefined;
     expect(call?.models).toBeUndefined();
     expect(String(call?.workspace)).toMatch(/host-workspaces[\\/]run-web-claude$/);
-    await expect(startRun({ runtime: "codex", workspace: "/tmp/ws" } as never)).rejects.toThrow("managed_planner_unsupported (codex)");
+    await startRun({ runtime: "codex", materialsDir: "/tmp/m", wfRunId: "run-web-codex" } as never);
+    const codexCall = calls.at(-1)?.[0] as Record<string, unknown>;
+    expect(codexCall.models).toBeUndefined();
+    expect(String(codexCall.workspace)).toMatch(/host-workspaces[\\/]run-web-codex$/);
+    const { outputStore } = await import('../src/graphs.js');
+    const saved = vi.mocked(outputStore.saveRun).mock.calls.at(-1)?.[0];
+    expect(saved?.detail).toMatchObject({targetSnapshot:{describe:'Codex · /tmp/ws'},penguin:{url:'/tmp/ws/runs/x/codex-events.jsonl'}});
   });
 });
 

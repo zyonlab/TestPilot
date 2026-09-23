@@ -21,3 +21,27 @@ it('shows host planning as running when frozen input skips the source node',asyn
  expect(control.beginStage(id,project,{node:'stories'}).status).toBe('paused');
  expect(service.runLedger().getRun(id,project).status).toBe('paused');
 });
+it('single-node continuation sets later boundaries and clears the current breakpoint',async()=>{
+ const {configureNextNode}=await import('../src/workflowOps.js');
+ const {captureWebModels}=await import('./helpers/model-snapshot.js');
+ service.registerWebRun('single-node-run',project,captureWebModels().binding,{stageControlVersion:1});
+ control.setControls('single-node-run',project,{breakpoints:['cases']});
+ configureNextNode('single-node-run',project,'cases');
+ expect(control.controls('single-node-run',project).breakpoints).toEqual(['gate','finalize','g2','execution']);
+ expect(control.beginStage('single-node-run',project,{node:'cases'}).status).toBe('running');
+ control.stageEvent('single-node-run',project,'cases','done');
+ expect(control.beginStage('single-node-run',project,{node:'gate'}).status).toBe('paused');
+ expect(control.controls('single-node-run',project).pausedAt).toBe('gate');
+});
+
+it('records the exact revisions delivered to a node rather than guessing from content',async()=>{
+ const {captureWebModels}=await import('./helpers/model-snapshot.js');
+ service.registerWebRun('context-record',project,captureWebModels().binding,{stageControlVersion:1});
+ const l=service.runLedger();
+ const a=l.putRevision({runId:'context-record',projectId:project,name:'knowledge/example',kind:'report',content:{roles:['stories'],text:'same'}},{kind:'system',id:'test'});
+ const b=l.putRevision({runId:'context-record',projectId:project,name:a.name,kind:'report',content:{roles:['stories'],text:'same'},sourceRefs:[a.id],parentRevision:a.id},{kind:'system',id:'test'});
+ const delivery=control.beginStage('context-record',project,{node:'stories'});
+ const record=l.listRevisions(project,'context-record').find(r=>r.name==='context/stories')!;
+ expect(record.sourceRefs).toEqual([a.id,b.id]);
+ expect((l.readRevision(record.id,project).content as any).knowledge).toEqual((delivery as any).knowledge.map((k:any)=>({revision:k.revision})));
+});

@@ -1,0 +1,95 @@
+{
+  "scope": "offline arithmetic fixtures; not live website results",
+  "checks": [
+    {
+      "name": "minimum size at 80000 with step .00001",
+      "actual": "0.00013",
+      "expected": ".00013",
+      "passed": true
+    },
+    {
+      "name": "below minimum notional",
+      "actual": "9.60000",
+      "expected": "9.6",
+      "passed": true
+    },
+    {
+      "name": "first valid notional",
+      "actual": "10.40000",
+      "expected": "10.4",
+      "passed": true
+    },
+    {
+      "name": "initial margin baseline",
+      "actual": "32.000",
+      "expected": "32",
+      "passed": true
+    },
+    {
+      "name": "same direction weighted entry",
+      "actual": "82000",
+      "expected": "82000",
+      "passed": true
+    },
+    {
+      "name": "long unrealized",
+      "actual": "2.000",
+      "expected": "2",
+      "passed": true
+    },
+    {
+      "name": "short unrealized",
+      "actual": "2.000",
+      "expected": "2",
+      "passed": true
+    },
+    {
+      "name": "long roundtrip net after two .045 percent fees",
+      "actual": "3.85420000",
+      "expected": "3.8542",
+      "passed": true
+    },
+    {
+      "name": "short roundtrip net after two .045 percent fees",
+      "actual": "3.85780000",
+      "expected": "3.8578",
+      "passed": true
+    },
+    {
+      "name": "partial close gross",
+      "actual": "1.000",
+      "expected": "1",
+      "passed": true
+    },
+    {
+      "name": "reversal closes old long only",
+      "actual": "3.000",
+      "expected": "3",
+      "passed": true
+    },
+    {
+      "name": "reversal residual short",
+      "actual": "-0.002",
+      "expected": "-.002",
+      "passed": true
+    },
+    {
+      "name": "positive funding long cashflow",
+      "actual": "-0.0160000",
+      "expected": "-.016",
+      "passed": true
+    },
+    {
+      "name": "flat closing balance includes fees funding once",
+      "actual": "1003.8382",
+      "expected": "1003.8382",
+      "passed": true
+    },
+    {
+      "name": "new borrowing produces zero equity",
+      "actual": "0",
+      "expected": "0",
+      "passed": true
+    }
+  ]
+}

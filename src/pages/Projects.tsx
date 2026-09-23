@@ -1,3 +1,4 @@
+import { ExplorationSettings } from '@/components/ExplorationSettings';
 import { useState } from "react";
 import { Globe, ListChecks, Plus, ChevronRight, Rocket, Loader2, Blocks, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -106,6 +107,7 @@ export function ProjectsPage() {
               <option value="ios">iOS</option>
               <option value="android">Android</option>
             </select>
+            <div className="w-full"><ExplorationSettings maxScreens={activeProject.explorationMaxScreens??8} scope={activeProject.explorationScope??"rules"} onChange={(n,s)=>void updateProject(activeProject.id,{explorationMaxScreens:n,explorationScope:s})}/></div>
             <span className="text-[0.6875rem] text-muted-foreground">
               {(activeProject.targetPlatform ?? "web") === "web"
                 ? t("projects.platformWebHint")

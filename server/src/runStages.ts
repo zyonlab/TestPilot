@@ -1,3 +1,5 @@
+import { storyPlanningIssues } from '@testpilot/harness-testing/casegen';
+import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import { boundRulePack } from "./rulePacks.js";
 import { boundDomainReference } from "./domainReferences.js";
 import { requireStageStarted } from './workflowControls.js';
@@ -6,7 +8,7 @@ import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { canonicalJSON, type ArtifactRevision } from "@testpilot/harness-core/run-contracts";
-import { validateStories, validateCases, runGate, type CaseBundle, type StoryBundle } from "@testpilot/harness-testing/casegen";
+import { ARTIFACT_WRITING_GUIDELINES, validateStories, validateCases, runGate, type CaseBundle, type StoryBundle } from "@testpilot/harness-testing/casegen";
 import { buildIndexFromDocs, retrieve, SPEC_FENCE, MAX_FENCED_CHARS } from "@testpilot/harness-testing/retrieve";
 import { runLedger, skillBinding } from "./runService.js";
 import { contentHash, LedgerError } from "./runLedger.js";
@@ -121,6 +123,10 @@ export function runScopeMaterials(runId: string, projectId: string) {
   const modelRev = l.listRevisions(projectId, runId).filter((r) => r.name === "product/model-candidate").sort((x, y) => x.revision - y.revision).at(-1);
   const model = modelRev ? (l.readRevision(modelRev.id, projectId).content as { roles?: unknown[] }) : undefined;
   return {
+    knowledgeRefs: [
+      l.listRevisions(projectId,runId).filter(r=>r.name==='knowledge/domain-reference').at(-1)?.id,
+      pack ? l.listRevisions(projectId,runId).filter(r=>r.name==='knowledge/rulepack/'+pack.id).at(-1)?.id : undefined,
+    ].filter((id):id is string=>!!id),
     domainReference: boundDomainReference(runId, projectId),
     actionVocabulary: pack?.actionVocabulary ?? [],
     volatileReadings: pack?.volatileReadings ?? [],
@@ -154,7 +160,7 @@ export function loadRunInstructions(runId: string, projectId: string) {
       *
       * 它们挂在这里：这个工具幂等（第二次调用返回同一份回执），天然只发一次。
       */
-    const content = { files, loadedDigest, memory, runScope: runScopeMaterials(runId, projectId), skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
+    const content = { files, loadedDigest, memory, writingGuidelines: ARTIFACT_WRITING_GUIDELINES, runScope: runScopeMaterials(runId, projectId), skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
     const r = save(runId, projectId, "instructions", content, memory.entries.map(e => e.sourceRevision));
     store().db.prepare("UPDATE wf_run_registrations SET bindingJson=? WHERE runId=?").run(canonicalJSON({ ...run.binding, loadedDigest, memoryDigest: memory.digest }), runId);
     return { ...content, revisionId: r.revisionId };
@@ -201,6 +207,8 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
     if (stage === "stories") {
       const bundle=verdict.data as StoryBundle;
       const stories = bundle.stories;
+      const planningIssues=storyPlanningIssues(stories);
+      if(planningIssues.length)return {status:"blocked",gate:"planning-contract",errors:planningIssues};
       const modules=new Map(bundle.modules.map(m=>[m.id,m]));
       if(modules.size!==bundle.modules.length)throw new LedgerError(400,'duplicate_module_id');
       for(const module of bundle.modules){const seen=new Set([module.id]);let parent=module.parentId;while(parent){if(seen.has(parent))throw new LedgerError(400,'product_module_cycle');seen.add(parent);const ancestor=modules.get(parent);if(!ancestor)throw new LedgerError(400,'product_module_parent_missing');parent=ancestor.parentId;}}
@@ -274,7 +282,7 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
       if (receipt(runId, "cases") && prior && canonicalJSON(current(runId, projectId, "stories").content) !== canonicalJSON(verdict.data))
         throw new LedgerError(409, "stories_frozen_after_case_design");
     }
-    const refs = stage === "stories" ? ready(runId, projectId).binding.materialRevisions : [current(runId, projectId, "stories").revision.id];
+    const refs = stage === "stories" ? [...ready(runId, projectId).binding.materialRevisions, ...store().listRevisions(projectId,runId).filter(r=>r.name==="validated/modules").slice(-1).map(r=>r.id)] : [current(runId, projectId, "stories").revision.id];
     return { status: "validated", ...verdict.output, ...save(runId, projectId, stage, verdict.data, refs),
       ...(modulePlan.length ? { modulePlan } : {}), ...(acceptance.length ? { acceptance } : {}) };
   })();
@@ -292,6 +300,8 @@ export function gateRun(runId: string, projectId: string) {
     const pack = boundRulePack(runId, projectId);
     const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings });
     const passed = report.score >= pinnedPolicy.minGateScore;
+    const executionReadiness = verdict.data.cases.map(c=>({caseId:c.id,blockers:executionBlockers(c)}));
+    const executionAdmission = {ready:executionReadiness.filter(c=>!c.blockers.length).length,total:executionReadiness.length,cases:executionReadiness};
     /**
      * 不通过时，把门禁的话按单元送回规划器（docs/v3/history/23 F-11）。
      *
@@ -300,8 +310,8 @@ export function gateRun(runId: string, projectId: string) {
      * 不知道该改哪几条。重开只针对**被 warn 点到的用例所在的单元**，info 不重开。
      */
     const repair = passed ? { reopened: [], round: 0 } : reopenUnitsFromGate(runId, projectId, report.findings);
-    return { status: passed ? "passed" : "blocked", report, ...(repair.reopened.length ? { repair } : {}),
-      ...save(runId, projectId, "gate", { report, passed, policy: pinnedPolicy }, [cases.revision.id], { passed, casesRevision: cases.revision.id }) };
+    return { status: passed ? "passed" : "blocked", report, executionAdmission, ...(repair.reopened.length ? { repair } : {}),
+      ...save(runId, projectId, "gate", { report, passed, executionAdmission, policy: pinnedPolicy }, [cases.revision.id], { passed, casesRevision: cases.revision.id }) };
   })();
 }
 export function finalizeRun(runId: string, projectId: string) {

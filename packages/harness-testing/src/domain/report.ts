@@ -36,6 +36,7 @@ export const EffectSchema = z
     controlsRemoved: z.array(z.string()).default([]),
     stateChanged: z.array(z.string()).default([]),
     textAdded: z.array(z.string()).default([]),
+    textRemoved: z.array(z.string()).default([]),
   })
   .strict();
 
@@ -129,7 +130,7 @@ export function coverageOfGraph(graph: Pick<StateFlowGraph, "states" | "transiti
 }
 
 /** 预算类停止原因：到了就是 partial，哪怕目标都试过了也要说清是预算停的。 */
-const BUDGET_STOPS = new Set(["screenCap", "actionBudget", "cancelled", "stuck", "noWayBack"]);
+const BUDGET_STOPS = new Set(["timeBudget", "screenCap", "actionBudget", "cancelled", "stuck", "noWayBack"]);
 
 export function buildExplorationReport(input: {
   charter: ExplorationCharter;
@@ -160,7 +161,7 @@ export function buildExplorationReport(input: {
   });
 
   const frontier = planned
-    .filter((p) => !p.terminal && p.status !== "not_found")
+    .filter((p) => !p.terminal || p.status === "blocked" || p.status === "failed")
     .map((p) => ({ targetSpecId: p.targetSpecId, featureId: p.featureId, ...(p.targetIds[0] ? { targetId: p.targetIds[0] } : {}), reason: p.reason ?? "pending" }));
   const unknowns = [
     ...(input.unknowns ?? []),

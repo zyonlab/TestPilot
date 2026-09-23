@@ -7,6 +7,6 @@ import { LedgerError } from "./runLedger.js";
  * Without authentication, this local API is not an isolation boundary against clients omitting a token.
  */
 export function reviewerPrincipal(req: Pick<Request, "headers">): Principal {
-  if (req.headers.authorization !== undefined) throw new LedgerError(403, "operator_action_required");
+  if (req.headers.authorization !== undefined || req.headers["x-testpilot-actor"] !== undefined) throw new LedgerError(403, "operator_action_required");
   return { kind: "human", id: "local-operator" };
 }

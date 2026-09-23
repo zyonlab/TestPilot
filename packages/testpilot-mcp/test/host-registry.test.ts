@@ -74,3 +74,19 @@ describe("宿主域工具", () => {
     }
   });
 });
+
+it("planner tools omit operator decisions and reject forged calls before transport", async () => {
+  const { registerHostDomains } = await import("../src/host/tools.js");
+  const registered = new Map<string, { config: any; handler: any }>();
+  let calls = 0;
+  registerHostDomains({ registerTool(name, config, handler) { registered.set(name, { config, handler }); } }, { call: async () => { calls++; return {}; } } as any);
+  const review = registered.get("tp_review")!;
+  expect(review.config.inputSchema.action.options).not.toContain("decide");
+  expect(registered.get("tp_stage")!.config.inputSchema.action.options).not.toContain("freeze_modules");
+  expect((await review.handler({ action: "decide", params: { projectId: "p", runId: "r" }, body: {} })).isError).toBe(true);
+  const evalTool = registered.get("tp_eval")!;
+  expect(evalTool.config.inputSchema.action.options).not.toContain("set_gold");
+  expect((await evalTool.handler({ action: "set_gold", params: { capability: "demo" }, body: { action: "freeze" } })).isError).toBe(true);
+  expect(calls).toBe(0);
+  await review.handler({ action: "list", params: { projectId: "p", runId: "r" } });
+});

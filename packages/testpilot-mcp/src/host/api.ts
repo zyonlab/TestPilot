@@ -30,6 +30,7 @@ export class HostApi {
     const res = await (this.opts.fetchImpl ?? fetch)(`${this.base}${path}`, {
       method,
       headers: {
+        "x-testpilot-actor": "agent",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },

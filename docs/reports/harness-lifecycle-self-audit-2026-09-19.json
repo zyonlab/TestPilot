@@ -1,0 +1,481 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-19",
+  "branch": "codex/harness-lifecycle-self-audit",
+  "baseCommit": "d2e62cec4a8217ccfb4d8aaebdba2391634d19c6",
+  "scope": "Architecture and lifecycle review; repository regression plus isolated readiness checks. No real-model benchmark or SUT actions.",
+  "readiness": {
+    "schemaVersion": 1,
+    "at": "2026-09-19T02:01:57.965Z",
+    "commit": "d2e62cec4a8217ccfb4d8aaebdba2391634d19c6",
+    "branch": "codex/harness-lifecycle-self-audit",
+    "sourceHashes": {
+      "server/src/evals.ts": "be63d72542dbdcc027ad91b51d7c831d2595544e9cc85cbead4cdb70ba0f59a3",
+      "server/src/reviewPrincipal.ts": "607b2db7296b0fb24cb9b0e45c4839fb8a6a108ebef8e22556aa4ffb5e9ae85d",
+      "packages/testpilot-mcp/src/host/api.ts": "228e177f68a3e1b9412afe7ac01e4049567f222415c3919359fe83d2ae0e40cc",
+      "packages/testpilot-mcp/src/host/tools.ts": "75deed36cbf05eb1acca9311911b6e5c883e7d233df1e89372080d0a90943ea8",
+      "packages/testpilot-mcp/src/host/registry.ts": "1af7b222baccefb3cceb74f16a40da85b7a01a1788bf06cb8c84263c438fe724",
+      "server/audit/evaluation-readiness.audit.ts": "19e3ee9c5311e40a3a04ce070f56bc1d0abd9b0759ae5f19fa0aac01bcd2fca4",
+      "server/audit/vitest.config.ts": "fc2f891edd5b780c5db1b49dc04663b9041b8777921b692b5c5e77d244f3cb5a",
+      "scripts/harness-readiness.mjs": "ac09cced1a712a559a9b8ce0568d95ae1541c7b0754d961cce7e5b1f8cf4f5a7"
+    },
+    "status": "blocked",
+    "scope": "Six isolated contract checks; passing does not establish end-to-end model quality or authorize release.",
+    "tests": [
+      {
+        "id": "R01",
+        "requirement": "R01 declared runtime must reach the execution adapter",
+        "status": "failed"
+      },
+      {
+        "id": "R02",
+        "requirement": "R02 unknown injection cannot produce a numeric mutation score",
+        "status": "failed"
+      },
+      {
+        "id": "R03",
+        "requirement": "R03 absent outputs from failed runs must invalidate the comparison",
+        "status": "failed"
+      },
+      {
+        "id": "R04",
+        "requirement": "R04 planner host review tools must not acquire local-human authority",
+        "status": "failed"
+      },
+      {
+        "id": "C01",
+        "requirement": "C01 verified injection and valid assertion failure remain creditable",
+        "status": "passed"
+      },
+      {
+        "id": "C02",
+        "requirement": "C02 explicit agent credentials remain rejected by the review boundary",
+        "status": "passed"
+      }
+    ],
+    "observations": {
+      "R01": {
+        "declared": [
+          "penguin",
+          "claude-code"
+        ],
+        "actual": [
+          null,
+          null
+        ],
+        "note": "both arms ran the same configuration — this measures run-to-run variation, not a change"
+      },
+      "R02": {
+        "applied": "unknown",
+        "killed": true,
+        "score": 1
+      },
+      "R03": {
+        "rejected": false,
+        "armStatus": "failed",
+        "coverage": 0,
+        "validity": null
+      },
+      "R04": {
+        "isError": false,
+        "returned": [
+          {
+            "type": "text",
+            "text": "{\"kind\":\"human\",\"id\":\"local-operator\"}"
+          }
+        ]
+      },
+      "C01": {
+        "applied": "yes",
+        "falseAlarmRate": 0,
+        "score": 1
+      },
+      "C02": {
+        "explicitAgentCredentialsRejected": true
+      }
+    }
+  },
+  "vitestPackages": [
+    {
+      "package": "packages/harness-core",
+      "passed": 226
+    },
+    {
+      "package": "packages/harness-testing",
+      "passed": 589
+    },
+    {
+      "package": "packages/testpilot-mcp",
+      "passed": 111
+    },
+    {
+      "package": "apps/agent",
+      "passed": 1
+    },
+    {
+      "package": "apps/runner",
+      "passed": 4
+    },
+    {
+      "package": "server",
+      "passed": 488
+    }
+  ],
+  "vitestTotal": 1419,
+  "extraMcpNodeTests": 4,
+  "commands": [
+    {
+      "command": "pnpm test",
+      "exitCode": 0,
+      "result": "163 个 Vitest 文件，1419 项通过；另有 MCP Node 测试 4 项通过",
+      "logSha256": "c80631f2b75e51fab268375f02af1897afc04c0684d117652800fe070ffbb00d"
+    },
+    {
+      "command": "pnpm typecheck",
+      "exitCode": 0,
+      "result": "应用与 6 个 workspace 类型检查通过；i18n 随应用检查执行",
+      "logSha256": "1afcce660ce0757c893ac008ce95d8295cc8b704eb6e125a75d8091f10a251ff"
+    },
+    {
+      "command": "pnpm test:hooks",
+      "exitCode": 0,
+      "result": "23 项通过",
+      "logSha256": "edc190a5c9e9d482be9443a36dba1c6fb1e95e887678973b2a167844157067c1"
+    },
+    {
+      "command": "node --test scripts/test/*.test.mjs",
+      "exitCode": 0,
+      "result": "7 项通过",
+      "logSha256": "5b1425087fc31d2eb775627f7ab6435e38b9d588c868a4ad05e01bdd23b5e215"
+    },
+    {
+      "command": "pnpm check:drift",
+      "exitCode": 0,
+      "result": "2 对提示词、10 个 skill、两个宿主副本一致",
+      "logSha256": "b1aa22d315d37515f28ff391990e8a0d2d84a090bdcd0016592092006123c20b"
+    },
+    {
+      "command": "pnpm check:host-parity",
+      "exitCode": 0,
+      "result": "190/190，UI 专属 3",
+      "logSha256": "09725f5c9f8beb0486a457781e7fe244e341e34c87848d3f9362a48bda406841"
+    },
+    {
+      "command": "pnpm check:domain-neutral",
+      "exitCode": 0,
+      "result": "领域中立检查通过",
+      "logSha256": "3917d675b5634e20ba5aeae5b9fece8760a67d5b472f45b429a41f390354508a"
+    },
+    {
+      "command": "pnpm build",
+      "exitCode": 0,
+      "result": "前端生产构建通过",
+      "logSha256": "11374c1029491976b8670587253f01de1a2e861c7f883c59c85db33e3921167d"
+    },
+    {
+      "command": "pnpm test:harness-readiness --output /tmp/testpilot-lifecycle-audit/readiness.json",
+      "exitCode": 1,
+      "result": "4 项不满足，2 项对照通过；blocked",
+      "logSha256": "caceff61686eb9a0d5d89cf2d39dbd98a5338de04b987416d959400e06f0e23a"
+    }
+  ],
+  "features": [
+    {
+      "id": "F01",
+      "layer": "输入与上下文",
+      "name": "项目材料、领域规则与环境画像",
+      "states": "草稿 → 校验 → 项目版本 → 运行绑定 → 封存 → 被引用/过期",
+      "current": "workflowOps.createWebWorkflow、runService.freezeRunMaterials、rulePacks、domainReferences 与 modelSnapshots 已把资料、模型与领域数据绑定到运行；产品不再默认读取仓库夹具。",
+      "entry": "将输入来源、语言、目标环境、允许状态变化与能力前提汇总成 preflight receipt；缺失输入失败，不用 benchmark 补位。声明哪些属于实验允许变化因素。",
+      "run": "同一 trial 只能引用绑定的材料版本；记录检索 chunk 及实际发给模型的摘要。资料更新产生新版本，不改变旧运行。",
+      "failure": "材料读取失败、环境不存在、目标不符分别记录；重试仍引用旧快照，要换输入就新建 trial。资料内容不可信，不能提升为工具或系统指令。",
+      "seal": "冻结 inputHash、知识引用和环境摘要；保留可解释的来源链。敏感值仅进受控快照，评测 manifest 使用引用/哈希。删除策略不能静默破坏已引用证据。",
+      "measure": "输入绑定一致性、引用可追溯率、跨项目污染、缺前提的预检拦截；不把文件数量当需求覆盖。",
+      "tests": [
+        "server/test/run-ledger.test.ts",
+        "server/test/domain-data.test.ts",
+        "server/test/model-snapshots.test.ts",
+        "server/test/target-provenance.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F02",
+      "layer": "输入与上下文",
+      "name": "探索与产品建模",
+      "states": "准备 → 确定范围 → 观察/交互 → 保存部分证据 → 产品模型 → 审核输入",
+      "current": "workflowOps.sourceKnowledge 与探索 charter 规定范围，readPartialObservation 支持中断后保存局部观察；产品模型仍需进入后续模块规划。",
+      "entry": "固定入口、状态准备、屏幕预算、观察模式和环境版本；基线/候选不可用不同账号或初始页面还宣称只改 prompt。",
+      "run": "每条功能陈述关联屏幕/操作证据；区分未探索、不可达、观察到但未知。交互引起的状态变化进入轨迹。",
+      "failure": "超时保留部分轨迹，标 incomplete；部分探索不能充当完整覆盖。重试前按协议重置，无法重置则标环境不可比。",
+      "seal": "模型候选与屏幕证据独立存 revision，不能用模型补写的“观察”代替实际轨迹；模块冻结明确引用候选版本。",
+      "measure": "已知路线覆盖、陈述的证据支持率、不可达率、观察成本；首轮阶段评测用冻结观察材料，真实 UI 留给集成验证。",
+      "tests": [
+        "server/test/exploration-partial.test.ts",
+        "server/test/domain-source-knowledge.test.ts",
+        "packages/harness-testing/test/charter-route-scope.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F03",
+      "layer": "编排与运行时",
+      "name": "运行登记、宿主选择、阶段控制",
+      "states": "请求 → 登记 → 启动 → 阶段推进/等人 → 暂停/续跑 → 完成/取消/中断",
+      "current": "workflowOps、runtimes、workflowControls 与运行账本已有幂等、checkpoint、暂停、取消；生产主线固定规划 runtime。旧 graph 评测入口未消费 runtime，R01 不通过。",
+      "entry": "运行前校验宿主可用性和候选版本；建立 requestedConfig 与 effectiveConfig。评测必须选择真实生产 adapter。",
+      "run": "统一 workflow application port 给 Web/MCP/实验调用；stage receipt 记录尝试、输入和输出。等待人工与等待模型分成不同阶段。",
+      "failure": "显式 deadline、取消传播、重启 reconcile、重复请求幂等；恢复只读相同输入版本。总实验预算不可因新 attempt 被清零。",
+      "seal": "终态同时保留 workflow status、执行 verdict、trial validity，不用一个 failed 代表所有问题。完成只封存证据，不等于候选胜出。",
+      "measure": "有效运行率、重复副作用、恢复后输入漂移、取消后迟到写入、总重试成本。runtime 声明与实际不一致应在评分前阻断。",
+      "tests": [
+        "server/test/workflow-controls.test.ts",
+        "server/test/checkpoint.test.ts",
+        "server/test/continue.test.ts",
+        "server/test/web-claude-planner.test.ts",
+        "server/audit/evaluation-readiness.audit.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F04",
+      "layer": "生成与验证",
+      "name": "模块规划与人工冻结",
+      "states": "生成候选树 → 结构校验 → 人工修改/冻结 → 单元切分 → 新版本重规划",
+      "current": "moduleStage 与 checkModulePlan 校验证据和功能归属；workUnits 使用冻结树。人类来源判定仍可被无令牌宿主调用取得，R04 不通过。",
+      "entry": "固定产品模型与可引用材料 sections；候选树必须声明 feature/module 归属，禁止凭空造功能。",
+      "run": "模型只能建议 moduleAmendments，不可自冻结；人工修改成为新 revision 并记录理由。规划工具应移除冻结能力。",
+      "failure": "等人时停止后续生成；冻结冲突返回明确版本差异。树改变后标注受影响的 stories/cases 为 stale，不用旧完成状态蒙混。",
+      "seal": "冻结回执绑定树、输入、操作者来源和校验版本；模块树作为后续阶段评测的固定起点之一。",
+      "measure": "无归属功能、证据错误、跨模块旅程缺口、人工修订量；比较故事结构指标时保证两边模块树相同。",
+      "tests": [
+        "server/test/module-stage.test.ts",
+        "packages/harness-testing/test/module-plan.test.ts",
+        "server/test/work-units.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F05",
+      "layer": "输入与上下文",
+      "name": "指令加载、检索与上下文装配",
+      "states": "选择版本 → load instructions → 按单元检索 → 分发 → 产物引用 → 下轮更新",
+      "current": "loadRunInstructions 固定门禁政策与 skills，runScopeMaterials 给整跑材料，unitMaterials 提供单元上下文；run_memory 仅提供有限的服务端事实。",
+      "entry": "候选改动必须明确属于 prompt、retriever、context policy 还是材料本身；同步固定工具 schema、模板展开值和检索预算。",
+      "run": "记录实际下发内容 hash 与 chunk IDs；记录 token 裁剪、去重与排序。区分“交付给模型”与“被模型采用”。",
+      "failure": "检索不足、不支持的引用、上下文截断各有 reason code；不得因缺上下文向隐藏 gold 求答案。",
+      "seal": "上下文 manifest 随 trial 保存。memory 的来源、作用域、TTL、禁用策略随候选版本；A/B 不共享不断变化的记忆状态。",
+      "measure": "召回/引用正确性、任务质量、总 token、被截断比例；做固定输入的上下文消融，不能只看 prompt 长度下降。",
+      "tests": [
+        "server/test/run-memory.test.ts",
+        "server/test/work-units.test.ts",
+        "packages/testpilot-mcp/test/retrieve.test.ts",
+        "packages/harness-testing/test/cache-context.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F06",
+      "layer": "生成与验证",
+      "name": "工作单元、故事与验收准则",
+      "states": "plan → claim → 生成 → 单元校验 → 重试 → merge → 整体校验",
+      "current": "workUnits 由服务端切分，最大尝试次数 5；故事按模块加旅程，用例按故事。checkStories/acceptanceIndex 提供结构和动作型准则信号。",
+      "entry": "依赖未完成不可领取；任务集固定单元范围和输入父版本。评测相同工作量，避免候选少生成单元而更便宜。",
+      "run": "领取、写入、校验、合并作为独立 receipt；正文保留明确前置/触发/可观察结果，并绑定 sourceRefs。",
+      "failure": "标注失败是模型格式、范围错误、材料不足还是调度异常；重启后的 claimed 单元需要可验证恢复或租约释放语义。这里是加强验收项，不把它当已复现 bug。",
+      "seal": "局部成功不等于整批完成，merge 后全局去重和一致性仍要跑；修订故事应传播到依赖的 cases。",
+      "measure": "单元首轮通过/最终通过、语义覆盖、合并丢失率、重复故事、修复次数；总分与单元数分开。",
+      "tests": [
+        "server/test/work-units.test.ts",
+        "server/test/unit-budget.test.ts",
+        "server/test/acceptance-index.test.ts",
+        "packages/harness-testing/test/storyQuality.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F07",
+      "layer": "生成与验证",
+      "name": "用例设计、断言与设计门禁",
+      "states": "故事输入 → 用例候选 → 校验 → gate → 定向修复 → finalize",
+      "current": "runGate 校验设计比例、出处、UI 判据；失败单元可重新打开。规则分数是设计启发式，不等于行为有效性。",
+      "entry": "固定 approved story 或冻结 story revision；定义边界/负例的业务意义和允许 oracle，不让模型发接口判据替代 UI。",
+      "run": "每条 case 绑定需求与 assertion；case 文本、判据、设计方法分别检验。加入关键词堆砌、空断言与看似相关但错误的反例。",
+      "failure": "修复只改许可字段，保留原候选和 findings；门禁回合计入预算。不因无限加重复用例提高覆盖。",
+      "seal": "finalize 封存当前门禁版本与 cases hash；历史展示使用当时回执，新评分产生新评估版本，不改历史事实。",
+      "measure": "语义覆盖、伪造需求率、有效断言比例、冗余度、人工修改/驳回率；gate 分数保持为辅助指标。",
+      "tests": [
+        "server/test/run-routes.test.ts",
+        "packages/harness-testing/test/casegen.test.ts",
+        "packages/harness-testing/test/gate-evidence-severity.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F08",
+      "layer": "审核与授权",
+      "name": "复核、修订、批准与驳回",
+      "states": "待审 → 查看证据 → 修改/批准/驳回 → outbox 投递 → 下游资格",
+      "current": "批准绑定 case revision，修改可使旧批准失效；驳回要求去空白后至少 4 个 UTF-16 码元；事件与 outbox 可重试。R04 暴露工具来源边界未隔离。",
+      "entry": "独立规划器工具集与本地操作员入口。保持本地免登录产品选择，但不能把“无 Authorization”作为代理不能取得的人类证明。",
+      "run": "页面展示原生成内容、当前 revision、门禁和修改差异；批准只授权具体版本。批量不同错误可逐条理由或拆批。",
+      "failure": "版本冲突不写旧批准；投递失败保持 outbox 待投递。取消/撤回应使所有依赖的执行与导出检查失效，而不是仅改 UI 状态。",
+      "seal": "审核记录保存 provenance 与理由；候选内容不能自带 actor=human。发布所用审核来源必须与 agent capability 隔离。",
+      "measure": "越权路径、陈旧批准拦截、投递幂等、理由可行动性、审核耗时；4 字符不等于理由充分。",
+      "tests": [
+        "server/test/run-routes.test.ts",
+        "server/test/review-principal.test.ts",
+        "server/test/regression-candidates.test.ts",
+        "server/audit/evaluation-readiness.audit.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F09",
+      "layer": "执行与交付",
+      "name": "编译与代码门禁",
+      "states": "已批准 case → 编译 → code gate → 冻结 bundle → 执行/重编译",
+      "current": "generateApprovedCode 与 approvedExecutionBundle 关联批准版本和代码；runCodeGate 拦截不合格代码，代码执行受批准版本约束。",
+      "entry": "固定 approved case 与 oracle；编译器版本和 target 解析规则进入候选 manifest。先做固定 case 的编译阶段评测。",
+      "run": "逐 case 保留 expected/oracle；编译可改动作表达，不可弱化预期。编译产物记录源 revision、工具版本和依赖。",
+      "failure": "编译失败是可分类产物质量事件；运行基础设施故障另算。修复代码不能悄悄改 case 预期以取得通过。",
+      "seal": "bundle 内容 hash、compilerHash 与 approval refs 一起封存；重编译产生新 bundle，不覆盖旧执行引用。",
+      "measure": "可编译率、语义保真、弱化断言拦截、执行成功与错误归因；不是代码行数越多越好。",
+      "tests": [
+        "server/test/run-routes.test.ts",
+        "server/test/case-oracle-update.test.ts",
+        "packages/harness-testing/test/codegen.test.ts",
+        "packages/harness-testing/test/g2.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F10",
+      "layer": "执行与交付",
+      "name": "环境准备、UI 执行与 judge",
+      "states": "预检 → reset/login → 执行动作 → 屏幕判据 → 重试/取消 → 结果回执",
+      "current": "workflowExecution 有幂等、选择集、环境快照、runner 取消与结果 revision；judge 支持采样；现有测试覆盖迟到成功不能覆盖取消。",
+      "entry": "验证批准仍有效、选集存在、占位符齐全、禁止名单和环境前提；固定基线/候选的 reset recipe。",
+      "run": "动作和 UI verdict 对齐；收集截图/结构化观察/模型请求。每次 attempt 显式绑定环境与 code revision，抽样执行标明分母。",
+      "failure": "区分产品缺陷、生成动作错、判官错、不可观察、环境错；按预定规则重试。真正发现缺陷的 failed 可以是生成器成功，不能一律扣分。",
+      "seal": "执行回执含真实 selection、每条结果和预算用量；截断/缺失不能标整套通过。保存必要证据，控制敏感数据与保留期。",
+      "measure": "健康误报、已确认故障检出、稳定性、有效执行率、首次/修复后表现、每计划任务总成本；judge 加模糊题校准。",
+      "tests": [
+        "server/test/workflow-execution.test.ts",
+        "server/test/execution-placeholders.test.ts",
+        "packages/harness-testing/test/judge.test.ts",
+        "packages/harness-testing/test/page-ready.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F11",
+      "layer": "执行与交付",
+      "name": "导出与使用端复现",
+      "states": "选择已批准产物 → 验证祖先链 → 脱敏 → 生成工程 → 本地运行 → 版本更新",
+      "current": "exportLayers 与 provenance 测试检查源、批准、导出关系；导出属于交付结果，不自动等于可脱离当前机器重跑。",
+      "entry": "只接受仍有效的批准/bundle；明确导出 target、环境变量需求、依赖版本和不包含的敏感状态。",
+      "run": "生成 manifest、锁定依赖、README 与可操作运行命令；导出代码语义与服务器编译产物一致。",
+      "failure": "缺依赖/不可移植路径与测试判失败分开；不能通过删除断言解决导出失败。部分导出显式声明 case 选集。",
+      "seal": "导出包 hash、源 revision、审批事件与版本标识封存；修订生成新包，旧包可识别过期。",
+      "measure": "干净环境安装/启动/测试比例、断言保真、路径与密钥泄漏、与原回执一致性；当前全绿不代替真实干净环境验收。",
+      "tests": [
+        "server/test/export.test.ts",
+        "server/test/export-layers.test.ts",
+        "server/test/export-provenance.test.ts"
+      ],
+      "priority": "P2"
+    },
+    {
+      "id": "F12",
+      "layer": "证据与反馈",
+      "name": "运行报告、归因、回归候选与记忆",
+      "states": "采集 → 去重聚合 → 归因假设 → 人工判定 → 回归候选 → 任务化/下次上下文",
+      "current": "runReport 汇总四节点与六层归因；regressionCandidates 入库但没有自动评测调度；runMemory 只取服务端事实、scope/TTL 与 held-out 排除。",
+      "entry": "统一错误码和证据 refs；候选来自真实 revision。模型解释作为 hypothesis，不自动等同根因。",
+      "run": "理由整理为 failure family、期望行为、冻结输入、判分规则；项目 SUT 回归用例与 harness 再生成任务分别建模。",
+      "failure": "聚合失败保留原事实；反例被推翻要撤销/版本化。语义相同合并时保留全部来源，不能删掉不利样本。",
+      "seal": "人工批准后形成 EvalTask manifest；记忆注入是另一条受限消费路径，不能混进隐藏答案，也不能以“被送达”冒充“有效”。",
+      "measure": "已归因比例、可复现比例、反馈转任务率、同类错误复发、memory on/off 任务效果；目前任务化与自动再运行缺口仍在。",
+      "tests": [
+        "server/test/run-report.test.ts",
+        "server/test/regression-candidates.test.ts",
+        "server/test/run-memory.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F13",
+      "layer": "评测与选版",
+      "name": "数据集、评分器与隔离",
+      "states": "采集 → 标注/裁决 → 分组切分 → 冻结 → 评分 → 校准/退役",
+      "current": "core/eval 有纯评分与统计，MCP 有离线分数与 SQLite scoreboard；casegen 可打分，当前领域 gold 未冻结；通用返回矩阵不天然隔离 heldOut。",
+      "entry": "冻结任务范围、sourceGroupId、split、graderHash；草稿只允许 diagnostic，正式准入不得静默用别的领域 gold。",
+      "run": "评估进程读取隐藏答案，candidate 只能拿可见输入。规则匹配覆盖与语义/行为质量分列，unknown 不变成零。",
+      "failure": "评分器自身失败标 invalid；标注争议进入裁决。修改 rubric 需双跑旧新 grader 并标版本，不能改旧分。",
+      "seal": "数据污染或看过留出细节记录访问；旧留出转开发或退役，更新独立批次。保存原证据与每版评分。",
+      "measure": "grader 与人工一致性、反作弊样本、未知比例、跨来源泛化、假阳性/假阴性；R02/R03 是必要测量契约。",
+      "tests": [
+        "packages/harness-core/test/eval.test.ts",
+        "packages/testpilot-mcp/test/benchmark-contract.test.ts",
+        "server/test/gold.test.ts",
+        "server/audit/evaluation-readiness.audit.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F14",
+      "layer": "评测与选版",
+      "name": "实验调度、配对比较与候选搜索",
+      "states": "预登记 → 预检 → 配对运行 → 评分 → 统计 → 验证 → 接受/拒绝/不足",
+      "current": "graph paired eval 与离线 pairedEval 存在，但非统一生产实验入口；一次两臂不能充分分离任务差异、随机性与环境漂移。",
+      "entry": "ExperimentSpec 固定 baseline/candidate、允许变化、任务和重复数、成本、主要指标与停止规则；真实 runtime 回执必须匹配。",
+      "run": "按任务配对、按来源分组，交替/随机执行顺序，所有 attempt 计成本；代理不拿评分权限。生产 adapter 和评测 adapter 共享执行用例。",
+      "failure": "无效尝试重试策略预定；预算耗尽报告 incomplete。生成坏产物仍是质量失败，不能都当 infra 排除。",
+      "seal": "比较返回 improved/regressed/inconclusive/invalid；相关条目不能当独立样本。保存不成功的候选与总搜索预算。",
+      "measure": "有效配对任务数、效应大小/不确定性、分层退化、成本约束；本次自测只测实验系统契约，没有真实模型 A/B。",
+      "tests": [
+        "server/test/evalspecs.test.ts",
+        "packages/harness-core/test/eval.test.ts",
+        "server/audit/evaluation-readiness.audit.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F15",
+      "layer": "评测与选版",
+      "name": "版本晋升、生产装载与回滚",
+      "states": "候选 → 开发验证 → 人审 → 留出/回归 → CAS 晋升 → 生产观察 → 回滚/退役",
+      "current": "evolution/store 已有 memory policy 版本、CAS、留出尝试与回滚；releaseGates 验证真实 receipts。探索性 counter 实验不等于通用版本发布。",
+      "entry": "通用 HarnessVersion 包含代码内容、prompt/skill、工具、模型、上下文、编译/执行器、预算策略；release recipe 只要求声明支持的 runtime。",
+      "run": "审核层读可信证据，候选只能提交版本引用；复用现有哈希验证和 oracle 保真检查。生产启动必须报告实际加载版本。",
+      "failure": "并发晋升用 generation CAS；留出失败不反复试到绿。回滚恢复整个版本包而非一段 prompt，已运行 trial 保持原绑定。",
+      "seal": "保存审计链、可回滚上一版本与证据保留政策；失效/污染证据触发资格撤销，不能删记录当没发生。",
+      "measure": "配置实际生效率、回滚恢复、留出退化、线上可靠性；本次通过的是已有受限机制测试，不证明通用晋升已实现。",
+      "tests": [
+        "server/test/evolution.test.ts",
+        "server/test/evolution-release.test.ts"
+      ],
+      "priority": "P1"
+    },
+    {
+      "id": "F16",
+      "layer": "证据与反馈",
+      "name": "工具分发、安装、配置与持续检查",
+      "states": "修改真源 → 构建宿主副本 → 安装/升级 → 实际装载 → drift 检查 → 卸载/迁移",
+      "current": "skills 真源与两个宿主副本已有 drift 校验，host-parity 当前 190/190；CI 仍按已有决定关闭。工具覆盖不代表角色能力隔离。",
+      "entry": "安装包/skill 版本及配置来源明确；新功能必须区分 operator、planner、executor、grader 能力，不因追求 UI 对等就给 planner 全部动作。",
+      "run": "运行回执验证插件实际装载摘要，模型配置不靠文档推断。变更后生成副本，并做角色级可达性测试。",
+      "failure": "缺宿主、插件不一致、错误配置显式拒绝；升级失败保留前版。卸载清理工具入口但遵循证据保留与敏感配置边界。",
+      "seal": "发布 manifest 带运行环境与依赖；确定性检查、浏览器集成和付费实验分层，恢复 CI 另作产品决策，不自动启用。",
+      "measure": "安装/升级成功率、实际 skill 一致性、角色能力越界、冷启动导出复现；host-parity=100% 不能替代 R04。",
+      "tests": [
+        "packages/testpilot-mcp/test/host-registry.test.ts",
+        "server/test/claudecode.test.ts",
+        "server/test/codex.test.ts",
+        "scripts/test"
+      ],
+      "priority": "P1"
+    }
+  ]
+}

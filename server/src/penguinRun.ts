@@ -1,3 +1,4 @@
+import { stageEvent } from "./workflowControls.js";
 /**
  * 起跑那条路的 Penguin 版本。
  *
@@ -277,11 +278,7 @@ export async function startRun(
   const scopeProjectId = target.projectId;
   const runId = input.wfRunId ?? newRunId();
   const rt = getRuntime(input.runtime ?? defaultRuntimeName());
-  /**
-   * Web 发起的规划可以走两条路：Penguin 托管（用项目里配置的规划模型），或本机 Claude Code
-   * （用它自己登录的模型）。Codex 不在初步交付范围里，仍然拒绝。
-   */
-  if (rt.name === "codex") throw new Error(`managed_planner_unsupported (${rt.name})：Web 发起的规划目前支持 Claude Code 与 Penguin；Codex 走宿主入口`);
+  // Native Claude Code and Codex keep their host planner; Penguin uses managed profiles.
   const managed = rt.name === "penguin";
   const prior = outputStore.getRun(runId);
   if (prior && !(prior.detail as { modelRoles?: unknown } | undefined)?.modelRoles)
@@ -383,13 +380,13 @@ export async function startRun(
         agentId: AGENT_ID,
         projectId: PROJECT_ID,
         // Penguin 的深链指它的 server；Claude Code 的「trace」是落在产物目录里的 stream-json。
-        url: rt.name === "penguin" ? `http://127.0.0.1:7364/sessions/${started.sessionId}` : join(started.outDir, "claude-stream.jsonl"),
+        url: rt.name === "penguin" ? `http://127.0.0.1:7364/sessions/${started.sessionId}` : join(started.outDir, rt.name === 'codex' ? 'codex-events.jsonl' : 'claude-stream.jsonl'),
       },
       ...(input.budget ? { budget: input.budget } : unitEstimate ? { budget: unitRunBudget(unitEstimate), budgetBasis: { workUnits: true, estimatedUnits: unitEstimate } } : {}),
       ...(input.ablate?.length ? { ablate: input.ablate } : {}),
       ...(input.params ? { requestedOverrides: input.params, paramOverrides: input.params } : {}),
       targetSnapshot: {
-        describe: `${rt.name === "penguin" ? `Penguin · ${AGENT_ID}` : "Claude Code"} · ${started.workspace}`,
+        describe: `${rt.name === "penguin" ? `Penguin · ${AGENT_ID}` : rt.name === 'codex' ? 'Codex' : "Claude Code"} · ${started.workspace}`,
       },
     },
   });
@@ -431,6 +428,14 @@ export async function startRun(
  * 看到一条 done 的运行，`reviewBatch` 抛「no output」，那一批就从复核队列里静默消失了——
  * 而运行记录上写着它成功了。
  */
+export function completionDiagnostics(status: string, error?: string) {
+  // The file adapter expects final artifacts even when the ledger intentionally waits for a human.
+  if (status === 'waiting_review' && error?.includes('没有 gate.json')) {
+    return { error: undefined, adapterDiagnostic: error };
+  }
+  return { error };
+}
+
 async function finish(
   wfRunId: string,
   startedAt: string,
@@ -472,6 +477,12 @@ async function finish(
     });
   }
 
+  if (target.projectId && ['failed','paused','cancelled'].includes(status)) {
+    for (const node of runLedger().nodeStates(wfRunId)) {
+      if (node.phase === 'running') stageEvent(wfRunId, target.projectId, node.node,
+        status === 'cancelled' ? 'cancelled' : status === 'paused' ? 'blocked' : 'failed', r.error ?? `Run stopped: ${status}`);
+    }
+  }
   outputStore.saveRun({
     id: wfRunId,
     graphId: PENGUIN_GRAPH_ID,
@@ -484,7 +495,7 @@ async function finish(
       target,
       ...(!registered.protected && r.products?.meta ? { meta: r.products.meta, prompts: r.products.meta.promptsDigest } : {}),
       ...(!registered.protected && r.products?.spend ? { spend: r.products.spend } : {}),
-      ...(r.error ? { error: r.error } : {}),
+      ...completionDiagnostics(status, r.error),
     },
   });
 
@@ -493,7 +504,7 @@ async function finish(
     {
       status,
       ...(!registered.protected && r.products?.spend ? { spend: r.products.spend } : {}),
-      ...(r.error ? { error: r.error } : {}),
+      ...completionDiagnostics(status, r.error),
       nodes: PENGUIN_NODES,
       cases: products?.bundle.cases.length ?? 0,
     },

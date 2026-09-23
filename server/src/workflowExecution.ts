@@ -1,3 +1,5 @@
+import type { Preparation } from '@testpilot/harness-testing';
+import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import { boundRulePack } from "./rulePacks.js";
 import { referencedKeys } from "@testpilot/harness-core";
 import {caseEntryUrl, caseStartsLoggedOut} from './caseEntry.js';
@@ -110,7 +112,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const runParams = (ledger().outputs.getRun(runId)?.detail as { parameters?: { sourceUrl?: string; targetUrl?: string; exploreWallet?: boolean } } | undefined)?.parameters;
   const url = resolveText(env?.baseUrl || runParams?.sourceUrl || runParams?.targetUrl || project.targetUrl, context);
   const session = env?.login?.authRequired ? env.login.session : null;
-  const login = env?.login?.authRequired && !session ? env.login.steps ?? [] : [];
+  const login = env?.login?.authRequired ? env.login.steps ?? [] : [];
   /**
    * 探索记下来的控件文案与选择器，交给执行侧当**定位提示**（docs/v3/history/23 F-15）。
    *
@@ -122,7 +124,9 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const reportContent = report ? ledger().readRevision(report.id, projectId).content : undefined;
   const locators = reportContent ? locatorHints(reportContent as Parameters<typeof locatorHints>[0]) : [];
   const selected = input.caseIds ? bundle.cases.filter((c) => input.caseIds!.includes(c.id)) : bundle.cases;
-  const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, storageState: session,
+  const blocked = ((bundle as {compilation?:string}).compilation === 'host-prepared-v1' ? [] : selected).map(c => ({ id: c.id, reasons: executionBlockers(c) })).filter(c => c.reasons.length);
+  if (blocked.length) throw new LedgerError(409, `execution_not_ready:${JSON.stringify(blocked)}`);
+  const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
     query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locators, visualThresholdPct: env?.visualThresholdPct };
@@ -136,9 +140,10 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
    * 恰好是个错密码，真正的判决被掩盖了。缺什么，跑之前就说出来。
    */
   const texts = [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps, ...(typeof c.expected === "string" ? [c.expected] : [])])];
-  const missing = missingPlaceholders(texts, context);
+  const preparationSteps = Object.values((bundle as {preparation?:Record<string,{steps:string[]}>}).preparation??{}).flatMap(p=>p.steps);
+  const missing = missingPlaceholders([...texts,...preparationSteps], context);
   if (missing.length) throw new LedgerError(400, `unresolved_placeholders:${missing.slice(0, 8).join(",")}`);
-  guardRun(url, [...login, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
+  guardRun(url, [...login, ...preparationSteps, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
   const row: ExecutionRow = { id: `exec-${randomUUID()}`, runId, projectId, codeRevision: input.codeRevision, requestHash, status: "running",
     // 选择集不进 environmentHash：跑哪几条不改变「在什么环境里跑」。它在 requestHash 里，也写进产物。
     environmentHash: contentHash(canonicalJSON({ ...snapshot, budget: undefined, caseIds: undefined })), environmentEnc: encryptSecret(JSON.stringify(snapshot)), resultRevision: null, startedAt: new Date().toISOString() };
@@ -172,9 +177,9 @@ async function perform(row: ExecutionRow) {
       const execId = `${row.id}-${contentHash(kase.id).slice(0, 12)}`; active.set(row.id, execId);
       const attempt = () => execOnRunner({ execId, scopeProjectId: row.projectId, modelSnapshotRunId: row.runId, url: caseEntryUrl(kase.precondition,env.url),
         steps: kase.steps, expected: kase.expected, artifactDir: ARTIFACT_DIR,
-        opts: { modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,
+        opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,
           // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
-          ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState }),
+          ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState, authentication: env.authentication }),
           resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locators: env.locators,
           /**
            * **带钱包探索出来的用例，执行时也要带钱包。**

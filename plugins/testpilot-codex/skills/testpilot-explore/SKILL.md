@@ -115,3 +115,13 @@ key 在 `server/.env`。**永远不要把 key 写进任何仓库文件、任何�
 探索会因为采满屏数上限而停（`stoppedBecause`）。**把 `unvisited` 原样写进材料的 unknowns**，
 不要假装那些地方不存在。一份不写自己盲区的规格读起来像是完整的，
 而由它衍生的一切都会继承这个错觉。
+
+
+## 逐条件探索证据
+
+“界面观察不到”是证据覆盖缺口，不代表功能不存在，也不自动等于 requires-fixture。
+故事用 observationLinks 逐 acceptanceIndex（从 0 起）关联本轮真实 observationIds。
+每项记录 status（observed / partial / unobserved）、reason（not_attempted / route_blocked / requires_session / requires_fixture / budget_exhausted / not_found / insufficient_evidence / observed）及 nextSteps。
+没有证据写 unobserved 和空 observationIds；不能编造记录 ID、实际路径或已核验状态。
+点击过某个功能不等于验证了全部验收条件。nextSteps 只是尚未执行的建议，必须与探索日志中的实际动作区分。
+多步路径没有走完时说明最后到达的状态和具体阻塞；静态观察不继承仅在状态变更测试中需要的夹具要求。

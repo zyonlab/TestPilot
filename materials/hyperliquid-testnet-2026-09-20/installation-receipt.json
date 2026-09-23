@@ -1,0 +1,92 @@
+{
+  "project": {
+    "id": "prj-mu96i5c2-1001",
+    "name": "Hyperliquid Testnet · 合约交易全生命周期与资金准确性",
+    "targetUrl": "https://app.hyperliquid-testnet.xyz/trade",
+    "targetPlatform": "web",
+    "createdAt": "2026-09-20T02:10:00.194Z",
+    "materials": []
+  },
+  "environment": {
+    "id": "env-mu96i5cd-1002",
+    "projectId": "prj-mu96i5c2-1001",
+    "name": "testnet-injected-wallet",
+    "baseUrl": "https://app.hyperliquid-testnet.xyz/trade",
+    "vars": {
+      "TP_NETWORK_SCOPE": "hyperliquid-testnet-only",
+      "TP_WALLET_VERIFICATION": "pending-first-authenticated-run",
+      "TP_ACCOUNT_MODE_POLICY": "observe-current-mode-before-changing",
+      "TP_FINANCIAL_ORACLE": "decimal-ui-snapshot",
+      "HL_ADDRESS": "0x676569831D1002d061465b17368D774913e807F5",
+      "TP_WALLET_SOURCE": "existing-local-testpilot-wallet"
+    },
+    "headers": {},
+    "query": {},
+    "viewport": {
+      "width": 1600,
+      "height": 1000
+    },
+    "login": {
+      "authRequired": true,
+      "steps": [
+        "waitFor:右侧下单面板底部出现 Enable Trading 按钮",
+        "点击右侧下单面板底部的 Enable Trading 按钮",
+        "在「Establish Connection」弹窗里点击 Establish Connection 按钮，然后等待 3 秒让签名完成"
+      ],
+      "apiLogin": null,
+      "hasSession": false,
+      "sessionCookies": 0,
+      "sessionOrigins": 0,
+      "sessionHeaders": 0
+    },
+    "injectWallet": true,
+    "isDefault": true,
+    "createdAt": "2026-09-20T02:10:00.205Z"
+  },
+  "domainReference": {
+    "id": "dr-prj-mu96i5c2-1001-665e195a9dbe",
+    "projectId": "prj-mu96i5c2-1001",
+    "hash": "665e195a9dbe21718e41ae363ed47ba5a4c861bb3dfdc902eb01afc8e7675a16",
+    "title": "Hyperliquid 测试网：合约全生命周期与资金准确性 · 2026-09-20",
+    "chars": 4580,
+    "createdAt": "2026-09-20T02:10:00.210Z",
+    "created": false
+  },
+  "rulePack": {
+    "id": "rp-prj-mu96i5c2-1001-d052c45f5e41",
+    "projectId": "prj-mu96i5c2-1001",
+    "packId": "hyperliquid-testnet-trade-lifecycle",
+    "version": "2026-09-20.1",
+    "hash": "d052c45f5e411f64adba554ee3bb979e43dc359f1506b8a36738abf7b1244919",
+    "createdAt": "2026-09-20T02:10:00.221Z",
+    "counts": {
+      "modules": 28,
+      "features": 34,
+      "rules": 42,
+      "targets": 16
+    },
+    "valid": true,
+    "created": false
+  },
+  "verification": {
+    "readBack": true,
+    "rulePackValid": true,
+    "rulePackHash": "d052c45f5e411f64adba554ee3bb979e43dc359f1506b8a36738abf7b1244919",
+    "domainHash": "665e195a9dbe21718e41ae363ed47ba5a4c861bb3dfdc902eb01afc8e7675a16",
+    "injectWallet": true,
+    "walletSessionVerified": false,
+    "liveTradesExecuted": false,
+    "modules": 28,
+    "features": 34,
+    "rules": 42,
+    "lifecycle": 10
+  },
+  "localWallet": {
+    "source": "/Users/admin/Midscene/testpilot/server/.wallets",
+    "address": "0x676569831D1002d061465b17368D774913e807F5",
+    "seedMatchesAccount": true,
+    "runningServerMatches": true,
+    "verifiedAt": "2026-09-20T02:15:30.493Z",
+    "websiteLoginVerified": false
+  }
+}

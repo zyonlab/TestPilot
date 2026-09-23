@@ -11,6 +11,7 @@ const FILLER = new Set(["-", "", "GET", "eq"]);
 const isFiller = (v: unknown): boolean => v === undefined || v === null || v === 0 || (typeof v === "string" && FILLER.has(v.trim()));
 
 const KEEP: Record<string, readonly string[]> = {
+  "decimal-equation": ["kind", "scope", "inputs", "actual", "formula", "maxAgeMs"],
   text: ["kind", "value"],
   noText: ["kind", "value"],
   url: ["kind", "value"],

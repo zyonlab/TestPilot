@@ -1,0 +1,1820 @@
+{
+  "schemaVersion": "product-rule-pack.v1",
+  "id": "hyperliquid-testnet-trade-lifecycle",
+  "version": "2026-09-20.1",
+  "domain": "crypto-linear-perpetuals",
+  "product": "Hyperliquid Testnet Trading SPA",
+  "network": "Hyperliquid testnet; wallet transport uses local configured test network",
+  "accountMode": "Observed logged-out default Unified; test Cross/Isolated separately; Manual and Portfolio Margin are explicit conditional branches",
+  "appliesTo": {
+    "urlPatterns": [
+      "^https://app\\.hyperliquid-testnet\\.xyz/trade(?:/[^?#]*)?(?:[?#].*)?$"
+    ],
+    "note": "测试网合约交易主链；非主网。多抵押品与高级类型必须先核对当前账户适用性。"
+  },
+  "sources": [
+    {
+      "id": "scope",
+      "kind": "product-spec",
+      "locator": "materials/hyperliquid-testnet-2026-09-20/scope.md",
+      "fetchedAt": "2026-09-20"
+    },
+    {
+      "id": "ui",
+      "kind": "observation",
+      "locator": "materials/hyperliquid-testnet-2026-09-20/site-observations.md",
+      "observedAt": "2026-09-20",
+      "note": "本次未登录SPA观察；不证明成交或金额正确"
+    },
+    {
+      "id": "domain",
+      "kind": "domain-reference",
+      "locator": "materials/hyperliquid-testnet-2026-09-20/domain-reference.md",
+      "fetchedAt": "2026-09-20"
+    },
+    {
+      "id": "accounts",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/account-abstraction-modes",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "margin",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margining",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "portfolio",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/portfolio-margin",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "contracts",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/contract-specifications",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "pnl",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/entry-price-and-pnl",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "orders",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/order-types",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "precision",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/tick-and-lot-size",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "errors",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/error-responses",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "fees",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/fees",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "funding",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/funding",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "tiers",
+      "kind": "official-doc",
+      "locator": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/margin-tiers",
+      "fetchedAt": "2026-09-20",
+      "note": "官方通用文档；测试网/账户适用性需首跑确认"
+    },
+    {
+      "id": "login-fixture",
+      "kind": "fixture-contract",
+      "locator": "fixtures/hyperliquid-testnet/cases.json",
+      "fetchedAt": "2026-09-20"
+    }
+  ],
+  "modules": [
+    {
+      "id": "account",
+      "name": "身份与账户资产",
+      "parentId": null
+    },
+    {
+      "id": "account.identity",
+      "name": "钱包连接与授权",
+      "parentId": "account"
+    },
+    {
+      "id": "account.balances",
+      "name": "资产与可用余额",
+      "parentId": "account"
+    },
+    {
+      "id": "account.modes",
+      "name": "账户模式与抵押品",
+      "parentId": "account"
+    },
+    {
+      "id": "market",
+      "name": "市场选择与合约参数",
+      "parentId": null
+    },
+    {
+      "id": "market.instrument",
+      "name": "币对与结算单位",
+      "parentId": "market"
+    },
+    {
+      "id": "market.prices",
+      "name": "行情价格与订单簿",
+      "parentId": "market"
+    },
+    {
+      "id": "market.precision",
+      "name": "数量价格精度",
+      "parentId": "market"
+    },
+    {
+      "id": "risk",
+      "name": "杠杆与保证金",
+      "parentId": null
+    },
+    {
+      "id": "risk.margin",
+      "name": "全仓逐仓",
+      "parentId": "risk"
+    },
+    {
+      "id": "risk.leverage",
+      "name": "杠杆及档位",
+      "parentId": "risk"
+    },
+    {
+      "id": "risk.portfolio",
+      "name": "跨资产风险",
+      "parentId": "risk"
+    },
+    {
+      "id": "order",
+      "name": "下单与预估",
+      "parentId": null
+    },
+    {
+      "id": "order.direction",
+      "name": "方向与数量输入",
+      "parentId": "order"
+    },
+    {
+      "id": "order.preview",
+      "name": "名义价值与成本预估",
+      "parentId": "order"
+    },
+    {
+      "id": "order.validation",
+      "name": "下单边界与拒绝",
+      "parentId": "order"
+    },
+    {
+      "id": "execution",
+      "name": "委托与成交",
+      "parentId": null
+    },
+    {
+      "id": "execution.types",
+      "name": "订单类型与有效期",
+      "parentId": "execution"
+    },
+    {
+      "id": "execution.fills",
+      "name": "逐笔成交与撤改单",
+      "parentId": "execution"
+    },
+    {
+      "id": "execution.resilience",
+      "name": "竞态与重连",
+      "parentId": "execution"
+    },
+    {
+      "id": "position",
+      "name": "持仓与退出",
+      "parentId": null
+    },
+    {
+      "id": "position.manage",
+      "name": "开仓加仓与反手",
+      "parentId": "position"
+    },
+    {
+      "id": "position.protection",
+      "name": "止盈止损与清算",
+      "parentId": "position"
+    },
+    {
+      "id": "position.exit",
+      "name": "部分及全部平仓",
+      "parentId": "position"
+    },
+    {
+      "id": "settlement",
+      "name": "资金结算与审计",
+      "parentId": null
+    },
+    {
+      "id": "settlement.pnl",
+      "name": "盈亏与费用",
+      "parentId": "settlement"
+    },
+    {
+      "id": "settlement.cashflow",
+      "name": "资金费与利息",
+      "parentId": "settlement"
+    },
+    {
+      "id": "settlement.reconciliation",
+      "name": "逐币种及总权益核对",
+      "parentId": "settlement"
+    }
+  ],
+  "features": [
+    {
+      "id": "wallet",
+      "moduleId": "account.identity",
+      "name": "注入钱包与正确身份",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "authorization",
+      "moduleId": "account.identity",
+      "name": "交易授权与拒签",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "login-fixture"
+      ]
+    },
+    {
+      "id": "assets",
+      "moduleId": "account.balances",
+      "name": "逐资产余额及可用额度",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "transfers",
+      "moduleId": "account.balances",
+      "name": "测试资金与内部划转",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "account-mode",
+      "moduleId": "account.modes",
+      "name": "Unified/Manual/Portfolio Margin",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "symbol",
+      "moduleId": "market.instrument",
+      "name": "币对、DEX和结算币识别",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "quotes",
+      "moduleId": "market.prices",
+      "name": "Mark/Oracle/订单簿",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "size-step",
+      "moduleId": "market.precision",
+      "name": "数量步长",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "precision"
+      ]
+    },
+    {
+      "id": "price-step",
+      "moduleId": "market.precision",
+      "name": "价格合法性",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "precision"
+      ]
+    },
+    {
+      "id": "margin-mode",
+      "moduleId": "risk.margin",
+      "name": "全仓逐仓与隔离",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "margin"
+      ]
+    },
+    {
+      "id": "leverage",
+      "moduleId": "risk.leverage",
+      "name": "杠杆和风险档位",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "margin"
+      ]
+    },
+    {
+      "id": "multi-position",
+      "moduleId": "risk.portfolio",
+      "name": "同抵押币多市场仓位",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "accounts"
+      ]
+    },
+    {
+      "id": "multi-collateral",
+      "moduleId": "risk.portfolio",
+      "name": "多抵押品借贷风险",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "portfolio"
+      ]
+    },
+    {
+      "id": "side",
+      "moduleId": "order.direction",
+      "name": "Buy Long / Sell Short",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "size-input",
+      "moduleId": "order.direction",
+      "name": "数量/金额/百分比输入",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "estimate",
+      "moduleId": "order.preview",
+      "name": "预估数量、名义价值和保证金",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "slippage",
+      "moduleId": "order.preview",
+      "name": "费用与滑点预估",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "ui"
+      ]
+    },
+    {
+      "id": "minimum",
+      "moduleId": "order.validation",
+      "name": "最小名义金额边界",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "errors"
+      ]
+    },
+    {
+      "id": "reject",
+      "moduleId": "order.validation",
+      "name": "保证金/精度/流动性拒绝",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "errors"
+      ]
+    },
+    {
+      "id": "order-types",
+      "moduleId": "execution.types",
+      "name": "Market/Limit/TIF",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "orders"
+      ]
+    },
+    {
+      "id": "advanced",
+      "moduleId": "execution.types",
+      "name": "高级订单",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "orders"
+      ]
+    },
+    {
+      "id": "fills",
+      "moduleId": "execution.fills",
+      "name": "挂单、成交、部分成交和撤单",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "orders"
+      ]
+    },
+    {
+      "id": "idempotence",
+      "moduleId": "execution.resilience",
+      "name": "重复点击、断线、重连及竞态",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "opening",
+      "moduleId": "position.manage",
+      "name": "开仓和同向加仓",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "pnl"
+      ]
+    },
+    {
+      "id": "reversal",
+      "moduleId": "position.manage",
+      "name": "反向减仓与反手",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "protection",
+      "moduleId": "position.protection",
+      "name": "TP/SL和Reduce Only",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "orders"
+      ]
+    },
+    {
+      "id": "liquidation",
+      "moduleId": "position.protection",
+      "name": "清算风险",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "margin"
+      ]
+    },
+    {
+      "id": "closing",
+      "moduleId": "position.exit",
+      "name": "部分平仓、全平与尘埃",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "pnl",
+      "moduleId": "settlement.pnl",
+      "name": "入场均价、U-PNL、Closed PNL和ROE",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "pnl"
+      ]
+    },
+    {
+      "id": "fees",
+      "moduleId": "settlement.pnl",
+      "name": "逐笔手续费与返佣",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "fees"
+      ]
+    },
+    {
+      "id": "funding",
+      "moduleId": "settlement.cashflow",
+      "name": "资金费结算",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "funding"
+      ]
+    },
+    {
+      "id": "interest",
+      "moduleId": "settlement.cashflow",
+      "name": "借款利息与资产收益",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "portfolio"
+      ]
+    },
+    {
+      "id": "reconcile",
+      "moduleId": "settlement.reconciliation",
+      "name": "账户权益与逐币种资金守恒",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "precision-oracle",
+      "moduleId": "settlement.reconciliation",
+      "name": "十进制、精度和时间一致性",
+      "description": "作为测试设计覆盖项；适用不等于已执行验证。",
+      "applicability": "applicable",
+      "applicabilitySourceRefs": [
+        "scope"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "R01",
+      "featureIds": [
+        "wallet"
+      ],
+      "claimType": "normative",
+      "statement": "测试登录必须采用注入钱包，并核对连接地址、网络和所选账户。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "注入后的钱包地址是否匹配测试身份？连接入口与交易授权需首跑验证。"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R02",
+      "featureIds": [
+        "authorization"
+      ],
+      "claimType": "hypothesis",
+      "statement": "既有夹具使用Enable Trading后Establish Connection；本次新环境仍需确认。",
+      "sourceRefs": [
+        "login-fixture"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "本次注入环境是否出现同样授权流程，拒签后是否没有委托？"
+      }
+    },
+    {
+      "id": "R03",
+      "featureIds": [
+        "assets"
+      ],
+      "claimType": "observed",
+      "statement": "资产表区分总余额、可用余额和USDC估值。",
+      "sourceRefs": [
+        "ui"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "textPresent": [
+            "Total Balance|Available Balance|USDC Value"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R04",
+      "featureIds": [
+        "account-mode",
+        "multi-position"
+      ],
+      "claimType": "normative",
+      "statement": "Unified按结算/抵押币共享相关全仓余额，Manual按DEX分账。",
+      "sourceRefs": [
+        "accounts"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "相同抵押币与不同抵押币场景下，余额归属及风险占用是否正确？"
+      }
+    },
+    {
+      "id": "R05",
+      "featureIds": [
+        "multi-collateral",
+        "interest"
+      ],
+      "claimType": "normative",
+      "statement": "Portfolio Margin允许合格抵押品、借款和利息，需满足当期资格与限额。",
+      "sourceRefs": [
+        "portfolio"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "当前测试账户是否满足准入？抵押折算、借款上限和利息是否可观察？"
+      }
+    },
+    {
+      "id": "R06",
+      "featureIds": [
+        "symbol"
+      ],
+      "claimType": "normative",
+      "statement": "所有金额核对必须绑定钱包、DEX、币对及单位，切币对不得串用参数。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "切换BTC/ETH等市场后精度、杠杆、输入单位和订单归属是否同步？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R07",
+      "featureIds": [
+        "quotes"
+      ],
+      "claimType": "observed",
+      "statement": "交易页分别显示Mark、Oracle、资金费与倒计时。",
+      "sourceRefs": [
+        "ui"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "textPresent": [
+            "Mark|Oracle|Funding / Countdown"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R08",
+      "featureIds": [
+        "quotes"
+      ],
+      "claimType": "normative",
+      "statement": "动态行情使用同一快照参与关系断言，不写成固定值。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "数值输入是否有时间戳及同步窗口？过期报价是否被标明？"
+      }
+    },
+    {
+      "id": "R09",
+      "featureIds": [
+        "size-step"
+      ],
+      "claimType": "normative",
+      "statement": "数量合法小数位由资产szDecimals确定。",
+      "sourceRefs": [
+        "precision"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "当前币对步长及超精度UI处理方式是什么？输入、预估和最终成交单位是否一致？"
+      }
+    },
+    {
+      "id": "R10",
+      "featureIds": [
+        "price-step"
+      ],
+      "claimType": "normative",
+      "statement": "永续价格兼顾5位有效数字与6-szDecimals小数位，整数价格按官方例外。",
+      "sourceRefs": [
+        "precision"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "边界价格被正确接受/拒绝，且没有默改成另一价格吗？"
+      }
+    },
+    {
+      "id": "R11",
+      "featureIds": [
+        "margin-mode"
+      ],
+      "claimType": "normative",
+      "statement": "Cross共享相关风险池；Isolated限制该仓位抵押风险。",
+      "sourceRefs": [
+        "margin"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "模式实际切换后字段、风险池及其他仓位保证金是否符合隔离关系？"
+      }
+    },
+    {
+      "id": "R12",
+      "featureIds": [
+        "leverage"
+      ],
+      "claimType": "normative",
+      "statement": "用户杠杆在1到该资产有效上限的整数范围内，档位变化需重新检查。",
+      "sourceRefs": [
+        "margin",
+        "tiers"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "下限、上限、越界和跨名义档位是否正确处理？"
+      }
+    },
+    {
+      "id": "R13",
+      "featureIds": [
+        "estimate",
+        "leverage"
+      ],
+      "claimType": "normative",
+      "statement": "初始保证金基式为数量×标记价/杠杆；下单预估需核实净增风险及费用口径。",
+      "sourceRefs": [
+        "margin"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "独立计算基式并逐项解释预估差额；现有仓位与挂单如何影响可用额度？"
+      }
+    },
+    {
+      "id": "R14",
+      "featureIds": [
+        "side"
+      ],
+      "claimType": "observed",
+      "statement": "下单面板区分Buy / Long和Sell / Short。",
+      "sourceRefs": [
+        "ui"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "ui-state",
+        "expect": {
+          "textPresent": [
+            "Buy / Long|Sell / Short"
+          ]
+        }
+      }
+    },
+    {
+      "id": "R15",
+      "featureIds": [
+        "size-input",
+        "estimate"
+      ],
+      "claimType": "hypothesis",
+      "statement": "金额、保证金预算与比例输入的计算价、费用预留和分母需分别确认。",
+      "sourceRefs": [
+        "domain"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "切输入单位后数量是否一致？100%使用哪个余额，是否预留费用？"
+      }
+    },
+    {
+      "id": "R16",
+      "featureIds": [
+        "minimum"
+      ],
+      "claimType": "normative",
+      "statement": "普通永续订单存在10美元最小名义金额错误条件，不是固定币数量。",
+      "sourceRefs": [
+        "errors"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "在当前价格和数量步长下核对低于/等于/高于门槛；减仓及高级订单例外分开验证。"
+      },
+      "constants": {
+        "ordinaryMinNotional": "10"
+      },
+      "unit": "USD notional; base quantity derived"
+    },
+    {
+      "id": "R17",
+      "featureIds": [
+        "minimum",
+        "precision-oracle"
+      ],
+      "claimType": "normative",
+      "statement": "边界样例必须在量化数量后重算名义金额，不用未量化值判断合规。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "用decimal-check.py中的ceil_to_step模型构造边界，并用实际价格/步长实例化。"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R18",
+      "featureIds": [
+        "reject"
+      ],
+      "claimType": "normative",
+      "statement": "保证金不足、Reduce Only增仓、价格异常与无流动性是不同拒绝原因。",
+      "sourceRefs": [
+        "errors"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "每个失败分别核对UI反馈及没有意外成交/持仓/资金变动。"
+      }
+    },
+    {
+      "id": "R19",
+      "featureIds": [
+        "estimate",
+        "slippage"
+      ],
+      "claimType": "normative",
+      "statement": "估计名义值和费用不能冒充逐笔成交值；按实际成交量价重算。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "滑点、部分成交与maker/taker变化能否解释估计到实际的差异？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R20",
+      "featureIds": [
+        "order-types"
+      ],
+      "claimType": "normative",
+      "statement": "Limit不得劣于限价成交；ALO不立即吃单；IOC未立即成交部分取消。",
+      "sourceRefs": [
+        "orders"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "用订单/成交历史核对价格、数量、状态，不能仅看提交提示。"
+      }
+    },
+    {
+      "id": "R21",
+      "featureIds": [
+        "advanced"
+      ],
+      "claimType": "normative",
+      "statement": "高级订单有独立参数与约束，普通订单最小金额不能直接复用。",
+      "sourceRefs": [
+        "orders"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "当前页面支持哪些高级类型？分别查TWAP总额/时长等边界。"
+      }
+    },
+    {
+      "id": "R22",
+      "featureIds": [
+        "fills"
+      ],
+      "claimType": "normative",
+      "statement": "同一订单的已成交量加未成交/取消残量必须解释原始数量。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "逐笔数量与Original Size、剩余数量、撤单状态是否守恒？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R23",
+      "featureIds": [
+        "fills"
+      ],
+      "claimType": "normative",
+      "statement": "撤单只取消未成交部分，已成交仓位不能随撤单消失。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "部分成交后撤单与撤单成交竞态能否重建唯一结果？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R24",
+      "featureIds": [
+        "idempotence"
+      ],
+      "claimType": "normative",
+      "statement": "刷新、重连或重复提交反馈不能凭空增加/丢失交易。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "以订单标识及交易历史核对最终状态，超时不能直接算失败后重复交易。"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R25",
+      "featureIds": [
+        "opening",
+        "pnl"
+      ],
+      "claimType": "normative",
+      "statement": "同向加仓按成交量加权更新入场均价，部分平仓保留剩余入场价。",
+      "sourceRefs": [
+        "pnl"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "用各笔Q和P独立计算VWAP与加仓后的E，再核对仓位表。"
+      }
+    },
+    {
+      "id": "R26",
+      "featureIds": [
+        "pnl"
+      ],
+      "claimType": "normative",
+      "statement": "未实现盈亏按带符号仓位乘以标记价和入场价之差。",
+      "sourceRefs": [
+        "pnl"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "多空、盈亏正负和零点采用同步标记价计算，UI显示区间是否包含预期？"
+      }
+    },
+    {
+      "id": "R27",
+      "featureIds": [
+        "reversal"
+      ],
+      "claimType": "hypothesis",
+      "statement": "同市场反向成交可能先减仓，超出旧仓才反手；不得预设双向独立持仓。",
+      "sourceRefs": [
+        "domain"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "确认本账户净持仓行为；反手拆分平旧仓与开新仓的数量、费用与新入场价。"
+      }
+    },
+    {
+      "id": "R28",
+      "featureIds": [
+        "protection"
+      ],
+      "claimType": "normative",
+      "statement": "Reduce Only只能减少已有仓位，不能产生反方向新仓。",
+      "sourceRefs": [
+        "orders"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "无仓、超额减仓、部分成交和仓位已被其他订单平掉时是否仍不增仓？"
+      }
+    },
+    {
+      "id": "R29",
+      "featureIds": [
+        "protection"
+      ],
+      "claimType": "normative",
+      "statement": "TP/SL的触发与后续成交是不同事件；只挂出条件单不等于完成退出。",
+      "sourceRefs": [
+        "orders"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "触发价、方向、reduce-only、关联数量和最终成交分别核对。"
+      }
+    },
+    {
+      "id": "R30",
+      "featureIds": [
+        "closing"
+      ],
+      "claimType": "normative",
+      "statement": "部分平仓只减少指定市场指定数量；全平需核对残量及其他市场不被误改。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "平仓后同市场残量为零/预期剩余量，其他市场数量和入场价是否保持？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R31",
+      "featureIds": [
+        "pnl"
+      ],
+      "claimType": "hypothesis",
+      "statement": "平台Closed PNL与独立毛实现盈亏可能有不同计价、费用及时间窗口径。",
+      "sourceRefs": [
+        "pnl",
+        "domain"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "建立UI字段字典后再核对，禁止直接把独立价差公式套到Closed PNL。"
+      }
+    },
+    {
+      "id": "R32",
+      "featureIds": [
+        "pnl"
+      ],
+      "claimType": "hypothesis",
+      "statement": "ROE分母依赖平台展示口径，不能直接以价格涨跌乘杠杆代替。",
+      "sourceRefs": [
+        "domain"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "确认分母是否含调整后的保证金、费用或累计项。"
+      }
+    },
+    {
+      "id": "R33",
+      "featureIds": [
+        "fees"
+      ],
+      "claimType": "normative",
+      "statement": "费用依赖费档及成交角色，可能包含折扣、返佣和部署方费用。",
+      "sourceRefs": [
+        "fees"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "逐笔确认费用币种及实际费率，按量价费率重算并防止重复扣费。"
+      }
+    },
+    {
+      "id": "R34",
+      "featureIds": [
+        "funding"
+      ],
+      "claimType": "normative",
+      "statement": "资金费按小时结算，结算名义值使用Oracle而非Mark。",
+      "sourceRefs": [
+        "funding"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "按结算仓位、该小时费率和Oracle算有符号现金流，并核对资金费历史。"
+      }
+    },
+    {
+      "id": "R35",
+      "featureIds": [
+        "interest",
+        "reconcile"
+      ],
+      "claimType": "normative",
+      "statement": "新增借款同时带来资产和负债，不能被记成账户收益。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "借入、偿还本金、利息与资产估值是否分别入账？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R36",
+      "featureIds": [
+        "liquidation"
+      ],
+      "claimType": "normative",
+      "statement": "维持保证金按档位计算，清算风险须匹配全仓/逐仓及账户模式。",
+      "sourceRefs": [
+        "tiers",
+        "margin"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "实际风险档位、扣减项、保证金池和预估清算价假设是否一致？"
+      }
+    },
+    {
+      "id": "R37",
+      "featureIds": [
+        "multi-collateral"
+      ],
+      "claimType": "normative",
+      "statement": "Portfolio Margin风险须包含抵押折算、负债和借贷限制，不能按普通单资产余额判断。",
+      "sourceRefs": [
+        "portfolio"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "核对当期资格/上限后再测试，未满足条件时记录不可执行而非通过。"
+      }
+    },
+    {
+      "id": "R38",
+      "featureIds": [
+        "reconcile",
+        "transfers"
+      ],
+      "claimType": "normative",
+      "statement": "同账户边界的内部划转净额为零；分配保证金和挂单冻结不等于权益损失。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "逐币种流水与子账/总账边界能否解释所有可用余额与权益变化？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R39",
+      "featureIds": [
+        "reconcile"
+      ],
+      "claimType": "normative",
+      "statement": "权益变化必须由净外部流入、实现盈亏、浮盈亏变化、费用、资金费、利息及已解释项组成。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "按domain-reference.md的资金守恒模型独立核对，任何差额单列不可用其他项抹平。"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R40",
+      "featureIds": [
+        "precision-oracle"
+      ],
+      "claimType": "normative",
+      "statement": "金融计算使用十进制、明确单位和误差传播；数据不可观测时不宣称准确通过。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "展示精度与时间不同步是否导致不可判？是否保存输入、预期、实际及误差区间？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R41",
+      "featureIds": [
+        "assets",
+        "closing"
+      ],
+      "claimType": "normative",
+      "statement": "没有其他仓位/现金流的闭环交易结束后，余额差不能重复包含释放保证金。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "最终余额差是否恰由净交易损益与期间费用、资金费构成？"
+      },
+      "riskFloor": "P0"
+    },
+    {
+      "id": "R42",
+      "featureIds": [
+        "multi-position"
+      ],
+      "claimType": "normative",
+      "statement": "多个市场的盈亏和风险分别核对，再按正确抵押池汇总。",
+      "sourceRefs": [
+        "scope"
+      ],
+      "appliesWhen": "仅本测试网目标；记录实际账户/市场/模式并核对适用性",
+      "verification": {
+        "kind": "open-question",
+        "question": "操作一个市场不会改错其他市场数量/入场价；不同抵押币不能随意合并。"
+      },
+      "riskFloor": "P0"
+    }
+  ],
+  "targets": [
+    {
+      "id": "T-account-mode",
+      "featureId": "account-mode",
+      "ruleRefs": [
+        "R04"
+      ],
+      "match": {
+        "label": [
+          "^Unified$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only",
+      "expectOnScreen": [
+        "Account Type"
+      ]
+    },
+    {
+      "id": "T-market",
+      "featureId": "order-types",
+      "ruleRefs": [
+        "R20"
+      ],
+      "match": {
+        "label": [
+          "^Market$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-limit",
+      "featureId": "order-types",
+      "ruleRefs": [
+        "R20"
+      ],
+      "match": {
+        "label": [
+          "^Limit$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only",
+      "expectOnScreen": [
+        "Price"
+      ]
+    },
+    {
+      "id": "T-long",
+      "featureId": "side",
+      "ruleRefs": [
+        "R14"
+      ],
+      "match": {
+        "label": [
+          "^Buy / Long$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-short",
+      "featureId": "side",
+      "ruleRefs": [
+        "R14"
+      ],
+      "match": {
+        "label": [
+          "^Sell / Short$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-balances",
+      "featureId": "assets",
+      "ruleRefs": [
+        "R03",
+        "R41"
+      ],
+      "match": {
+        "label": [
+          "^Balances$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only",
+      "expectOnScreen": [
+        "Total Balance"
+      ]
+    },
+    {
+      "id": "T-positions",
+      "featureId": "opening",
+      "ruleRefs": [
+        "R25"
+      ],
+      "match": {
+        "label": [
+          "^Positions$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only",
+      "expectOnScreen": [
+        "Entry Price"
+      ]
+    },
+    {
+      "id": "T-orders",
+      "featureId": "fills",
+      "ruleRefs": [
+        "R22",
+        "R23"
+      ],
+      "match": {
+        "label": [
+          "^Open Orders$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only",
+      "expectOnScreen": [
+        "Original Size"
+      ]
+    },
+    {
+      "id": "T-trades",
+      "featureId": "fills",
+      "ruleRefs": [
+        "R22",
+        "R23"
+      ],
+      "match": {
+        "label": [
+          "^Trade History$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-funding",
+      "featureId": "funding",
+      "ruleRefs": [
+        "R34"
+      ],
+      "match": {
+        "label": [
+          "^Funding History$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-order-history",
+      "featureId": "idempotence",
+      "ruleRefs": [
+        "R24"
+      ],
+      "match": {
+        "label": [
+          "^Order History$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-margin",
+      "featureId": "margin-mode",
+      "ruleRefs": [
+        "R11"
+      ],
+      "match": {
+        "label": [
+          "^Cross$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [
+        "wallet-session"
+      ],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-pro",
+      "featureId": "advanced",
+      "ruleRefs": [
+        "R21"
+      ],
+      "match": {
+        "label": [
+          "^Pro$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-tp-sl",
+      "featureId": "protection",
+      "ruleRefs": [
+        "R28",
+        "R29"
+      ],
+      "match": {
+        "label": [
+          "^Take Profit / Stop Loss$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "activate",
+      "requires": [],
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-size",
+      "featureId": "size-input",
+      "ruleRefs": [
+        "R15"
+      ],
+      "match": {
+        "label": [
+          "^Size$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "observe-only",
+      "requires": [],
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-portfolio-value",
+      "featureId": "reconcile",
+      "ruleRefs": [
+        "R35",
+        "R38",
+        "R39"
+      ],
+      "match": {
+        "label": [
+          "^Portfolio Value$"
+        ],
+        "route": "^/trade(?:/|$)"
+      },
+      "action": "observe-only",
+      "requires": [],
+      "sideEffect": "none"
+    }
+  ],
+  "roles": [
+    {
+      "id": "trader",
+      "name": "合约交易用户",
+      "goal": "在明确风险与资金成本下完成开仓、持仓管理及退出",
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "auditor",
+      "name": "测试与资金复核人员",
+      "goal": "逐笔解释订单、仓位和账户权益变化",
+      "sourceRefs": [
+        "scope"
+      ]
+    }
+  ],
+  "lifecycle": [
+    {
+      "id": "identity",
+      "name": "确认钱包身份与交易授权",
+      "order": 1,
+      "featureIds": [
+        "wallet",
+        "authorization"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "assets",
+      "name": "核对资产和账户模式",
+      "order": 2,
+      "featureIds": [
+        "assets",
+        "transfers",
+        "account-mode"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "market",
+      "name": "选择市场并取得参数",
+      "order": 3,
+      "featureIds": [
+        "symbol",
+        "quotes",
+        "size-step",
+        "price-step"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "risk",
+      "name": "确定保证金与风险预算",
+      "order": 4,
+      "featureIds": [
+        "margin-mode",
+        "leverage",
+        "multi-position",
+        "multi-collateral"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "preview",
+      "name": "输入方向与数量并核对预估",
+      "order": 5,
+      "featureIds": [
+        "side",
+        "size-input",
+        "estimate",
+        "minimum",
+        "slippage",
+        "reject"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "submit",
+      "name": "提交并识别订单状态",
+      "order": 6,
+      "featureIds": [
+        "order-types",
+        "fills",
+        "idempotence"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "holding",
+      "name": "核对持仓并管理风险",
+      "order": 7,
+      "featureIds": [
+        "opening",
+        "pnl",
+        "protection",
+        "liquidation"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "accrual",
+      "name": "核对持仓期间资金费与利息",
+      "order": 8,
+      "featureIds": [
+        "funding",
+        "interest"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "exit",
+      "name": "部分退出或全平并处理反手",
+      "order": 9,
+      "featureIds": [
+        "closing",
+        "reversal",
+        "fills"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    },
+    {
+      "id": "audit",
+      "name": "汇总费用与资金对账并重连复核",
+      "order": 10,
+      "featureIds": [
+        "fees",
+        "reconcile",
+        "precision-oracle",
+        "idempotence"
+      ],
+      "sourceRefs": [
+        "scope"
+      ]
+    }
+  ],
+  "externalCapabilities": [
+    "wallet-session",
+    "funded-test-account",
+    "clean-position-fixture",
+    "multi-market-fixture",
+    "portfolio-margin-eligible"
+  ],
+  "forbidLabels": [
+    "^Place Order$",
+    "^Confirm Order$",
+    "^Close All$",
+    "^Market Close$",
+    "^Cancel All$",
+    "^Deposit$",
+    "^Withdraw$",
+    "^Transfer$",
+    "^Borrow$",
+    "^Repay$"
+  ],
+  "gateLabels": [
+    "^Connect$",
+    "^Enable Trading$",
+    "^Establish Connection$",
+    "Terms of Use"
+  ],
+  "actionVocabulary": [
+    "开仓",
+    "加仓",
+    "减仓",
+    "平仓",
+    "反手",
+    "下单",
+    "撤单",
+    "改单",
+    "设置杠杆",
+    "划转",
+    "借款",
+    "还款",
+    "结算"
+  ],
+  "sideEffectLabels": [
+    "^Place Order$",
+    "^Confirm Order$",
+    "^Close All$",
+    "^Market Close$",
+    "^Cancel All$",
+    "^Deposit$",
+    "^Withdraw$",
+    "^Transfer$",
+    "^Borrow$",
+    "^Repay$"
+  ],
+  "volatileReadings": [
+    "Mark",
+    "Oracle",
+    "Funding",
+    "Countdown",
+    "Open Interest",
+    "24h Volume",
+    "Portfolio Value",
+    "Unrealized PNL",
+    "Liq. Price",
+    "Available to Trade"
+  ]
+}

@@ -27,7 +27,8 @@ beforeAll(async () => {
   const ref = stage.retrieveRunSpec(runId, projectId, { query: "Increment", budgetTokens: 2000 }).chunks[0].id;
   const stories = [{ id: "s1", title: "Count", acceptance: [] }];
   const kase = (id: string, title: string, step: string, value: string) => ({ id, storyId: "s1", title, designMethod: "boundary", steps: [step],
-    expected: `Counter shows ${value}`, tier: 1, key: id, sourceRefs: [ref], oracle: { kind: "text", value } });
+    expected: `Counter shows ${value}`, tier: 1, key: id, sourceRefs: [ref], oracle: { kind: "text", value },
+    readiness: { design: "candidate", execution: "ready" } });
   stage.writeRunStage(runId, projectId, "stories", { stories });
   stage.writeRunStage(runId, projectId, "cases", { stories, cases: [
     kase("c1", "Increment once", "Click Increment", "Count: 1"),

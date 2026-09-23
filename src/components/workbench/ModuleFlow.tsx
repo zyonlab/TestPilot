@@ -11,7 +11,7 @@ interface ModuleData extends Record<string, unknown> {
   onSelect: (id: string) => void;
 }
 
-const COL_W = 236, NODE_W = 196, ROW_H = 64;
+const COL_W = 280, NODE_W = 196, ROW_H = 64;
 
 const ModuleNode = memo(function ModuleNode({ data }: NodeProps<Node<ModuleData>>) {
   const t = useT();
@@ -61,7 +61,7 @@ export function ModuleFlow({ modules, selected, onSelect, storyCount, rootSubtit
       const y = kids.length
         ? (() => { const ys = kids.map((k) => place(k, depth + 1, guard + 1)); return (Math.min(...ys) + Math.max(...ys)) / 2; })()
         : row++ * ROW_H;
-      for (const k of kids) edges.push({ id: `${id}-${String(k.id)}`, source: id, target: String(k.id), type: 'smoothstep',
+      for (const k of kids) edges.push({ id: `${id}-${String(k.id)}`, source: id, target: String(k.id), type: 'default',
         style: { stroke: selected && (selected === id || selected === String(k.id)) ? 'hsl(var(--primary))' : 'hsl(var(--border))', strokeWidth: 1.25 } });
       nodes.push({ id, type: 'module', position: { x: depth * COL_W, y }, data: {
         id, name: String(m.name ?? m.id), root: false, leaf: !kids.length, selected: selected === id,
@@ -75,7 +75,7 @@ export function ModuleFlow({ modules, selected, onSelect, storyCount, rootSubtit
     nodes.push({ id: '__all__', type: 'module', position: { x: 0, y: rootY }, data: {
       id: '', name: t('bench.allModules'), root: true, leaf: false, selected: !selected, subtitle: rootSubtitle,
       outOfScope: false, onSelect: () => onSelect('') } });
-    for (const m of tops) edges.push({ id: `root-${String(m.id)}`, source: '__all__', target: String(m.id), type: 'smoothstep',
+    for (const m of tops) edges.push({ id: `root-${String(m.id)}`, source: '__all__', target: String(m.id), type: 'default',
       style: { stroke: 'hsl(var(--primary) / 0.35)', strokeWidth: 1.25 } });
     return { nodes, edges, rows: row };
   }, [modules, selected, onSelect, storyCount, rootSubtitle, t]);

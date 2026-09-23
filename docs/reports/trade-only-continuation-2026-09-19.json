@@ -1,0 +1,94 @@
+{
+  "runId": "run-6751f6eb-83c5-4c6a-8599-feadfe6073e4",
+  "status": "waiting_review",
+  "next": "human_module_freeze",
+  "scope": "https://app.hyperliquid-testnet.xyz/trade",
+  "moduleRevision": "rev-cf5f1312-a8ad-4527-af8a-e89f5b0365d8",
+  "modules": {
+    "findings": [],
+    "modules": [
+      {
+        "evidence": [
+          "1-trade-observed.md.md#1"
+        ],
+        "featureIds": [],
+        "id": "market",
+        "name": "了解市场与交易风险",
+        "parentId": null,
+        "purpose": "用户在 /trade 查看当前合约的行情与风险提示，为交易判断提供依据。"
+      },
+      {
+        "evidence": [
+          "1-trade-observed.md.md#1"
+        ],
+        "featureIds": [],
+        "id": "market.assessment",
+        "name": "评估当前合约行情",
+        "parentId": "market",
+        "purpose": "用户结合 Mark、Oracle、Funding / Countdown 与 Order Book 中的 Price、Size、Total 和 Spread 了解当前合约；实时读数不作为固定预期。"
+      },
+      {
+        "evidence": [
+          "1-trade-observed.md.md#1"
+        ],
+        "featureIds": [],
+        "id": "order",
+        "name": "准备交易委托",
+        "parentId": null,
+        "purpose": "用户在 /trade 的交易表单准备方向、数量与风险参数，了解委托所需信息。"
+      },
+      {
+        "evidence": [
+          "1-trade-observed.md.md#1"
+        ],
+        "featureIds": [],
+        "id": "order.configuration",
+        "name": "设置委托与风险参数",
+        "parentId": "order",
+        "purpose": "用户通过 Market、Limit、Pro、Buy / Long、Sell / Short、Size、Reduce Only、Take Profit / Stop Loss 及保证金和杠杆入口准备委托；切换、弹层、校验与提交结果待确认。"
+      },
+      {
+        "evidence": [
+          "1-trade-observed.md.md#1"
+        ],
+        "featureIds": [],
+        "id": "account",
+        "name": "了解账户与交易状态",
+        "parentId": null,
+        "purpose": "用户在 /trade 了解连接入口、账户概况及持仓和订单状态。"
+      },
+      {
+        "evidence": [
+          "1-trade-observed.md.md#1"
+        ],
+        "featureIds": [],
+        "id": "account.monitoring",
+        "name": "查看账户与交易记录入口",
+        "parentId": "account",
+        "purpose": "用户在当前页查看 Connect、Balances、Positions、Open Orders、TWAP、Chase、交易和资金历史以及 Unified Account Summary；连接、记录切换和 Deposit、Withdraw 的页内交互结果待确认。"
+      }
+    ],
+    "outOfScope": [],
+    "sections": [
+      "1-trade-observed.md.md#1"
+    ]
+  },
+  "manualUiObservations": [
+    {
+      "action": "Limit tab",
+      "observed": "Price (USDC), TIF and GTC become visible",
+      "url": "https://app.hyperliquid-testnet.xyz/trade"
+    },
+    {
+      "action": "Trades tab",
+      "observed": "trade prices, sizes and timestamps are visible; transaction links not followed",
+      "url": "https://app.hyperliquid-testnet.xyz/trade"
+    },
+    {
+      "action": "Connect button",
+      "observed": "in-page dialog displays Email and wallet choices; no wallet selected",
+      "url": "https://app.hyperliquid-testnet.xyz/trade"
+    }
+  ],
+  "note": "These are independent manual UI observations, not generated case execution results. No case approval, Gold freeze or evaluation score has been produced."
+}

@@ -20,7 +20,7 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tp-web-claude-")); vi.stubEnv("TP_DATA_DIR", dir);
   vi.stubEnv("MIDSCENE_MODEL_NAME", "fixture-executor"); vi.stubEnv("MIDSCENE_MODEL_BASE_URL", "https://executor.test/v1"); vi.stubEnv("MIDSCENE_MODEL_API_KEY", "fixture-key");
   // 用 node 冒充 claude：`node --version` 退出码 0，足以回答「起得来吗」，而不会真的起一个会话。
-  vi.stubEnv("TP_CLAUDE_BIN", process.execPath);
+  vi.stubEnv("TP_CLAUDE_BIN", process.execPath); vi.stubEnv("TP_CODEX_BIN", process.execPath);
   db = await import("../src/db.js"); service = await import("../src/runService.js"); ops = await import("../src/workflowOps.js");
   projectId = db.createProject("Web Claude planner", "http://127.0.0.1:9879").id;
 });
@@ -61,4 +61,61 @@ describe("Web 发起、Claude Code 规划", () => {
     // 同一个幂等键修好之后还能创建：被拒的那次没有占住它。
     await expect(ops.createWebWorkflow(projectId, spec("claude-missing", { planner: "claude-code" }))).resolves.toMatchObject({ created: true });
   });
+});
+
+it("Codex uses the same Web creation and host binding contract", async () => {
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec("codex-web",{planner:"codex"}));
+ expect(service.runLedger().requireRun(wfRunId,projectId).binding.models).toMatchObject({entry:"host",runtime:"codex",planner:{source:"host",model:null}});
+ await vi.waitFor(()=>expect(startWebRun.mock.calls.find(([i])=>i.wfRunId===wfRunId)?.[0]).toMatchObject({runtime:"codex",generationMode:"skill"}));
+});
+
+it("reruns source in a new run, retaining knowledge and pausing before downstream work",async()=>{
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec("rerun-source-original",{planner:"codex",knowledge:[{name:"domain.md",text:"Domain evidence",roles:["source","stories"]}]}));
+ const l=service.runLedger();
+ service.freezeRunMaterials(wfRunId,projectId,join(dir,"uploads",wfRunId));
+ l.db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(wfRunId);
+ const result=await ops.rerunProjectNode(wfRunId,projectId,{node:"source",idempotencyKey:"source-repeat"});
+ expect(result.wfRunId).not.toBe(wfRunId);
+ const {controls}=await import("../src/workflowControls.js");
+ expect(controls(result.wfRunId,projectId).breakpoints).toContain("modules");
+ expect(l.listRevisions(projectId,result.wfRunId).some(r=>r.name==="knowledge/domain.md")).toBe(true);
+ expect(l.getRun(wfRunId,projectId).status).toBe("paused");
+ expect(await ops.rerunProjectNode(wfRunId,projectId,{node:"source",idempotencyKey:"source-repeat"})).toMatchObject({wfRunId:result.wfRunId,created:false});
+});
+
+it("reruns modules with sealed source inputs, without copying downstream artifacts",async()=>{
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec("rerun-modules-original",{planner:"codex"}));
+ const l=service.runLedger();
+ service.freezeRunMaterials(wfRunId,projectId,join(dir,"uploads",wfRunId));
+ l.putRevision({projectId,runId:wfRunId,name:"validated/stories",kind:"stories",content:{stale:true}},{kind:"system",id:"fixture"});
+ l.db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(wfRunId);
+ const result=await ops.rerunProjectNode(wfRunId,projectId,{node:"modules",idempotencyKey:"modules-repeat"});
+ expect(l.requireRun(result.wfRunId,projectId).binding.materialsHash).toBe(l.requireRun(wfRunId,projectId).binding.materialsHash);
+ expect(l.listRevisions(projectId,result.wfRunId).some(r=>r.name==="validated/stories")).toBe(false);
+ expect(startWebRun.mock.calls.find(([i])=>i.wfRunId===result.wfRunId)?.[0]).toMatchObject({resumeStage:"modules"});
+ await expect(ops.rerunProjectNode(wfRunId,projectId,{node:"cases",idempotencyKey:"bad-upstream"})).rejects.toThrow("上游节点尚未完成");
+ l.db.prepare("UPDATE wf_runs SET status='running' WHERE id=?").run(wfRunId);
+ await expect(ops.rerunProjectNode(wfRunId,projectId,{node:"source",idempotencyKey:"active"})).rejects.toThrow("请先停止");
+});
+
+it("reruns cases with frozen upstream receipts and fresh instruction binding",async()=>{
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec("rerun-cases-original",{planner:"codex"}));
+ const l=service.runLedger(),c=await import("../src/workflowControls.js");
+ service.freezeRunMaterials(wfRunId,projectId,join(dir,"uploads",wfRunId));
+ l.db.exec("CREATE TABLE IF NOT EXISTS run_stage_receipts (runId TEXT NOT NULL,stage TEXT NOT NULL,revisionId TEXT NOT NULL,json TEXT NOT NULL,PRIMARY KEY(runId,stage))");
+ for(const node of ["modules","instructions","stories"]){
+   const r=l.putRevision({projectId,runId:wfRunId,name:"validated/"+node,kind:node==="stories"?"stories":"report",content:node==="stories"?{stories:[]}:{files:[]}},{kind:"system",id:"fixture"});
+   l.db.prepare("INSERT INTO run_stage_receipts VALUES (?,?,?,?)").run(wfRunId,node,r.id,JSON.stringify({revisionId:r.id,frozen:true}));
+   c.stageEvent(wfRunId,projectId,node,"done");
+ }
+ l.db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(wfRunId);
+ const result=await ops.rerunProjectNode(wfRunId,projectId,{node:"cases",idempotencyKey:"cases-repeat"});
+ const fresh=l.requireRun(result.wfRunId,projectId);
+ expect(fresh.binding.loadedDigest).toBeTruthy();
+ expect(l.nodeStates(result.wfRunId).find(n=>n.node==="cases")?.phase).toBe("queued");
+ const receipt=l.db.prepare("SELECT json FROM run_stage_receipts WHERE runId=? AND stage='modules'").get(result.wfRunId) as {json:string};
+ expect(JSON.parse(receipt.json)).toMatchObject({frozen:true,inheritedFromRun:wfRunId});
+ expect(l.readRevision(JSON.parse(receipt.json).revisionId,projectId).revision.runId).toBe(result.wfRunId);
+ expect(c.controls(result.wfRunId,projectId).breakpoints).toContain("gate");
+ expect(startWebRun.mock.calls.find(([i])=>i.wfRunId===result.wfRunId)?.[0]).toMatchObject({resumeStage:"cases"});
 });

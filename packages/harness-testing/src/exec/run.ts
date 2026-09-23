@@ -1,3 +1,5 @@
+import { checkPrerequisite, type Preparation, type EnvironmentFact, type PrerequisiteReceipt } from './preparationChecks.js';
+import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
 import {settleOn} from './pageReady.js';
 import { cacheDigest } from './cache.js';
 import { pickLocator, locatorUsable, type LocatorHint } from "./locators.js";
@@ -23,6 +25,11 @@ import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles
 import { executorConnectionFromEnv, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
 
 export interface RunResult {
+  observations?: Array<{step:number;text:string;url:string;capturedAt:number}>;
+  prerequisiteChecks?: PrerequisiteReceipt[];
+  environmentFacts?: EnvironmentFact[];
+  auxiliaryChecks?: Array<OracleCheck & {id:string;supports:string[]}>;
+  recipeChecks?: Array<PrerequisiteReceipt & {phase:"entry"|"postcondition"}>;
   /** Exact proxied requests; absent means unavailable, never guessed from step count. */
   modelRequests?: RoleRequestRecord[];
   /** `unobservable`：没有一条判据失败，但至少一条没量到——没有判决，不是通过。 */
@@ -73,8 +80,9 @@ export interface RunResult {
  * get invented here, and none leak into stage-one artifacts.
  */
 async function snapshotPage(page: { evaluate: (fn: () => unknown) => Promise<unknown>; url: () => string }): Promise<PageSnapshot> {
+  const capturedAt = Date.now();
   const text = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")) as string;
-  return { text: String(text ?? ""), url: page.url() };
+  return { text: String(text ?? ""), url: page.url(), capturedAt };
 }
 
 export async function executeRun(
@@ -83,6 +91,8 @@ export async function executeRun(
   expected: string,
   opts: {
     signal?: AbortSignal;
+    captureObservations?: boolean;
+    preparation?: Preparation;
     modelBudget?: RoleProxyBudget;
     executorModel?: RoleModelConnection;
     injected?: boolean;
@@ -97,6 +107,7 @@ export async function executeRun(
      * 谁给的 key 谁负责 `releaseRunSession(key)`——批次结束时。
      */
     sessionKey?: string;
+    authentication?: AuthenticationChecks;
     login?: string[]; // login-flow step templates (登录态), run before case steps
     postSteps?: string[]; // teardown/cleanup step templates, run after the assert
     resolve?: ResolveContext; // ${env.*}/${secret.*} resolution context
@@ -158,6 +169,8 @@ export async function executeRun(
     };
   } = {},
 ): Promise<RunResult> {
+  const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
+  const auxiliaryChecks: NonNullable<RunResult["auxiliaryChecks"]> = [];
   const injected = !!opts.injected;
   const wallet = !injected && !!opts.wallet;
   const ctx: ResolveContext = opts.resolve ?? { env: {}, secrets: {} };
@@ -167,6 +180,11 @@ export async function executeRun(
   const sinceMs = Date.now();
   const t0 = sinceMs;
   const logs: string[] = [];
+  const observations: NonNullable<RunResult["observations"]> = [];
+  const prerequisiteChecks: NonNullable<RunResult["prerequisiteChecks"]> = [];
+  const environmentFacts: EnvironmentFact[] = [];
+  const recipeChecks: NonNullable<RunResult["recipeChecks"]> = [];
+  const observe = async (step:number) => { if(opts.captureObservations && session){const snap=await snapshotPage(session.page); observations.push({step,text:redact(snap.text,secretVals).slice(0,24000),url:redact(snap.url??"",secretVals),capturedAt:snap.capturedAt??Date.now()});} };
   /** 六段计时：`mark()` 把上一段收口。段与段之间没有缝——它们加起来就是 durationMs。 */
   const phases: RunPhases = { launchMs: 0, loginMs: 0, settleMs: 0, stepsMs: 0, assertMs: 0, teardownMs: 0 };
   const PHASE_ORDER: (keyof RunPhases)[] = ["launchMs", "loginMs", "settleMs", "stepsMs", "assertMs", "teardownMs"];
@@ -302,12 +320,23 @@ export async function executeRun(
     mark("launchMs");
     // Login flow (登录态): resolve ${secret.*}/${env.*} for execution, but log the
     // TEMPLATE text so credentials never appear in logs/reports.
-    const login = reused ? [] : (opts.login ?? []);
+    await settleOn(session.page,{minMs:600,maxMs:12_000});
+    const verifyAuthentication = async () => authenticationState(opts.authentication ?? {}, {
+      url: session!.page.url(),
+      labels: await session!.page.evaluate(() => (document.body?.innerText ?? "").split(/\n/).map(s=>s.trim()).filter(Boolean)),
+      address: session!.injectedAddress, receipts: session!.signatureReceipts ?? [],
+    });
+    const verified = await verifyAuthentication();
+    const restored = reused || !!opts.storageState || !!opts.sutProfileDir;
+    rlog(verified === true ? 'authentication verified; skipping login' : verified === false ? 'authentication check failed; attempting configured login' : 'authentication unverified: no checks configured');
+    const login = shouldRunLogin(verified, restored, !!opts.login?.length) ? opts.login! : [];
     if (login.length) {
       rlog(`login flow (${login.length} steps)`);
       for (const t of login) {
         rlog(`  login: ${t}`);
-        await withModel(() => act(resolveText(t, ctx)));
+        const step = resolveText(t, ctx);
+        if (step.startsWith("waitFor:")) await withModel(() => session!.agent.aiWaitFor(step.slice(8), {timeoutMs:30_000}));
+        else await withModel(() => act(step));
       }
       await shot();
       /**
@@ -323,6 +352,57 @@ export async function executeRun(
     checkCancelled();
     if(!ready.settled&&ready.controls===0&&ready.textLen===0)throw new Error('PAGE_NOT_READY: the target page remained blank before execution');
     rlog(`page ready after ${ready.ms}ms (${ready.controls} controls, ${ready.textLen} text characters)`);
+    if (!opts.preparation && await verifyAuthentication() === false) throw new Error('AUTHENTICATION_NOT_VERIFIED: configured login checks failed before case execution');
+    await observe(0);
+    if(opts.captureObservations||opts.preparation)await shot();
+    const refreshFacts = async () => {
+      const capturedAt = Date.now();
+      environmentFacts.length = 0;
+      environmentFacts.push(
+        {fact:'target-origin', value:new URL(session!.page.url()).origin, source:'browser:current-url', capturedAt},
+        {fact:'injected-wallet', value:!!session!.injectedAddress, source:'runner:provider-installation', capturedAt},
+        {fact:'injected-account', value:session!.injectedAddress, source:'runner:provider-installation', capturedAt},
+        {fact:'injected-chain', value:session!.injectedChainId, source:'runner:provider-installation', capturedAt},
+        {fact:'authentication', value:await verifyAuthentication(), source:'runner:configured-session-checks', capturedAt},
+      );
+    };
+    await refreshFacts();
+    const recipeCheck = async (phase:'entry'|'postcondition') => {
+      for(const check of (phase==='entry' ? opts.preparation?.recipe?.entryChecks : opts.preparation?.recipe?.postconditions) ?? []) {
+        const receipt = await checkPrerequisite(check, {
+          facts:environmentFacts, snapshot:()=>snapshotPage(session!.page),
+          assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},
+          resolve:text=>resolveText(text,ctx), redact:text=>redact(text,secretVals),
+        });
+        recipeChecks.push({...receipt,phase});
+        if(receipt.status!=='pass')throw new Error(`PREREQUISITE_NOT_VERIFIED: recipe ${phase}: ${receipt.statement}: ${receipt.detail}`);
+      }
+    };
+    await recipeCheck('entry');
+    // Preparation checks happen in this browser, before any business test step.
+    for (const [i, step] of (opts.preparation?.steps ?? []).entries()) {
+      rlog(`prepare ${i+1}: ${step}`);
+      await withModel(() => act(resolveText(step,ctx)));
+      await shot(); await observe(-(i+1));
+    }
+    await refreshFacts();
+    await recipeCheck('postcondition');
+    if (await verifyAuthentication() === false) throw new Error('AUTHENTICATION_NOT_VERIFIED: configured login checks failed after preparation');
+    for (const check of opts.preparation?.checks ?? []) {
+      // Legacy frozen packages retain their original visual-check implementation.
+      const contract = typeof check === 'string' ? {statement:check, checks:[{kind:'screen' as const, statement:check}]} : check;
+      const receipt = await checkPrerequisite(contract, {
+        facts:environmentFacts, snapshot:()=>snapshotPage(session!.page),
+        assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},
+        resolve:text=>resolveText(text,ctx), redact:text=>redact(text,secretVals),
+      });
+      prerequisiteChecks.push(receipt);
+      rlog(`prerequisite ${receipt.status}: ${receipt.statement} — ${receipt.detail}`);
+      if (receipt.status !== 'pass') {
+        await shot(); await observe(-999);
+        throw new Error(`PREREQUISITE_NOT_VERIFIED: ${receipt.statement}: ${receipt.detail}`);
+      }
+    }
     // Dapp/SPA settle: give the app time to detect the injected wallet + render before we
     // act/assert (a bare domcontentloaded fires before a React dapp is interactive).
     if (opts.web3) {
@@ -340,8 +420,8 @@ export async function executeRun(
     const stepBound = (a: { oracle?: MachineOracle; afterStep?: number }) =>
       a.afterStep !== undefined && a.afterStep >= 1 && a.afterStep <= steps.length && a.oracle?.kind !== "api";
     const machineChecks: Array<{ statement: string; oracle: MachineOracle }> = [
-      ...(opts.oracle ? [{ statement: expected || describeOracle(opts.oracle), oracle: opts.oracle }] : []),
-      ...(opts.assertions ?? []).flatMap((a) => (a.oracle && !stepBound(a) && !isOpenQuestion(a.statement) ? [{ statement: a.statement, oracle: a.oracle }] : [])),
+      ...(opts.oracle && opts.oracle.kind !== "none" ? [{ statement: expected || describeOracle(opts.oracle), oracle: opts.oracle }] : []),
+      ...(opts.assertions ?? []).flatMap((a) => (a.oracle && a.oracle.kind !== "none" && !stepBound(a) && !isOpenQuestion(a.statement) ? [{ statement: a.statement, oracle: a.oracle }] : [])),
     ];
     /**
      * 「前」读数一律取，不再只为 `delta` 取。
@@ -360,7 +440,7 @@ export async function executeRun(
      * 让报告能说出「这条绿是免费的」。一次 `page.evaluate`，不花模型调用。
      */
     let snapBefore: PageSnapshot | undefined;
-    if (machineChecks.length || (opts.assertions ?? []).some((a) => a.oracle && stepBound(a))) snapBefore = await snapshotPage(session.page);
+    if (machineChecks.length || auxiliaryAssertions.some(a=>a.oracle) || (opts.assertions ?? []).some((a) => a.oracle && stepBound(a))) snapBefore = await snapshotPage(session.page);
     // 接口判据的「前」读数：只有关系型判据需要（increased/decreased/unchanged）。
     // 步骤前不等 settleMs——那是给「后」读数留的传播时间。
     for (const { oracle: o } of machineChecks) {
@@ -408,7 +488,7 @@ export async function executeRun(
         rlog(`assert ∅ (after step ${n}) 开放问题——不判`);
         return;
       }
-      if (a.oracle) {
+      if (a.oracle && a.oracle.kind !== "none") {
         const snap = await snapshotPage(session!.page);
         if (a.oracle.kind === "judge" && !(await judgeInto(snap, a.oracle))) return;
         const verdict = evaluateOracle(a.oracle, snap, snapBefore);
@@ -430,11 +510,17 @@ export async function executeRun(
         else { oracle.push({ assertion: a.statement, status: "fail", detail, decidedBy: "judge" }); assertFailed = detail; }
       }
     };
+    const checkAuxiliary = async (a:typeof auxiliaryAssertions[number], step:number) => {
+      const offset=oracle.length;
+      await checkNow(a,step);
+      auxiliaryChecks.push(...oracle.splice(offset).map(check=>({...check,id:a.id,supports:a.supports})));
+    };
     for (const [i, step] of steps.entries()) {
       rlog(`step ${i + 1}: ${step}`);
       await withModel(() => act(resolveText(step, ctx)));
-      await shot();
+      await shot(); await observe(i+1);
       for (const a of (opts.assertions ?? []).filter((x) => stepBound(x) && x.afterStep === i + 1)) await checkNow(a, i + 1);
+      for (const a of auxiliaryAssertions.filter(x=>x.afterStep===i+1)) await checkAuxiliary(a,i+1);
     }
     mark("stepsMs");
     /**
@@ -513,8 +599,10 @@ export async function executeRun(
        * 没带判据的断言仍然交给判官——按**这一条**判，不是拿 `expected` 那句总结代替。
        * 81 条里只有 1 条是这种「一半有一半没有」，所以这条路很少走。
        */
-      for (const a of opts.assertions ?? []) {
-        if (a.oracle || stepBound(a)) continue;
+      // Explicit none has the same screen-judge semantics as an omitted oracle.
+      // Keep the original approved artifact intact; dispatch it here, never auto-pass it.
+      for (const a of [...(opts.oracle?.kind === "none" && expected ? [{statement:expected}] : []), ...(opts.assertions ?? [])] as Array<{statement:string;oracle?:MachineOracle;afterStep?:number}>) {
+        if ((a.oracle && a.oracle.kind !== "none") || stepBound(a)) continue;
         // 作者明说「不作为失败判据」的，不交给判官（stepSemantics.ts 的 isOpenQuestion）。
         if (isOpenQuestion(a.statement)) {
           oracle.push({ assertion: a.statement, status: "unobservable", detail: "开放问题：记下，不下判决" });
@@ -552,6 +640,10 @@ export async function executeRun(
         }
       }
     }
+    // Pure visual cases still need every reviewed assertion, not only the summary.
+    if(!machineChecks.length)for(const a of opts.assertions??[])if(!stepBound(a))await checkNow(a,steps.length);
+    for (const a of auxiliaryAssertions.filter(x=>!x.afterStep)) await checkAuxiliary(a,steps.length);
+    if(auxiliaryChecks.some(c=>c.status!=='pass'))assertFailed='AUXILIARY_CHECK_NOT_VERIFIED: '+auxiliaryChecks.filter(c=>c.status!=='pass').map(c=>`${c.id}: ${c.detail??c.assertion}`).join('; ');
     // On-chain oracle: read the chain AFTER the steps and evaluate each assertion. These
     // join the same oracle array (so they show + gate the verdict) — verifies real state,
     // not just the UI. Snapshot before teardown so cleanup doesn't skew it.
@@ -594,6 +686,10 @@ export async function executeRun(
     checkCancelled();
     return {
       modelRequests,
+      ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
+      ...(opts.captureObservations?{observations}:{}),
+      ...(opts.preparation?{prerequisiteChecks,...(opts.preparation.recipe?{recipeChecks}:{})}:{}),
+      ...(opts.captureObservations || opts.preparation ? {environmentFacts:environmentFacts.map(f=>({...f,value:typeof f.value==='string'?redact(f.value,secretVals):f.value}))} : {}),
       phases,
       // 失败压过一切；没失败但有判据没量到，就是「没有判决」，不是通过。
       status: assertFailed ? "failed" : unobservable ? "unobservable" : "passed",
@@ -615,6 +711,7 @@ export async function executeRun(
   } catch (e) {
     const message = opts.signal?.aborted ? "EXEC_CANCELLED" : redact((e as Error).message, secretVals);
     logs.push(`error: ${message}`);
+    await observe(-999).catch(()=>{});
     // 浏览器本身死了才踢出池；用例层面的异常（规划失败、判据没走到）不踢——下一条 goto 回起点就是干净的，
     // 踢掉就要重起浏览器再跑一遍登录态，正是复用要省的那两段。
     if (poolKey && /Target closed|Session closed|Browser has disconnected|Navigating frame was detached|Protocol error \((Target|Browser|Page)\./.test(message)) {
@@ -625,8 +722,13 @@ export async function executeRun(
     phases[open] += Date.now() - phaseT;
     return {
       modelRequests,
+      ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
+      ...(opts.captureObservations?{observations}:{}),
+      ...(opts.preparation?{prerequisiteChecks,...(opts.preparation.recipe?{recipeChecks}:{})}:{}),
+      ...(opts.captureObservations || opts.preparation ? {environmentFacts:environmentFacts.map(f=>({...f,value:typeof f.value==='string'?redact(f.value,secretVals):f.value}))} : {}),
       phases,
-      status: "failed",
+      status: [...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks].some(c=>c.status==='fail') ? "unobservable" : "failed",
+      ...([...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') ? {unobservableReason:message} : {}),
       ...(mutationApplied === undefined ? {} : { mutationApplied }),
       durationMs: Date.now() - t0,
       startedAt,

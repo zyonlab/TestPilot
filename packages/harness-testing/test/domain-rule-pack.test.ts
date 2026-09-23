@@ -182,7 +182,7 @@ describe("前提的供给关系", () => {
     if (!v.ok) expect(v.errors.map((e) => e.code)).toContain("target_requires_what_it_provides");
   });
 
-  it("点成之后，它产出的前提变成可用", () => {
+  it("仅点击连接不能证明钱包会话可用", () => {
     const v = validateRulePack(load());
     if (!v.ok) throw new Error("fixture invalid");
     const charter = charterFromRulePack({ ...v.pack, targets: [
@@ -193,7 +193,7 @@ describe("前提的供给关系", () => {
     expect(tracker.capabilities()).not.toContain("wallet-session");
     tracker.record({ targetId: "x", targetSpecId: "T-CONNECT-X", featureId: charter.featureTargets[0]!.featureId,
       status: "attempted", stateBefore: "/", round: 1, controlsAfter: [], evidenceRefs: [] } as never);
-    expect(tracker.capabilities()).toContain("wallet-session");
+    expect(tracker.capabilities()).not.toContain("wallet-session");
   });
 });
 
@@ -382,13 +382,14 @@ describe("charter：一条链要一次走完", () => {
     const charter = packWith(targets);
     // 沙箱：允许点会改状态的东西，否则 Connect / Place Order 一律不点，看不到顺序。
     const sandbox = { ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } };
-    const t = new CharterTracker(sandbox as never);
+    const t = new CharterTracker(sandbox as never, [], [{capability:"session",checks:[{kind:"connected",label:"Connected"}]}]);
     const order: string[] = [];
     for (let i = 0; i < 8; i++) {
       const pick = t.next("/", controls);
       if (!pick) break;
       t.markAttempted(pick.target.stableId);
       order.push(pick.spec.id);
+      if (pick.spec.id === "T-SESSION") t.noteState("/connected", "/", [ctl({label:"Connected",display:"button: Connected"})], i);
       t.record({ targetId: pick.target.stableId, targetSpecId: pick.spec.id, featureId: pick.spec.featureId,
         status: "attempted", stateBefore: "/", stateAfter: `/~${i}`, controlsAfter: [], evidenceRefs: [], round: i,
         effect: { controlsAdded: [], controlsRemoved: [], stateChanged: ["x"], textAdded: [] } } as never);
@@ -441,13 +442,14 @@ describe("charter：三步链的起点也要等", () => {
     const v = validateRulePack(raw);
     if (!v.ok) throw new Error(JSON.stringify(v.errors.slice(0, 2)));
     const charter = charterFromRulePack(v.pack, v.hash, { entryUrl: "https://x.test/", maxScreens: 8 });
-    const t = new CharterTracker({ ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } } as never);
+    const t = new CharterTracker({ ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } } as never, [], [{capability:"session",checks:[{kind:"connected",label:"Connected"}]}]);
     const order: string[] = [];
     for (let i = 0; i < 10; i++) {
       const pick = t.next("/", controls);
       if (!pick) break;
       t.markAttempted(pick.target.stableId);
       order.push(pick.spec.id);
+      if (pick.spec.id === "T-SESSION") t.noteState("/connected", "/", [ctl({label:"Connected",display:"button: Connected"})], i);
       t.record({ targetId: pick.target.stableId, targetSpecId: pick.spec.id, featureId: pick.spec.featureId,
         status: "attempted", stateBefore: "/", stateAfter: `/~${i}`, controlsAfter: [], evidenceRefs: [], round: i,
         effect: { controlsAdded: [], controlsRemoved: [], stateChanged: ["x"], textAdded: [] } } as never);
@@ -480,7 +482,7 @@ it("下一跳不在这一屏上 → 供给方先不走，等它出现", () => {
   const v = validateRulePack(raw);
   if (!v.ok) throw new Error(JSON.stringify(v.errors.slice(0, 2)));
   const charter = charterFromRulePack(v.pack, v.hash, { entryUrl: "https://x.test/", maxScreens: 8 });
-  const t = new CharterTracker({ ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } } as never);
+  const t = new CharterTracker({ ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } } as never, [], [{capability:"session",checks:[{kind:"connected",label:"Connected"}]}]);
   const size = ctl({ display: "input[text]: Size", label: "Size", fillable: true });
   const noise = ctl({ display: "button[button]: Reduce Only", label: "Reduce Only" });
   const send = ctl({ display: "button[button]: Place Order", label: "Place Order" });
@@ -516,7 +518,7 @@ it("链的下一步还没出现时，这一轮什么都不点，也不让链外�
   const v = validateRulePack(raw);
   if (!v.ok) throw new Error(JSON.stringify(v.errors.slice(0, 2)));
   const charter = charterFromRulePack(v.pack, v.hash, { entryUrl: "https://x.test/", maxScreens: 8 });
-  const t = new CharterTracker({ ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } } as never);
+  const t = new CharterTracker({ ...charter, actionsPolicy: { ...charter.actionsPolicy, allowStateChange: true, forbidLabels: [] } } as never, [], [{capability:"session",checks:[{kind:"connected",label:"Connected"}]}]);
   const c = (l: string) => ctl({ display: `button[button]: ${l}`, label: l });
   const before = [c("Limit"), c("GTC"), c("Place Order")];      // Mid 还没出现
   const after = [...before, c("Mid")];                           // 点完限价它才出现

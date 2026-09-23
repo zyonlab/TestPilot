@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
 /** Inline emphasis and code, applied to already-escaped text. */
 function inline(text: string, keyBase: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
+  const re = /(\[[^\]]+\]\([^\s)]+\))|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -22,7 +22,11 @@ function inline(text: string, keyBase: string): React.ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     const key = `${keyBase}-${i++}`;
-    if (tok.startsWith("`"))
+    if (tok.startsWith("[")) {
+      const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
+      if (link && /^(https?:\/\/|mailto:)/i.test(link[2])) out.push(<a key={key} href={link[2]} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">{link[1]}</a>);
+      else out.push(tok);
+    } else if (tok.startsWith("`"))
       out.push(
         <code key={key} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.75rem]">
           {tok.slice(1, -1)}
@@ -40,17 +44,20 @@ export function Markdown({ text, className }: { text: string; className?: string
   const lines = text.split("\n");
   const blocks: React.ReactNode[] = [];
   let list: string[] = [];
+  let ordered = false;
+  let listStart = 1;
   let table: string[][] = [];
   let code: string[] | null = null;
 
   const flush = () => {
     if (list.length) {
+      const List = ordered ? "ol" : "ul";
       blocks.push(
-        <ul key={`ul-${blocks.length}`} className="my-1.5 list-disc space-y-0.5 pl-5">
+        <List key={`ul-${blocks.length}`} start={ordered?listStart:undefined} className={cn("my-3 space-y-1 pl-6",ordered?"list-decimal":"list-disc")}>
           {list.map((li, i) => (
             <li key={i}>{inline(li, `li${blocks.length}-${i}`)}</li>
           ))}
-        </ul>,
+        </List>,
       );
       list = [];
     }
@@ -110,18 +117,19 @@ export function Markdown({ text, className }: { text: string; className?: string
     if (heading) {
       flush();
       const depth = heading[1].length;
+      const Heading = `h${depth}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
       blocks.push(
-        <div
+        <Heading
           key={`h-${idx}`}
           className={cn(
-            "mt-3 font-display font-medium text-foreground",
+            "mt-7 mb-3 font-display font-semibold text-foreground",
             depth === 1 && "text-[1.0625rem]",
-            depth === 2 && "text-[0.875rem]",
-            depth >= 3 && "text-[0.8125rem] text-muted-foreground",
+            depth === 2 && "text-base",
+            depth >= 3 && "text-sm",
           )}
         >
           {inline(heading[2], `h${idx}`)}
-        </div>,
+        </Heading>,
       );
       return;
     }
@@ -151,20 +159,22 @@ export function Markdown({ text, className }: { text: string; className?: string
       return;
     }
 
-    if (/^[-*]\s/.test(line)) {
-      if (table.length) flush();
-      list.push(line.replace(/^[-*]\s/, ""));
+    const numbered = /^(\d+)[.)]\s+/.exec(line);
+    if (/^[-*]\s/.test(line) || numbered) {
+      if (table.length || (list.length && ordered !== !!numbered)) flush();
+      if (!list.length) { ordered = !!numbered; listStart = numbered ? Number(numbered[1]) : 1; }
+      list.push(line.replace(/^(?:[-*]|\d+[.)])\s+/, ""));
       return;
     }
 
     flush();
     blocks.push(
-      <p key={`p-${idx}`} className="my-1 leading-relaxed">
+      <p key={`p-${idx}`} className="my-2 leading-7">
         {inline(line, `p${idx}`)}
       </p>,
     );
   });
   flush();
 
-  return <div className={cn("text-[0.8125rem] text-foreground", className)}>{blocks}</div>;
+  return <div className={cn("min-w-0 break-words text-sm text-foreground", className)}>{blocks}</div>;
 }

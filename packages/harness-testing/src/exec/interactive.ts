@@ -1,3 +1,7 @@
+import {authenticationState,shouldRunLogin} from "./authentication.js";
+import {verifyInjectedSession,type InjectedSessionCheck} from "../domain/injectedSessionEvidence.js";
+import type { SessionCheck } from "../domain/sessionEvidence.js";
+import { sameExplorationPage } from "./explorationScope.js";
 import {settleOn} from './pageReady.js';
 export {settleOn} from './pageReady.js';
 // Interactive sessions: exploration and step-by-step debugging.
@@ -232,7 +236,7 @@ export function diffScreens(
     if (old !== undefined && old !== v) stateChanged.push(`${k}: ${old || "（无）"} → ${v || "（无）"}`);
   }
 
-  const lines = (t: string): string[] => t.split("\n").map((s) => s.trim()).filter(Boolean);
+  const lines = (t: string): string[] => t.split("\n").map((s) => s.trim()).filter(s => !!s && !/^=====.*=====$/.test(s));
   const bT = setOf(lines(before.text).map(maskVolatile));
   const aT = setOf(lines(after.text).map(maskVolatile));
   const textAdded = lines(after.text).filter((l) => !bT.has(maskVolatile(l))).slice(0, 30);
@@ -245,7 +249,7 @@ export function diffScreens(
     textAdded,
     textRemoved,
     changed:
-      controlsAdded.length > 0 || controlsRemoved.length > 0 || stateChanged.length > 0 || textAdded.length > 0,
+      controlsAdded.length > 0 || controlsRemoved.length > 0 || stateChanged.length > 0 || textAdded.length > 0 || textRemoved.length > 0,
   };
 }
 
@@ -469,6 +473,9 @@ export interface ObserveSpec {
    * 这是探索的**成本**闸：每往前一屏要花一次模型调用，本地模型一次几十秒。
    */
   maxScreens?: number;
+  /** Wall budget remains finite even when the screen count is unlimited. */
+  maxDurationMs?: number;
+  explorationScope?: "current-url" | "rules";
   /**
    * 连续几轮没发现新界面就停。
    *
@@ -498,6 +505,8 @@ export interface ObserveSpec {
    * 规则包里目标的 `requires` 对照的就是它。不给时按老规矩：配了登录步骤就提供 `session`。
    */
   capabilities?: string[];
+  sessionChecks?: SessionCheck[];
+  injectedSessionCheck?: InjectedSessionCheck;
   resolve?: ResolveContext;
   launch: LaunchOpts;
 }
@@ -1139,9 +1148,38 @@ export async function runObserve(
 
   try {
     emit({ type: "start", url: spec.url });
-    session = await launchSession(spec.url, spec.launch);
+    session = await launchSession(spec.url, {...spec.launch, ...((spec.explorationScope === "current-url" || spec.maxScreens === 0) ? {explorationEntryUrl: spec.url} : {})});
     emit({ type: "navigated", shotRef: await shot(session) });
     await settle("入口页");
+    // Explicit environment login is a separate prerequisite, not a guessed exploration action.
+    // Wallet flows often contain no password input; run configured steps before discovering targets.
+    const verifyAuthentication = async () => {
+      const labels = await session!.page.evaluate(() => (document.body?.innerText??'').split('\n').map(s=>s.trim()).filter(Boolean));
+      return authenticationState(spec,{url:session!.page.url(),labels,address:session!.injectedAddress,receipts:session!.signatureReceipts??[]});
+    };
+    const initialAuth=await verifyAuthentication();
+    const restored=!!spec.launch.storageState || !!spec.launch.sutProfileDir;
+    if(initialAuth===true) note('已有登录状态核验通过，跳过重复登录');
+    else if(initialAuth===undefined && restored) note('已注入会话，但未配置有效性检查：保持未验证，不重复登录', 'warn');
+    if (shouldRunLogin(initialAuth,restored,!!spec.login?.length)) {
+      for (const [index, template] of spec.login!.entries()) {
+        if (token.cancelled) break;
+        try {
+          const step = spec.resolve ? resolveText(template, spec.resolve) : template;
+          if (step.includes('${')) throw new Error('unresolved_login_input');
+          if (step.startsWith('waitFor:')) await withModel(()=>session!.agent.aiWaitFor(step.slice(8), {timeoutMs:30_000}));
+          else await withModel(()=>session!.agent.aiAction(step));
+          note(`登录准备步骤 ${index+1} 已执行；会话状态仍需界面核验`);
+        } catch {
+          note(`登录准备步骤 ${index+1} 失败；未授予登录能力`, 'warn');
+          break;
+        }
+      }
+      await settle('登录准备后');
+      const verified=await verifyAuthentication();
+      note(verified===true?'登录完成且身份检查通过':verified===false?'登录动作完成，但身份检查未通过':'登录动作完成，尚未配置有效性检查',verified===true?'info':'warn');
+    }
+
 
     /**
      * 探索是一个循环，不是「看两眼」。
@@ -1157,13 +1195,15 @@ export async function runObserve(
      * 下一步点什么，从**已经确定性采到的控件表**里挑，不用再问一次模型：
      * 「这一屏还有哪个没点过」是个查得出来的事实。
      */
-    const maxScreens = Math.max(1, spec.maxScreens ?? 6);
+    const maxScreens = spec.maxScreens === 0 ? Infinity : Math.max(1, spec.maxScreens ?? 6);
     const dryLimit = Math.max(1, spec.dryRounds ?? 3);
     /**
      * 一轮走一个控件，所以动作预算比屏数宽——有些点击不会换屏。
      * 同源链接走 `goto`，一次几乎不花时间，所以这个预算可以给得比屏数宽得多。
      */
-    const maxRounds = maxScreens * 5;
+    const maxRounds = Number.isFinite(maxScreens) ? maxScreens * 5 : 500;
+    const durationMs = Math.max(1, Math.min(spec.maxDurationMs ?? 3_600_000, 6 * 3_600_000));
+    const explorationDeadline = Date.now() + durationMs;
 
     /** 点了会把这次探索本身毁掉的（退出登录）或不可逆的，不点。 */
     const OFF_LIMITS = /log\s*out|sign\s*out|logout|退出|注销|delete|remove|reset|清空|删除/i;
@@ -1200,11 +1240,13 @@ export async function runObserve(
 
     const first = await snapshot("入口页");
     const entryRoute = pathOf(first.url);
+    const inScope = (url: string) => spec.explorationScope !== 'current-url' && spec.maxScreens !== 0 || sameExplorationPage(spec.url, url, spec.launch?.explorationRouteTemplates);
+    const allowedRoute = (entry: string, route: string, url?: string) => (!url || inScope(url)) && routeAllowed(spec.charter, entry, route, url);
     /**
      * charter 记账。有 charter 时不再问模型猜故事：候选任务来自规则包，真正的故事
      * 等产品模型出来之后才写。`session` 这个前提只在环境配了登录步骤时算满足。
      */
-    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.capabilities ?? (spec.login?.length ? ["session"] : [])) : undefined;
+    const tracker = spec.charter ? new CharterTracker(spec.charter, spec.capabilities ?? [], spec.sessionChecks ?? []) : undefined;
     if (spec.charter) note(`charter ${spec.charter.id}：${spec.charter.featureTargets.length} 个目标，规则包 ${spec.charter.rulePack.id}@${spec.charter.rulePack.version}`);
     let charterShots = 0;
     const charterShot = async (): Promise<string | undefined> => {
@@ -1310,7 +1352,14 @@ export async function runObserve(
       });
       return id;
     };
+    const verifyWallet = (url: string, elements: Array<{label:string}>) => {
+      if (!tracker || !spec.injectedSessionCheck) return;
+      const verified=verifyInjectedSession(spec.injectedSessionCheck,{address:session?.injectedAddress,url,labels:elements.map(c=>c.label),receipts:session?.signatureReceipts??[]});
+      tracker.setInjectedSessionEvidence(verified);
+      note(`注入钱包会话核验：${verified?'通过（本地账户、站点签名及页面完成标志匹配）':'未通过（账户、签名或页面标志缺失）'}`);
+    };
     let currentId = idFor(first);
+    verifyWallet(first.url, first.elements);
     if (tracker) {
       const found = tracker.noteState(currentId, entryRoute, first.elements, 0);
       note(`入口页命中 ${found.length} 个 charter 目标：${found.map((t) => `${t.targetSpecId}=「${t.label}」`).join("，") || "（无）"}`);
@@ -1730,7 +1779,7 @@ export async function runObserve(
         if (offsiteSection(c.href)) continue;
         if (deadHref.has(c.href)) continue;
         if (knownRoutes.has(pathOf(new URL(c.href, screen.url).toString()))) continue;
-        { const to = new URL(c.href, screen.url).toString(); if (!routeAllowed(spec.charter, entryRoute, pathOf(to), to)) continue; }
+        { const to = new URL(c.href, screen.url).toString(); if (!allowedRoute(entryRoute, pathOf(to), to)) continue; }
         return { key: c.href, kind: "goto", href: c.href };
       }
 
@@ -1827,7 +1876,7 @@ export async function runObserve(
           continue;
         }
         if (sfgStates.some((st) => st.route === route)) continue;
-        if (!routeAllowed(spec.charter, entryRoute, route, new URL(href, screen.url).toString())) continue;
+        if (!allowedRoute(entryRoute, route, new URL(href, screen.url).toString())) continue;
         return { key: href, kind: "goto", href };
       }
 
@@ -1847,7 +1896,7 @@ export async function runObserve(
         if (c.href && c.href !== here && !deadHref.has(c.href)) {
           if (triedGoto.has(c.href) || NOT_A_SCREEN.test(c.href)) continue;
           if (offsiteSection(c.href)) continue;
-          { const to = new URL(c.href, screen.url).toString(); if (!routeAllowed(spec.charter, entryRoute, pathOf(to), to)) continue; }
+          { const to = new URL(c.href, screen.url).toString(); if (!allowedRoute(entryRoute, pathOf(to), to)) continue; }
           return { key: c.href, kind: "goto", href: c.href };
         }
         /**
@@ -1900,7 +1949,7 @@ export async function runObserve(
       screens.length < maxScreens &&
       dry < dryLimit &&
       consecutiveFailures < 3 &&
-      rounds < maxRounds
+      rounds < maxRounds && Date.now() < explorationDeadline
     ) {
       rounds += 1;
       const next = nextAction(current);
@@ -2245,6 +2294,21 @@ export async function runObserve(
           shapeCount.set(ck, (shapeCount.get(ck) ?? 0) + 1);
         }
         const probeOrigin = next.kind === "probe" && next.rest > 0 ? current.url : undefined;
+        if (!inScope(session!.page.url())) {
+          note(`页内跳转超出当前 URL 范围：${session!.page.url()}，返回 ${current.url}`, "warn");
+          await page.goto(current.url);
+          await settle("返回范围内");
+          if (!inScope(session!.page.url())) {
+            note(`返回后仍超出范围：${session!.page.url()}，停止探索`, "warn");
+            stopped = { kind: "stuck" };
+            stoppedBecause = "越界后无法返回允许的页面";
+            break;
+          }
+          current = await snapshot("越界返回后");
+          currentId = idFor(current);
+          noteLinks(current, currentId);
+          continue;
+        }
         const after = await snapshot(`第 ${screens.length + 1} 屏`);
         const nowOrigin = (() => {
           try {
@@ -2253,7 +2317,7 @@ export async function runObserve(
             return homeOrigin;
           }
         })();
-        if (homeOrigin && nowOrigin !== homeOrigin) {
+        if (!inScope(after.url) || (homeOrigin && nowOrigin !== homeOrigin)) {
           // 这一屏不算数：它不属于被测产品。退回入口，接着走产品自己的东西。
           if (next.kind === "goto") {
             const sec = sectionOf(next.href);
@@ -2310,6 +2374,7 @@ export async function runObserve(
                   controlsRemoved: effect.controlsRemoved,
                   stateChanged: effect.stateChanged,
                   textAdded: effect.textAdded.slice(0, 12),
+                  textRemoved: effect.textRemoved.slice(0, 12),
                 },
               }
             : {}),
@@ -2333,7 +2398,7 @@ export async function runObserve(
           ...(wasNew
             ? {}
             : currentId === toId
-              ? { note: "状态未变" }
+              ? { note: effect.changed ? "同一抽象状态，存在可见变化" : "未检测到可见变化" }
               : { note: "回到已知状态" }),
         });
         if (next.kind === "click" && next.charter) {
@@ -2347,7 +2412,7 @@ export async function runObserve(
             stateAfter: toId,
             action: { kind: "click", target: next.label, selector: next.selector },
             ...(effect.changed
-              ? { effect: { controlsAdded: effect.controlsAdded, controlsRemoved: effect.controlsRemoved, stateChanged: effect.stateChanged, textAdded: effect.textAdded.slice(0, 12) } }
+              ? { effect: { controlsAdded: effect.controlsAdded, controlsRemoved: effect.controlsRemoved, stateChanged: effect.stateChanged, textAdded: effect.textAdded.slice(0, 12), textRemoved: effect.textRemoved.slice(0, 12) } }
               : { reason: "no_effect" }),
             controlsAfter: after.controls,
             evidenceRefs: [`sfg:edge:${sfgEdges.length - 1}`, `sfg:state:${toId}`, ...(shotPath ? [`shot:${shotPath}`] : [])],
@@ -2358,6 +2423,7 @@ export async function runObserve(
         currentId = toId;
         current = after;
         if (tracker) {
+          verifyWallet(after.url, after.elements);
           const found = tracker.noteState(toId, pathOf(after.url), after.elements, rounds);
           if (found.length) note(`这一屏新命中 ${found.length} 个 charter 目标：${found.map((t) => t.targetSpecId).join("，")}`);
         }
@@ -2459,6 +2525,8 @@ export async function runObserve(
     if (!stoppedBecause) {
       stopped = token.cancelled
         ? { kind: "cancelled" }
+        : Date.now() >= explorationDeadline
+          ? { kind: "timeBudget", n: durationMs }
         : screens.length >= maxScreens
           ? { kind: "screenCap", n: maxScreens }
           : rounds >= maxRounds
@@ -2468,6 +2536,8 @@ export async function runObserve(
               : { kind: "dry", n: dryLimit };
       stoppedBecause = token.cancelled
         ? "被取消"
+        : Date.now() >= explorationDeadline
+          ? `探索达到时间预算 ${durationMs} ms`
         : screens.length >= maxScreens
           ? `采满 ${maxScreens} 屏的上限`
           : rounds >= maxRounds
@@ -2549,12 +2619,19 @@ export async function runObserve(
       unvisited,
     };
 
-    const report = tracker?.report(graph, stopped ?? { kind: "unknown" }, { maxScreens, screens: screens.length, rounds, maxRounds });
+    const report = tracker?.report(graph, stopped ?? { kind: "unknown" }, { maxScreens: Number.isFinite(maxScreens) ? maxScreens : 0, screens: screens.length, rounds, maxRounds: Number.isFinite(maxRounds) ? maxRounds : 0 });
+    if (report) {
+      const granted = tracker?.capabilities() ?? [];
+      for (const cap of ["session", "wallet-session", "trading-authorized"]) {
+        if ((spec.capabilities ?? []).includes(cap) || spec.charter?.featureTargets.some(t => t.requires.includes(cap)))
+          if (!granted.includes(cap)) report.unknowns.push(`${cap}: not verified; injection/configuration/action attempt is not login evidence`);
+      }
+    }
     if (report) note(`charter 回执：${report.completion}，目标 ${report.coverage.targetsPlanned}：已试 ${report.coverage.targetsAttempted} / 仅看见 ${report.coverage.targetsObservedOnly} / 阻塞 ${report.coverage.targetsBlocked} / 未找到 ${report.coverage.targetsNotFound}`);
 
     const coverage = [
       "===== 这次探索走到哪为止 =====",
-      `采到 ${screens.length} 屏（上限 ${maxScreens}），走了 ${rounds} 轮，停止原因：${stoppedBecause}`,
+      `采到 ${screens.length} 屏（上限 ${Number.isFinite(maxScreens) ? maxScreens : "不限"}），走了 ${rounds} 轮，停止原因：${stoppedBecause}`,
       `走过的地址：${visited.join(" , ")}`,
       ...(missed.length ? ["没能走进去的地方：", ...missed.map((m) => `- ${m}`)] : []),
       "这份材料只覆盖上面列出的界面。没有出现在这里的功能，是没有被看到，不是不存在。",

@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@midscene/web": "^0.30.0",
+    "@playwright/test": "1.62.1",
     "@testpilot/harness-core": "workspace:*",
     "@testpilot/harness-testing": "workspace:*",
     "@testpilot/runner": "workspace:*",

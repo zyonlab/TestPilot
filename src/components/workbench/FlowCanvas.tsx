@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow, useViewport, type Edge, type Node, type NodeTypes } from '@xyflow/react';
+import { Background, BackgroundVariant, MarkerType, ReactFlow, ReactFlowProvider, useNodesInitialized, useReactFlow, useViewport, type Edge, type Node, type NodeTypes } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize2, Minus, Plus } from 'lucide-react';
 import { useT } from '@/lib/prefs';
@@ -45,12 +45,16 @@ function Refit({ wrapper, layoutKey }: { wrapper: React.RefObject<HTMLDivElement
   const fittedFor = useRef<string | null>(null);
   useEffect(() => { if (measured && fittedFor.current !== layoutKey) { fittedFor.current = layoutKey; refit(); } }, [measured, layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const seen = useRef(false);
+  const size = useRef({width:0,height:0});
   useEffect(() => {
     const el = wrapper.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const visible = (entry?.contentRect.width ?? 0) > 0 && (entry?.contentRect.height ?? 0) > 0;
-      if (visible && !seen.current) { seen.current = true; refit(); }
+      const width=entry.contentRect.width,height=entry.contentRect.height;
+      // Opening the bottom log drawer changes the viewport, not the user's zoom.
+      if (visible && (!seen.current || Math.abs(size.current.width-width)>2 || Math.abs(size.current.height-height)>2)) { seen.current = true; refit(); }
+      size.current={width,height};
       if (!visible) seen.current = false;
     });
     ro.observe(el);
@@ -74,20 +78,30 @@ function useStable<T>(value: T[]): T[] {
   return ref.current.value;
 }
 
-export function FlowCanvas({ nodes: rawNodes, edges: rawEdges, nodeTypes, height, layoutKey, minZoom = 0.3, maxZoom = 1.6, ariaLabel, children }: {
+export function FlowCanvas({ nodes: rawNodes, edges: rawEdges, nodeTypes, height, layoutKey, minZoom = 0.3, maxZoom = 1.6, ariaLabel, children, onEdgeClick }: {
   nodes: Node[]; edges: Edge[]; nodeTypes: NodeTypes; height: number | string; layoutKey: string;
-  minZoom?: number; maxZoom?: number; ariaLabel: string; children?: ReactNode;
+  minZoom?: number; maxZoom?: number; ariaLabel: string; children?: ReactNode; onEdgeClick?: (id: string) => void;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const nodes = useStable(rawNodes);
-  const edges = useStable(rawEdges);
+  const edges = useStable(rawEdges.map(edge => ({
+    ...edge,
+    style: { ...edge.style, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const },
+    markerEnd: edge.markerEnd ?? {
+      type: MarkerType.ArrowClosed,
+      width: 24,
+      height: 24,
+      markerUnits: 'userSpaceOnUse',
+      color: typeof edge.style?.stroke === 'string' ? edge.style.stroke : 'hsl(var(--muted-foreground))',
+    },
+  })));
   return <div ref={wrapper} className="tp-flow relative w-full overflow-hidden rounded-lg border border-border bg-background" style={{ height }} aria-label={ariaLabel}>
     <ReactFlowProvider>
       <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
         nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}
         /* 不可选、不可拖、又没有点击回调的节点，@xyflow 会给它 pointer-events: none——
            节点里的按钮就全点不到了。给一个空回调把事件留给节点自己的按钮。 */
-        onNodeClick={noop}
+        onNodeClick={noop} onEdgeClick={onEdgeClick ? (_event, edge) => onEdgeClick(edge.id) : undefined}
         panOnScroll zoomOnScroll={false} zoomActivationKeyCode={['Meta', 'Control']} zoomOnDoubleClick={false}
         minZoom={minZoom} maxZoom={maxZoom}
         proOptions={{ hideAttribution: true }}>

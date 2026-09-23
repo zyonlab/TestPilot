@@ -47,14 +47,14 @@ function ProjectSwitcher({collapsed}: {collapsed: boolean}) {
   const active = projects.find((p) => p.id === activeId);
 
   return (
-    <div ref={box} className="relative border-t border-border">
+    <div ref={box} className="relative h-9 shrink-0 border-t border-border">
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         title={t("nav.switchProject")}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-[0.75rem] text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex h-full w-full items-center gap-1.5 px-3 text-left text-[0.75rem] text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <span className="min-w-0 flex-1 truncate">
           {collapsed ? (active?.name.slice(0,2) ?? "+") : active ? active.name : t("common.noProjectSelected")}
@@ -123,7 +123,7 @@ function ProjectSwitcher({collapsed}: {collapsed: boolean}) {
  * 所以 `#/?open=review&run=wf-xxx` 这样的旧链接照样能打开，
  * 只是现在它渲染成一屏而不是盖在画布上的一张浮层。
  */
-const icons:Record<string,typeof Workflow>={canvas:Workflow,review:ClipboardCheck,artifacts:Files,runs:ChartNoAxesCombined,baselines:Activity,scoreboard:Gauge,gold:Star,settings:Settings2};
+const icons:Record<string,typeof Workflow>={canvas:Workflow,review:ClipboardCheck,artifacts:Files,runs:ChartNoAxesCombined,baselines:Activity,scoreboard:Gauge,evals:Gauge,gold:Star,settings:Settings2};
 
 export function AppNav({
   current,
@@ -135,14 +135,17 @@ export function AppNav({
   reviewCount?: number;
 }) {
   const t = useT();
-  const [collapsed,setCollapsed] = useState(() => safeGet('tp.nav.collapsed') === '1');
+  const [preferredCollapsed, setPreferredCollapsed] = useState(() => safeGet('tp.nav.collapsed') === '1');
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => { const media = window.matchMedia('(max-width: 640px)'); const change = () => setNarrow(media.matches); media.addEventListener('change', change); return () => media.removeEventListener('change', change); }, []);
+  const collapsed = narrow || preferredCollapsed;
 
   return (
     <nav className={cn("flex h-full flex-none flex-col border-r border-border bg-card",collapsed ? "w-14" : "w-[13rem]")}>
       <div className="flex items-center gap-2 px-3 py-3 text-[0.8125rem] font-semibold">
         {!collapsed && <span className="inline-block h-3.5 w-3.5 rounded-[3px] bg-primary" />}
         {!collapsed && "TestPilot"}
-        <button className="ml-auto rounded p-1 hover:bg-accent" title={t("bench.collapse")} aria-label={t("bench.collapse")} onClick={()=>setCollapsed(v=>{safeSet("tp.nav.collapsed",v?"0":"1");return !v;})}>{collapsed ? <PanelLeftOpen size={16}/> : <PanelLeftClose size={16}/>}</button>
+        <button className="ml-auto rounded p-1 hover:bg-accent" title={t("bench.collapse")} aria-label={t("bench.collapse")} disabled={narrow} onClick={()=>setPreferredCollapsed(v=>{safeSet("tp.nav.collapsed",v?"0":"1");return !v;})}>{collapsed ? <PanelLeftOpen size={16}/> : <PanelLeftClose size={16}/>}</button>
       </div>
       {/* ⌘K 放在导航第一项——Langfuse 就是这么放的，理由很实在：它是最快的那条路，
           而人只有看得见它才会去用。 */}

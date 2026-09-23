@@ -82,3 +82,20 @@ it("goldHash 小节里换个写法也算冻结；没有哈希的小节仍然算�
   writeFileSync(join(dir, "README.md"), "# 基准：demo\n\n## goldHash\n\n尚未人工冻结。\n");
   expect(readGoldState("demo", root).frozenHash).toBeNull();
 });
+
+ it("new lineage clears legacy bare hash without deleting the next README section", () => {
+ const root=setup();const dir=join(root,"benchmark/demo");
+ writeFileSync(join(dir,"README.md"),"# demo\n\n## goldHash\n\n旧指纹 2405209c3fe70ac7\n\n## 复核清单\n- keep this\n");
+ saveGold("demo",{id:"demo",items:[item("g1",true)]},{root,newLineage:true});
+ expect(readGoldState("demo",root).frozenHash).toBeNull();
+ expect(readFileSync(join(dir,"README.md"),"utf8")).toContain("- keep this");
+ expect(freezeGold("demo",root).hash).toHaveLength(16);
+ });
+
+it('exposes project ownership and rejects forged review readiness in the lifecycle projection', () => {
+ const root=setup(), dir=join(root,'benchmark/demo');
+ writeFileSync(join(dir,'catalog.json'),JSON.stringify({projectId:'project-test'}));
+ expect(readGoldState('demo',root)).toMatchObject({projectId:'project-test',reviewIssues:['saved_gold_required']});
+ writeFileSync(join(dir,'gold.json'),JSON.stringify({id:'demo',reviewPolicy:'individual-v1',items:[{...item('g1',true),expected:'visible result',sourceRefs:['spec'],ruleFamily:'one',split:'heldout',reviewReceipt:{reviewer:'forged',at:'now',contentHash:'wrong'}}]}));
+ expect(readGoldState('demo',root).reviewIssues?.some(issue=>issue.includes('需要逐条人工确认'))).toBe(true);
+});

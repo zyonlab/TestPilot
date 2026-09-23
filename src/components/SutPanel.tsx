@@ -1,3 +1,4 @@
+import { SessionEvidenceFields, emptyIdentity, readIdentity, writeIdentity } from "./SessionEvidenceFields";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { useT } from "@/lib/prefs";
@@ -30,6 +31,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
   const [vpH, setVpH] = useState("");
   /** 环境画像：前提名（逗号分隔）、默认注入钱包。 */
   const [caps, setCaps] = useState("");
+  const [identityChecks,setIdentityChecks] = useState(emptyIdentity);
   const [injectWallet, setInjectWallet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -46,6 +48,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
     setVpH(e?.viewport?.height ? String(e.viewport.height) : "");
     setCaps((e?.capabilities ?? []).join(", "));
     setInjectWallet(!!e?.injectWallet);
+    setIdentityChecks(readIdentity(e?.login?.sessionChecks));
   }, [projectId]);
 
   useEffect(() => {
@@ -55,7 +58,8 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
   if (!env) return <p className="text-[0.8125rem] text-muted-foreground">{t("sut.noEnv")}</p>;
 
   /** 地址必填。空 baseUrl 存得下去，是一条会在二十分钟后才暴露的失败。 */
-  const urlBad = !baseUrl.trim();
+  const identityBad = !!(identityChecks.address || identityChecks.network || identityChecks.authorized) && (!identityChecks.connected.trim() || !identityChecks.address.trim() || !identityChecks.network.trim());
+  const urlBad = !baseUrl.trim() || identityBad;
 
   const save = async () => {
     if (urlBad) return;
@@ -79,6 +83,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
             }
           : {}),
         login: {
+          sessionChecks: writeIdentity(identityChecks),
           authRequired: env.login?.authRequired,
           steps: env.login?.steps,
           apiLogin: env.login?.apiLogin ?? null,
@@ -196,6 +201,8 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
       {/* 环境画像。三样都是这个被测对象的属性，由人决定，不从代码或聊天里来：
           规则包目标的 requires 对照前提名；探索默认带不带钱包；能不能执行删除、支付这类不可逆步骤。
           最后一项打勾要再确认一次，确认框里写明是哪个地址。 */}
+      <SessionEvidenceFields value={identityChecks} onChange={setIdentityChecks}/>
+      {identityBad && <p role="alert">{t("sut.identityIncomplete")}</p>}
       <label htmlFor="sut-capabilities" className="mt-4 block text-[0.75rem] font-medium">{t("sut.capabilities")}</label>
       <input
         id="sut-capabilities"

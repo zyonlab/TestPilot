@@ -259,3 +259,12 @@ it("冻结留下的痕迹要分得清人和代理", () => {
   expect(state.frozenNote).toMatch(/代按/);
   expect(state.frozenAt).toBeTruthy();
 });
+
+it('whole-bundle planning cannot start or write past an unfrozen module proposal', () => {
+ const runId=newRun('whole-unfrozen',{});
+ stage.writeModulePlan(runId,project,{modules:[{id:'a',evidence:['m.md#1']}]});
+ expect(controlsModule.beginStage(runId,project,{node:'stories'})).toMatchObject({status:'paused',code:'module_plan_requires_human_freeze'});
+ expect(()=>controlsModule.requireStageStarted(runId,project,'stories')).toThrow('module_plan_requires_human_freeze');
+ stage.freezeModulePlan(runId,project,human);
+ expect(controlsModule.beginStage(runId,project,{node:'stories'})).not.toHaveProperty('code','module_plan_requires_human_freeze');
+});

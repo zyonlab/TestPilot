@@ -16,6 +16,13 @@ export const StorySchema = z.object({
   acceptance: z.array(z.string()).default([]),
   /** Which requirement this came from, when the material had ids. */
   requirementId: z.string().optional(),
+  observationLinks: z.array(z.object({
+    acceptanceIndex: z.number().int().nonnegative(),
+    status: z.enum(['observed', 'partial', 'unobserved']),
+    reason: z.enum(['not_attempted', 'route_blocked', 'requires_session', 'requires_fixture', 'budget_exhausted', 'not_found', 'insufficient_evidence', 'observed']),
+    observationIds: z.array(z.string().min(1)),
+    nextSteps: z.array(z.string().min(1)).default([]),
+  }).strict()).optional(),
   /**
    * Which document it came from, when the material was several.
    *
@@ -263,6 +270,11 @@ export const AssertionSchema = z.object({
  * 而不是删掉或降级——否则通过率好看了，覆盖缺口也一起消失了（21 §8 反例 7）。
  */
 export const ReadinessSchema = z.object({
+  requirements: z.array(z.object({
+    id: z.string().min(1), kind: z.enum(["session", "fixture", "locator", "calculation", "applicability"]),
+    status: z.enum(["missing", "unverified", "verified"]),
+    evidenceRefs: z.array(z.string().min(1)).default([]),
+  }).strict()).optional(),
   design: z.enum(["candidate", "reviewed"]),
   execution: z.enum(["ready", "requires-fixture", "requires-session", "blocked", "not-executable"]),
   reason: z.string().optional(),

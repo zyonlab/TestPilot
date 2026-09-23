@@ -55,7 +55,7 @@ export const ExplorationCharterSchema = z
     featureTargets: z.array(ExplorationTargetSpecSchema).min(1),
     ruleRefs: z.array(DomainIdSchema).default([]),
     actionsPolicy: ActionsPolicySchema.default({}),
-    budgets: z.object({ maxScreens: z.number().int().positive(), maxRounds: z.number().int().positive().optional() }).strict(),
+    budgets: z.object({ maxScreens: z.number().int().nonnegative(), maxRounds: z.number().int().positive().optional() }).strict(),
     completionCriteria: z.object({ allTargetsAttempted: z.literal(true).default(true) }).strict().default({}),
     environmentRef: z.string().optional(),
   })

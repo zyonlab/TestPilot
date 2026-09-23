@@ -1,3 +1,5 @@
+import {storageForOrigin} from "./authentication.js";
+import { sameExplorationPage } from "./explorationScope.js";
 import { STRUCTURE_PROBE, cacheDigest, scopedCacheId, structureOf } from './cache.js';
 import { visibleContextTree } from './visibleContext.js';
 import { mkdtempSync } from "node:fs";
@@ -26,6 +28,15 @@ import { midsceneModelConfig } from "./model.js";
 // navigation requests are touched — sub-resources (images/xhr) are left alone. Cooperative
 // priority + a handled-guard so it coexists with any other interceptor. Midscene itself does
 // not intercept, so this is the sole handler in practice.
+async function installExplorationBoundary(page: Page, entry?: string, templates: string[] = []): Promise<void> {
+  if (!entry) return;
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    if (req.isInterceptResolutionHandled()) return;
+    if (req.isNavigationRequest() && req.frame() === page.mainFrame() && !sameExplorationPage(entry, req.url(), templates)) void req.abort('blockedbyclient', 1);
+    else void req.continue(undefined, 0);
+  });
+}
 async function installQueryInterception(
   page: Page,
   query?: Record<string, string>,
@@ -105,8 +116,9 @@ async function installMutation(page: Page, opts: LaunchOpts): Promise<void> {
 
 // Fixed headers + captured cookies must be set BEFORE the first navigation.
 async function applyPreNav(page: Page, opts: LaunchOpts): Promise<void> {
-  if (opts.extraHeaders && Object.keys(opts.extraHeaders).length) {
-    await page.setExtraHTTPHeaders(opts.extraHeaders);
+  const headers = {...opts.extraHeaders,...opts.storageState?.headers};
+  if (Object.keys(headers).length) {
+    await page.setExtraHTTPHeaders(headers);
   }
   const cookies = opts.storageState?.cookies;
   if (cookies?.length) {
@@ -133,9 +145,8 @@ async function applyPostNav(page: Page, storageState?: StorageState | null): Pro
   if (!origins?.length) return false;
   let injected = false;
   try {
-    const here = new URL(page.url()).origin;
-    const match = origins.find((o) => o.origin === here) ?? origins[0];
-    if (match?.localStorage?.length) {
+    const items = storageForOrigin(page.url(), origins);
+    if (items.length) {
       await page.evaluate((items: { name: string; value: string }[]) => {
         for (const it of items) {
           try {
@@ -144,7 +155,7 @@ async function applyPostNav(page: Page, storageState?: StorageState | null): Pro
             /* quota / disabled — skip */
           }
         }
-      }, match.localStorage);
+      }, items);
       injected = true;
     }
   } catch {
@@ -160,7 +171,9 @@ export interface Session {
   walletId?: string;
   walletUnlocked?: boolean;
   walletPage?: Page; // kept-open MetaMask page holding the unlock (MV3 keep-alive)
+  signatureReceipts?: import("../domain/injectedSessionEvidence.js").WalletSignatureReceipt[];
   injectedAddress?: string; // address of the injected virtual wallet (injected mode)
+  injectedChainId?: number; // actual configuration used to install the provider
   sentTxs?: string[]; // tx hashes the injected wallet sent this session (live-updated)
   cleanup: () => Promise<void>;
   /** Private local adapter connection, retained only for this browser's lifetime. */
@@ -169,6 +182,8 @@ export interface Session {
 }
 
 export interface LaunchOpts {
+  explorationEntryUrl?: string;
+  explorationRouteTemplates?: string[];
   signal?: AbortSignal;
   modelBudget?: RoleProxyBudget;
   executorModel?: RoleModelConnection;
@@ -296,10 +311,11 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
     const page = await browser.newPage();
     await page.setViewport(resolveViewport(opts.viewport));
     await installQueryInterception(page, opts.query);
+    await installExplorationBoundary(page, opts.explorationEntryUrl, opts.explorationRouteTemplates);
     await page.setUserAgent(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     );
-    const { address, sentTxs } = await setupInjectedWallet(page, cfg);
+    const { address, sentTxs, signatureReceipts } = await setupInjectedWallet(page, cfg);
     await installMutation(page, opts);
     await applyPreNav(page, opts);
     const navUrl = appendQuery(url, opts.query);
@@ -314,7 +330,7 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
         /* ignore */
       }
     };
-    return { agent, page, browser, injectedAddress: address, sentTxs, cleanup };
+    return { agent, page, browser, injectedAddress: address, injectedChainId: cfg.chainId, sentTxs, signatureReceipts, cleanup };
   }
 
   const wantsWallet = opts.wallet && isWalletInstalled();
@@ -393,6 +409,7 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
   // for memory-constrained self-hosted models (MLX prefill guard). Same as the injected path.
   await page.setViewport(resolveViewport(opts.viewport));
   await installQueryInterception(page, opts.query);
+    await installExplorationBoundary(page, opts.explorationEntryUrl, opts.explorationRouteTemplates);
   // **两条启动路径都要装。**第一版只写在注入钱包那条分支里，而正常执行走的是这一条
     // ——于是变异体一次都没装上，计数恒为 0，我先后怀疑了时机和 API，都不是。
     await installMutation(page, opts);

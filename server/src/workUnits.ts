@@ -1,3 +1,4 @@
+import { STORY_PLANNING_CONTRACT, storyPlanningIssues } from '@testpilot/harness-testing/casegen';
 import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
 import { acceptanceIndex } from "./acceptanceIndex.js";
@@ -249,12 +250,12 @@ export function unitStatus(runId: string, projectId: string, node?: UnitNode) {
 export function unitMaterials(runId: string, projectId: string, unit: WorkUnit) {
   const { model, revisionId } = productModel(runId, projectId);
   const pack = rulePack(runId, projectId);
-  const report = latestByName(runId, projectId, "exploration/report")?.content as { observations?: Array<{ targetSpecId: string; featureId: string; status: string; reason?: string; effect?: { controlsAdded: string[]; stateChanged: string[]; textAdded: string[] } }>; plannedTargets?: Array<{ targetSpecId: string; featureId: string; status: string; reason?: string }> } | undefined;
+  const report = latestByName(runId, projectId, "exploration/report")?.content as { observations?: Array<{ id: string; stateBefore?: string; stateAfter?: string; evidenceRefs?: string[]; action?: unknown; controlsAfter?: string[]; targetSpecId: string; featureId: string; status: string; reason?: string; effect?: { controlsAdded: string[]; stateChanged: string[]; textAdded: string[] } }>; plannedTargets?: Array<{ targetSpecId: string; featureId: string; status: string; reason?: string }> } | undefined;
   const featureIds = unit.scope.kind === "module" || unit.scope.kind === "story" ? unit.scope.featureIds : model.features.map((f) => f.id);
   const ruleIds = unit.scope.kind === "module" || unit.scope.kind === "story" ? unit.scope.ruleIds : model.ruleBindings.map((b) => b.ruleId);
   const features = model.features.filter((f) => featureIds.includes(f.id)).map((f) => ({ id: f.id, moduleId: f.moduleId, name: f.name, applicability: f.applicability, verification: f.verification, verificationReason: f.verificationReason, ruleIds: f.ruleIds, claims: model.claims.filter((c) => f.claimIds.includes(c.id)).map((c) => ({ id: c.id, claimType: c.claimType, statement: c.statement, support: c.support, sourceRefs: c.sourceRefs })) }));
   const rules = (pack?.pack.rules ?? []).filter((r) => ruleIds.includes(r.id)).map((r) => ({ id: r.id, featureIds: r.featureIds, claimType: r.claimType, statement: r.statement, appliesWhen: r.appliesWhen, riskFloor: r.riskFloor, unit: r.unit, constants: r.constants, verification: r.verification, sourceRefs: r.sourceRefs, binding: model.ruleBindings.find((b) => b.ruleId === r.id)?.status }));
-  const observations = (report?.observations ?? []).filter((o) => featureIds.includes(o.featureId)).map((o) => ({ targetSpecId: o.targetSpecId, featureId: o.featureId, status: o.status, reason: o.reason, effect: o.effect ? { controlsAdded: o.effect.controlsAdded.slice(0, 12), stateChanged: o.effect.stateChanged.slice(0, 12), textAdded: o.effect.textAdded.slice(0, 8) } : undefined }));
+  const observations = (report?.observations ?? []).filter((o) => featureIds.includes(o.featureId)).map((o) => ({ id: o.id, stateBefore:o.stateBefore,stateAfter:o.stateAfter,evidenceRefs:o.evidenceRefs,action:o.action,controlsAfter:o.controlsAfter, targetSpecId: o.targetSpecId, featureId: o.featureId, status: o.status, reason: o.reason, effect: o.effect ? { controlsAdded: o.effect.controlsAdded, stateChanged: o.effect.stateChanged, textAdded: o.effect.textAdded } : undefined }));
   /**
    * 模块表带上冻结树自己认领的功能（`featureIds`）——单元契约要按它算「这个叶子该写几条故事」。
    * 产品模型里的模块没有这个字段：功能挂在模块上是反过来的（`feature.moduleId`），
@@ -324,6 +325,10 @@ export function claimUnit(runId: string, projectId: string, raw: unknown, claime
     const materials = unitMaterials(runId, projectId, next);
     const manifest = manifestFor(runId, projectId, next, materials, claimedBy);
     next.manifestId = manifest.manifestId;
+    const manifestName='context/'+next.node+'/'+manifest.manifestId;
+    const priorManifest=runLedger().listRevisions(projectId,runId).filter(r=>r.name===manifestName).at(-1);
+    runLedger().putRevision({runId,projectId,name:manifestName,kind:'report',content:manifest,sourceRefs:manifest.knowledge.map(k=>k.revision),parentRevision:priorManifest?.id??null},{kind:'system',id:'context-recorder'});
+
     save(next);
     const contract = unitContract(next, materials.modules, materials.features, materials.story, materials.subsumed, materials.actionVocabulary);
     /**
@@ -410,6 +415,7 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
   if (unit.node === "stories") {
     const parsed = UnitStoriesSchema.safeParse(typeof content === "string" ? JSON.parse(content) : content);
     if (!parsed.success) return { status: "blocked", gate: "schema", errors: parsed.error.issues.slice(0, 20).map((i) => ({ code: "schema", jsonPointer: "/" + i.path.join("/"), message: i.message })) };
+    errors.push(...storyPlanningIssues(parsed.data.stories));
     const otherIds = new Set(units.filter((u) => u.node === "stories" && u.unitId !== unitId && u.outputRevision).flatMap((u) => ((runLedger().readRevision(u.outputRevision!, projectId).content as { stories: Story[] }).stories).map((s) => s.id)));
     // 每份材料有多少段：判据里的 `file.md#N` 要对得上，见下面 acceptance_cites_missing_section。
     const sectionCounts = new Map<string, number>();
@@ -427,6 +433,14 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
       if (unit.scope.kind === "journeys" && new Set((s.moduleIds ?? []).map((m) => materials.modules.find((x) => x.id === m)?.parentId ?? m)).size < 2) errors.push({ code: "journey_needs_two_modules", jsonPointer: `/stories/${i}/moduleIds`, message: s.id });
       for (const f of s.featureRefs ?? []) if (!featureIds.has(f)) errors.push({ code: "feature_out_of_unit_scope", jsonPointer: `/stories/${i}/featureRefs`, message: f });
       for (const r of s.ruleRefs ?? []) if (!ruleIds.has(r)) errors.push({ code: "rule_out_of_unit_scope", jsonPointer: `/stories/${i}/ruleRefs`, message: r });
+      const exploration = latestByName(runId, projectId, "exploration/report")?.content as { observations?: Array<{id:string;featureId:string}> } | undefined;
+      const linked = new Set<number>();
+      for (const link of s.observationLinks ?? []) {
+        if (linked.has(link.acceptanceIndex) || link.acceptanceIndex >= s.acceptance.length) errors.push({code:'invalid_acceptance_link',jsonPointer:`/stories/${i}/observationLinks`,message:s.id});
+        linked.add(link.acceptanceIndex);
+        if (link.status !== 'unobserved' && !link.observationIds.length) errors.push({code:'observation_evidence_required',jsonPointer:`/stories/${i}/observationLinks`,message:s.id});
+        for (const id of link.observationIds) if (!exploration?.observations?.some(o=>o.id===id && s.featureRefs?.includes(o.featureId))) errors.push({code:'unknown_observation_reference',jsonPointer:`/stories/${i}/observationLinks`,message:id});
+      }
       if (!s.acceptance.length) errors.push({ code: "story_without_acceptance", jsonPointer: `/stories/${i}/acceptance`, message: s.id });
       /**
        * 判据里的出处要**真的存在**（2026-09-13）。
@@ -672,7 +686,7 @@ export function unitContract(
     return { id, features: n, want: Math.max(2, n) };
   });
   const leafLine = counted.length
-    ? ` LEAVES YOU MUST FILL — each needs stories of its OWN, not only a parent-level one, at least two, and at least one per feature it claims: ${counted.map((c) => `${c.id}(features=${c.features}, stories>=${c.want})`).join(", ")}. That is ${counted.reduce((a, c) => a + c.want, 0)} stories for this unit at the very least. A leaf the exploration never reached still gets its stories — write what the product should do there and mark the criterion 【待确认：界面观察不到】; skipping it silently hides the hole.`
+    ? ` LEAVES YOU MUST FILL — each needs stories of its OWN, not only a parent-level one, at least two, and at least one per feature it claims: ${counted.map((c) => `${c.id}(features=${c.features}, stories>=${c.want})`).join(", ")}. That is ${counted.reduce((a, c) => a + c.want, 0)} stories for this unit at the very least. A leaf the exploration never reached still gets its stories — write behavior supported by requirements or normative rules, and record missing observation separately in observationLinks; skipping it silently hides the hole.`
     : "";
   /**
    * **验收准则要带编号交出去，`acRefs` 只能填编号。**
@@ -723,7 +737,7 @@ export function unitContract(
     : "acRefs MUST be ids from this story's acceptance list, verbatim.";
 
   return next.node === "stories"
-      ? `Write ONLY stories for this unit via write_unit(unitId=${JSON.stringify(next.unitId)}, content={stories:[...]}). Each story: stable id, title, role, benefit, acceptance[] (each criterion states precondition, trigger, business result), moduleIds ⊆ ${JSON.stringify(next.scope.kind === "module" ? next.scope.moduleIds : next.scope.kind === "journeys" ? next.scope.moduleIds : [])}, featureRefs ⊆ this unit's features, ruleRefs ⊆ this unit's rules. ${next.scope.kind === "journeys" ? "This unit is for cross-module journeys only: each story must reference ≥2 modules and cite existing storyIndex ids in acceptance text where it composes them; do not repeat module stories." : "Do not write stories for other modules."} Features marked blocked/unverified may still get stories when a normative rule supports them; mark such acceptance as requires-fixture instead of dropping them. Hypothesis claims may only produce open questions, not acceptance. If a story does not fit any module in this unit, do NOT force it onto the nearest one: write it anyway and add moduleAmendments:[{kind,reason,storyId?,featureId?,from?,to?,evidence[]}] saying what the tree cannot hold. Amendments change nothing in this run — they are a proposal for whoever freezes the next tree. Saying it out loud is the point; quietly mis-filing a story is the failure this exists to prevent.${leafLine}${subsumeAdvice}`
+      ? `${STORY_PLANNING_CONTRACT}\nWrite ONLY stories for this unit via write_unit(unitId=${JSON.stringify(next.unitId)}, content={stories:[...]}). Each story: stable id, title, role, benefit, acceptance[] (each criterion states precondition, trigger, business result), moduleIds ⊆ ${JSON.stringify(next.scope.kind === "module" ? next.scope.moduleIds : next.scope.kind === "journeys" ? next.scope.moduleIds : [])}, featureRefs ⊆ this unit's features, ruleRefs ⊆ this unit's rules. ${next.scope.kind === "journeys" ? "This unit is for cross-module journeys only: each story must reference ≥2 modules and cite existing storyIndex ids in acceptance text where it composes them; do not repeat module stories." : "Do not write stories for other modules."} Features marked blocked/unverified may still get stories when a normative rule supports them; keep its business acceptance intact and record observation gaps separately instead of dropping it. For every acceptance return observationLinks:[{acceptanceIndex:0-based,status:observed|partial|unobserved,reason:not_attempted|route_blocked|requires_session|requires_fixture|budget_exhausted|not_found|insufficient_evidence|observed,observationIds:[],nextSteps:[]}]. Copy observationIds only from supplied observations in this run. Observed means evidence supports this criterion, not merely that its feature was clicked. Empty evidence must be unobserved. Review all supplied observations for this feature before choosing unobserved. If records show only the entry or part of a business outcome, cite those records as partial only when they support a concrete part of this criterion. A feature match alone is not evidence. Cite relevant attempted records with unobserved/insufficient_evidence when they do not establish the outcome; use not_attempted only for the specific action not attempted. Avoid blanket empty IDs and generic nextSteps: identify the last observed state and the remaining action or missing result. nextSteps are proposed, NEVER executed history. Do not append requires-fixture to every acceptance: static visible labels require no trading funds or positions. Separate observed evidence, normative rules and hypotheses from execution prerequisites. Hypothesis claims may only produce open questions, not acceptance. If a story does not fit any module in this unit, do NOT force it onto the nearest one: write it anyway and add moduleAmendments:[{kind,reason,storyId?,featureId?,from?,to?,evidence[]}] saying what the tree cannot hold. Amendments change nothing in this run — they are a proposal for whoever freezes the next tree. Saying it out loud is the point; quietly mis-filing a story is the failure this exists to prevent.${leafLine}${subsumeAdvice}`
       : [
           `Write ONLY cases for story ${JSON.stringify((next.scope as { storyId: string }).storyId)} via write_unit(unitId=${JSON.stringify(next.unitId)}, content={cases:[...]}).`,
           /**
@@ -734,6 +748,7 @@ export function unitContract(
            * 一条都过不了 schema，而它同时把 v2 的证据字段写得相当好。它不是不会写，
            * 是没被告知这些是必填的。
            */
+          STORY_PLANNING_CONTRACT,
           "REQUIRED on every case, or the write is rejected: id, storyId (this story), title, designMethod, steps[], expected, tier, key, priority, scenarioType.",
           "  designMethod ∈ equivalence | boundary | state-transition | decision-table | negative | exploratory, and it must agree with design.technique.",
           "  key is a dedupe triple 'transition|parameters|assertion'. steps are short end-agnostic actions. priority takes the rule's riskFloor as its lower bound.",
@@ -792,8 +807,9 @@ export function unitContract(
           "  • testData is an OBJECT: {fixtureRef?, accountRef?, values:[{name, value, unit?, source?}]} — not a bare array. Every value carries where it came from (a rule id or the asset metadata). Never invent a constant.",
           "  • assertions: one entry per independently checkable expectation, each {id, statement, ruleRefs[], oracle?, afterStep?} — the field is `statement`, not `expected`. Do not fold two checks into one sentence. Assertions are checked after the LAST step unless you set afterStep: n (1-based) — if an assertion describes a screen the case passes THROUGH (「the labels page shows the empty state」 before the step that opens the form), set afterStep to the step that reaches that screen, or it will be judged on the wrong page. An open question is not an assertion: never put 「待确认 / 开放问题 / not a failure criterion」 text into assertions[] — it cannot pass or fail; put it in readiness.reason.",
           "  • The domain reference from load_run_instructions (runScope.domainReference), when present, is THIS product's own list of invariants (supplied by the project): a case may be written to contradict one; anything it marks as a hypothesis may only become an open question. materials.volatileReadings names readings that change on their own — assert they exist or relate, never pin their value.",
-          "  • readiness: {design, execution, reason?}. design ∈ candidate | reviewed. execution ∈ ready | requires-fixture | requires-session | blocked | not-executable. When execution is not `ready` you MUST give reason and say what is missing.",
+          "  • readiness: {design, execution, reason?}. design ∈ candidate | reviewed. execution ∈ ready | requires-fixture | requires-session | blocked | not-executable. When execution is not `ready` you MUST give reason and say what is missing. requirements may list {id,kind:session|fixture|locator|calculation|applicability,status:missing|unverified|verified,evidenceRefs:[]}. Never invent verification evidence. ready must have no missing prerequisites and a machine oracle for EVERY independent assertion; the top-level oracle only covers the primary expected statement. Static display checks must not inherit trading-fixture reasons. Numeric checks require independent decimal calculation, timestamp/scope/rounding evidence; prose formulas alone are not executable. The decimal-equation oracle accepts scope:{start,end} (unique visible boundaries), inputs:[{id,label,unit,decimals,rounding:exact|nearest|truncate}], actual:inputId, formula:[inputId,inputId,operator] in postfix notation (+,-,*,/), maxAgeMs:1..60000. Each input must match one visible line label:number unit. Never use the actual result in its own formula. Use only observed labels/units and documented rounding; otherwise leave execution blocked. This checks consistency within display precision, not ledger precision.",
           "A bound, a step or a constant you cannot trace to a rule or to the asset metadata does not belong in the case. Leave the field out rather than fabricate it — the server treats a missing field and a fabricated one differently.",
+          "Preparation handoff: when execution is not ready, enumerate each missing prerequisite in readiness.requirements with kind, status and evidenceRefs. Do not claim verified without evidence. Design approval is separate from execution admission. For a numeric field, noText substring matching cannot establish inequality: 10x contains 0x. Use a scoped numeric comparison or leave the oracle unresolved. Test-runner/reporting policies belong in audit constraints, not invented product UI cases; flag an upstream amendment when an acceptance criterion only constrains the tester.",
           "steps are ACTIONS a browser agent performs, one per line, in order. They are not narration: never put a cross-reference (\"as in S-MKT-01\"), a precondition (\"on an account with no balance\"), or an API call into a step — the agent will try to perform it and the case dies before its oracle is checked. Preconditions go in precondition[], cross-references stay in the story, API checks stay in the oracle.",
           /**
            * **「确认 X 显示 Y」不是一个动作。**

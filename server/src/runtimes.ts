@@ -60,13 +60,13 @@ const availability = new Map<string, boolean>();
  * 创建运行时就拒掉起不来的，比探索跑完几分钟之后才失败强。
  */
 export function plannerRuntimeAvailable(name: RuntimeName): boolean {
-  const bin = name === "claude-code" ? claudecode.claudeBin() : name;
+  const bin = name === "claude-code" ? claudecode.claudeBin() : name === "codex" ? codex.codexBin() : name;
   const key = `${name}:${bin}`;
   const cached = availability.get(key);
   if (cached !== undefined) return cached;
   let ok = false;
   try {
-    if (name === "claude-code") ok = spawnSync(bin, ["--version"], { timeout: 15_000, stdio: "ignore" }).status === 0;
+    if (name === "claude-code" || name === "codex") ok = spawnSync(bin, ["--version"], { timeout: 15_000, stdio: "ignore" }).status === 0;
     else if (name === "penguin") ok = existsSync(penguin.penguinBin());
   } catch { ok = false; }
   availability.set(key, ok);

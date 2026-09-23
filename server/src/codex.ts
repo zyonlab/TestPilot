@@ -7,7 +7,7 @@ import { generationMessage, prepareSkillLaunch } from './runtime/skill-launch.js
 import { configuredRunBudget } from './runBudget.js';
 import { REPO_ROOT, defaultWorkspace, newRunId, readRun, writeDecisions, watchRun as sharedWatchRun, type StartRunInput, type StartedRun } from './penguin.js';
 export { readRun, writeDecisions };
-const live = new Map<string, { child: ChildProcess; state: 'running' | 'idle' | 'gone' }>();
+const live = new Map<string, { child: ChildProcess; state: 'running' | 'idle' | 'gone'; wallMs: number; stopReason?: string }>();
 export const codexBin = () => process.env.TP_CODEX_BIN || 'codex';
 export function codexSessionId(line: Record<string, unknown>) { return line.type === 'thread.started' && typeof line.thread_id === 'string' ? line.thread_id : undefined; }
 // Values become individual argv entries, never shell source. Only credential file paths are passed.
@@ -16,7 +16,7 @@ export function codexArgs(workspace: string, env: Record<string, string>) {
   return ['-a', 'never', 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-C', workspace,
     '-c', `mcp_servers.testpilot=${toml({ command: process.execPath, args: [join(REPO_ROOT, 'packages/testpilot-mcp/bin/testpilot-mcp.mjs')], cwd: REPO_ROOT, env, required: true, startup_timeout_sec: 60, tool_timeout_sec: 600, default_tools_approval_mode: 'approve' })}`, '-'];
 }
-export function cancelRun(runId: string) { const run = live.get(runId); if (!run || run.state !== 'running') return false; run.child.kill('SIGTERM'); setTimeout(() => { if (run.state === 'running') run.child.kill('SIGKILL'); }, 5000).unref(); return true; }
+export function cancelRun(runId: string, reason = 'codex_cancelled') { const run = live.get(runId); if (!run || run.state !== 'running') return false; run.stopReason ??= reason; run.child.kill('SIGTERM'); setTimeout(() => { if (run.state === 'running') run.child.kill('SIGKILL'); }, 5000).unref(); return true; }
 export function isRunning(runId: string) { return live.get(runId)?.state === 'running'; }
 export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   if (input.models) throw new Error('codex_managed_planner_unsupported');
@@ -35,13 +35,14 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   const childEnv = { ...process.env };
   // TestPilot's Web planner and executor must not override the native Codex planner.
   for (const key of Object.keys(childEnv)) if (/^(TP_PLANNER_|MIDSCENE_)/.test(key)) delete childEnv[key];
+  const budget = input.budget ?? configuredRunBudget();
   const child = spawn(codexBin(), codexArgs(workspace, env), { cwd: workspace, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'] });
-  const item = { child, state: 'running' as 'running' | 'idle' | 'gone' }; live.set(runId, item);
+  const item: NonNullable<ReturnType<typeof live.get>> = { child, state: 'running', wallMs: budget.wallMs }; live.set(runId, item);
   const tracePath = join(outDir, 'codex-events.jsonl'); let buffer = '', stderr = '', nativeSessionId = ''; let turn = 0;
-  const budget = configuredRunBudget(); const deadline = setTimeout(() => cancelRun(runId), budget.wallMs); deadline.unref();
+  const deadline = setTimeout(() => cancelRun(runId, `codex_budget_exhausted: exceeded ${budget.wallMs} ms`), budget.wallMs); deadline.unref();
   const sessionId = await new Promise<string>((resolve, reject) => {
     let ready = false;
-    const startup = setTimeout(() => { cancelRun(runId); reject(new Error('codex_start_timeout')); }, Math.min(60_000, budget.wallMs)); startup.unref();
+    const startup = setTimeout(() => { cancelRun(runId, 'codex_start_timeout'); reject(new Error('codex_start_timeout')); }, Math.min(60_000, budget.wallMs)); startup.unref();
     child.stdout!.on('data', data => {
       buffer += data.toString(); let newline: number;
       while ((newline = buffer.indexOf('\n')) >= 0) {
@@ -54,10 +55,11 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
       }
     });
     child.stderr!.on('data', data => { stderr = (stderr + data.toString()).slice(-4000); });
-    child.on('error', () => { clearTimeout(startup); clearTimeout(deadline); item.state = 'gone'; reject(new Error('codex_spawn_failed')); });
-    child.on('close', code => {
+    child.on('error', () => { clearTimeout(startup); clearTimeout(deadline); item.state = 'gone'; item.stopReason = 'codex_spawn_failed'; reject(new Error('codex_spawn_failed')); });
+    child.on('close', (code, signal) => {
       clearTimeout(startup); clearTimeout(deadline); item.state = code === 0 ? 'idle' : 'gone';
-      writeFileSync(join(outDir, 'codex-exit.json'), JSON.stringify({ code, ...(code ? { error: 'codex_run_failed' } : {}) }));
+      if (!item.stopReason && code !== 0) item.stopReason = `codex_run_failed: ${signal ?? `exit ${code}`}`;
+      writeFileSync(join(outDir, 'codex-exit.json'), JSON.stringify({ code, signal, ...(item.stopReason || code !== 0 ? { error: item.stopReason ?? `codex_run_failed: ${signal ?? `exit ${code}`}` } : {}) }));
       if (!ready) { writeFileSync(join(outDir, 'codex-start-error.txt'), stderr, { mode: 0o600 }); reject(new Error('codex_initialization_failed')); }
       setTimeout(() => { if (live.get(runId) === item) live.delete(runId); }, 120_000).unref();
     });
@@ -67,5 +69,5 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   return { sessionId, workspace, runId, outDir };
 }
 export function watchRun(opts: Parameters<typeof sharedWatchRun>[0]) {
-  sharedWatchRun({ ...opts, stateOf: () => live.get(opts.runId)?.state ?? 'gone', onDone: result => { if (result.status !== 'done') cancelRun(opts.runId); opts.onDone(result); } });
+  sharedWatchRun({ ...opts, timeoutMs: live.get(opts.runId)?.wallMs ?? opts.timeoutMs, errorOf: () => live.get(opts.runId)?.stopReason, stateOf: () => live.get(opts.runId)?.state ?? 'gone', onDone: result => { if (result.status !== 'done') cancelRun(opts.runId); opts.onDone(result); } });
 }

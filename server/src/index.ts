@@ -1,3 +1,7 @@
+import { recoverPreparations } from './preparation.js';
+import { trackSourceSession } from "./sourceSessions.js";
+import { benchmarkCatalog } from "./benchmarkCatalog.js";
+import { listStudies, readStudy, startStudy, reviewStudy, evidenceFile, recoverStudies } from './evidenceStudy/runner.js';
 import { readActiveEvolution } from './evolution/bridge.js';
 import { environmentPatch } from "./environmentInput.js";
 import { defaultRuntimeName, plannerRuntimeAvailable } from './runtimes.js';
@@ -12,7 +16,7 @@ import { runRouter } from "./runRoutes.js";
 import { projectWorkflowEvent, recoverRunProjections } from "./runService.js";
 import { degradeDecision, recordDegrade } from "./degrade.js";
 import { projectCost } from "./cost.js";
-import { readGoldState, saveGold, freezeGold, type GoldFile } from "./gold.js";
+import { createGoldDraft, readGoldState, saveGold, freezeGold, type GoldFile } from "./gold.js";
 import { pairedEval } from "testpilot-mcp/score";
 import cors from "cors";
 import { INSTANCE } from "./datadir.js";
@@ -41,14 +45,14 @@ import {
 } from "./review.js";
 import {
   DEFECT_TITLES,
-  evalSubject,
+  evalSubject, evaluateRegisteredRuns,
   getEval,
   listCritiques,
   listEvals,
   reconcileOrphanedEvals,
   runCritique, scoreRun,
   runDetectionEval,
-  runPairedEval,
+  runPairedEval, startPairedEval, preflightPairedEval,
   setCaseExecutor,
 } from "./evals.js";
 import { getEvalSpec, listEvalSpecs, specFromSuggestion } from "./evalspecs.js";
@@ -241,7 +245,7 @@ const RUNTIME = process.env.TP_RUNTIME === "graph" ? "graph" : "penguin";
 import { seedIfEmpty } from "./seed.js";
 import { buildExportFiles } from "./export.js";
 import { exportLayerMemory, rememberExportLayers } from "./db.js";
-import { supersededBoardCases } from "./decisionDelivery.js";
+import { supersededBoardCases, exportApprovedCases } from "./decisionDelivery.js";
 import { processVisual } from "./visualBaseline.js";
 import {
   mkdtempSync,
@@ -692,11 +696,15 @@ type Platform = (typeof PLATFORMS)[number];
 const asPlatform = (v: unknown): Platform | undefined =>
   PLATFORMS.includes(v as Platform) ? (v as Platform) : undefined;
 
+const validExploration = (body: { explorationMaxScreens?: unknown; explorationScope?: unknown }) =>
+  (body.explorationMaxScreens === undefined || (Number.isInteger(body.explorationMaxScreens) && Number(body.explorationMaxScreens) >= 0 && Number(body.explorationMaxScreens) <= 50)) &&
+  (body.explorationScope === undefined || ['current-url', 'rules'].includes(String(body.explorationScope)));
 const asMaterials = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : [];
 
 app.post("/api/projects", (req, res) => {
-  const { name, targetUrl, targetPlatform, materials } = req.body ?? {};
+  const { name, targetUrl, targetPlatform, materials, explorationMaxScreens, explorationScope } = req.body ?? {};
+  if (!validExploration(req.body ?? {})) return res.status(400).json({ error: "invalid exploration settings" });
   if (!name || !targetUrl) return res.status(400).json({ error: "name and targetUrl required" });
   if (targetPlatform !== undefined && !asPlatform(targetPlatform))
     return res.status(400).json({ error: `targetPlatform must be one of ${PLATFORMS.join(", ")}` });
@@ -705,7 +713,7 @@ app.post("/api/projects", (req, res) => {
       String(name),
       String(targetUrl),
       asPlatform(targetPlatform) ?? "web",
-      asMaterials(materials),
+      asMaterials(materials), explorationMaxScreens, explorationScope,
     ),
   });
 });
@@ -716,12 +724,15 @@ app.post("/api/projects", (req, res) => {
 app.patch("/api/projects/:id", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   const { name, targetUrl, targetPlatform } = req.body ?? {};
+  if (!validExploration(req.body ?? {})) return res.status(400).json({ error: "invalid exploration settings" });
   if (targetPlatform !== undefined && !asPlatform(targetPlatform))
     return res.status(400).json({ error: `targetPlatform must be one of ${PLATFORMS.join(", ")}` });
   const project = updateProject(req.params.id, {
     ...(name !== undefined ? { name: String(name) } : {}),
     ...(targetUrl !== undefined ? { targetUrl: String(targetUrl) } : {}),
     ...(targetPlatform !== undefined ? { targetPlatform: asPlatform(targetPlatform)! } : {}),
+    ...(req.body?.explorationMaxScreens !== undefined ? { explorationMaxScreens: req.body.explorationMaxScreens } : {}),
+    ...(req.body?.explorationScope !== undefined ? { explorationScope: req.body.explorationScope } : {}),
     ...(req.body?.materials !== undefined ? { materials: asMaterials(req.body.materials) } : {}),
   });
   res.json({ project });
@@ -921,10 +932,10 @@ app.get("/api/projects/:id/export-preflight", (req, res) => {
   const quarantined = all.filter((c) => c.quarantined);
   const degraded = all.filter((c) => c.degraded);
   const superseded = all.filter((c) => stale.has(c.id));
-  const noCode = all.filter((c) => !stale.has(c.id) && !c.code?.trim());
+  const noCode = all.filter((c) => !stale.has(c.id) && !c.code?.trim() && !c.steps.length);
 
   // 登录到底带没带走：看**生成出来的文件里**有没有那个 setup，而不是看环境上写着什么。
-  const files = buildExportFiles(project, all, {
+  const files = buildExportFiles(project, exportApprovedCases(all.filter(c => !stale.has(c.id) && !c.quarantined && !c.degraded)), {
     environments: envs,
     secretKeys: listSecretMeta(project.id).map((s) => s.key),
     // 抽取层只增不减：曾经命名过的步骤/前置一直保留名字，增量导出才不会搅动一批 spec。
@@ -1012,7 +1023,7 @@ app.get("/api/projects/:id/export", (req, res) => {
   const cases = (includeAll
     ? listCases(project.id)
     : listCases(project.id).filter((c) => !c.quarantined && !c.degraded)).filter((c) => !stale.has(c.id));
-  const files = buildExportFiles(project, cases, {
+  const files = buildExportFiles(project, exportApprovedCases(cases), {
     environments: listEnvironments(project.id),
     secretKeys: listSecretMeta(project.id).map((s) => s.key),
     // 抽取层只增不减：曾经命名过的步骤/前置一直保留名字，增量导出才不会搅动一批 spec。
@@ -1091,7 +1102,7 @@ async function runAndPersistCase(
   const session = env?.login?.session ?? null;
   const useSession = !!env?.login?.authRequired && !!session && !body?.skipLogin;
   const login =
-    env?.login?.authRequired && !useSession && !body?.skipLogin ? env.login.steps ?? [] : [];
+    env?.login?.authRequired && !body?.skipLogin ? env.login.steps ?? [] : [];
   // Wallet mode: from the run body OR the case's web3Mode (so suite/debug honor it too).
   const injected = body?.provider === "injected" || !!body?.injected || c.web3Mode === "injected";
   const wallet = !!body?.wallet || c.web3Mode === "metamask";
@@ -1135,6 +1146,7 @@ async function runAndPersistCase(
       // 批次给的 key：同一批的用例共用一个浏览器，登录态只跑一次（07 T-28）。单跑没有。
       ...(typeof body?.__sessionKey === "string" ? { sessionKey: body.__sessionKey } : {}),
       login,
+      authentication: env?.login?.authRequired && !body?.skipLogin ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined,
       web3,
       postSteps: c.postSteps.map((s) => s.text),
       resolve: ctx,
@@ -1576,12 +1588,14 @@ setUnfinishedRuns(() => unfinishedRunIds());
 setAgentObserver(async (input) => {
   const {
     url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId, envRef,
-    scenarioFirst, inPageFirst, groupCap, charter, wallet,
+    scenarioFirst, inPageFirst, groupCap, charter, wallet, explorationScope, workflowRunId,
   } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
     settleMs?: number;
     maxScreens?: number;
+    workflowRunId?: string;
+    explorationScope?: "current-url" | "rules";
     dryRounds?: number;
     stateAbstraction?: string;
     projectId?: string;
@@ -1610,12 +1624,13 @@ setAgentObserver(async (input) => {
   const live = interactiveSession(`observe-${projectId ?? "adhoc"}`, projectId);
   // 走 observe 而不是 explore：explore 的契约是"返回解析出来的 flows"，把散文喂进它
   // 只会被 `asArray()` 压成 []。观察要的是屏幕上原样的东西，采集是确定性的。
+  const untrack = workflowRunId ? trackSourceSession(workflowRunId, () => live.cancel()) : () => {};
   const result = await live.observe(
     {
       url: target,
       deep,
       settleMs,
-      maxScreens,
+      maxScreens, explorationScope,
       dryRounds,
       stateAbstraction,
       /**
@@ -1640,15 +1655,18 @@ setAgentObserver(async (input) => {
       ...(projectId ? observeLogin(projectId, envRef) : {}),
       // 这个环境提供的前提名（人在环境设置里填的）；没填就由探索器按「配了登录就有 session」推。
       ...(env?.capabilities?.length ? { capabilities: env.capabilities } : {}),
+      ...(env?.login?.injectedSessionCheck ? {injectedSessionCheck:env.login.injectedSessionCheck} : {}),
+      ...(env?.login?.sessionChecks?.length ? { sessionChecks: env.login.sessionChecks } : {}),
       launch: {
         cacheId: `observe-${projectId ?? "adhoc"}`,
+        explorationRouteTemplates: String(env?.vars?.TP_EXPLORATION_ROUTE_TEMPLATES ?? '').split(',').map(s=>s.trim()).filter(Boolean),
         ...(projectId ? observeLaunch(projectId, envRef) : {}),
         // 注入钱包与执行用例那条路同源：同一把种子、同一条链，探索因此看得到登录态的产品。
         ...(wallet ? { injected: true, ...resolveChainConfig() } : {}),
       },
     },
     ARTIFACT_DIR,
-  );
+  ).finally(untrack);
   /**
    * 上限跟着屏数走。这里已经被同一件事咬过两次：
    *
@@ -1699,6 +1717,8 @@ function sanitizeEnv(env: Environment) {
   return {
     ...env,
     login: {
+      sessionChecks: env.login?.sessionChecks ?? [],
+      injectedSessionCheck: env.login?.injectedSessionCheck,
       authRequired: env.login?.authRequired ?? false,
       steps: env.login?.steps ?? [],
       apiLogin: env.login?.apiLogin ?? null, // config only (contains placeholders, not secrets)
@@ -2881,15 +2901,34 @@ app.post("/api/evals/paired", (req, res) => {
     const request = req.body as Parameters<typeof runPairedEval>[0];
     if (!request?.graphId || !request.a || !request.b)
       return res.status(400).json({ error: "graphId, a and b are required" });
-    const started = runPairedEval(request);
-    started.catch(() => undefined); // failures are recorded on the eval row
-    res.json({ ok: true, note: "running; watch eval.* events or poll /api/evals" });
+    res.status(202).json({ ok: true, ...startPairedEval(request) });
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
 });
 
+app.post("/api/evals/registered", async (req,res) => {
+ try { res.status(201).json(await evaluateRegisteredRuns(req.body)); }
+ catch(e) { res.status(400).json({error:(e as Error).message}); }
+});
 app.get("/api/evals", (_req, res) => res.json({ evals: listEvals() }));
+app.get('/api/evidence-studies', (_req,res) => res.json({studies:listStudies()}));
+app.post('/api/evidence-studies', (_req,res) => {
+  try {res.status(202).json(startStudy());} catch(e) {res.status(409).json({error:(e as Error).message});}
+});
+app.get('/api/evidence-studies/:id', (req,res) => {
+  try {res.json(readStudy(req.params.id));} catch(e) {res.status(404).json({error:(e as Error).message});}
+});
+app.get('/api/evidence-studies/:id/files/:file', (req,res) => {
+  try {
+    const file=evidenceFile(req.params.id,req.params.file);
+    if(req.headers['x-testpilot-actor']==='agent'&&file.endsWith('.png'))return res.json({kind:'screenshot',path:req.path});
+    res.sendFile(file);
+  } catch(e) {res.status(404).json({error:(e as Error).message});}
+});
+app.post('/api/evidence-studies/:id/review', (req,res) => {
+  try {reviewerPrincipal(req);res.json(reviewStudy(req.params.id,req.body));} catch(e) {res.status(409).json({error:(e as Error).message});}
+});
 
 /* ─────────────── 07 P5：成本 / 记分板 / gold ─────────────── */
 
@@ -2904,18 +2943,19 @@ app.get("/api/projects/:id/cost", (req, res) => {
 app.get("/api/scoreboard", (req, res) => {
   const want = typeof req.query.capability === "string" ? req.query.capability : undefined;
   const root = resolve(REPO_ROOT, "benchmark");
-  const caps = existsSync(root) ? readdirSync(root).filter((d) => statSync(resolve(root, d)).isDirectory() && (!want || d === want)) : [];
+  const catalog = benchmarkCatalog(root);
+  const caps = catalog.filter(c => (req.query.includeArchived === "1" || !c.archived) && (!want || c.capability === want)).map(c => c.capability);
   const entries: Array<Record<string, unknown>> = [];
   for (const cap of caps) {
     const p = resolve(root, cap, "scoreboard.yaml");
     if (!existsSync(p)) continue;
     try {
-      for (const e of storedScoreboard(p)) entries.push({ capability: cap, ...e });
+      for (const e of storedScoreboard(p)) entries.push({ capability: cap, ...e, projectId: catalog.find(c => c.capability === cap)?.projectId, archived: !!catalog.find(c => c.capability === cap)?.archived });
     } catch (e) {
       entries.push({ capability: cap, error: `scoreboard.yaml 读不出：${(e as Error).message}` });
     }
   }
-  res.json({ capabilities: caps, entries, penguinUrl: process.env.TP_PENGUIN_EVALUATION_URL || "http://127.0.0.1:7365", activeVersion: readActiveEvolution() });
+  res.json({ capabilities: caps, entries, catalog, diagnostics: listEvals(), penguinUrl: process.env.TP_PENGUIN_EVALUATION_URL || "http://127.0.0.1:7365", activeVersion: readActiveEvolution() });
 });
 
 /**
@@ -2940,6 +2980,13 @@ app.post("/api/scoreboard/paired", async (req, res) => {
 });
 
 /** gold 生命周期（T-19）。每次写都是人从界面来的；agent 没有这条路。 */
+app.post("/api/gold", (req, res) => {
+  try {
+    const { capability, file, projectId } = req.body ?? {};
+    if (typeof capability !== "string" || !file || typeof projectId !== "string" || !getProject(projectId)) return res.status(400).json({error:"gold_project_and_draft_required"});
+    res.status(201).json({state:createGoldDraft(capability,file,projectId)});
+  } catch(e) { res.status(400).json({error:(e as Error).message}); }
+});
 app.get("/api/gold/:capability", (req, res) => {
   try {
     res.json(readGoldState(req.params.capability));
@@ -2950,9 +2997,10 @@ app.get("/api/gold/:capability", (req, res) => {
 app.post("/api/gold/:capability", (req, res) => {
   const body = (req.body ?? {}) as { action?: "save" | "freeze"; file?: GoldFile; newLineage?: boolean; reviewedItemIds?: string[] };
   try {
+    const actor = reviewerPrincipal(req);
     if (body.action === "freeze") return res.json({ frozen: freezeGold(req.params.capability), state: readGoldState(req.params.capability) });
     if (!body.file) return res.status(400).json({ error: "action=save 要给 file（gold.json 的内容）" });
-    const saved = saveGold(req.params.capability, body.file, { newLineage: !!body.newLineage, actor: reviewerPrincipal(req), reviewedItemIds: body.reviewedItemIds });
+    const saved = saveGold(req.params.capability, body.file, { newLineage: !!body.newLineage, actor, reviewedItemIds: body.reviewedItemIds });
     res.json({ saved, state: readGoldState(req.params.capability) });
   } catch (e) {
     const msg = (e as Error).message;
@@ -2966,7 +3014,10 @@ app.post("/api/gold/:capability", (req, res) => {
  * `problems` 和 `specs` 一起返回，不静默丢弃坏文件：一份读不出来的定义如果被跳过，
  * 评测集就悄悄变小了，而界面上看起来一切正常。
  */
-app.get("/api/evals/specs", (_req, res) => res.json(listEvalSpecs()));
+app.get("/api/evals/specs", (_req, res) => {
+  const catalog = listEvalSpecs();
+  res.json({ ...catalog, specs: catalog.specs.map(spec => ({ ...spec, preflight: preflightPairedEval(spec) })) });
+});
 
 /**
  * 可以当材料喂进去的文档，供 `source.spec` 的 `paths` 勾选。
@@ -2999,7 +3050,7 @@ app.post("/api/evals/specs/:id/run", (req, res) => {
   const spec = getEvalSpec(req.params.id);
   if (!spec) return res.status(404).json({ error: `没有这份评测定义：${req.params.id}` });
   try {
-    const started = runPairedEval({
+    const started = startPairedEval({
       graphId: spec.graphId,
       goldPath: spec.goldPath,
       casesNode: spec.casesNode,
@@ -3009,8 +3060,7 @@ app.post("/api/evals/specs/:id/run", (req, res) => {
       b: spec.b,
       spec: { id: spec.id, title: spec.title, why: spec.why, path: spec.path, expect: spec.expect },
     });
-    started.catch(() => undefined);
-    res.json({ ok: true, spec: spec.id, note: "running; watch eval.* events or poll /api/evals" });
+    res.status(202).json({ ok: true, spec: spec.id, ...started });
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
@@ -3407,6 +3457,7 @@ seedIfEmpty();
 bus.subscribe(event => { void projectWorkflowEvent(event).catch(error => log(`run projection failed: ${(error as Error).message}`)); });
 await recoverRunProjections();
 recoverWorkflowExecutions();
+recoverPreparations();
 await flushDecisionDelivery();
 const decisionDeliveryTimer = setInterval(() => { void flushDecisionDelivery().catch(() => log("decision delivery pending")); }, 5000);
 decisionDeliveryTimer.unref();
@@ -3416,6 +3467,7 @@ attachWs(httpServer, bus, log);
 // module, or the two import each other and neither finishes initialising.
 reconcileOrphanedRuns(log);
 reconcileOrphanedEvals(log);
+recoverStudies();
 // Penguin 那条路的同一件事：session 在 :7364 上还跑着，看门狗却随网关一起没了。
 reconcilePenguinRuns(log);
 void startProcesses(log);

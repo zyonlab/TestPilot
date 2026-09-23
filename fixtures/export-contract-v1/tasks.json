@@ -1,0 +1,14 @@
+{
+  "id": "export-contract-v1",
+  "description": "Controlled single-page UI lifecycle fixtures. These are exporter regression tasks, not Hyperliquid replicas or independent human Gold.",
+  "tasks": [
+    {"id":"dialog","split":"dev","family":"visibility","title":"Dialog lifecycle","buttons":["Open dialog","Close dialog"],"initial":"Dialog closed","intermediate":"Dialog open","final":"Dialog closed"},
+    {"id":"tabs","split":"dev","family":"navigation","title":"Tab lifecycle","buttons":["Select activity","Select overview"],"initial":"Overview selected","intermediate":"Activity selected","final":"Overview selected"},
+    {"id":"form","split":"dev","family":"validation","title":"Validation lifecycle","buttons":["Submit empty","Submit valid"],"initial":"Form ready","intermediate":"Required field error","final":"Form saved"},
+    {"id":"counter","split":"dev","family":"state","title":"Counter lifecycle","buttons":["Increment","Reset counter"],"initial":"Count zero","intermediate":"Count one","final":"Count zero"},
+    {"id":"drawer","split":"validation","family":"visibility","title":"Drawer lifecycle","buttons":["Show details","Hide details"],"initial":"Details hidden","intermediate":"Details visible","final":"Details hidden"},
+    {"id":"filter","split":"validation","family":"navigation","title":"Filter lifecycle","buttons":["Show pending","Show all"],"initial":"All entries","intermediate":"Pending entries","final":"All entries"},
+    {"id":"settings","split":"validation","family":"validation","title":"Settings lifecycle","buttons":["Save incomplete","Save complete"],"initial":"Settings ready","intermediate":"Missing setting error","final":"Settings saved"},
+    {"id":"selection","split":"validation","family":"state","title":"Selection lifecycle","buttons":["Select item","Clear selection"],"initial":"Nothing selected","intermediate":"One item selected","final":"Nothing selected"}
+  ]
+}
