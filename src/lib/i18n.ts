@@ -10,6 +10,14 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "host.title": {zh:"Web 使用的本机宿主",en:"Local host for Web tasks",ja:"Web タスクのローカルホスト"},
+  "host.choose": {zh:"请选择已登录的宿主",en:"Select a signed-in host",ja:"ログイン済みホストを選択"},
+  "host.model": {zh:"规划模型：由所选宿主管理，实际模型名称尚未回报。",en:"Planner model: managed by the selected host; actual model name not yet reported.",ja:"計画モデルは選択したホストが管理します。実際のモデル名はまだ報告されていません。"},
+  "host.independent": {zh:"Web 启动独立任务，不接管当前聊天会话。登录检查通过不代表模型请求一定成功；失败时不自动切换模型。",en:"Web starts an independent task, not the current chat session. Sign-in does not guarantee a successful request; failures do not switch models.",ja:"Web は現在の会話とは別のタスクを開始します。ログイン確認はリクエスト成功を保証せず、失敗時もモデルを自動切替しません。"},
+  "host.state.ready": {zh:"已登录",en:"Signed in",ja:"ログイン済み"},
+  "host.state.unavailable": {zh:"未安装或不可用",en:"Not installed or unavailable",ja:"未インストール・利用不可"},
+  "host.state.signed-out": {zh:"未登录",en:"Signed out",ja:"未ログイン"},
+  "host.state.unknown": {zh:"登录状态未确认",en:"Sign-in unconfirmed",ja:"ログイン状態未確認"},
   "library.builtin": {zh:"Hyperliquid Testnet 内置示例",en:"Hyperliquid Testnet built-in example",ja:"Hyperliquid Testnet 組み込み例"},
   "library.none": {zh:"本次不使用",en:"Do not use for this run",ja:"この実行では使用しない"},
   "library.hint": {zh:"选择固定版本。聊着填或宿主保存的新版本会出现在这里；内置示例只读，修改后另存。",en:"Choose a fixed version. Versions saved by chat or the host appear here. Built-in examples are read-only; edits are saved separately.",ja:"固定バージョンを選択します。会話やホストで保存した版も表示されます。組み込み例は読み取り専用で、変更は別保存します。"},

@@ -1,3 +1,4 @@
+import {requireHost} from "./plannerHost.js";
 import {readKnowledgeLibrary} from "./knowledgeLibrary.js";
 import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
 import { evaluateExplorationResult } from "./explorationResults.js";
@@ -33,7 +34,7 @@ import { buildProductModel, charterFromRulePack, describeProductModel, validateR
 
 export async function createWebWorkflow(projectId: string, raw: unknown, prepared?: {runId:string;node:string}) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
-  const input = z.object({knowledgeSelection:z.string().nullable().optional(),rulePackSelection:z.string().nullable().optional(),idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
+  const input = z.object({knowledgeSelection:z.string().nullable().optional(),rulePackSelection:z.string().nullable().optional(),idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin','connected']).optional()}).parse(raw);
   /**
    * 禁止名单上的地址什么都不跑（`config.guard.denyHosts`，运营方配置）。环境与运行参数都放不开它。
    * 探索不带钱包、不点会改状态的东西也不行：观察本身会带着登录态与会话去访问那个地址。
@@ -88,7 +89,7 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 规划由谁跑，在创建这一刻定下并记进运行：续跑必须用同一个运行时，否则模型绑定对不上。
    * 起不来的（本机没有 `claude`、没装 Penguin）当场拒掉，而不是探索跑完几分钟之后才失败。
    */
-  const plannerRuntime=input.planner??defaultRuntimeName();
+  const plannerRuntime=input.planner==='connected'?await requireHost(projectId):input.planner??defaultRuntimeName();
   if(plannerRuntime!=='claude-code'&&plannerRuntime!=='codex'&&plannerRuntime!=='penguin')throw new LedgerError(400,`web_planner_runtime_unsupported:${plannerRuntime}`);
   if(!plannerRuntimeAvailable(plannerRuntime))throw new LedgerError(400,`planner_runtime_unavailable:${plannerRuntime}`);
   const runId = prepared?.runId ?? `run-${randomUUID()}`;

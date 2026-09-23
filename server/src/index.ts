@@ -1,3 +1,4 @@
+import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
@@ -750,6 +751,8 @@ app.patch("/api/projects/:id", (req, res) => {
  * 却是唯一没有列表、没有版本、没有复用的那一个——同一个项目的两次运行可以用着不同的包
  * 而没人拦得住。这四条路由把它变成项目的东西：列出来、看得见、传新版、删没用过的。
  */
+app.get("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await hostStatus(req.params.id));}catch(e){res.status(400).json({error:(e as Error).message});}});
+app.post("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await selectHost(req.params.id,req.body?.runtime));}catch(e){res.status(400).json({error:(e as Error).message});}});
 app.use("/api/projects/:projectId/knowledge-library", knowledgeLibraryRouter());
 app.get("/api/projects/:id/rule-packs", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
@@ -3362,6 +3365,7 @@ app.post("/api/capabilities", (req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
     const body = (req.body ?? {}) as {
+      useHost?: boolean;
       messages?: Array<{ role: "user" | "assistant"; text: string }>;
       intent?: ChatIntent;
       graphId?: string;
@@ -3376,6 +3380,7 @@ app.post("/api/chat", async (req, res) => {
     if (!body.messages?.length) return res.status(400).json({ error: "messages is required" });
     res.json(
       await chat({
+        useHost: body.useHost,
         messages: body.messages,
         intent: body.intent ?? "ask",
         graphId: body.graphId,

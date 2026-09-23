@@ -1,3 +1,4 @@
+import {PlannerHost} from "@/components/PlannerHost";
 import { ExplorationSettings } from '@/components/ExplorationSettings';
 import { useRef, useState, type FormEvent } from 'react';
 import { useT } from '@/lib/prefs';
@@ -27,27 +28,21 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
      */
     [workUnits,setWorkUnits]=useState(true),
     /** 规划由谁跑：留空用服务端默认（`TP_AGENT_RUNTIME`，不设时是 Claude Code）。 */
-    [planner,setPlanner]=useState<''|'claude-code'|'codex'|'penguin'>('');
+    [hostReady,setHostReady]=useState(false);
   const [knowledgeReady,setKnowledgeReady]=useState(false),[rulesReady,setRulesReady]=useState(false);
   const intent=useRef<{hash:string;key:string}>();
   const exampleDefault=(()=>{try{return new URL(project?.targetUrl??'').hostname==='app.hyperliquid-testnet.xyz';}catch{return false;}})();
-  async function start(e:FormEvent) {e.preventDefault();if(!knowledgeReady||!rulesReady||busy)return;setBusy(true);setError('');
-    const payload={pageVersion:pageVersion.trim()||undefined,sourceKind,outputLanguage,maxScreens,explorationScope,...(planner?{planner}:{}),sourceUrl:sourceKind==='explore'?sourceUrl:undefined,
+  async function start(e:FormEvent) {e.preventDefault();if(!hostReady||!knowledgeReady||!rulesReady||busy)return;setBusy(true);setError('');
+    const payload={pageVersion:pageVersion.trim()||undefined,sourceKind,outputLanguage,maxScreens,explorationScope,planner:'connected',sourceUrl:sourceKind==='explore'?sourceUrl:undefined,
       ...(sourceKind==='explore'?{exploreWallet,exploreActions:exploreInteract?'interact':'observe'}:{}),materials:[...materials,...(text.trim()?[{name:'requirements.md',text}]:[])],knowledgeSelection,rulePackSelection,workUnits,limit};const hash=JSON.stringify(payload);if(intent.current?.hash!==hash)intent.current={hash,key:workflowRequestId()};try{const run=await workflowRequest<{wfRunId:string}>(workflowBase(projectId),{...payload,idempotencyKey:intent.current.key});onCreated(run.wfRunId);}catch(e){setError(e instanceof Error?e.message:'request_failed');}finally{setBusy(false);}}
   return <form onSubmit={e=>void start(e)} className="mx-auto w-full max-w-2xl space-y-5 p-6" aria-label={t('workflow.new')}><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{t('workflow.new')}</h2><Button type="button" onClick={onClose}>{t('bench.close')}</Button></div>
     <p className="text-sm leading-relaxed text-muted-foreground">{t("bench.newHint")}</p>
+    <PlannerHost projectId={projectId} onReady={setHostReady}/>
     <div className="grid grid-cols-3 gap-2">{(['spec','explore','code'] as const).map(k=><button key={k} type="button" disabled={k==='code'||busy} aria-pressed={sourceKind===k} className={`rounded-md border p-3 text-sm disabled:opacity-40 ${sourceKind===k?'border-primary bg-primary/10 text-primary':'border-border'}`} onClick={()=>k!=='code'&&setSourceKind(k)}>{t(`bench.source.${k}`)}</button>)}</div>
     {sourceKind==='explore'?<><label key="source-url" className="block space-y-2 text-sm"><span>{t('bench.target')}</span><input type="url" required className={field} value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} /></label><label key="page-version" className="block space-y-2 text-sm"><span>{t('reuse.pageVersion')}</span><input className={field} maxLength={160} value={pageVersion} onChange={e=>setPageVersion(e.target.value)}/><p className="text-xs text-muted-foreground">{t('reuse.versionHelp')}</p></label></>:<><label key="requirements" className="block space-y-2 text-sm"><span>{t('workflow.requirements')}</span><textarea rows={6} className={field} required={!materials.length} value={text} onChange={e=>setText(e.target.value)}/></label><label key="material-upload" className="block space-y-2 text-sm"><span>{t('bench.upload')}</span><input type="file" multiple accept=".md,.txt" onChange={e=>{const files=[...e.target.files??[]];if(files.length>20){setError(t('bench.tooManyFiles'));return;}void Promise.all(files.map(async f=>{if(!/\.(md|txt)$/i.test(f.name))throw new Error(t('bench.textOnly'));if(f.size>2_000_000)throw new Error(t('bench.fileTooLarge'));return {name:f.name,text:await f.text()};})).then(setMaterials).catch(e=>setError(String(e.message)));}}/></label><ul className="text-xs text-muted-foreground">{materials.map((f,i)=><li key={i}>{f.name} · {f.text.length} chars</li>)}</ul></>}
     <KnowledgeSelect key={`${projectId}:knowledge`} projectId={projectId} kind="domainKnowledge" value={knowledgeSelection} onChange={setKnowledgeSelection} onReady={setKnowledgeReady} exampleDefault={exampleDefault}/>
     <KnowledgeSelect key={`${projectId}:rules`} projectId={projectId} kind="rulePack" value={rulePackSelection} onChange={setRulePackSelection} onReady={setRulesReady} exampleDefault={exampleDefault}/>
     <div className="flex flex-wrap gap-4"><label className="flex items-center gap-3 text-sm">{t('bench.outputLanguage')}<select className={field} value={outputLanguage} onChange={e=>setOutputLanguage(e.target.value)}><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>{sourceKind==='explore'&&<ExplorationSettings maxScreens={maxScreens} scope={explorationScope} onChange={(n,s)=>{setMaxScreens(n);setExplorationScope(s);}}/>}</div>
-    <label className="block space-y-2 text-sm"><span>{t('bench.planner')}</span>
-      <select className={field} value={planner} onChange={e=>setPlanner(e.target.value as ''|'claude-code'|'codex'|'penguin')}>
-        <option value="">{t('bench.plannerDefault')}</option>
-        <option value="claude-code">{t('bench.plannerClaude')}</option>
-        <option value="codex">Codex</option>
-        <option value="penguin">{t('bench.plannerPenguin')}</option>
-      </select><span className="block text-xs text-muted-foreground">{t('bench.plannerHint')}</span></label>
     <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={workUnits} onChange={e=>setWorkUnits(e.target.checked)}/>
       <span><span className="font-medium">{t('bench.workUnits')}</span><span className="mt-1 block text-xs text-muted-foreground">{t('bench.workUnitsHint')}</span></span></label>
     {sourceKind==='explore'&&<fieldset className="space-y-3 rounded-md border border-border p-4 text-sm">
@@ -59,6 +54,6 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
       {exploreInteract&&<p className="text-xs text-warn">{t('bench.exploreInteractWarn')}</p>}
     </fieldset>}
     <label className="flex items-center gap-3 text-sm">{t('workflow.limit')}<input className={`${field} max-w-24`} type="number" min={1} max={50} value={limit} onChange={e=>setLimit(Number(e.target.value))}/></label>
-    {error&&<p role="alert" className="text-sm text-bad">{error}</p>}<div className="flex justify-end"><Button type="submit" variant="primary" disabled={busy||!knowledgeReady||!rulesReady}>{t(busy?'workflow.starting':'workflow.start')}</Button></div>
+    {error&&<p role="alert" className="text-sm text-bad">{error}</p>}<div className="flex justify-end"><Button type="submit" variant="primary" disabled={busy||!hostReady||!knowledgeReady||!rulesReady}>{t(busy?'workflow.starting':'workflow.start')}</Button></div>
   </form>;
 }

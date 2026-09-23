@@ -58,6 +58,8 @@ const project: DomainSpec = {
     },
     update: { summary: "改项目（名字、目标地址）", method: "PATCH", path: "/api/projects/:id", params: ["id"], mutates: true, body: json },
     remove: { summary: "删项目。不可撤销，动手前先跟人确认", method: "DELETE", path: "/api/projects/:id", params: ["id"], mutates: true },
+    planner_host: {summary:"检查本机 Codex / Claude Code 登录与项目选择；不代表连接当前聊天会话",method:"GET",path:"/api/projects/:id/planner-host",params:["id"]},
+    select_planner_host: {summary:"选择 Web 独立任务使用的已登录宿主（runtime: codex 或 claude-code）",method:"POST",path:"/api/projects/:id/planner-host",params:["id"],mutates:true,body:json},
     knowledge_library: {summary:"列出项目领域知识或规则包及只读内置示例",method:"GET",path:"/api/projects/:projectId/knowledge-library/:kind",params:["projectId","kind"]},
     knowledge_library_entry: {summary:"读取知识库版本，kind 为 domainKnowledge 或 rulePack",method:"GET",path:"/api/projects/:projectId/knowledge-library/:kind/:id",params:["projectId","kind","id"]},
     save_knowledge_library: {summary:"保存项目知识的新版本，body={title?,value}，返回 id 供新建运行的 knowledgeSelection/rulePackSelection 选择；不覆盖内置示例",method:"POST",path:"/api/projects/:projectId/knowledge-library/:kind",params:["projectId","kind"],mutates:true,body:json},

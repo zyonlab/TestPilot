@@ -1,3 +1,4 @@
+import {PlannerHost} from "./PlannerHost";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessagesSquare } from "lucide-react";
 import { Drawer } from "@/components/overlay";
@@ -59,6 +60,7 @@ export function FieldChatDrawer({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hostReady,setHostReady]=useState(false);
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [sourcesState, setSourcesState] = useState<"loading" | "ready" | "error">("loading");
   const [runId, setRunId] = useState(fixedRunId ?? "");
@@ -95,7 +97,7 @@ export function FieldChatDrawer({
   const send = useCallback(
     async (text: string) => {
       const said = text.trim();
-      if (!said || busy) return;
+      if (!said || busy || !hostReady) return;
       const next = [...turns, { role: "you" as const, text: said }];
       setTurns(next);
       setInput("");
@@ -107,6 +109,7 @@ export function FieldChatDrawer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             intent: "field",
+            useHost: true,
             field,
             projectId,
             // 材料由网关自己去账本里读。页面不替模型准备证据——它准备得了的只有它正在显示的那点。
@@ -129,7 +132,7 @@ export function FieldChatDrawer({
         setBusy(false);
       }
     },
-    [busy, draft, field, projectId, runId, turns, initialValue],
+    [busy, draft, field, projectId, runId, turns, initialValue,hostReady],
   );
 
   /**
@@ -174,6 +177,7 @@ export function FieldChatDrawer({
         {t(applyLabel ? "library.chatHint" : "field.rule")}
       </p>
 
+      <div className="px-3 py-2"><PlannerHost projectId={projectId} onReady={setHostReady}/></div>
       {!fixedRunId && sourcesState === "ready" && runs.length > 0 && (
         <label className="flex flex-col gap-1 border-b border-border px-4 py-2 text-[0.75rem]">
           <span className="text-muted-foreground">{t("field.evidence")}</span>
@@ -281,7 +285,7 @@ export function FieldChatDrawer({
             }}
           />
           <div className="flex flex-col gap-1">
-            <Button variant="primary" disabled={busy || !input.trim()} onClick={() => void send(input)}>
+            <Button variant="primary" disabled={busy || !hostReady || !input.trim()} onClick={() => void send(input)}>
               {t("wf.chatSend")}
             </Button>
             <Button disabled={busy || !draft?.valid} onClick={() => void apply()}>

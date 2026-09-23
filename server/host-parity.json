@@ -598,6 +598,18 @@
   {
    "source": "index.ts",
    "method": "GET",
+   "path": "/api/projects/:id/planner-host",
+   "host": "tp_project.planner_host"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/planner-host",
+   "host": "tp_project.select_planner_host"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
    "path": "/api/projects/:id/quarantine-log",
    "host": "tp_report.quarantine_log"
   },
@@ -1269,8 +1281,8 @@
   }
  ],
  "baseline": {
-  "covered": 194,
-  "reachable": 198,
-  "rate": 0.9798
+  "covered": 196,
+  "reachable": 200,
+  "rate": 0.98
  }
 }
