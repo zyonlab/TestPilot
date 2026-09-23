@@ -1,0 +1,254 @@
+{
+  "schemaVersion": "product-rule-pack.v1",
+  "id": "hyperliquid-testnet-example",
+  "version": "2026-09-24.1",
+  "domain": "perpetual-trading",
+  "product": "Hyperliquid Testnet 内置示例",
+  "network": "testnet",
+  "accountMode": "wallet",
+  "appliesTo": {
+    "urlPatterns": [
+      "^https://app\\.hyperliquid-testnet\\.xyz/trade(?:/[^?#]*)?(?:[?#].*)?$"
+    ],
+    "note": "示例仅限测试网；匹配标签与业务规则均待现场核对。"
+  },
+  "sources": [
+    {
+      "id": "example",
+      "kind": "domain-reference",
+      "locator": "examples/hyperliquid-testnet/domain-knowledge.md",
+      "note": "示例设计假设，不是实测证据"
+    }
+  ],
+  "modules": [
+    {
+      "id": "account",
+      "name": "账户与资产",
+      "parentId": null
+    },
+    {
+      "id": "market",
+      "name": "币对与行情",
+      "parentId": null
+    },
+    {
+      "id": "orders",
+      "name": "订单与撤单",
+      "parentId": null
+    },
+    {
+      "id": "positions",
+      "name": "持仓、盈亏与平仓",
+      "parentId": null
+    },
+    {
+      "id": "margin",
+      "name": "杠杆、保证金与风险",
+      "parentId": null
+    }
+  ],
+  "features": [
+    {
+      "id": "account.inspect",
+      "moduleId": "account",
+      "name": "账户与资产",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "market.inspect",
+      "moduleId": "market",
+      "name": "币对与行情",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "orders.inspect",
+      "moduleId": "orders",
+      "name": "订单与撤单",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "positions.inspect",
+      "moduleId": "positions",
+      "name": "持仓、盈亏与平仓",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "margin.inspect",
+      "moduleId": "margin",
+      "name": "杠杆、保证金与风险",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "R-account",
+      "featureIds": [
+        "account.inspect"
+      ],
+      "claimType": "hypothesis",
+      "statement": "账户与资产的状态与可见判据需要核对",
+      "sourceRefs": [
+        "example"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "当前页面支持哪些账户与资产状态？缺少哪些前提？"
+      }
+    },
+    {
+      "id": "R-market",
+      "featureIds": [
+        "market.inspect"
+      ],
+      "claimType": "hypothesis",
+      "statement": "币对与行情的状态与可见判据需要核对",
+      "sourceRefs": [
+        "example"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "当前页面支持哪些币对与行情状态？缺少哪些前提？"
+      }
+    },
+    {
+      "id": "R-orders",
+      "featureIds": [
+        "orders.inspect"
+      ],
+      "claimType": "hypothesis",
+      "statement": "订单与撤单的状态与可见判据需要核对",
+      "sourceRefs": [
+        "example"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "当前页面支持哪些订单与撤单状态？缺少哪些前提？"
+      }
+    },
+    {
+      "id": "R-positions",
+      "featureIds": [
+        "positions.inspect"
+      ],
+      "claimType": "hypothesis",
+      "statement": "持仓、盈亏与平仓的状态与可见判据需要核对",
+      "sourceRefs": [
+        "example"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "当前页面支持哪些持仓、盈亏与平仓状态？缺少哪些前提？"
+      }
+    },
+    {
+      "id": "R-margin",
+      "featureIds": [
+        "margin.inspect"
+      ],
+      "claimType": "hypothesis",
+      "statement": "杠杆、保证金与风险的状态与可见判据需要核对",
+      "sourceRefs": [
+        "example"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "当前页面支持哪些杠杆、保证金与风险状态？缺少哪些前提？"
+      }
+    }
+  ],
+  "targets": [
+    {
+      "id": "T-account",
+      "featureId": "account.inspect",
+      "ruleRefs": [
+        "R-account"
+      ],
+      "match": {
+        "label": [
+          "^(Balances|Manual|Unified)$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-market",
+      "featureId": "market.inspect",
+      "ruleRefs": [
+        "R-market"
+      ],
+      "match": {
+        "label": [
+          "^(Market|Limit)$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-orders",
+      "featureId": "orders.inspect",
+      "ruleRefs": [
+        "R-orders"
+      ],
+      "match": {
+        "label": [
+          "^Open Orders$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-positions",
+      "featureId": "positions.inspect",
+      "ruleRefs": [
+        "R-positions"
+      ],
+      "match": {
+        "label": [
+          "^Positions$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    },
+    {
+      "id": "T-margin",
+      "featureId": "margin.inspect",
+      "ruleRefs": [
+        "R-margin"
+      ],
+      "match": {
+        "label": [
+          "^(Cross|Isolated|Leverage)$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "observe-only",
+      "sideEffect": "none"
+    }
+  ],
+  "roles": [],
+  "lifecycle": [],
+  "externalCapabilities": []
+}

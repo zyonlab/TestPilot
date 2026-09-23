@@ -58,6 +58,9 @@ const project: DomainSpec = {
     },
     update: { summary: "改项目（名字、目标地址）", method: "PATCH", path: "/api/projects/:id", params: ["id"], mutates: true, body: json },
     remove: { summary: "删项目。不可撤销，动手前先跟人确认", method: "DELETE", path: "/api/projects/:id", params: ["id"], mutates: true },
+    knowledge_library: {summary:"列出项目领域知识或规则包及只读内置示例",method:"GET",path:"/api/projects/:projectId/knowledge-library/:kind",params:["projectId","kind"]},
+    knowledge_library_entry: {summary:"读取知识库版本，kind 为 domainKnowledge 或 rulePack",method:"GET",path:"/api/projects/:projectId/knowledge-library/:kind/:id",params:["projectId","kind","id"]},
+    save_knowledge_library: {summary:"保存项目知识的新版本，body={title?,value}，返回 id 供新建运行的 knowledgeSelection/rulePackSelection 选择；不覆盖内置示例",method:"POST",path:"/api/projects/:projectId/knowledge-library/:kind",params:["projectId","kind"],mutates:true,body:json},
     rule_packs: { summary: "列出项目绑定的规则包", method: "GET", path: "/api/projects/:id/rule-packs", params: ["id"] },
     rule_pack: { summary: "读一份规则包的全文", method: "GET", path: "/api/projects/:id/rule-packs/:hash", params: ["id", "hash"] },
     add_rule_pack: {

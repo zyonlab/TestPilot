@@ -1,3 +1,4 @@
+import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
 import { ExplorationAttemptSchema, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
@@ -749,6 +750,7 @@ app.patch("/api/projects/:id", (req, res) => {
  * 却是唯一没有列表、没有版本、没有复用的那一个——同一个项目的两次运行可以用着不同的包
  * 而没人拦得住。这四条路由把它变成项目的东西：列出来、看得见、传新版、删没用过的。
  */
+app.use("/api/projects/:projectId/knowledge-library", knowledgeLibraryRouter());
 app.get("/api/projects/:id/rule-packs", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   res.json({ packs: listRulePacks(req.params.id) });

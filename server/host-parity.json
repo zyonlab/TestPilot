@@ -704,6 +704,24 @@
    "host": "tp_eval.compare_artifacts"
   },
   {
+   "source": "knowledgeLibrary.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/knowledge-library/:kind/:id",
+   "host": "tp_project.knowledge_library_entry"
+  },
+  {
+   "source": "knowledgeLibrary.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/knowledge-library/:kind",
+   "host": "tp_project.knowledge_library"
+  },
+  {
+   "source": "knowledgeLibrary.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/knowledge-library/:kind",
+   "host": "tp_project.save_knowledge_library"
+  },
+  {
    "source": "modelProfilesRoutes.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/model-profiles/:role/probe",
@@ -1251,8 +1269,8 @@
   }
  ],
  "baseline": {
-  "covered": 191,
-  "reachable": 195,
-  "rate": 0.9795
+  "covered": 194,
+  "reachable": 198,
+  "rate": 0.9798
  }
 }

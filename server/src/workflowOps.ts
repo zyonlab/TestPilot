@@ -1,3 +1,4 @@
+import {readKnowledgeLibrary} from "./knowledgeLibrary.js";
 import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
 import { evaluateExplorationResult } from "./explorationResults.js";
 import { ExplorationAttemptSchema, explorationExecId, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
@@ -32,7 +33,7 @@ import { buildProductModel, charterFromRulePack, describeProductModel, validateR
 
 export async function createWebWorkflow(projectId: string, raw: unknown, prepared?: {runId:string;node:string}) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
-  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
+  const input = z.object({knowledgeSelection:z.string().nullable().optional(),rulePackSelection:z.string().nullable().optional(),idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
   /**
    * 禁止名单上的地址什么都不跑（`config.guard.denyHosts`，运营方配置）。环境与运行参数都放不开它。
    * 探索不带钱包、不点会改状态的东西也不行：观察本身会带着登录态与会话去访问那个地址。
@@ -53,7 +54,9 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 以前不给就是没有：同一个项目连着跑两次，一次贴了包一次忘了，产出的东西完全不是
    * 一回事，而界面上看不出差别。规则包属于项目，运行只是引用它。
    */
-  if(!prepared&&!input.rulePacks.length){const current=currentRulePack(projectId);if(current)input.rulePacks=[current];}
+  if(input.knowledgeSelection){const entry=readKnowledgeLibrary(projectId,'domainKnowledge',input.knowledgeSelection);input.knowledge.push({name:'domain-knowledge.md',text:entry.value,roles:['source','stories','cases','gate']});}
+  if(input.rulePackSelection)input.rulePacks=[readKnowledgeLibrary(projectId,'rulePack',input.rulePackSelection).value];
+  if(!prepared&&input.rulePackSelection===undefined&&!input.rulePacks.length){const current=currentRulePack(projectId);if(current)input.rulePacks=[current];}
   const packs=input.rulePacks.map(raw=>{const v=validateRulePack(raw);if(!v.ok)throw new LedgerError(400,`invalid_rule_pack:${v.errors.slice(0,3).map(e=>`${e.code}@${e.jsonPointer}`).join(';')}`);return v;});
   if(new Set(packs.map(p=>p.pack.id)).size!==packs.length)throw new LedgerError(400,'duplicate_rule_pack_id');
   /**
@@ -99,7 +102,7 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 漏了它们，重跑出来的就是另一种探索——而没有人会知道这一次和上一次的差别在哪。
    * 它们同时也是这次运行**被授权做过什么**的凭证：谁允许探索去点会改状态的东西，记在这里。
    */
-  const params={pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
+  const params={knowledgeSelection:input.knowledgeSelection,rulePackSelection:input.rulePackSelection,pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
   registerWebRun(runId,projectId,models.binding,params);
   for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
   // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。

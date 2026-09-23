@@ -32,6 +32,7 @@ export function routeInventory() {
   for (const m of app.matchAll(new RegExp(`app\\.(${VERB})\\(\\s*['"\`](\\/api\\/[^'"\`]+)['"\`]`, "g")))
     out.push({ source: "index.ts", method: m[1].toUpperCase(), path: m[2] });
   const mounted = [
+    ["server/src/knowledgeLibrary.ts", "/api/projects/:projectId/knowledge-library"],
     ["server/src/artifactComparisons.ts", "/api/projects/:projectId/artifact-comparisons"],
     ["server/src/runRoutes.ts", "/api/projects/:projectId/workflow-runs"],
     ["server/src/modelProfilesRoutes.ts", "/api/projects/:projectId/model-profiles"],

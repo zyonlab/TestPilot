@@ -40,8 +40,12 @@ export function FieldChatDrawer({
   runId: fixedRunId,
   onApply,
   onClose,
+  initialValue,
+  applyLabel,
 }: {
   field: "rulePack" | "domainKnowledge" | "domainReference";
+  initialValue?: unknown;
+  applyLabel?: string;
   /** 抽屉标题里那个字段名。给了就用给的——页面比这里更清楚它把这个字段叫什么。 */
   title?: string;
   projectId: string;
@@ -108,7 +112,7 @@ export function FieldChatDrawer({
             // 材料由网关自己去账本里读。页面不替模型准备证据——它准备得了的只有它正在显示的那点。
             ...(runId ? { context: { kind: "run", wfRunId: runId } } : {}),
             // 上一版原样带回去：这一轮是改它。不带的话，实测是改一个枚举值顺手丢掉三个功能。
-            ...(draft ? { previous: draft.value } : {}),
+            ...(draft || initialValue !== undefined ? { previous: draft ? draft.value : initialValue } : {}),
             messages: next
               .filter((m) => m.role !== "sys")
               .map((m) => ({ role: m.role === "you" ? "user" : "assistant", text: m.text })),
@@ -125,7 +129,7 @@ export function FieldChatDrawer({
         setBusy(false);
       }
     },
-    [busy, draft, field, projectId, runId, turns],
+    [busy, draft, field, projectId, runId, turns, initialValue],
   );
 
   /**
@@ -167,7 +171,7 @@ export function FieldChatDrawer({
       }
     >
       <p className="border-b border-border px-4 py-2 text-[0.75rem] leading-relaxed text-muted-foreground">
-        {t("field.rule")}
+        {t(applyLabel ? "library.chatHint" : "field.rule")}
       </p>
 
       {!fixedRunId && sourcesState === "ready" && runs.length > 0 && (
@@ -281,7 +285,7 @@ export function FieldChatDrawer({
               {t("wf.chatSend")}
             </Button>
             <Button disabled={busy || !draft?.valid} onClick={() => void apply()}>
-              {t("field.apply")}
+              {applyLabel ?? t("field.apply")}
             </Button>
           </div>
         </div>

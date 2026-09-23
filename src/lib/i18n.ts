@@ -10,6 +10,12 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "library.builtin": {zh:"Hyperliquid Testnet 内置示例",en:"Hyperliquid Testnet built-in example",ja:"Hyperliquid Testnet 組み込み例"},
+  "library.none": {zh:"本次不使用",en:"Do not use for this run",ja:"この実行では使用しない"},
+  "library.hint": {zh:"选择固定版本。聊着填或宿主保存的新版本会出现在这里；内置示例只读，修改后另存。",en:"Choose a fixed version. Versions saved by chat or the host appear here. Built-in examples are read-only; edits are saved separately.",ja:"固定バージョンを選択します。会話やホストで保存した版も表示されます。組み込み例は読み取り専用で、変更は別保存します。"},
+  "library.preview": {zh:"查看所选内容",en:"Preview selection",ja:"選択内容を表示"},
+  "library.save": {zh:"保存到项目并选用",en:"Save to project and select",ja:"プロジェクトに保存して選択"},
+  "library.chatHint": {zh:"根据所选内容聊出新草稿。确认后点击「保存到项目并选用」，同一项目的后续运行和宿主都能读取；不会覆盖内置示例或启动运行。",en:"Discuss the selected content to draft a new version. Save to project and select makes it available to future runs and the host. It does not overwrite examples or start a run.",ja:"選択内容をもとに新しい下書きを作成します。保存すると次回の実行やホストからも使えます。組み込み例の上書きや実行開始は行いません。"},
   "field.sourcesEmpty": {zh:"还没有可引用的运行材料。可以直接描述需求，或参考下方示例起草；之后有了探索材料再补充核对。",en:"No run materials are available yet. Describe your requirements or start from the example below, then check the draft against exploration materials when available.",ja:"参照できる実行資料はまだありません。要件を説明するか下の例から下書きを作成し、探索資料ができたら照合できます。"},
   "field.sourcesLoading": {zh:"正在查找可引用的运行材料…",en:"Loading available run materials…",ja:"参照できる実行資料を読み込み中…"},
   "field.sourcesError": {zh:"运行材料暂时加载失败，可继续通过对话起草。重新打开此窗口可重试。",en:"Run materials could not be loaded. You can still draft by chat. Reopen this panel to retry.",ja:"実行資料を読み込めませんでした。会話で下書きを続けられます。再試行するには開き直してください。"},
@@ -4345,8 +4351,8 @@ export const dict: Record<string, Entry> = {
   "field.fixPrompt": { zh: "校验没通过，逐条修：\n{errors}", en: "Validation rejected the draft. Fix each of these:\n{errors}", ja: "検証に失敗しました。次を直してください:\n{errors}" },
   "field.apply": { zh: "填进这个字段", en: "Put it in the field", ja: "フィールドに入れる" },
   "field.hint.rulePack": {
-    zh: "先说说这个产品是做什么的、哪些事在它这个领域里算「不该发生」。它会照着你选的那次运行的探索材料起草，产出的规则一律标成「观察到的」——要写成「产品必须如此」得有产品自己的规格，那一步得你来判。",
-    en: "Start by saying what this product is and what counts as must-not-happen in its domain. It drafts from the exploration material of the run you picked, and every rule comes out as “observed” — calling something normative needs the product's own spec, and that judgement is yours.",
+    zh: "先说明产品和测试范围。已有观察可写成观察规则；示例与未证实内容保留为假设和待确认问题。要写成产品必须满足的要求，需要可追溯的产品规格。",
+    en: "Describe the product and test scope. Actual observations support observed rules; examples and unverified content remain hypotheses and open questions. Normative requirements need traceable product specifications.",
     ja: "この製品が何であり、その領域で「起きてはならない」ことは何かから話してください。",
   },
   "field.hint.domainKnowledge": {
