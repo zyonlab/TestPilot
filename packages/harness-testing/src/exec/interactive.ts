@@ -1,3 +1,5 @@
+import { randomUUID, createHash } from "node:crypto";
+import { assessExploration, ExplorationAttemptSchema, explorationExecId, type ExplorationAttempt, type ExplorationAssessment } from "../domain/explorationEvidence.js";
 import {authenticationState,shouldRunLogin} from "./authentication.js";
 import {verifyInjectedSession,type InjectedSessionCheck} from "../domain/injectedSessionEvidence.js";
 import type { SessionCheck } from "../domain/sessionEvidence.js";
@@ -413,6 +415,7 @@ function shooter(spec: { execId: string; artifactDir: string }) {
 }
 
 export interface ObserveSpec {
+  sourceAttempt?: ExplorationAttempt;
   /** Gateway scope for scenario planning; never contains planner credentials. */
   projectId?: string;
   execId: string;
@@ -512,6 +515,8 @@ export interface ObserveSpec {
 }
 
 export interface ObserveResult {
+  sourceAttempt?: ExplorationAttempt;
+  assessment?: ExplorationAssessment;
   /** 观察到的界面材料，逐屏。原样，不经任何解释。 */
   notes: string;
   url: string;
@@ -549,6 +554,13 @@ export async function runObserve(
   emit: Emit,
   token: CancelToken = { cancelled: false },
 ): Promise<ObserveResult> {
+  const sourceAttempt = spec.sourceAttempt ?? {
+    attemptId:randomUUID(),runId:spec.execId,projectId:spec.projectId ?? 'adhoc',entryUrl:spec.url,
+    startedAt:new Date().toISOString(),scopeHash:createHash('sha256').update(JSON.stringify({charter:spec.charter??null,scope:spec.explorationScope??null})).digest('hex'),
+  };
+  ExplorationAttemptSchema.parse(sourceAttempt);
+  if(sourceAttempt.entryUrl!==spec.url || (spec.projectId && sourceAttempt.projectId!==spec.projectId))throw new Error('exploration_attempt_mismatch');
+  spec={...spec,sourceAttempt};
   const shot = shooter(spec as unknown as ExploreSpec);
   const log: string[] = [];
   const note = (message: string, kind: "info" | "warn" = "info") => {
@@ -1302,12 +1314,13 @@ export async function runObserve(
      * 这不是断点续跑：探索不会从第 18 屏接着走（那要动状态机，是另一件事）。
      * 它只保证**已经花掉的钱不白花**，以及下游拿到的材料上写着它只到第几屏。
      */
-    const partialPath = partialObservationPath(spec.artifactDir, spec.execId);
+    const partialPath = partialObservationPath(spec.artifactDir, spec.sourceAttempt ? explorationExecId(spec.sourceAttempt) : spec.execId);
     const snapshotPartial = (): void => {
       try {
         mkdirSync(dirname(partialPath), { recursive: true });
         const body = JSON.stringify({
           partial: true,
+          sourceAttempt: spec.sourceAttempt,
           at: new Date().toISOString(),
           url: spec.url,
           screens: screens.length,
@@ -2658,6 +2671,8 @@ export async function runObserve(
       // 图的摘要跟着材料一起走：下游整理规格时**先看结构再看正文**——
       // 实证研究的结论是「精简的功能级上下文」对 LLM 最有效，原始屏幕转储不是。
       notes,
+      sourceAttempt: spec.sourceAttempt,
+      assessment: report?.assessment ?? assessExploration({entryUrl:spec.url, graph, stop:stopped}),
       url: spec.url,
       log,
       shotRef,

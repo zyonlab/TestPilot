@@ -1,3 +1,5 @@
+import { evaluateExplorationResult } from "./explorationResults.js";
+import { ExplorationAttemptSchema, explorationExecId, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
 import { cancelPreparation } from './preparation.js';
 import { cancelSourceSession } from "./sourceSessions.js";
 import { getProject, resolveEnvironment } from "./db.js";
@@ -128,23 +130,17 @@ export function sourceKnowledge(runId:string,projectId:string,entryUrl:string,ma
     truncation:{omittedOptionalRefs:packs.slice(1).map(p=>p.revision),missingRequiredRefs:[]},isolationEvidence:'service-scoped'});
   return {charter,pack,packRevision:first?.revision,manifest};
 }
-/**
- * 捡起探索器落下的半成品（`exec/interactive.ts` 的 `snapshotPartial`）。
- *
- * 路径按约定拼：观察的 execId 是 `observe-<projectId>`（见 index.ts 的 setAgentObserver），
- * 一个项目同时只探索一份，所以这个名字够用。读不到、读坏了都当作没有——
- * 捡不回来是可以接受的，捡回来一份半个 JSON 不行。
- */
-export function readPartialObservation(projectId:string):{notes:string;url:string;screens:number;graph:unknown;stoppedBecause:unknown}|undefined{
-  try{
-    // 落点由探索器那一侧的函数算，两处共用——见 `partialObservationPath` 的注释。
-    const path=partialObservationPath(ARTIFACT_DIR,`observe-${projectId}`);
-    const raw=JSON.parse(readFileSync(path,'utf8')) as {notes?:string;url?:string;screens?:number;graph?:unknown};
-    if(!raw?.notes?.trim())return undefined;
-    // 半成品里没有状态图（`graph` 要循环跑完才建得出来）。给 undefined 而不是编一个空图：
-    // 下游读到「没有图」是真的没有，读到一个空图会以为这个产品只有一屏。
-    return {notes:raw.notes,url:raw.url??'',screens:raw.screens??0,graph:undefined,
-      stoppedBecause:`探索中途失败，这份材料只到第 ${raw.screens ?? 0} 屏`};
+/** Only this dispatched attempt may contribute partial material. Historical files stay untouched. */
+export function readPartialObservation(expected:ExplorationAttempt) {
+  try {
+    ExplorationAttemptSchema.parse(expected);
+    const path=partialObservationPath(ARTIFACT_DIR,explorationExecId(expected));
+    const raw=JSON.parse(readFileSync(path,'utf8'));
+    if(!sameExplorationAttempt(raw.sourceAttempt,expected) || raw.partial!==true || raw.url!==expected.entryUrl ||
+      typeof raw.notes!=='string' || !raw.notes.trim() || !Number.isInteger(raw.screens) || raw.screens<1 ||
+      !Number.isFinite(Date.parse(raw.at)) || Date.parse(raw.at)<Date.parse(expected.startedAt)) return undefined;
+    return {notes:raw.notes,url:raw.url,screens:raw.screens,graph:undefined,sourceAttempt:expected,
+      stopped:{kind:'failed'},stoppedBecause:`探索中途失败，这份材料只到第 ${raw.screens} 屏`};
   }catch{return undefined;}
 }
 
@@ -171,28 +167,35 @@ async function launchSource(runId:string,projectId:string,directory:string,param
        * 这**不是**断点续跑：不会从第 18 屏接着探。它保证的是已经花掉的钱不白白作废，
        * 而且这件事要在材料里写明白——下游读到的是一份 18 屏的材料，不是 20 屏的。
        */
-      let result:{notes:string;url:string;screens:unknown;stoppedBecause:unknown;graph:unknown;report?:unknown;partial?:boolean};
+      const sourceAttempt:ExplorationAttempt={attemptId:randomUUID(),runId,projectId,entryUrl:params.sourceUrl!,startedAt:new Date().toISOString(),
+        scopeHash:contentHash(canonicalJSON({charter:bound.charter ?? null,envRef:envRef??params.envRef??null,maxScreens:params.maxScreens??8,explorationScope:params.explorationScope??'rules',interact}))};
+      putSourceRevision({runId,projectId,name:'exploration/attempt',kind:'report',content:sourceAttempt,sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+      let result:{notes:string;url:string;screens:unknown;stoppedBecause:unknown;stopped?:{kind:string;n?:number};graph:unknown;report?:unknown;partial?:boolean;sourceAttempt?:unknown;assessment?:unknown};
       let partialReason:string|undefined;
       try {
-        result=await observeProduct({workflowRunId:runId,url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,explorationScope:params.maxScreens===0?"current-url":params.explorationScope,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as typeof result;
+        result=await observeProduct({sourceAttempt,workflowRunId:runId,url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,explorationScope:params.maxScreens===0?"current-url":params.explorationScope,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as typeof result;
       } catch(error) {
-        const salvaged=readPartialObservation(projectId);
+        const salvaged=readPartialObservation(sourceAttempt);
         if(!salvaged?.notes?.trim())throw error;
         partialReason=String((error as Error).message??error).slice(0,300);
         result={...salvaged,partial:true};
         putSourceRevision({runId,projectId,name:'report/exploration-partial',kind:'report',
-          content:{screens:salvaged.screens,reason:partialReason,at:new Date().toISOString()},sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+          content:{screens:salvaged.screens,reason:partialReason,sourceAttempt,at:new Date().toISOString()},sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
       }
       if(ledger.getRun(runId,projectId).status==='cancelled')return;
+      if(!sameExplorationAttempt(result.sourceAttempt,sourceAttempt) || result.url!==sourceAttempt.entryUrl)throw new Error('exploration_attempt_mismatch');
+      result=evaluateExplorationResult(result,bound.charter);
       if(!result.notes?.trim())throw new Error('exploration_returned_no_observations');
       const observation=putSourceRevision({runId,projectId,name:'exploration/observations',kind:'report',content:result,sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
       let productText='';
-      if(bound.charter){
-        // charter 给了，回执就必须回来；回不来是探索器的错，不能静默降级成旧材料。
+      const reportRevision=result.report?putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:result.report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'}):undefined;
+      if(bound.charter && reportRevision && ExplorationReportSchema.safeParse(result.report).success){
+        // 无结构化回执的半成品只保存 unknown 摘要，不推导产品模型。
         const report=ExplorationReportSchema.parse(result.report);
         if(report.rulePack.hash!==bound.charter.rulePack.hash)throw new Error('exploration_report_rule_pack_mismatch');
-        const reportRevision=putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'});
-        const model=buildProductModel({pack:bound.pack!,report});
+        // Keep the raw observations in the report; only graph-backed interactions feed the candidate model.
+        const completedIds=new Set(report.assessment?.targets.flatMap(t=>t.completedObservationIds)??[]);
+        const model=buildProductModel({pack:bound.pack!,report:{...report,observations:report.observations.filter(o=>o.status!=='attempted'||completedIds.has(o.id))}});
         putSourceRevision({runId,projectId,name:'product/model-candidate',kind:'report',content:model,sourceRefs:[reportRevision.id,bound.packRevision!]},{kind:'system',id:'stage-validator'});
         productText=`\n\n${describeProductModel(model)}\n`;
       }
@@ -203,6 +206,7 @@ Context manifest: ${bound.manifest.manifestId}${bound.charter?` · rule pack ${b
 
 ${result.notes}${productText}
 
+Exploration completion: ${String((result.assessment as {status?:string})?.status??"unknown")}. Denominator is declared targets only, never the unknown whole product. Interaction receipts do not establish business assertion passes.
 Only observed behavior is evidence. Unobserved, authenticated, or transaction behavior must be explicitly marked as unknown.`,{mode:0o600});
       stageEvent(runId,projectId,'source','done',undefined,observation.id);
     } else stageEvent(runId,projectId,'source','done');

@@ -16,7 +16,7 @@ describe('shared artifact reading', () => {
   });
   it('keeps partial exploration and missing evidence distinct from success', () => {
     const html=renderToStaticMarkup(<ExplorationDocument data={{completion:'partial',coverage:{targetsAttempted:4,targetsFailed:0},unknowns:['Account unavailable'],stopReason:{kind:'screenCap',n:8}}}/>);
-    for(const text of ['partial','Account unavailable','screenCap','artifact.coverageHint'])expect(html).toContain(text);
+    for(const text of ['partial','Account unavailable','screenCap','exploration.evidence.legacy'])expect(html).toContain(text);
   });
   it('renders semantic headings, numbered steps and safe links', () => {
     const html=renderToStaticMarkup(<Markdown text={'## Lifecycle\n3. Open\n4. Close\n\n[Docs](https://example.com/docs)\n[unsafe](javascript:alert)\n<script>alert(1)</script>'}/>);

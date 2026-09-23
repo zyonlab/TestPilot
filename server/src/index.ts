@@ -1,3 +1,4 @@
+import { ExplorationAttemptSchema, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
 import { LedgerError } from './runLedger.js';
 import { recoverPreparations } from './preparation.js';
 import { trackSourceSession } from "./sourceSessions.js";
@@ -1591,13 +1592,14 @@ setUnfinishedRuns(() => unfinishedRunIds());
 setAgentObserver(async (input) => {
   const {
     url, deep, settleMs, maxScreens, dryRounds, stateAbstraction, projectId, envRef,
-    scenarioFirst, inPageFirst, groupCap, charter, wallet, explorationScope, workflowRunId,
+    scenarioFirst, inPageFirst, groupCap, charter, wallet, explorationScope, workflowRunId, sourceAttempt,
   } = (input ?? {}) as {
     url?: string;
     deep?: boolean;
     settleMs?: number;
     maxScreens?: number;
     workflowRunId?: string;
+    sourceAttempt?: ExplorationAttempt;
     explorationScope?: "current-url" | "rules";
     dryRounds?: number;
     stateAbstraction?: string;
@@ -1624,6 +1626,10 @@ setAgentObserver(async (input) => {
   const target = url || env?.baseUrl || project?.targetUrl;
   if (!target) throw new Error("source.explore has no address to open: give it a url, or bind the run to a project");
 
+  if (sourceAttempt) {
+    ExplorationAttemptSchema.parse(sourceAttempt);
+    if (sourceAttempt.runId !== workflowRunId || sourceAttempt.projectId !== projectId || sourceAttempt.entryUrl !== target) throw new Error('exploration_attempt_mismatch');
+  }
   const live = interactiveSession(`observe-${projectId ?? "adhoc"}`, projectId);
   // 走 observe 而不是 explore：explore 的契约是"返回解析出来的 flows"，把散文喂进它
   // 只会被 `asArray()` 压成 []。观察要的是屏幕上原样的东西，采集是确定性的。
@@ -1631,6 +1637,7 @@ setAgentObserver(async (input) => {
   const result = await live.observe(
     {
       url: target,
+      sourceAttempt,
       deep,
       settleMs,
       maxScreens, explorationScope,
@@ -1680,6 +1687,7 @@ setAgentObserver(async (input) => {
    * 现在按屏分配预算在 `budgeted()` 里做（每屏截断并标明截了多少），这一刀只作为
    * 最后的护栏，且放宽到 240000——它再生效就说明 `budgeted` 的预算算错了。
    */
+  if (sourceAttempt && !sameExplorationAttempt(result.sourceAttempt, sourceAttempt)) throw new Error('exploration_attempt_mismatch');
   if (result.notes.length > 240000)
     console.warn(`[explore] 材料 ${result.notes.length} 字，超过护栏 240000——按屏分配的预算算错了`);
   /*
@@ -1691,6 +1699,8 @@ setAgentObserver(async (input) => {
    * 一次被截断的材料，从此说得出自己是被截断的。
    */
   return {
+    sourceAttempt: result.sourceAttempt,
+    assessment: result.assessment,
     notes: trimMiddle(result.notes, Math.floor(240000 / 4)),
     url: result.url,
     screens: result.screens,

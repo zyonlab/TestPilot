@@ -283,7 +283,7 @@ export class CharterTracker {
         if (this.attempted.has(stableId)) continue;
         if (activationBlocker(c, spec, this.charter.actionsPolicy, this.available, this.stateChangeSpecs, route)) continue;
         // 已经处于目标态的选项（当前选中的 tab）不用再切：切它什么也不会发生，白花一轮。
-        if (/(selected|checked|pressed)=true|cls:(on|active|selected)/.test(c.state)) { this.attempted.add(stableId); this.observations.push({ id: `obs-${++this.n}`, targetId: stableId, targetSpecId: spec.id, featureId: spec.featureId, status: "skipped_equivalent", stateBefore: "", reason: "already_active", round: 0, controlsAfter: [], evidenceRefs: [] }); continue; }
+        if (/(selected|checked|pressed)=true|cls:(on|active|selected)/.test(c.state)) { this.attempted.add(stableId); this.observations.push({ id: `obs-${++this.n}`, targetId: stableId, targetSpecId: spec.id, featureId: spec.featureId, status: "skipped_equivalent", stateBefore: this.targets.find(t => t.stableId === stableId)?.stateId ?? "unknown", reason: "already_active", round: 0, controlsAfter: [], evidenceRefs: [] }); continue; }
         const target = this.targets.find((t) => t.stableId === stableId) ?? { stableId, targetSpecId: spec.id, featureId: spec.featureId, stateId: "", route, role: c.role, label: c.label, display: c.display, selector: c.selector, availability: "enabled" as const, foundAtRound: 0 };
         return { target, spec, control: c };
       }
@@ -327,8 +327,6 @@ export class CharterTracker {
   pendingActivations(route: string, elements: ControlLike[]): boolean { return !!this.next(route, elements); }
 
   report(graph: StateFlowGraph, stop: { kind: string; n?: number }, budget: { maxScreens: number; screens: number; rounds: number; maxRounds: number }, unknowns: string[] = []): ExplorationReport {
-    // `skipped_equivalent` 的 stateBefore 在 next() 里还不知道，补成入口状态。
-    for (const o of this.observations) if (!o.stateBefore) o.stateBefore = graph.entry || "entry";
     return buildExplorationReport({ charter: this.charter, graph, targets: this.targets, observations: this.observations, stop, budget, unknowns });
   }
 }

@@ -43,10 +43,30 @@ export function RulePackDocument({data}:{data:DocumentData}) {
 }
 
 export function ExplorationDocument({data}:{data:DocumentData}) {
-  const t=useT(),coverage=object(data.coverage);
-  return <article className="space-y-6"><h3 className="text-xl font-semibold">{t('artifact.explorationReport')}</h3><DocumentFields data={{entryUrl:data.entryUrl,completion:data.completion,stopReason:data.stopReason}}/>
-    <section><h3 className="mb-3 font-semibold">{t('artifact.coverage')}</h3><dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">{Object.entries(coverage).map(([key,value])=><div key={key}><dt className="text-xs text-muted-foreground">{t(`artifact.field.${key}`)===`artifact.field.${key}`?key:t(`artifact.field.${key}`)}</dt><dd className="mt-1 text-base font-medium">{String(value)}</dd></div>)}</dl><p className="mt-3 text-sm text-muted-foreground">{t('artifact.coverageHint')}</p></section>
-    <section><h3 className="mb-3 font-semibold">{t('artifact.unknowns')}</h3><DocumentFields data={data.unknowns??[]}/></section>
-    <DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>!['entryUrl','completion','stopReason','coverage','unknowns'].includes(k)))}/>
+  const t=useT(),a=object(data.assessment),scope=object(a.scope),counts=object(a.counts),progress=object(a.progress);
+  const targets=rows(a.targets),stop=object(a.stop??data.stopReason??data.stopped);
+  const text=(code:unknown)=>{const key=`exploration.evidence.${String(code)}`,value=t(key);return value===key?String(code??t('exploration.evidence.unknown')):value;};
+  const list=(v:unknown)=>Array.isArray(v)?v.map(String):[];
+  const collected=a.version===1;
+  return <article className="space-y-6">
+    <header><h3 className="text-xl font-semibold">{t('artifact.explorationReport')}</h3><p className="mt-2 font-medium">{text(collected?a.status:'unknown')}</p><p className="mt-2 text-sm text-muted-foreground">{t('exploration.evidence.boundary')}</p></header>
+    {!collected&&<p role="status">{t('exploration.evidence.legacy')}</p>}
+    <section className="space-y-2 text-sm"><h4 className="font-semibold">{t('exploration.scope')}</h4><p className="break-all">{String(scope.entryUrl??data.entryUrl??data.url??'—')}</p>
+      <p>{[...list(scope.routes),...list(scope.urlPatterns)].join(' · ')}</p>
+      <p>{t('exploration.evidence.denominator')}: {collected&&scope.denominator!=null?String(scope.denominator):t('exploration.evidence.unknown')}</p>
+      <p>{t('exploration.evidence.stop')}: {text(stop.kind??'unknown')}{stop.n!=null?` (${stop.n})`:''}</p>
+      <ul className="list-disc pl-5">{list(a.reasons).map(reason=><li key={reason}>{text(reason)}</li>)}</ul>
+    </section>
+    {collected&&<><dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">{['seen','attempted','interactionCompleted','observationCompleted','assertionsPassed'].map(key=><div key={key}><dt className="text-xs text-muted-foreground">{text(key)}</dt><dd>{counts[key]==null?t('exploration.evidence.not_collected'):String(counts[key])}</dd></div>)}</dl>
+      <section className="space-y-2"><h4 className="font-semibold">{t('exploration.evidence.progress')}</h4><p className="text-sm text-muted-foreground">{t('exploration.evidence.progressHint')}</p>{a.progress==null?<p>{t('exploration.evidence.not_collected')}</p>:<dl className="grid grid-cols-2 gap-4">{['abstractStates','uniqueWalkedTransitions','repeatedActions','invalidTransitions','abstraction'].map(key=><div key={key}><dt className="text-xs text-muted-foreground">{text(key)}</dt><dd>{String(progress[key]??'—')}</dd></div>)}</dl>}</section>
+      <section className="space-y-3"><h4 className="font-semibold">{t('exploration.evidence.targets')}</h4>{targets.map((target,i)=><details key={i} className="rounded border border-border p-3"><summary className="cursor-pointer text-sm"><span className="font-mono">{String(target.targetSpecId)}</span> · {text(target.reason)}</summary><div className="mt-3 space-y-3 text-sm"><p>{t('exploration.evidence.assertionsPassed')}: {text(target.assertion)}</p>
+        <p>{t('artifact.references')}: {[...list(target.observationIds),...list(target.evidenceRefs)].join(' · ')||t('exploration.evidence.not_collected')}</p>
+        {list(target.invalidRefs).length>0&&<p>{t('exploration.evidence.invalid_evidence')}: {list(target.invalidRefs).join(' · ')}</p>}
+        <DocumentFields data={rows(data.observations).filter(o=>list(target.observationIds).includes(String(o.id)))}/>
+      </div></details>)}</section>
+      {list(a.unvisited).length>0&&<section><h4 className="font-semibold">{t('exploration.evidence.unvisited')}</h4><ul className="list-disc pl-5 text-sm">{list(a.unvisited).map(url=><li key={url} className="break-all">{url}</li>)}</ul></section>}
+    </>}
+    <section><h4 className="mb-3 font-semibold">{t('artifact.unknowns')}</h4><DocumentFields data={data.unknowns??[]}/></section>
+    <details><summary className="cursor-pointer text-sm">{t('exploration.evidence.raw')}</summary><DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>k!=='assessment'))}/></details>
   </article>;
 }
