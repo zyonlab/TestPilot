@@ -1,3 +1,6 @@
+import {inspectLocator, type LocatorEvidence} from './locatorEvidence.js';
+import { randomUUID, createHash } from "node:crypto";
+import { assessExploration, ExplorationAttemptSchema, explorationExecId, type ExplorationAttempt, type ExplorationAssessment } from "../domain/explorationEvidence.js";
 import {authenticationState,shouldRunLogin} from "./authentication.js";
 import {verifyInjectedSession,type InjectedSessionCheck} from "../domain/injectedSessionEvidence.js";
 import type { SessionCheck } from "../domain/sessionEvidence.js";
@@ -413,6 +416,7 @@ function shooter(spec: { execId: string; artifactDir: string }) {
 }
 
 export interface ObserveSpec {
+  sourceAttempt?: ExplorationAttempt;
   /** Gateway scope for scenario planning; never contains planner credentials. */
   projectId?: string;
   execId: string;
@@ -512,6 +516,8 @@ export interface ObserveSpec {
 }
 
 export interface ObserveResult {
+  sourceAttempt?: ExplorationAttempt;
+  assessment?: ExplorationAssessment;
   /** 观察到的界面材料，逐屏。原样，不经任何解释。 */
   notes: string;
   url: string;
@@ -549,6 +555,13 @@ export async function runObserve(
   emit: Emit,
   token: CancelToken = { cancelled: false },
 ): Promise<ObserveResult> {
+  const sourceAttempt = spec.sourceAttempt ?? {
+    attemptId:randomUUID(),runId:spec.execId,projectId:spec.projectId ?? 'adhoc',entryUrl:spec.url,
+    startedAt:new Date().toISOString(),scopeHash:createHash('sha256').update(JSON.stringify({charter:spec.charter??null,scope:spec.explorationScope??null})).digest('hex'),
+  };
+  ExplorationAttemptSchema.parse(sourceAttempt);
+  if(sourceAttempt.entryUrl!==spec.url || (spec.projectId && sourceAttempt.projectId!==spec.projectId))throw new Error('exploration_attempt_mismatch');
+  spec={...spec,sourceAttempt};
   const shot = shooter(spec as unknown as ExploreSpec);
   const log: string[] = [];
   const note = (message: string, kind: "info" | "warn" = "info") => {
@@ -1302,12 +1315,13 @@ export async function runObserve(
      * 这不是断点续跑：探索不会从第 18 屏接着走（那要动状态机，是另一件事）。
      * 它只保证**已经花掉的钱不白花**，以及下游拿到的材料上写着它只到第几屏。
      */
-    const partialPath = partialObservationPath(spec.artifactDir, spec.execId);
+    const partialPath = partialObservationPath(spec.artifactDir, spec.sourceAttempt ? explorationExecId(spec.sourceAttempt) : spec.execId);
     const snapshotPartial = (): void => {
       try {
         mkdirSync(dirname(partialPath), { recursive: true });
         const body = JSON.stringify({
           partial: true,
+          sourceAttempt: spec.sourceAttempt,
           at: new Date().toISOString(),
           url: spec.url,
           screens: screens.length,
@@ -2024,6 +2038,7 @@ export async function runObserve(
        * 「验证入口页 Funding 数值」「验证入口页 Countdown 数值」就是这么来的。
        */
       const before = current;
+      let locatorEvidence:LocatorEvidence|undefined;
       if (next.kind === "goto") triedGoto.add(next.href);
       else triedClick.add(next.key);
       // 页内切换按「路由::组::文案」记，同一项不再切第二次。选择器会随重渲染变，文案不会。
@@ -2206,6 +2221,8 @@ export async function runObserve(
            * 所以：路径上的控件文案对不上，就按文案（以及 charter 声明的容器）重新找。
            * 找不到唯一的一个就不点——宁可这一轮空过，也不要一次点错被记成点对。
            */
+          const inspected=await inspectLocator(page,next.selector).catch(()=>undefined);
+          if(inspected?.ok && inspected.evidence.label===next.label)locatorEvidence=inspected.evidence;
           const clicked = (await page.evaluate(((({ sel, label, within }: { sel: string; label: string; within?: string[] }) => {
             /**
              * 这段在浏览器里跑，**不能出现具名函数**：tsx 会给 `const f = () => {}` 套一层
@@ -2267,6 +2284,7 @@ export async function runObserve(
             pick[0]!.click();
             return "relocated";
           }) as unknown) as (arg: never) => unknown, { sel: next.selector, label: next.label, within: next.within })) as string;
+          if (clicked !== "selector") locatorEvidence=undefined;
           if (clicked !== "selector") note(`第 ${rounds} 轮：${next.label} 的路径已经过时（${clicked}）`);
           if (clicked.startsWith("ambiguous")) {
             // 没点成要如实记：留空的话回执上是 `found_not_activated`，读起来像「预算没到」。
@@ -2408,6 +2426,7 @@ export async function runObserve(
             targetSpecId: next.charter.specId,
             featureId: next.charter.featureId,
             status: "attempted",
+            locatorEvidence,
             stateBefore: cameFrom,
             stateAfter: toId,
             action: { kind: "click", target: next.label, selector: next.selector },
@@ -2658,6 +2677,8 @@ export async function runObserve(
       // 图的摘要跟着材料一起走：下游整理规格时**先看结构再看正文**——
       // 实证研究的结论是「精简的功能级上下文」对 LLM 最有效，原始屏幕转储不是。
       notes,
+      sourceAttempt: spec.sourceAttempt,
+      assessment: report?.assessment ?? assessExploration({entryUrl:spec.url, graph, stop:stopped}),
       url: spec.url,
       log,
       shotRef,

@@ -33,7 +33,7 @@ const entryControls: ControlLike[] = [
   ctl("button[button]: Cancel All", "Cancel All"),
 ];
 const graphOf = (edges: StateFlowGraph["transitions"], states: string[] = ["/"]): StateFlowGraph =>
-  StateFlowGraphSchema.parse({ abstraction: "route+controls+state/norm", collector: "aria-roles/v2", entry: states[0], states: states.map((id) => ({ id, route: id.split("~")[0], title: "Perp Demo", controls: [] })), transitions: edges, stoppedBecause: "", unvisited: [] });
+  StateFlowGraphSchema.parse({ abstraction: "route+controls+state/norm", collector: "aria-roles/v2", entry: states[0], states: states.map((id) => ({ id, route: id.split("~")[0], title: "Perp Demo", controls: entryControls.map(c => c.display) })), transitions: edges, stoppedBecause: "", unvisited: [] });
 
 describe("覆盖计数由代码算", () => {
   it("50 条边、7 条走过：walked 分子是 7，43 条 observed-only 不计入", () => {

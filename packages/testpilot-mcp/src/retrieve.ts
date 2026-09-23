@@ -11,7 +11,7 @@
 import {
   loadOrBuildIndex,
   retrieve,
-  MAX_FENCED_CHARS,
+  compactDiagnostics,
   SPEC_FENCE,
   type RetrieveResult,
 } from "@testpilot/harness-testing/retrieve";
@@ -22,9 +22,11 @@ export interface RetrieveSpecOptions {
   budgetTokens: number;
   chunkIds?: string[];
   rebuild?: boolean;
+  diagnosticOffset?: number;
 }
 
-export interface RetrieveSpecResult extends RetrieveResult {
+export interface RetrieveSpecResult extends Omit<RetrieveResult, "diagnostics"> {
+  diagnostics: ReturnType<typeof compactDiagnostics>;
   indexed: number;
   materialsHash: string;
   /** 提示词里那句话，随结果一起回去：没有按请求上下文块的路径（MCP 就是），notice 只能跟着结果走。 */
@@ -40,16 +42,10 @@ export interface RetrieveSpecResult extends RetrieveResult {
  */
 export function retrieveSpec(opts: RetrieveSpecOptions): RetrieveSpecResult {
   const index = loadOrBuildIndex(opts.materialsDir, { rebuild: opts.rebuild });
-  if (!index.chunks.length)
-    throw new Error(`no specification text under ${opts.materialsDir} — nothing to index`);
   const out = retrieve(index, opts.query, opts.budgetTokens, { chunkIds: opts.chunkIds });
   return {
     ...out,
-    chunks: out.chunks.map((c) => ({
-      ...c,
-      heading: c.heading.map((h) => SPEC_FENCE.sanitizeText(h, 200)),
-      text: SPEC_FENCE.sanitizeText(c.text, MAX_FENCED_CHARS),
-    })),
+    diagnostics: compactDiagnostics(out.diagnostics, opts.diagnosticOffset),
     indexed: index.chunks.length,
     materialsHash: index.materialsHash,
     notice: SPEC_FENCE.notice,

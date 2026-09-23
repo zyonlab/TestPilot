@@ -83,6 +83,7 @@ export interface ReviewItem {
   priority?: string;
   /** 把产品放回去的动作。写操作的用例没有它，就会毒化它自己以后的每一次运行。 */
   postSteps?: string[];
+  lifecycle?: TextCase["lifecycle"];
   /**
    * 指回哪一条需求。
    *
@@ -314,6 +315,7 @@ interface GatedBundleShape {
     tier: number;
     priority?: string;
     postSteps?: string[];
+  lifecycle?: TextCase["lifecycle"];
     /** 这条用例走了哪些转移。重写时要带上，否则它挂在产品模型上的那根线会断。 */
     covers?: string[];
       sourceRefs?: string[];
@@ -417,6 +419,7 @@ export async function reviewBatch(wfRunId: string): Promise<ReviewBatch> {
       covers: c.covers,
       priority: c.priority,
       postSteps: c.postSteps,
+      lifecycle: c.lifecycle,
       // 用例本身没有 requirementId——它继承自所属的故事，那是这条追溯线唯一的来源。
       requirementId: storyReq.get(c.storyId),
       findings: gateFindings.filter((f) => f.caseId === c.id).map(({ rule, severity, message, args, field }) => ({ rule, severity, message, args, field })),
@@ -801,6 +804,7 @@ export async function regenerate(
           covers: product?.covers ?? [],
           // 清理步骤同理：重写不该顺手把「跑完要把产品放回去」这件事丢掉。
           postSteps: product?.postSteps ?? [],
+          lifecycle: product?.lifecycle,
           // 出处同理：重写不该让一条有出处的用例变成无出处的。
           sourceRefs: product?.sourceRefs ?? [],
           // 功能 / 规则引用同理（2026-09-11 单元循环）：重写不该把这条用例和产品模型、

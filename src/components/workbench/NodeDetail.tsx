@@ -1,3 +1,4 @@
+import {RetrievalHistory} from './RetrievalHistory';
 import {nodeStatusKey} from './nodeStatus';
 import { nodeKnowledge } from './nodeKnowledge';
 import { Drawer } from '@/components/overlay';
@@ -28,7 +29,7 @@ export function NodeDetail({run,node,projectId,onRunDetails,refresh}:{run:Workfl
    }})
    .catch(()=>{if(!c.signal.aborted)setContext({files:[],knowledge:[],used:[],sources:{},recorded:false,error:t('workflow.artifactFailed')});});return()=>c.abort();
  },[projectId,run.id,contextKey,t]);
- const refs=run.revisions.filter(r=>r.name===`validated/${node}`||(!run.revisions.some(v=>v.name===`validated/${node}`)&&r.name.startsWith(`units/${node}/`))||node==='source'&&(r.kind==='material'||r.name==='exploration/observations')||node==='g2'&&(r.kind==='code'||r.name.startsWith('preparation/'))||node==='execution'&&r.kind==='execution');
+ const refs=run.revisions.filter(r=>r.name===`validated/${node}`||(!run.revisions.some(v=>v.name===`validated/${node}`)&&r.name.startsWith(`units/${node}/`))||node==='source'&&(r.kind==='material'||r.name==='exploration/observations')||node==='g2'&&(r.kind==='code'||r.name.startsWith('preparation/')||r.name.startsWith('compilation-observation/'))||node==='execution'&&r.kind==='execution');
  const usesExecutor=node==='execution'||node==='source'&&run.detail?.parameters?.sourceKind==='explore';
  const model=usesExecutor?run.binding?.models.executor.model:['modules','stories','cases','instructions','g2'].includes(node)?run.binding?.models.planner.model??run.binding?.models.runtime:'—';
  const [documentPath,setDocumentPath]=useState<string|null>(null);
@@ -96,6 +97,7 @@ export function NodeDetail({run,node,projectId,onRunDetails,refresh}:{run:Workfl
    {proposed&&<Button className="mt-3" variant="primary" disabled={freezing==='busy'} onClick={()=>void freeze()}>{t(freezing==='busy'?'bench.moduleReviewSubmitting':'bench.freezeModules')}</Button>}
    {freezing&&freezing!=='busy'&&<p role="alert" className="mt-2 text-bad">{freezing}</p>}
   </section>}
+  <RetrievalHistory key={`${run.id}-retrievals`} projectId={projectId} revisions={run.revisions}/>
   <div className="flex gap-2">{['cases','gate','review'].includes(node)&&<Button onClick={()=>navigateProject('review',{projectId,runId:run.id,revisionId:''})}>{t('surface.review')}</Button>}<Button onClick={onRunDetails}>{t('bench.runDetails')}</Button></div>
   {['g2','execution'].includes(node)&&<ExecutionControls projectId={projectId} run={run} refresh={refresh} showArtifactLink={false}/>}
  </section>;

@@ -1,8 +1,9 @@
+import { lifecycleIssues } from '../exec/lifecycle.js';
 import type { TextCase } from './types.js';
 
 /** Design approval is not execution admission. Never infer readiness from a passing design gate. */
 export function executionBlockers(c: TextCase): string[] {
-  const issues: string[] = [];
+  const issues: string[] = c.lifecycle ? lifecycleIssues(c) : [];
   if (c.readiness?.execution !== 'ready') issues.push(c.readiness?.reason || `readiness:${c.readiness?.execution ?? 'not-assessed'}`);
   if (c.readiness?.execution === 'ready' && /(?:缺少?|尚未验证|尚未核实|未具备|待确认|missing\s|unverified|not yet verified)/i.test(c.readiness.reason ?? '')) issues.push('ready_conflicts_with_missing_prerequisite');
   for (const r of c.readiness?.requirements ?? []) if (r.status !== 'verified' || !r.evidenceRefs.length) issues.push(`unverified_requirement:${r.kind}:${r.id}`);

@@ -491,9 +491,12 @@ export const DriveSutInput = {
 
 export const RetrieveSpecInput = {
   materialsDir: z.string().describe("Directory holding the specification documents. The index is built into materials/.index/."),
-  query: z.string().describe("What the caller is about to work on — a user story, an acceptance criterion, a route."),
-  budgetTokens: z.number().int().min(200).max(200_000).describe("Token budget for the returned specification text."),
-  chunkIds: z.array(z.string()).optional().describe("Fetch these chunks by id instead of searching, for following up on a hint."),
+  query: z.string().max(4000).describe("What the caller is about to work on — a user story, an acceptance criterion, a route."),
+  budgetTokens: z.number().int().min(200).max(200_000).describe("Estimate budget for sanitized chunk headings and text only; not billed model tokens. Metadata is bounded separately."),
+  chunkIds: z.array(z.string().max(512)).max(256).optional().describe("Required chunks by id instead of searching. Duplicates and unknown IDs are reported."),
+  node: z.string().max(80).optional().describe("Caller-declared node, not proof of current visibility."),
+  unitId: z.string().max(160).optional().describe("Caller-declared work unit, not proof of current visibility."),
+  diagnosticOffset: z.number().int().min(0).optional().describe("Standalone diagnostic page offset; registered runs expose the full immutable audit revision."),
   rebuild: z.boolean().optional().describe("Rebuild the index even if the cached one matches the materials hash."),
 };
 

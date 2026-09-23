@@ -1,3 +1,4 @@
+import { executionObserver } from '@testpilot/harness-core/execution-observation';
 import { validatePreparedBundle } from './preparation.js';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import {caseEntryUrl} from './caseEntry.js';
@@ -92,6 +93,17 @@ export async function deliverDecisionOutbox(deliver: (event: Record<string, any>
   return { delivered, pending: rows.length - delivered };
 }
 export function generateApprovedCode(runId: string, projectId: string, raw: unknown = {}) {
+  const observer = executionObserver(); observer.begin('compilation', true);
+  let revision: string | undefined;
+  try { const result = compileApprovedCode(runId, projectId, raw); revision = result.revision.id; if(result.blocked.length) observer.issue('failed'); return result; }
+  catch (error) { observer.issue('failed'); throw error; }
+  finally {
+    observer.end();
+    // Timing is a separate receipt; immutable executable content must remain deterministic.
+    if (ledger().getRun(runId, projectId)) ledger().putRevision({runId,projectId,name:`compilation-observation/${randomUUID()}`,kind:'report',content:{observation:observer.data},sourceRefs:revision?[revision]:[]},{kind:'system',id:'g2-compiler'});
+  }
+}
+function compileApprovedCode(runId: string, projectId: string, raw: unknown = {}) {
   const input = z.object({ revisionIds: z.array(z.string()).min(1).optional() }).parse(raw);
   return ledger().db.transaction(() => {
     const approved = reviewRevisions(runId, projectId).filter(c => c.approval?.decision === "approved");
@@ -149,7 +161,7 @@ export function approvedExecutionBundle(runId: string, projectId: string, revisi
   if (artifact.revision.runId !== runId || artifact.revision.kind !== "code") throw new LedgerError(409, "execution_revision_conflict");
   const content = artifact.content as CodeBundle & { approvedRevisions: string[]; approvalsHash: string };
   if ((content as any).compilation === 'host-prepared-v1') return validatePreparedBundle(runId,projectId,content);
-  const fresh = generateApprovedCode(runId, projectId, { revisionIds: content.approvedRevisions });
+  const fresh = compileApprovedCode(runId, projectId, { revisionIds: content.approvedRevisions });
   /**
    * 重编一次再比对：**要执行的必须是现在这个编译器产出的代码**。
    * 不一致有两种可能——批准变了，或者编译器/入口地址变了；名字里带了编译器身份之后

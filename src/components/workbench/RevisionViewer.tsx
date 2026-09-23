@@ -1,3 +1,7 @@
+import {RetrievalAudit} from './RetrievalAudit';
+import {EvidenceReuse} from './EvidenceReuse';
+import {LifecycleDetail} from './LifecycleDetail';
+import {ExecutionObservation} from './ExecutionObservation';
 import { artifactLabel } from './artifactLabel';
 import { DocumentFields, RulePackDocument, ExplorationDocument } from './ArtifactDocument';
 import { ExplorationGraph, type ExplorationGraphData } from './ExplorationGraph';
@@ -60,11 +64,14 @@ export function RevisionContent({content,kind,projectId,runId}:{content:unknown;
   if(typeof content==='string')return <Markdown text={content}/>;
   if(!content||typeof content!=='object')return <DocumentFields data={content}/>;
   const data=content as Record<string,unknown>;
+  if(data.schemaVersion==='retrieval-audit.v1')return <RetrievalAudit value={data}/>;
   if(data.schemaVersion==='product-rule-pack.v1')return <RulePackDocument data={{rulePack:data}}/>;
   if(data.rulePack&&typeof data.rulePack==='object'&&Array.isArray((data.rulePack as Record<string,unknown>).rules))return <RulePackDocument data={data}/>;
-  if(data.schemaVersion==='exploration-report.v1')return <ExplorationDocument data={data}/>;
+  if(data.schemaVersion==='exploration-report.v1'||data.schemaVersion==='exploration-summary.v1')return <ExplorationDocument data={data}/>;
   if(data.schemaVersion==='product-model.v1')return <DocumentFields data={data}/>;
-  if(data.graph && typeof data.graph==='object' && Array.isArray((data.graph as ExplorationGraphData).states) && Array.isArray((data.graph as ExplorationGraphData).transitions)) return <div className="space-y-5"><ExplorationGraph graph={data.graph as ExplorationGraphData}/>{data.report&&typeof data.report==='object'?<ExplorationDocument data={data.report as Record<string,unknown>}/>:null}{typeof data.notes==='string'&&<details><summary className="cursor-pointer font-medium">{t('artifact.notes')}</summary><Markdown text={data.notes}/></details>}</div>;
+  if(data.graph && typeof data.graph==='object' && Array.isArray((data.graph as ExplorationGraphData).states) && Array.isArray((data.graph as ExplorationGraphData).transitions)) return <div className="space-y-5"><ExplorationGraph graph={data.graph as ExplorationGraphData}/>{data.report&&typeof data.report==='object'?<ExplorationDocument data={data.report as Record<string,unknown>}/>:<ExplorationDocument data={data}/>}{typeof data.notes==='string'&&<details><summary className="cursor-pointer font-medium">{t('artifact.notes')}</summary><Markdown text={data.notes}/></details>}</div>;
+  if(typeof data.notes==='string'&&(data.partial===true||data.assessment))return <ExplorationDocument data={data}/>;
+  if(data.case && typeof data.case==='object' && Array.isArray((data.case as Record<string,unknown>).steps))return <div className="space-y-4"><TextCaseDetail kase={data.case as Record<string,unknown>}/><DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>k!=='case'))}/></div>;
   if(kind==='gate')return <GateReport data={data}/>;
   if(kind==='cases'&&typeof data.id==='string'&&Array.isArray(data.steps))return <RevisionContent kind="cases" content={{cases:[data]}}/>;
   if(kind==='execution')return <ExecutionReport data={data} projectId={projectId} runId={runId}/>;
@@ -74,6 +81,8 @@ export function RevisionContent({content,kind,projectId,runId}:{content:unknown;
   if(Array.isArray(data.stories)) return <ProductStructure data={data} projectId={projectId} runId={runId}/>;
   if(typeof data.text==='string'||typeof data.specText==='string'||typeof data.notes==='string')return <div className="space-y-6"><Markdown text={String(data.text??data.specText??data.notes)}/><details><summary className="cursor-pointer text-sm">{t('artifact.additional')}</summary><DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>!['text','specText','notes'].includes(k)))}/></details></div>;
   if(typeof data.code==='string')return <pre className="overflow-auto whitespace-pre-wrap text-xs">{data.code}</pre>;
+  if(data.exploration&&typeof data.exploration==='object')return <div className="space-y-4"><EvidenceReuse context={data.exploration}/><DocumentFields data={data}/></div>;
+  if('observation' in data || Array.isArray(data.prerequisiteChecks) || Array.isArray(data.modelRequests) || Array.isArray(data.logs)&&typeof data.status==='string')return <div className="space-y-4"><EvidenceReuse value={data.evidenceReuse}/><LifecycleDetail value={data.lifecycle} receipt/><ExecutionObservation value={data.observation}/>{data.serviceObservation!=null&&<ExecutionObservation value={data.serviceObservation}/>}<DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>!['observation','serviceObservation'].includes(k)))}/></div>;
   return <DocumentFields data={content}/>;
 }
 export function RevisionViewer({projectId,revision,all,onSelect,hideTitle=false}:{hideTitle?:boolean;projectId:string;revision:Revision;all:Revision[];onSelect:(revision:Revision)=>void}) {

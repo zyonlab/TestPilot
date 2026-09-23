@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "purpose": "synthetic-retrieval-regression",
+  "docs": [
+    {
+      "docId": "portal.md",
+      "text": "# Login\nUsers enter a password at `/signin`.\n# Session\nThe session expires at `/signin`.\n# Export\nInvoices export as CSV."
+    },
+    {
+      "docId": "zh.md",
+      "text": "# 登录\n输入密码后登录。\n# 导出\n账单可以导出。"
+    },
+    {
+      "docId": "ja.md",
+      "text": "# ログイン\nパスワードでログインします。\n# 保存\n設定を保存します。"
+    },
+    {
+      "docId": "large.md",
+      "text": "# Huge\noversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence oversized evidence "
+    }
+  ],
+  "queries": [
+    {
+      "id": "english",
+      "query": "password",
+      "budgetTokens": 500,
+      "required": [
+        "portal.md#1"
+      ],
+      "relevant": [
+        "portal.md#1",
+        "portal.md#2"
+      ],
+      "note": "Password and linked session rule."
+    },
+    {
+      "id": "chinese",
+      "query": "登录",
+      "budgetTokens": 500,
+      "required": [
+        "zh.md#1"
+      ],
+      "relevant": [
+        "zh.md#1"
+      ],
+      "note": "Chinese literal match."
+    },
+    {
+      "id": "japanese",
+      "query": "ログイン",
+      "budgetTokens": 500,
+      "required": [
+        "ja.md#1"
+      ],
+      "relevant": [
+        "ja.md#1"
+      ],
+      "note": "Japanese literal match."
+    },
+    {
+      "id": "cross-language",
+      "query": "パスワード",
+      "budgetTokens": 500,
+      "required": [
+        "portal.md#1"
+      ],
+      "relevant": [
+        "portal.md#1",
+        "ja.md#1"
+      ],
+      "note": "English evidence is required but lexical translation is not implemented."
+    },
+    {
+      "id": "requested",
+      "query": "",
+      "budgetTokens": 500,
+      "chunkIds": [
+        "portal.md#1",
+        "portal.md#1",
+        "missing"
+      ],
+      "required": [
+        "portal.md#1"
+      ],
+      "relevant": [
+        "portal.md#1"
+      ],
+      "note": "Duplicate and unknown requested IDs."
+    },
+    {
+      "id": "oversized-first",
+      "query": "",
+      "budgetTokens": 20,
+      "chunkIds": [
+        "large.md#1",
+        "zh.md#1"
+      ],
+      "required": [
+        "large.md#1"
+      ],
+      "relevant": [
+        "large.md#1"
+      ],
+      "note": "Large first requested chunk cannot exceed the budget."
+    },
+    {
+      "id": "ranked-budget",
+      "query": "password",
+      "budgetTokens": 15,
+      "required": [
+        "portal.md#1",
+        "portal.md#2"
+      ],
+      "relevant": [
+        "portal.md#1",
+        "portal.md#2"
+      ],
+      "note": "Some or all positive-score candidates do not fit."
+    },
+    {
+      "id": "no-result",
+      "query": "qzxw",
+      "budgetTokens": 500,
+      "required": [
+        "portal.md#1"
+      ],
+      "relevant": [
+        "portal.md#1"
+      ],
+      "note": "Zero lexical matches does not prove no evidence exists."
+    },
+    {
+      "id": "unlabeled",
+      "query": "password",
+      "budgetTokens": 500,
+      "required": null,
+      "relevant": null,
+      "note": "No quality labels; metrics must remain null."
+    },
+    {
+      "id": "invalid-labels",
+      "query": "password",
+      "budgetTokens": 500,
+      "required": [
+        "not-in-corpus"
+      ],
+      "relevant": [
+        "portal.md#1"
+      ],
+      "note": "Annotation defect must not be scored as a ranking miss."
+    }
+  ]
+}

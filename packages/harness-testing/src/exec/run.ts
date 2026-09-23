@@ -1,14 +1,16 @@
+import { lifecycleExecution, lifecycleIssues, LifecycleSchema, type Lifecycle, type LifecycleReceipt } from './lifecycle.js';
+import { executionObserver, type ExecutionObservation } from '@testpilot/harness-core/execution-observation';
 import { checkPrerequisite, type Preparation, type EnvironmentFact, type PrerequisiteReceipt } from './preparationChecks.js';
 import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
 import {settleOn} from './pageReady.js';
 import { cacheDigest } from './cache.js';
-import { pickLocator, locatorUsable, type LocatorHint } from "./locators.js";
+import { matchingLocators, validateLocator, type LocatorHint, type LocatorContext, type LocatorReuseReceipt, type LocatorRuntimeScope } from "./locators.js";
 // The executor: drive Midscene steps against a target, capture what a run leaves behind
 // (screenshots, perf metrics, oracle results) and hand it back. It knows nothing about the
 // database, baselines or artifacts — those live in the gateway, which is why this can run
 // in the runner process.
 import { launchSession, reopenPage } from "./session.js";
-import { createHash } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { acquireSession, evictSession, releaseSession, replaceSession } from "./sessionPool.js";
 import type { RunPhases } from "../report.js";
 import { startPopupApprover } from "./wallet.js";
@@ -25,6 +27,10 @@ import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles
 import { executorConnectionFromEnv, type RoleRequestRecord, type RoleProxyBudget } from "@testpilot/harness-core";
 
 export interface RunResult {
+  evidenceReuse?: LocatorReuseReceipt;
+  lifecycle?: LifecycleReceipt;
+  businessStatus?: "passed" | "failed" | "unobservable";
+  observation?: ExecutionObservation;
   observations?: Array<{step:number;text:string;url:string;capturedAt:number}>;
   prerequisiteChecks?: PrerequisiteReceipt[];
   environmentFacts?: EnvironmentFact[];
@@ -93,6 +99,9 @@ export async function executeRun(
     signal?: AbortSignal;
     captureObservations?: boolean;
     preparation?: Preparation;
+    lifecycle?: Lifecycle;
+    sourceRefs?: string[];
+    precondition?: string[];
     modelBudget?: RoleProxyBudget;
     executorModel?: RoleModelConnection;
     injected?: boolean;
@@ -135,6 +144,8 @@ export async function executeRun(
      * 少一次模型调用是附带的好处，不是目的；目的是让「这个词在页面上出现十三次」不再是失败。
      */
     locators?: LocatorHint[];
+    locatorContext?: LocatorContext;
+    locatorRuntimeScope?:LocatorRuntimeScope;
     /**
      * A check a program can settle. When present it decides the case and the model is
      * never asked — which is what makes a tier-1 label mean something at execution time.
@@ -169,11 +180,13 @@ export async function executeRun(
     };
   } = {},
 ): Promise<RunResult> {
+  const observer = executionObserver();
+  observer.begin("session-navigation");
   const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
   const auxiliaryChecks: NonNullable<RunResult["auxiliaryChecks"]> = [];
   const injected = !!opts.injected;
   const wallet = !injected && !!opts.wallet;
-  const ctx: ResolveContext = opts.resolve ?? { env: {}, secrets: {} };
+  const ctx: ResolveContext = { env: {...opts.resolve?.env, TP_LIFECYCLE_ID: randomUUID()}, secrets: opts.resolve?.secrets ?? {} };
   const secretVals = Object.values(ctx.secrets);
   const rlog = (s: string) => logs.push(redact(s, secretVals));
   const startedAt = new Date().toISOString();
@@ -204,11 +217,27 @@ export async function executeRun(
   const screenshots: string[] = [];
   const pngBuffers: Buffer[] = [];
   const modelRequests: RoleRequestRecord[] = []; let requestSource: RoleRequestRecord[] | undefined, requestOffset = 0;
+  const oracle: OracleCheck[] = [];
+  let result: RunResult | undefined;
   let session: Awaited<ReturnType<typeof launchSession>> | undefined;
   let stopApprover: (() => void) | undefined;
   /** 变异体改过这份 DOM，绝不能进池让下一条接着用。 */
   const poolKey = opts.sessionKey && !opts.mutation ? opts.sessionKey : undefined;
   let reused = false;
+  let sessionClosed = false;
+  const lifecycle = lifecycleExecution(opts.lifecycle, opts.postSteps ?? [], {
+    check: check => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
+      if(!session || sessionClosed || opts.signal?.aborted || session.page.isClosed?.()) throw new Error('SESSION_UNAVAILABLE');
+      // A failed snapshot is unknown, never evidence of resource absence.
+      const text = await session.page.evaluate(()=>document.body?.innerText ?? '');
+      if(!String(text).trim())throw new Error('SCREEN_UNAVAILABLE');
+      return {text:String(text),url:session.page.url(),capturedAt:Date.now()};
+    }, assert:async()=>{throw new Error('LIFECYCLE_REQUIRES_SCREEN_ORACLE');},resolve:t=>resolveText(t,ctx),redact:t=>redact(t,secretVals)}),
+    resolve:t=>redact(resolveText(t,ctx),secretVals),
+    redact:t=>redact(t,secretVals),
+    act:async t=>{rlog(`teardown: ${t}`);await withModel(()=>act(resolveText(t,ctx)));},
+    available:()=>!!session && !sessionClosed && !opts.signal?.aborted && !session.page.isClosed?.(),
+  });
   const checkCancelled = () => { if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED"); };
   const abortSession = () => { if (poolKey) void evictSession(poolKey).catch(() => {}); else void session?.cleanup().catch(() => {}); };
   /**
@@ -220,24 +249,26 @@ export async function executeRun(
    * 这一步能不能直接用探索记下的选择器点掉。返回 false 就交回模型。
    * 只处理**点击**：填值、断言、滚动都还是模型的事。
    */
-  const byLocator = async (t: string): Promise<boolean> => {
-    const hit = pickLocator(t, opts.locators ?? []);
-    if (!hit) return false;
-    try {
-      // Puppeteer，不是 Playwright：这里没有 locator().count()，用 $$ 取全部匹配。
-      const page = session!.page as unknown as {
-        $$(s: string): Promise<Array<{ click(): Promise<void> }>>;
-        evaluate<T, A>(fn: (el: A) => T, arg: A): Promise<T>;
-      };
-      const els = await page.$$(hit.selector);
-      const text = els.length === 1 ? await page.evaluate((el) => (el as unknown as HTMLElement).innerText ?? "", els[0]!) : "";
-      const verdict = locatorUsable(hit.label, els.length, text);
-      if (!verdict.ok) { rlog(`  定位提示${verdict.why}（${hit.label}），交回模型`); return false; }
+  const evidenceReuse:LocatorReuseReceipt={context:opts.locatorContext??null,events:[]};
+  const byLocator = async (t:string):Promise<boolean>=>{
+    const matches=matchingLocators(t,opts.locatorContext?.hints??opts.locators??[]);
+    const hit=matches[0];
+    const record=(status:'used'|'fallback'|'action-error',reason:string)=>evidenceReuse.events.push({label:hit?.label,source:hit?.source,status,reason});
+    if(matches.length!==1){record('fallback',matches.length?'ambiguous_label':'no_candidate');return false;}
+    let clicking=false;
+    try{
+      const els=await session!.page.$$(hit!.selector);
+      if(els.length!==1){record('fallback','target_changed');return false;}
+      const reason=await validateLocator(session!.page,hit!,opts.locatorContext,opts.locatorRuntimeScope);
+      if(reason){record('fallback',reason);return false;}
+      const same=await session!.page.evaluate((el,sel)=>el.isConnected&&document.querySelector(sel)===el,els[0]!,hit!.selector);
+      if(!same){record('fallback','target_changed');return false;}
+      clicking=true;
       await els[0]!.click();
-      rlog(`  定位提示命中：${hit.label}`);
-      return true;
-    } catch (e) {
-      rlog(`  定位提示用不了（${hit.label}：${String((e as Error).message).slice(0, 60)}），交回模型`);
+      record('used','current_ui_validated');return true;
+    }catch(e){
+      record(clicking?'action-error':'fallback',clicking?'action_attempted_no_retry':'validation_error');
+      if(clicking)throw e;
       return false;
     }
   };
@@ -261,7 +292,8 @@ export async function executeRun(
        * 这一次仍拿 undefined 坐标去点，`dispatchMouseEvent … params.x: double value expected`。
        * 缓存此时已经是新的，同一步再放一遍就过——重试一次，不重试第二次。
        */
-      if (!/dispatchMouseEvent.*double value expected/.test((e as Error).message)) throw e;
+      if (!lifecycle.receipt.safeToRetry || !/dispatchMouseEvent.*double value expected/.test((e as Error).message)) throw e;
+      observer.retry("coordinate-replay");
       rlog(`  回放坐标丢失（Midscene 缓存刷新后的第一次），这一步重试一次`);
       await session!.agent.aiAction(t);
     }
@@ -273,12 +305,18 @@ export async function executeRun(
   };
   try {
     checkCancelled();
+    if(opts.lifecycle?.mode==='controlled' && opts.preparation?.steps.length && (!opts.preparation.recipe || JSON.stringify(opts.preparation.steps)!==JSON.stringify(opts.preparation.recipe.steps) || !['none','ui-only'].includes(opts.preparation.recipe.sideEffects)))throw new Error('LIFECYCLE_UNCONTROLLED_PREPARATION');
+    if(opts.lifecycle){
+      LifecycleSchema.parse(opts.lifecycle);
+      const issues=lifecycleIssues({lifecycle:opts.lifecycle,steps,postSteps:opts.postSteps??[],sourceRefs:opts.sourceRefs,precondition:opts.precondition,assertions:opts.assertions?.filter((a):a is typeof a & {id:string}=>!!a.id)});
+      if(issues.length)throw new Error('LIFECYCLE_INVALID: '+issues.join(', '));
+    }
     opts.signal?.addEventListener("abort", abortSession, { once: true });
     if (opts.rowLabel) rlog(`data row ${opts.rowLabel}`);
     logs.push(`navigate → ${url}${injected ? " (injected wallet)" : wallet ? " (with MetaMask)" : ""}`);
     const dataOpts = {
       signal: opts.signal, modelBudget: opts.modelBudget,
-      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],login:opts.login??[],resolve:opts.resolve??null,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
+      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],lifecycle:opts.lifecycle??null,login:opts.login??[],resolve:ctx,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
       executorModel: opts.executorModel ?? executorConnectionFromEnv(),
       extraHeaders: opts.extraHeaders,
       query: opts.query,
@@ -300,6 +338,9 @@ export async function executeRun(
       session = got.session;
       requestOffset = session.modelRequests?.length ?? 0;
       reused = got.reused;
+      requestSource = session.modelRequests;
+      observer.source(() => requestSource, requestOffset);
+      observer.data.cache.session = reused ? "hit" : "miss";
       if (reused) {
         // 回到起点：同一个浏览器、**新的页面**、这条用例自己的 agent（cacheId 按用例）。登录态在浏览器里，不用再跑。
         session = await reopenPage(session, url, launchOpts);
@@ -310,6 +351,7 @@ export async function executeRun(
       session = await launchSession(url, launchOpts);
     }
     requestSource = session.modelRequests;
+    observer.source(() => requestSource, requestOffset);
     if (opts.signal?.aborted) { abortSession(); checkCancelled(); }
     if (injected) logs.push(`injected wallet ${session.injectedAddress}`);
     else if (wallet && session.walletId) {
@@ -318,6 +360,7 @@ export async function executeRun(
     }
     await shot();
     mark("launchMs");
+    observer.begin("authentication");
     // Login flow (登录态): resolve ${secret.*}/${env.*} for execution, but log the
     // TEMPLATE text so credentials never appear in logs/reports.
     await settleOn(session.page,{minMs:600,maxMs:12_000});
@@ -348,6 +391,7 @@ export async function executeRun(
       await session.page.goto(url, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }));
     }
     mark("loginMs");
+    observer.begin("preparation");
     const ready=await settleOn(session.page,{minMs:600,maxMs:12_000});
     checkCancelled();
     if(!ready.settled&&ready.controls===0&&ready.textLen===0)throw new Error('PAGE_NOT_READY: the target page remained blank before execution');
@@ -378,9 +422,12 @@ export async function executeRun(
         if(receipt.status!=='pass')throw new Error(`PREREQUISITE_NOT_VERIFIED: recipe ${phase}: ${receipt.statement}: ${receipt.detail}`);
       }
     };
+    if(opts.lifecycle)LifecycleSchema.parse(opts.lifecycle);
+    await lifecycle.baseline();
     await recipeCheck('entry');
     // Preparation checks happen in this browser, before any business test step.
     for (const [i, step] of (opts.preparation?.steps ?? []).entries()) {
+      lifecycle.beforePreparation();
       rlog(`prepare ${i+1}: ${step}`);
       await withModel(() => act(resolveText(step,ctx)));
       await shot(); await observe(-(i+1));
@@ -456,8 +503,9 @@ export async function executeRun(
       rlog(`chain snapshot (before) — ${chainBefore.length} balance(s)`);
     }
     mark("settleMs");
+    observer.begin("actions");
     // Functional oracle: verify the case's expected outcome and record it structurally.
-    const oracle: OracleCheck[] = [];
+
     let assertFailed: string | undefined;
     let unobservable: string | undefined;
     let infraError = false;
@@ -482,7 +530,7 @@ export async function executeRun(
       snap.judge = out.sampling;
       return true;
     };
-    const checkNow = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
+    const checkNowInner = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
       if (isOpenQuestion(a.statement)) {
         oracle.push({ assertion: a.statement, status: "unobservable", detail: "开放问题：记下，不下判决" });
         rlog(`assert ∅ (after step ${n}) 开放问题——不判`);
@@ -510,19 +558,33 @@ export async function executeRun(
         else { oracle.push({ assertion: a.statement, status: "fail", detail, decidedBy: "judge" }); assertFailed = detail; }
       }
     };
+    const checkNow = async (a: { statement: string; oracle?: MachineOracle }, n: number) => {
+      observer.begin("assertions");
+      const before = oracle.length;
+      try { await checkNowInner(a,n); }
+      finally {
+        const checks = oracle.slice(before);
+        if (checks.some(c=>c.status==='fail') || infraError) observer.issue('failed', {attribution:infraError?'infra':'assert',retryable:infraError});
+        else if(checks.some(c=>c.status==='unobservable')) observer.issue('unknown');
+      }
+    };
     const checkAuxiliary = async (a:typeof auxiliaryAssertions[number], step:number) => {
       const offset=oracle.length;
       await checkNow(a,step);
       auxiliaryChecks.push(...oracle.splice(offset).map(check=>({...check,id:a.id,supports:a.supports})));
     };
     for (const [i, step] of steps.entries()) {
+      observer.begin("actions");
       rlog(`step ${i + 1}: ${step}`);
+      lifecycle.beforeStep(i+1);
       await withModel(() => act(resolveText(step, ctx)));
+      await lifecycle.afterStep(i+1);
       await shot(); await observe(i+1);
       for (const a of (opts.assertions ?? []).filter((x) => stepBound(x) && x.afterStep === i + 1)) await checkNow(a, i + 1);
       for (const a of auxiliaryAssertions.filter(x=>x.afterStep===i+1)) await checkAuxiliary(a,i+1);
     }
     mark("stepsMs");
+    observer.begin("assertions");
     /**
      * **变异体到底生效了没有，必须读回来——而且要在步骤跑完之后读。**
      *
@@ -669,22 +731,14 @@ export async function executeRun(
         rlog(`chain assertions skipped — ${redact((e as Error).message, secretVals).slice(0, 70)}`);
       }
     }
+    if (assertFailed) observer.issue("failed", classifyFailure(assertFailed));
+    else if (unobservable) observer.issue("unknown");
     mark("assertMs");
-    // Required cleanup is part of reproducibility: a failure cannot leave the run green.
-    for (const t of opts.postSteps ?? []) {
-      try {
-        rlog(`teardown: ${t}`);
-        await withModel(() => act(resolveText(t, ctx)));
-      } catch (e) {
-        infraError = true;
-        assertFailed = assertFailed || "ENV_TEARDOWN_FAILED";
-        rlog(`ENV_TEARDOWN_FAILED — ${redact((e as Error).message, secretVals).slice(0, 70)}`);
-      }
-    }
-    mark("teardownMs");
     const perfMetrics = await capturePerf(session.page).catch(() => ({}) as PerfMetrics);
     checkCancelled();
-    return {
+    return result = {
+      observation: observer.data,
+      evidenceReuse,
       modelRequests,
       ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
       ...(opts.captureObservations?{observations}:{}),
@@ -710,25 +764,30 @@ export async function executeRun(
     };
   } catch (e) {
     const message = opts.signal?.aborted ? "EXEC_CANCELLED" : redact((e as Error).message, secretVals);
+    observer.issue(opts.signal?.aborted ? "cancelled" : [...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='fail') ? "unknown" : "failed", classifyFailure(message));
     logs.push(`error: ${message}`);
     await observe(-999).catch(()=>{});
-    // 浏览器本身死了才踢出池；用例层面的异常（规划失败、判据没走到）不踢——下一条 goto 回起点就是干净的，
-    // 踢掉就要重起浏览器再跑一遍登录态，正是复用要省的那两段。
+    sessionClosed = /Target closed|Session closed|Browser has disconnected|Navigating frame was detached|Protocol error/.test(message);
+    // Closed sessions cannot compensate; other failures retain the live page until finally attempts cleanup.
     if (poolKey && /Target closed|Session closed|Browser has disconnected|Navigating frame was detached|Protocol error \((Target|Browser|Page)\./.test(message)) {
       await evictSession(poolKey);
       session = undefined;
     }
     // 出错那一刻停在哪段就记到哪段。
     phases[open] += Date.now() - phaseT;
-    return {
+    phaseT = Date.now();
+    open = "teardownMs";
+    return result = {
+      observation: observer.data,
+      evidenceReuse,
       modelRequests,
       ...(auxiliaryAssertions.length?{auxiliaryChecks}:{}),
       ...(opts.captureObservations?{observations}:{}),
       ...(opts.preparation?{prerequisiteChecks,...(opts.preparation.recipe?{recipeChecks}:{})}:{}),
       ...(opts.captureObservations || opts.preparation ? {environmentFacts:environmentFacts.map(f=>({...f,value:typeof f.value==='string'?redact(f.value,secretVals):f.value}))} : {}),
       phases,
-      status: [...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks].some(c=>c.status==='fail') ? "unobservable" : "failed",
-      ...([...prerequisiteChecks,...recipeChecks].some(c=>c.status==='unknown') ? {unobservableReason:message} : {}),
+      status: !opts.signal?.aborted && [...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='unknown') && ![...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='fail') ? "unobservable" : "failed",
+      ...([...prerequisiteChecks,...recipeChecks,...lifecycle.receipt.checks].some(c=>c.status==='unknown') ? {unobservableReason:message} : {}),
       ...(mutationApplied === undefined ? {} : { mutationApplied }),
       durationMs: Date.now() - t0,
       startedAt,
@@ -737,17 +796,48 @@ export async function executeRun(
       pngBuffers,
       sinceMs,
       perfMetrics: {},
-      oracle: [],
+      oracle,
       failureReason: message,
       infraError: isInfraError(message),
       failure: classifyFailure(message),
     };
   } finally {
+    observer.begin("cleanup");
+    const cleanupStarted=Date.now();
+    let lifecycleReceipt:LifecycleReceipt;
+    try { lifecycleReceipt=await lifecycle.finish(); }
+    catch(e){lifecycleReceipt=lifecycle.receipt;lifecycleReceipt.status='unknown';lifecycleReceipt.safeToRetry=false;lifecycleReceipt.pendingResources.push({id:'unknown',identity:'unknown',reason:redact(String(e),secretVals)});}
+    if(evidenceReuse.events.some(e=>e.status==='action-error'))lifecycleReceipt.safeToRetry=false;
+    phases.teardownMs += Date.now() - cleanupStarted;
+    if(result){
+      result.businessStatus=result.status;
+      result.lifecycle=lifecycleReceipt;
+      if((opts.lifecycle && lifecycleReceipt.status!=='pass') || lifecycleReceipt.status==='fail' || lifecycleReceipt.pendingResources.length || lifecycleReceipt.cleanup.some(c=>c.status==='fail'||c.status==='unknown')){
+        observer.issue(lifecycleReceipt.status==='fail'?'failed':'unknown',{attribution:'infra',retryable:false});
+        if(result.status==='passed')result.status=lifecycleReceipt.status==='fail'?'failed':'unobservable';
+        result.failureReason ??= 'LIFECYCLE_CLEANUP_NOT_VERIFIED';
+        result.failure ??= classifyFailure('ENV_TEARDOWN_FAILED');
+      }
+    }
+    // A business action may have taken effect before throwing. Never reuse that session.
+    if(poolKey && (result?.status!=='passed' || lifecycleReceipt.pendingResources.length)) {
+      await evictSession(poolKey).catch(()=>{}); session=undefined;
+    }
     opts.signal?.removeEventListener("abort", abortSession);
     stopApprover?.();
     // 进了池的会话留给下一条；释放由给 key 的那一方在批次结束时做。
-    if (!poolKey) await session?.cleanup();
+    observer.end();
+    if (!poolKey && session) {
+      observer.begin("cleanup");
+      try { await session.cleanup(); }
+      catch {
+        observer.issue("failed", {attribution:"infra",retryable:false});
+        if (result) { result.status = "failed"; if(result.businessStatus === "passed") result.infraError = true; result.failureReason ??= "ENV_TEARDOWN_FAILED"; result.failure ??= classifyFailure("ENV_TEARDOWN_FAILED"); }
+      }
+    }
+    observer.end();
     modelRequests.push(...(requestSource?.slice(requestOffset) ?? []));
+    if (result) { result.durationMs = Date.now() - t0; if (!requestSource) delete result.modelRequests; }
   }
 }
 

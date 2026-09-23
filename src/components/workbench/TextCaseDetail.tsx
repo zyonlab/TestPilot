@@ -1,3 +1,4 @@
+import {LifecycleDetail} from './LifecycleDetail';
 import type { ReactNode } from 'react';
 import { useT } from '@/lib/prefs';
 import { hasKey } from '@/lib/i18n';
@@ -94,6 +95,7 @@ export function TextCaseDetail({ kase, stories = [], findings = [] }: { kase: An
       {kase.storyId && <Tag>{String(kase.storyId)}</Tag>}
     </div>
 
+    <LifecycleDetail contract={kase.lifecycle}/>
     {risk?.reason && <Section title={t('caseDetail.why')}><p>{String(risk.reason)}</p></Section>}
 
     {(arr(kase.acRefs).length > 0 || refGroups.some(([, v]) => v.length)) && <Section title={t('caseDetail.covers')}>

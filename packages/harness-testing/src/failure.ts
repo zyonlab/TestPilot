@@ -46,12 +46,12 @@ const LOCATE =
 
 /** Same predicate the executor has always used, kept as a named export for compatibility. */
 export function isInfraError(msg: string): boolean {
-  return /AUTHENTICATION_NOT_VERIFIED|EXEC_CANCELLED|ENV_RESET_FAILED|ENV_TEARDOWN_FAILED|BUDGET_EXHAUSTED/.test(msg) || INFRA.test(msg);
+  return /LIFECYCLE_[A-Z_]+|AUTHENTICATION_NOT_VERIFIED|EXEC_CANCELLED|ENV_RESET_FAILED|ENV_TEARDOWN_FAILED|BUDGET_EXHAUSTED/.test(msg) || INFRA.test(msg);
 }
 
 export function classifyFailure(message: string): Failure {
   const msg = message ?? "";
-  const preparation = /^(PREREQUISITE_NOT_VERIFIED|AUXILIARY_CHECK_NOT_VERIFIED)/.exec(msg)?.[0];
+  const preparation = /^(LIFECYCLE_[A-Z_]+|PREREQUISITE_NOT_VERIFIED|AUXILIARY_CHECK_NOT_VERIFIED)/.exec(msg)?.[0];
   if (preparation) return { code: preparation, attribution: "infra", retryable: false, message: msg };
   const stopped = /AUTHENTICATION_NOT_VERIFIED|EXEC_CANCELLED|ENV_RESET_FAILED|ENV_TEARDOWN_FAILED|BUDGET_EXHAUSTED/.exec(msg)?.[0];
   if (stopped) return { code: stopped, attribution: "infra", retryable: false, message: msg };

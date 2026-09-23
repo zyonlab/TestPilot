@@ -1,3 +1,6 @@
+import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
+import { evaluateExplorationResult } from "./explorationResults.js";
+import { ExplorationAttemptSchema, explorationExecId, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
 import { cancelPreparation } from './preparation.js';
 import { cancelSourceSession } from "./sourceSessions.js";
 import { getProject, resolveEnvironment } from "./db.js";
@@ -8,7 +11,7 @@ import { partialObservationPath } from "@testpilot/harness-testing/exec";
 import { ARTIFACT_DIR } from "./db.js";
 import { controls, beginStage, stageEvent, resumeControls, setControls } from './workflowControls.js';
 import { cancelRun as cancelCodex } from "./codex.js";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -29,7 +32,7 @@ import { buildProductModel, charterFromRulePack, describeProductModel, validateR
 
 export async function createWebWorkflow(projectId: string, raw: unknown, prepared?: {runId:string;node:string}) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
-  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
+  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
   /**
    * 禁止名单上的地址什么都不跑（`config.guard.denyHosts`，运营方配置）。环境与运行参数都放不开它。
    * 探索不带钱包、不点会改状态的东西也不行：观察本身会带着登录态与会话去访问那个地址。
@@ -96,7 +99,7 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 漏了它们，重跑出来的就是另一种探索——而没有人会知道这一次和上一次的差别在哪。
    * 它们同时也是这次运行**被授权做过什么**的凭证：谁允许探索去点会改状态的东西，记在这里。
    */
-  const params={sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
+  const params={pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
   registerWebRun(runId,projectId,models.binding,params);
   for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
   // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。
@@ -128,23 +131,17 @@ export function sourceKnowledge(runId:string,projectId:string,entryUrl:string,ma
     truncation:{omittedOptionalRefs:packs.slice(1).map(p=>p.revision),missingRequiredRefs:[]},isolationEvidence:'service-scoped'});
   return {charter,pack,packRevision:first?.revision,manifest};
 }
-/**
- * 捡起探索器落下的半成品（`exec/interactive.ts` 的 `snapshotPartial`）。
- *
- * 路径按约定拼：观察的 execId 是 `observe-<projectId>`（见 index.ts 的 setAgentObserver），
- * 一个项目同时只探索一份，所以这个名字够用。读不到、读坏了都当作没有——
- * 捡不回来是可以接受的，捡回来一份半个 JSON 不行。
- */
-export function readPartialObservation(projectId:string):{notes:string;url:string;screens:number;graph:unknown;stoppedBecause:unknown}|undefined{
-  try{
-    // 落点由探索器那一侧的函数算，两处共用——见 `partialObservationPath` 的注释。
-    const path=partialObservationPath(ARTIFACT_DIR,`observe-${projectId}`);
-    const raw=JSON.parse(readFileSync(path,'utf8')) as {notes?:string;url?:string;screens?:number;graph?:unknown};
-    if(!raw?.notes?.trim())return undefined;
-    // 半成品里没有状态图（`graph` 要循环跑完才建得出来）。给 undefined 而不是编一个空图：
-    // 下游读到「没有图」是真的没有，读到一个空图会以为这个产品只有一屏。
-    return {notes:raw.notes,url:raw.url??'',screens:raw.screens??0,graph:undefined,
-      stoppedBecause:`探索中途失败，这份材料只到第 ${raw.screens ?? 0} 屏`};
+/** Only this dispatched attempt may contribute partial material. Historical files stay untouched. */
+export function readPartialObservation(expected:ExplorationAttempt) {
+  try {
+    ExplorationAttemptSchema.parse(expected);
+    const path=partialObservationPath(ARTIFACT_DIR,explorationExecId(expected));
+    const raw=JSON.parse(readFileSync(path,'utf8'));
+    if(!sameExplorationAttempt(raw.sourceAttempt,expected) || raw.partial!==true || raw.url!==expected.entryUrl ||
+      typeof raw.notes!=='string' || !raw.notes.trim() || !Number.isInteger(raw.screens) || raw.screens<1 ||
+      !Number.isFinite(Date.parse(raw.at)) || Date.parse(raw.at)<Date.parse(expected.startedAt)) return undefined;
+    return {notes:raw.notes,url:raw.url,screens:raw.screens,graph:undefined,sourceAttempt:expected,
+      stopped:{kind:'failed'},stoppedBecause:`探索中途失败，这份材料只到第 ${raw.screens} 屏`};
   }catch{return undefined;}
 }
 
@@ -159,6 +156,7 @@ async function launchSource(runId:string,projectId:string,directory:string,param
     if(params.sourceKind==='explore'){
       const interact=params.exploreActions==='interact';
       const bound=sourceKnowledge(runId,projectId,params.sourceUrl!,params.maxScreens??8,envRef??params.envRef,interact);
+      for(const name of readdirSync(directory).sort()){if(/\.(md|txt)$/.test(name)&&name!=='exploration.md')bound.manifest.inputs.push({pointer:'material/'+name,digest:contentHash(readFileSync(join(directory,name)))});}
       const manifestRevision=putSourceRevision({runId,projectId,name:'context/source',kind:'report',content:bound.manifest,sourceRefs:bound.manifest.knowledge.map(k=>k.revision)},{kind:'system',id:'stage-validator'});
       /**
        * **探索崩了，也要把已经采到的屏捡回来。**
@@ -171,39 +169,53 @@ async function launchSource(runId:string,projectId:string,directory:string,param
        * 这**不是**断点续跑：不会从第 18 屏接着探。它保证的是已经花掉的钱不白白作废，
        * 而且这件事要在材料里写明白——下游读到的是一份 18 屏的材料，不是 20 屏的。
        */
-      let result:{notes:string;url:string;screens:unknown;stoppedBecause:unknown;graph:unknown;report?:unknown;partial?:boolean};
+      const sourceParameters=ledger.requireRun(runId,projectId).input.parameters;
+      const environmentHash=explorationEnvironment(projectId,envRef??params.envRef,!!params.exploreWallet);
+      const pageVersion=typeof sourceParameters?.pageVersion==='string'?sourceParameters.pageVersion:null;
+      const sourceAttempt:ExplorationAttempt={attemptId:randomUUID(),runId,projectId,entryUrl:params.sourceUrl!,startedAt:new Date().toISOString(),
+        environmentHash,pageVersion,inputFingerprint:explorationInputFingerprint(manifestRevision.id,bound.charter,sourceParameters,environmentHash,pageVersion),
+        scopeHash:contentHash(canonicalJSON({charter:bound.charter ?? null,envRef:envRef??params.envRef??null,maxScreens:params.maxScreens??8,explorationScope:params.explorationScope??'rules',interact}))};
+      const attemptRevision=putSourceRevision({runId,projectId,name:'exploration/attempt',kind:'report',content:sourceAttempt,sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+      let result:{notes:string;url:string;screens:unknown;stoppedBecause:unknown;stopped?:{kind:string;n?:number};graph:unknown;report?:unknown;partial?:boolean;sourceAttempt?:unknown;assessment?:unknown};
       let partialReason:string|undefined;
       try {
-        result=await observeProduct({workflowRunId:runId,url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,explorationScope:params.maxScreens===0?"current-url":params.explorationScope,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as typeof result;
+        result=await observeProduct({sourceAttempt,workflowRunId:runId,url:params.sourceUrl,projectId,envRef:envRef??params.envRef,deep:true,maxScreens:params.maxScreens??8,explorationScope:params.maxScreens===0?"current-url":params.explorationScope,settleMs:interact?3000:1800,scenarioFirst:true,inPageFirst:'on',groupCap:6,...(params.exploreWallet?{wallet:true}:{}),...(bound.charter?{charter:bound.charter}:{})}) as typeof result;
       } catch(error) {
-        const salvaged=readPartialObservation(projectId);
+        const salvaged=readPartialObservation(sourceAttempt);
         if(!salvaged?.notes?.trim())throw error;
         partialReason=String((error as Error).message??error).slice(0,300);
         result={...salvaged,partial:true};
         putSourceRevision({runId,projectId,name:'report/exploration-partial',kind:'report',
-          content:{screens:salvaged.screens,reason:partialReason,at:new Date().toISOString()},sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+          content:{screens:salvaged.screens,reason:partialReason,sourceAttempt,at:new Date().toISOString()},sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
       }
       if(ledger.getRun(runId,projectId).status==='cancelled')return;
+      if(!sameExplorationAttempt(result.sourceAttempt,sourceAttempt) || result.url!==sourceAttempt.entryUrl)throw new Error('exploration_attempt_mismatch');
+      result=evaluateExplorationResult(result,bound.charter);
       if(!result.notes?.trim())throw new Error('exploration_returned_no_observations');
-      const observation=putSourceRevision({runId,projectId,name:'exploration/observations',kind:'report',content:result,sourceRefs:[manifestRevision.id]},{kind:'system',id:'explorer'});
+      const observation=putSourceRevision({runId,projectId,name:'exploration/observations',kind:'report',content:{...result,sourceCharter:bound.charter},sourceRefs:[attemptRevision.id,manifestRevision.id]},{kind:'system',id:'explorer'});
       let productText='';
-      if(bound.charter){
-        // charter 给了，回执就必须回来；回不来是探索器的错，不能静默降级成旧材料。
+      const reportRevision=result.report?putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:result.report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'}):undefined;
+      if(bound.charter && reportRevision && ExplorationReportSchema.safeParse(result.report).success){
+        // 无结构化回执的半成品只保存 unknown 摘要，不推导产品模型。
         const report=ExplorationReportSchema.parse(result.report);
         if(report.rulePack.hash!==bound.charter.rulePack.hash)throw new Error('exploration_report_rule_pack_mismatch');
-        const reportRevision=putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'});
-        const model=buildProductModel({pack:bound.pack!,report});
+        // Keep the raw observations in the report; only graph-backed interactions feed the candidate model.
+        const completedIds=new Set(report.assessment?.targets.flatMap(t=>t.completedObservationIds)??[]);
+        const model=buildProductModel({pack:bound.pack!,report:{...report,observations:report.observations.filter(o=>o.status!=='attempted'||completedIds.has(o.id))}});
         putSourceRevision({runId,projectId,name:'product/model-candidate',kind:'report',content:model,sourceRefs:[reportRevision.id,bound.packRevision!]},{kind:'system',id:'stage-validator'});
         productText=`\n\n${describeProductModel(model)}\n`;
       }
-      writeFileSync(join(directory,'exploration.md'),`# Observed product
+      const materialText=`# Observed product
 Source: ${result.url}
 Captured: ${new Date().toISOString()}
 Context manifest: ${bound.manifest.manifestId}${bound.charter?` · rule pack ${bound.charter.rulePack.id}@${bound.charter.rulePack.version}`:' · generic exploration (no rule pack bound)'}
 
 ${result.notes}${productText}
 
-Only observed behavior is evidence. Unobserved, authenticated, or transaction behavior must be explicitly marked as unknown.`,{mode:0o600});
+Exploration completion: ${String((result.assessment as {status?:string})?.status??"unknown")}. Denominator is declared targets only, never the unknown whole product. Interaction receipts do not establish business assertion passes.
+Only observed behavior is evidence. Unobserved, authenticated, or transaction behavior must be explicitly marked as unknown.`;
+      writeFileSync(join(directory,'exploration.md'),materialText,{mode:0o600});
+      putSourceRevision({runId,projectId,name:'exploration.md',kind:'material',content:materialText,mediaType:'text/markdown',sourceRefs:[observation.id]},{kind:'system',id:'explorer'});
       stageEvent(runId,projectId,'source','done',undefined,observation.id);
     } else stageEvent(runId,projectId,'source','done');
     await startWebRun({wfRunId:runId,target:{projectId,envRef:envRef??params.envRef},materialsDir:directory,limit:params.limit,params:params as never,generationMode:'skill',runtime:plannerOf(runId,projectId)});

@@ -9,7 +9,9 @@
     "./obs": "./src/obs/index.ts",
     "./harness": "./src/harness/index.ts",
     "./model-profiles": "./src/model/profiles.ts",
-    "./run-contracts": "./src/run-contracts.ts"
+    "./run-contracts": "./src/run-contracts.ts",
+    "./execution-observation": "./src/execution-observation.ts",
+    "./retrieval-audit": "./src/retrieval-audit.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -1,4 +1,6 @@
+import { LocatorEvidenceSchema } from '../exec/locatorEvidence.js';
 import { z } from "zod";
+import { assessExploration, ExplorationAssessmentSchema, ExplorationAttemptSchema } from "./explorationEvidence.js";
 import { SfgActionSchema, type StateFlowGraph } from "../exec/sfg.js";
 import { DomainIdSchema } from "./rules.js";
 import type { ExplorationCharter } from "./charter.js";
@@ -43,6 +45,7 @@ export const EffectSchema = z
 export const ObservationSchema = z
   .object({
     id: z.string().min(1),
+    locatorEvidence:LocatorEvidenceSchema.optional(),
     targetId: z.string().min(1),
     targetSpecId: DomainIdSchema,
     featureId: DomainIdSchema,
@@ -67,7 +70,7 @@ export const PlannedTargetSchema = z
     featureId: DomainIdSchema,
     action: z.enum(["activate", "observe-only", "fill"]),
     status: PlannedTargetStatusSchema,
-    /** 对 observe-only 目标，found 就是终态；对 activate 目标，只有 attempted/blocked/failed/skipped 是终态。 */
+    /** 只有有效可见状态（observe-only）或实际动作与后态回执才能满足声明目标。 */
     terminal: z.boolean(),
     reason: z.string().optional(),
     targetIds: z.array(z.string()).default([]),
@@ -108,6 +111,8 @@ export const ExplorationReportSchema = z
     /** 还没做完的：预算到点时留给续跑。 */
     frontier: z.array(z.object({ targetSpecId: DomainIdSchema, featureId: DomainIdSchema, targetId: z.string().optional(), reason: z.string() }).strict()),
     stopReason: z.object({ kind: z.string(), n: z.number().optional() }).strict(),
+    assessment: ExplorationAssessmentSchema.optional(),
+    sourceAttempt: ExplorationAttemptSchema.optional(),
     completion: z.enum(["complete", "partial"]),
     coverage: CoverageSchema,
     unknowns: z.array(z.string()),
@@ -129,8 +134,6 @@ export function coverageOfGraph(graph: Pick<StateFlowGraph, "states" | "transiti
   };
 }
 
-/** 预算类停止原因：到了就是 partial，哪怕目标都试过了也要说清是预算停的。 */
-const BUDGET_STOPS = new Set(["timeBudget", "screenCap", "actionBudget", "cancelled", "stuck", "noWayBack"]);
 
 export function buildExplorationReport(input: {
   charter: ExplorationCharter;
@@ -160,14 +163,23 @@ export function buildExplorationReport(input: {
     return { ...base, status: "not_found" as const, terminal: false, reason: "not_found_in_scope" };
   });
 
+  const assessment = assessExploration({charter, graph, targets, observations, entryUrl:charter.scope.entryUrl, stop:input.stop, budget:input.budget});
+  for (const p of planned) {
+    const evidence = assessment.targets.find(t => t.targetSpecId === p.targetSpecId)!;
+    p.terminal = evidence.interactionCompleted || evidence.observationCompleted;
+    if (p.status === 'attempted' && !evidence.attempted) {
+      p.status = evidence.seen ? 'observed_only' : 'not_found';
+      p.reason = evidence.reason;
+    }
+  }
   const frontier = planned
     .filter((p) => !p.terminal || p.status === "blocked" || p.status === "failed")
-    .map((p) => ({ targetSpecId: p.targetSpecId, featureId: p.featureId, ...(p.targetIds[0] ? { targetId: p.targetIds[0] } : {}), reason: p.reason ?? "pending" }));
+    .map((p) => ({ targetSpecId: p.targetSpecId, featureId: p.featureId, ...(p.targetIds[0] ? { targetId: p.targetIds[0] } : {}), reason: assessment.targets.find(t => t.targetSpecId === p.targetSpecId)!.reason }));
   const unknowns = [
     ...(input.unknowns ?? []),
     ...planned.filter((p) => p.status === "not_found").map((p) => `target ${p.targetSpecId} (${p.featureId}) not found in scope: not observed ≠ not applicable`),
   ];
-  const completion: ExplorationReport["completion"] = BUDGET_STOPS.has(input.stop.kind) || frontier.length ? "partial" : "complete";
+  const completion: ExplorationReport["completion"] = assessment.status === "complete" ? "complete" : "partial";
   const count = (s: PlannedTarget["status"]) => planned.filter((p) => p.status === s).length;
   return ExplorationReportSchema.parse({
     schemaVersion: "exploration-report.v1",
@@ -182,11 +194,12 @@ export function buildExplorationReport(input: {
     frontier,
     stopReason: input.stop,
     completion,
+    assessment,
     coverage: {
       ...coverageOfGraph(graph),
       targetsPlanned: planned.length,
-      targetsFound: planned.filter((p) => p.targetIds.length).length,
-      targetsAttempted: count("attempted"),
+      targetsFound: assessment.counts.seen,
+      targetsAttempted: assessment.counts.attempted,
       targetsBlocked: count("blocked"),
       targetsNotFound: count("not_found"),
       targetsFailed: count("failed"),
@@ -204,6 +217,8 @@ export function describeReport(r: ExplorationReport): string {
     "===== 领域探索回执 =====",
     `规则包：${r.rulePack.id}@${r.rulePack.version}　charter：${r.charterId}　完成度：${r.completion}　停止：${r.stopReason.kind}${r.stopReason.n ? `(${r.stopReason.n})` : ""}`,
     `地址 ${c.visitedUrls} / 状态 ${c.statesSeen} / 看见的边 ${c.edgesSeen} / 走过的边 ${c.edgesWalked} / 有效果的转移 ${c.transitionsAsserted}`,
+    "分母仅为已声明目标；交互完成不代表业务断言通过，不代表全站覆盖。",
+    `有后态证据的交互 ${r.assessment?.counts.interactionCompleted ?? "unknown"}；业务断言通过：未采集`,
     `目标 ${c.targetsPlanned}：已试 ${c.targetsAttempted}，仅看见 ${c.targetsObservedOnly}，阻塞 ${c.targetsBlocked}，未找到 ${c.targetsNotFound}，失败 ${c.targetsFailed}`,
     "",
     "逐目标：",

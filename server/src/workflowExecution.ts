@@ -1,3 +1,5 @@
+import { unavailableLifecycle } from '@testpilot/harness-testing';
+import { executionObserver, readExecutionObservation, type ExecutionAttempt } from '@testpilot/harness-core/execution-observation';
 import type { Preparation } from '@testpilot/harness-testing';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import { boundRulePack } from "./rulePacks.js";
@@ -15,7 +17,7 @@ import { getProject, resolveEnvironment, getSecretValues, ARTIFACT_DIR } from ".
 import { encryptSecret, decryptSecret } from "./vault.js";
 import { execOnRunner, cancelExecution } from "./exec.js";
 import { recordWorkflowCaseRun } from "./workflowRunRecord.js";
-import { locatorHints } from "@testpilot/harness-testing/exec";
+import {selectExplorationContext,dispatchedEnvironment} from "./explorationReuse.js";
 import { runEnvReset, guardRun } from "./executionPolicy.js";
 import { LedgerError, contentHash } from "./runLedger.js";
 import { captureExecutionMemory } from './runMemory.js';
@@ -65,7 +67,7 @@ export function missingPlaceholders(texts: string[], context: { env: Record<stri
   const missing = new Set<string>();
   for (const text of texts) {
     const { env, secret } = referencedKeys(text);
-    for (const key of env) if (!(key in context.env)) missing.add(`env.${key}`);
+    for (const key of env) if (key !== 'TP_LIFECYCLE_ID' && !(key in context.env)) missing.add(`env.${key}`);
     for (const key of secret) if (!(key in context.secrets)) missing.add(`secret.${key}`);
   }
   return [...missing].sort();
@@ -119,17 +121,13 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
    * 用例里不会有选择器——它是端无关的。选择器留在这里，执行时先试、验不过就交回模型，
    * 见 `exec/run.ts` 的 `byLocator`。没有探索回执的 run（纯 spec 来源）拿到空表，行为不变。
    */
-  const report = ledger().listRevisions(projectId, runId).filter((r) => r.name === "exploration/report")
-    .sort((a, b) => a.revision - b.revision).at(-1);
-  const reportContent = report ? ledger().readRevision(report.id, projectId).content : undefined;
-  const locators = reportContent ? locatorHints(reportContent as Parameters<typeof locatorHints>[0]) : [];
   const selected = input.caseIds ? bundle.cases.filter((c) => input.caseIds!.includes(c.id)) : bundle.cases;
   const blocked = ((bundle as {compilation?:string}).compilation === 'host-prepared-v1' ? [] : selected).map(c => ({ id: c.id, reasons: executionBlockers(c) })).filter(c => c.reasons.length);
   if (blocked.length) throw new LedgerError(409, `execution_not_ready:${JSON.stringify(blocked)}`);
   const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
-    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locators, visualThresholdPct: env?.visualThresholdPct };
+    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
   // 不可逆步骤默认放行；额外词来自这次运行绑定的规则包，只有整机打开 GUARD_STRICT 时才生效。
   /**
    * **占位符没解析就不要跑。**
@@ -163,24 +161,38 @@ async function perform(row: ExecutionRow) {
   const controller = new AbortController(); controllers.set(row.id, controller);
   const budget = env.budget ?? configuredRunBudget(); const deadlineAt = Date.parse(row.startedAt) + budget.wallMs;
   let calls = 0, usageComplete = true;
+  const observer = executionObserver();
+  const validatedBundle = () => {
+    observer.begin("validation",true);
+    try { return approvedExecutionBundle(row.runId,row.projectId,row.codeRevision); }
+    catch(error) { observer.issue('failed'); throw error; }
+    finally { observer.end(); }
+  };
   const timer = setTimeout(() => controller.abort(new Error("BUDGET_EXHAUSTED")), Math.max(1, deadlineAt - Date.now())); timer.unref();
   let status = "passed";
   const cancelled = () => (ledger().db.prepare("SELECT status FROM workflow_executions WHERE id=?").get(row.id) as { status: string }).status === "cancelled";
   try {
-    const bundle = approvedExecutionBundle(row.runId, row.projectId, row.codeRevision);
+    const bundle = validatedBundle();
     const chosen = env.caseIds ? bundle.cases.filter((c: { id: string }) => env.caseIds.includes(c.id)) : bundle.cases;
     for (const kase of chosen) {
       if (cancelled()) { status = "cancelled"; break; }
       if (controller.signal.aborted || calls >= budget.executorCalls) throw new LedgerError(409, "BUDGET_EXHAUSTED");
-      approvedExecutionBundle(row.runId, row.projectId, row.codeRevision);
+      validatedBundle();
+      observer.begin("reset", true);
       runEnvReset(env.reset);
+      observer.end();
       const execId = `${row.id}-${contentHash(kase.id).slice(0, 12)}`; active.set(row.id, execId);
-      const attempt = () => execOnRunner({ execId, scopeProjectId: row.projectId, modelSnapshotRunId: row.runId, url: caseEntryUrl(kase.precondition,env.url),
+      const attempts: ExecutionAttempt[] = [];
+      const attemptRequests: NonNullable<Awaited<ReturnType<typeof execOnRunner>>["modelRequests"]> = [];
+      let caseUsageComplete = true;
+      const attempt = async () => {
+        const start = performance.now(); observer.begin("dispatch"); observer.source(()=>undefined);
+        try { const result = await execOnRunner({ execId, scopeProjectId: row.projectId, modelSnapshotRunId: row.runId, url: caseEntryUrl(kase.precondition,env.url),
         steps: kase.steps, expected: kase.expected, artifactDir: ARTIFACT_DIR,
-        opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,
+        opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,lifecycle:kase.lifecycle,sourceRefs:kase.sourceRefs,precondition:kase.precondition,
           // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
           ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState, authentication: env.authentication }),
-          resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locators: env.locators,
+          resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locatorContext: env.locatorContexts?.[kase.id],locatorRuntimeScope:{projectId:row.projectId,runId:row.runId,entryUrl:caseEntryUrl(kase.precondition,env.url),environmentHash:env.locatorEnvironmentHash,pageVersion:env.locatorPageVersion,materialsHash:env.locatorMaterialsHash,loggedOut:caseStartsLoggedOut(kase.precondition)},
           /**
            * **带钱包探索出来的用例，执行时也要带钱包。**
            *
@@ -195,6 +207,22 @@ async function perform(row: ExecutionRow) {
            */
           ...(env.injectedWallet ? { injected: true } : {}),
           cacheId: `${row.codeRevision}-${kase.id}` } }, { signal: controller.signal });
+          observer.source(()=>result.modelRequests);
+          if(cancelled()) observer.issue("cancelled");
+          attempts.push({attempt:attempts.length+1,status:cancelled()?'cancelled':result.status,durationMs:performance.now()-start,observation:readExecutionObservation(result.observation)});
+          if (Array.isArray(result.modelRequests)) {
+            attemptRequests.push(...result.modelRequests);
+            calls += result.modelRequests.filter(r=>r.forwarded).length;
+            recordModelRequests(row.runId,result.modelRequests,{executionId:row.id,caseRevision:(bundle as typeof bundle & {approvedRevisions:string[]}).approvedRevisions.find(id=>(ledger().readRevision(id,row.projectId).content as {id:string}).id===kase.id)});
+          } else { caseUsageComplete = false; usageComplete = false; }
+          return result;
+        } catch (error) {
+          observer.issue(cancelled()?'cancelled':'failed',{attribution:'infra',retryable:false});
+          attempts.push({attempt:attempts.length+1,status:cancelled()?'cancelled':'unknown',durationMs:performance.now()-start,observation:null});
+          results.push({caseId:kase.id,lifecycle:unavailableLifecycle(kase.lifecycle,kase.postSteps),status:cancelled()?'cancelled':'unobservable',infraError:true,attempts});
+          throw error;
+        } finally { observer.end(); }
+      };
       /**
        * **可重试的基础设施失败，要重试，而不是把整批扔掉。**
        *
@@ -210,21 +238,27 @@ async function perform(row: ExecutionRow) {
        * 每次尝试的模型调用都要计数：失败的那次一样花了钱。
        */
       let result = await attempt();
-      const attemptRequests = [...(Array.isArray(result.modelRequests) ? result.modelRequests : [])];
+
       for (let tries = 1; tries <= RETRYABLE_INFRA_TRIES; tries++) {
-        if (!result.infraError || (result.failure as { retryable?: boolean } | undefined)?.retryable !== true) break;
-        if (cancelled() || controller.signal.aborted || Date.now() >= deadlineAt) break;
+        if (result.lifecycle?.safeToRetry !== true || !result.infraError || (result.failure as { retryable?: boolean } | undefined)?.retryable !== true) break;
+        if (cancelled() || controller.signal.aborted || Date.now() >= deadlineAt || !caseUsageComplete || calls >= budget.executorCalls) break;
         const waitMs = 8_000 * 2 ** (tries - 1);
         phase(row, "running", undefined, `${kase.id} · ${(result.failure as { code?: string } | undefined)?.code ?? "infra"} · ${waitMs / 1000}s 后重试（第 ${tries}/${RETRYABLE_INFRA_TRIES} 次）`);
-        await new Promise((r) => setTimeout(r, waitMs));
+        observer.begin('retry-wait', true); observer.retry('retryable-infrastructure',waitMs);
+        await new Promise<void>((resolve) => {
+          const done = () => { clearTimeout(timer); controller.signal.removeEventListener('abort',done); resolve(); };
+          const timer = setTimeout(done,waitMs); controller.signal.addEventListener('abort',done,{once:true});
+          if(controller.signal.aborted) done();
+        });
+        if(controller.signal.aborted) observer.issue('cancelled');
+        observer.end();
         if (cancelled() || controller.signal.aborted) break;
         result = await attempt();
-        if (Array.isArray(result.modelRequests)) attemptRequests.push(...result.modelRequests);
-        else attemptRequests.length = 0;
+
       }
-      if (attemptRequests.length && Array.isArray(result.modelRequests)) result = { ...result, modelRequests: attemptRequests };
+      result = { ...result, modelRequests: caseUsageComplete ? attemptRequests : undefined };
       active.delete(row.id);
-      results.push({ caseId: kase.id, entryUrl: caseEntryUrl(kase.precondition,env.url), ...result });
+      results.push({ caseId: kase.id, entryUrl: caseEntryUrl(kase.precondition,env.url), ...result, ...(cancelled()?{status:"cancelled"}:{}), attempts });
       /**
        * 落一条运行记录，顺带立/比视觉与性能基线。
        *
@@ -238,22 +272,18 @@ async function perform(row: ExecutionRow) {
         if (runRecordId) (results[results.length - 1] as Record<string, unknown>).runRecordId = runRecordId;
       }
       catch (e) { phase(row, "running", undefined, `基线未记录（${kase.id}）：${String((e as Error).message).slice(0, 80)}`); }
-      if (Array.isArray(result.modelRequests)) {
-        calls += result.modelRequests.filter(r => r.forwarded).length;
-        const caseRevision = (bundle as typeof bundle & { approvedRevisions: string[] }).approvedRevisions.find(id => (ledger().readRevision(id, row.projectId).content as {id:string}).id === kase.id);
-        recordModelRequests(row.runId, result.modelRequests, { caseRevision, executionId: row.id });
-      } else usageComplete = false;
       if (cancelled()) { status = "cancelled"; break; }
       phase(row,"running",undefined,`${results.length}/${chosen.length} · ${kase.id} · ${result.status}`);
       if (!usageComplete) throw new LedgerError(409, "executor_usage_unavailable");
-      approvedExecutionBundle(row.runId, row.projectId, row.codeRevision);
+      validatedBundle();
       if (controller.signal.aborted || result.modelRequests?.some(r => r.error === "BUDGET_EXHAUSTED")) { status = "budget_exhausted"; break; }
+      if(result.lifecycle?.pendingResources.length){status='infra_error';break;}
       if (result.infraError) { status = "infra_error"; break; }
       if (result.status === "unobservable") status = status === "failed" ? status : "unobservable";
       else if (result.status === "failed") status = "failed";
     }
-  } catch (error) { if (active.has(row.id)) usageComplete = false; status = cancelled() ? "cancelled" : controller.signal.aborted || /BUDGET_EXHAUSTED/.test(String(error)) ? "budget_exhausted" : "infra_error"; results.push({ error: error instanceof LedgerError ? error.code : /ENV_RESET_FAILED/.test(String(error)) ? "ENV_RESET_FAILED" : "execution_unavailable" }); }
-  finally { clearTimeout(timer); active.delete(row.id); controllers.delete(row.id); }
+  } catch (error) { observer.issue(cancelled()?"cancelled":"failed",{attribution:"infra",retryable:false}); if (active.has(row.id)) usageComplete = false; status = cancelled() ? "cancelled" : controller.signal.aborted || /BUDGET_EXHAUSTED/.test(String(error)) ? "budget_exhausted" : "infra_error"; results.push({ error: error instanceof LedgerError ? error.code : /ENV_RESET_FAILED/.test(String(error)) ? "ENV_RESET_FAILED" : "execution_unavailable" }); }
+  finally { observer.end(); clearTimeout(timer); active.delete(row.id); controllers.delete(row.id); }
   /**
    * **提前中断时，没跑到的用例要留下记录。**
    *
@@ -263,7 +293,7 @@ async function perform(row: ExecutionRow) {
    * 在界面上长得一模一样——而这两件事对读报告的人意义完全不同。
    */
   try {
-    const all = approvedExecutionBundle(row.runId, row.projectId, row.codeRevision).cases;
+    const all = validatedBundle().cases;
     /**
      * 只补**这次选中的**那些，不补没选的。
      *
@@ -279,8 +309,8 @@ async function perform(row: ExecutionRow) {
           failureReason: `批次在第 ${ran.size} 条之后以 ${status} 停止，这一条没有执行` });
   } catch { /* 读不到 bundle 就不补——宁可少一条记录，也不要在收尾里再抛一次 */ }
   const artifact = ledger().putRevision({ runId: row.runId, projectId: row.projectId, name: `execution/${row.id}`, kind: "execution",
-    content: { executionId: row.id, codeRevision: row.codeRevision, environmentHash: row.environmentHash, budget, forwardedExecutorCalls: usageComplete ? calls : null, usageComplete, status,
-      ...(env.caseIds ? { selection: { caseIds: env.caseIds, ran: env.caseIds.length, of: approvedExecutionBundle(row.runId, row.projectId, row.codeRevision).cases.length } } : {}),
+    content: { observation: observer.data, executionId: row.id, codeRevision: row.codeRevision, environmentHash: row.environmentHash, budget, forwardedExecutorCalls: usageComplete ? calls : null, usageComplete, status,
+      ...(env.caseIds ? { selection: { caseIds: env.caseIds, ran: env.caseIds.length, of: validatedBundle().cases.length } } : {}),
       results, startedAt: row.startedAt, finishedAt: new Date().toISOString() },
     sourceRefs: [row.codeRevision] }, system);
   phase(row, status, artifact.id);

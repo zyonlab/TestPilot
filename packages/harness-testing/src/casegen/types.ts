@@ -1,3 +1,4 @@
+import { LifecycleSchema } from '../exec/lifecycle.js';
 import { z } from "zod";
 import { StateFlowGraphSchema } from "../exec/sfg.js";
 import { MachineOracleSchema } from "../exec/oracle.js";
@@ -308,6 +309,7 @@ export const TextCaseSchema = z.object({
    * 而这个差别一直看不见，直到某个计数断言毫无道理地挂掉。
    */
   postSteps: z.array(z.string().min(1)).default([]),
+  lifecycle: LifecycleSchema.optional(),
   /** One concrete, checkable outcome. The pass/fail oracle. */
   expected: z.string().min(1),
   /**

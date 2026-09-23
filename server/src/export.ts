@@ -1,3 +1,4 @@
+import { LedgerError } from './runLedger.js';
 import type { TextCase } from "@testpilot/harness-testing/casegen";
 import { sealExport, exportHash } from './exportIntegrity.js';
 import { exportOracleFiles } from './exportOracle.js';
@@ -5,7 +6,7 @@ import type { Project, TestCase, Environment } from "./db.js";
 import { buildLayers, flowKey, type LayerMemory, type Layers } from "./exportLayers.js";
 import { getDataset, type Dataset } from "./datasets.js";
 
-type ExportCase = TestCase & { assertions?: TextCase["assertions"] };
+type ExportCase = TestCase & { assertions?: TextCase["assertions"]; lifecycle?: TextCase["lifecycle"] };
 
 /**
  * 文件名。
@@ -193,7 +194,7 @@ function specForCase(
   const post = tc.postSteps.length
     ? "\n  // teardown\n" +
       tc.postSteps
-        .map((s) => `  await aiAction(${T(s.text)}).catch(() => { throw new Error("ENV_TEARDOWN_FAILED"); });`)
+        .map((s, i) => `  try { await aiAction(${T(s.text)}); cleanupReceipts.push({step:${i+1},status:"unknown",detail:"Action completed; no reviewed cleanup oracle"}); } catch (error) { cleanupErrors.push(error); cleanupReceipts.push({step:${i+1},status:page.isClosed()?"unknown":"fail",detail:String(error)}); }`)
         .join("\n")
     : "";
   /**
@@ -236,12 +237,12 @@ function specForCase(
     ...checks.flatMap(a => a.oracle ? [a.oracle.kind === "judge" ? "checkJudge" : "checkOracle", "readBefore"] : [])
   ]);
   const head = `import { test } from "${up}ai";
-${oracleImports.size ? `import { ${[...oracleImports].join(", ")} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
+${post ? 'test.describe.configure({ retries: 0 });\n' : ''}${oracleImports.size ? `import { ${[...oracleImports].join(", ")} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
   // targetUrl 已经是**这条用例自己的入口**（首步的裸导航被提到了这里，见 liftEntryNavigation）。
   const body = `  await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
-${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${checks.map((a, i) => a.oracle ? `  const assertionBefore${i} = await readBefore(page, ${JSON.stringify(a.oracle)});\n` : "").join("")}${post ? "  try {\n" : ""}${steps}
+${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${checks.map((a, i) => a.oracle ? `  const assertionBefore${i} = await readBefore(page, ${JSON.stringify(a.oracle)});\n` : "").join("")}${post ? "  let businessError: unknown; let businessFailed = false; const cleanupErrors: unknown[] = []; const cleanupReceipts: unknown[] = [];\n  try {\n" : ""}${steps}
 ${assert}
-${checks.flatMap((a,i) => bound(a) ? [] : [checkSource(a,i)]).join("\n")}${post ? "\n  } finally {" + post + "\n  }" : ""}`;
+${checks.flatMap((a,i) => bound(a) ? [] : [checkSource(a,i)]).join("\n")}${post ? '\n  } catch (error) { businessFailed = true; businessError = error; } finally {' + post + '\n    try { await test.info().attach("cleanup-receipts", {body:JSON.stringify(cleanupReceipts),contentType:"application/json"}); } catch (error) { cleanupErrors.push(error); }\n  }\n  if (businessFailed) throw businessError;\n  if (cleanupErrors.length) throw new AggregateError(cleanupErrors, "ENV_TEARDOWN_FAILED");' : ""}`;
   const title = `[${tags}] ${tc.title}`;
 
   /**
@@ -328,6 +329,8 @@ export function buildExportFiles(
     /** 这次新抽出来的名字回调出去，由调用方落盘。导出本身保持无状态。 */
     onLayers?: (seen: { actions: string[]; flows: string[] }) => void } = {},
 ): Record<string, string> {
+  const unsupported=cases.filter(c=>c.lifecycle);
+  if(unsupported.length)throw new LedgerError(409,'export_lifecycle_unsupported:'+unsupported.map(c=>c.id).join(','));
   const files: Record<string, string> = {};
   const name = slug(project.name) + "-e2e";
   const environments = opts.environments ?? [];

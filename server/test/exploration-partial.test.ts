@@ -23,37 +23,40 @@ describe("探索中途失败时捡回已采到的屏", () => {
   });
   afterEach(() => { vi.unstubAllEnvs(); rmSync(dir, { recursive: true, force: true }); });
 
-  // 写的时候用**探索器那一侧的函数**算落点：两侧共用同一个函数，这个接缝就错不开。
-  const writePartial = async (projectId: string, body: unknown) => {
-    const { partialObservationPath } = await import("@testpilot/harness-testing/exec");
-    const path = partialObservationPath(db.ARTIFACT_DIR, `observe-${projectId}`);
-    mkdirSync(join(path, ".."), { recursive: true });
-    writeFileSync(path, JSON.stringify(body));
+  const attempt={attemptId:'91d6725e-d5d2-4f10-b274-9d8e4b87bb8d',projectId:'p1',runId:'run1',entryUrl:'https://x.test/',scopeHash:'scope1',startedAt:'2026-09-23T00:00:00.000Z'};
+  const body=()=>({partial:true,sourceAttempt:attempt,at:'2026-09-23T00:01:00.000Z',url:attempt.entryUrl,screens:17,notes:'===== 第 1 屏 =====\n看到了东西'});
+  const writePartial = async (value: unknown, execId=`observe-${attempt.attemptId}`) => {
+    const { partialObservationPath } = await import('@testpilot/harness-testing/exec');
+    const path = partialObservationPath(db.ARTIFACT_DIR, execId);
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, typeof value==='string'?value:JSON.stringify(value));
+    return path;
   };
-
-  it("有材料就捡回来，并说清楚它只到第几屏", async () => {
-    await writePartial("p1", { partial: true, url: "https://x.test/", screens: 17, notes: "===== 第 1 屏 =====\n看到了东西" });
-    const got = ops.readPartialObservation("p1");
-    expect(got).toMatchObject({ screens: 17, url: "https://x.test/" });
-    expect(got!.notes).toContain("看到了东西");
-    // 停止原因要说人话：下游读到的是一份 17 屏的材料，不是 20 屏的。
-    expect(String(got!.stoppedBecause)).toContain("17");
-    // 半成品里没有状态图——给 undefined 而不是编一个空图，否则下游以为这产品只有一屏。
-    expect(got!.graph).toBeUndefined();
+  it('only salvages material captured by this exact attempt, retaining provenance and failed stop', async () => {
+    await writePartial(body());
+    expect(ops.readPartialObservation(attempt)).toMatchObject({screens:17,url:attempt.entryUrl,sourceAttempt:attempt,stopped:{kind:'failed'}});
+    expect(ops.readPartialObservation(attempt)?.graph).toBeUndefined();
   });
-
-  it("材料是空的就当作没有——宁可如实抛出原来的错", async () => {
-    await writePartial("p2", { partial: true, screens: 3, notes: "   " });
-    expect(ops.readPartialObservation("p2")).toBeUndefined();
+  it.each(['attemptId','runId','projectId','entryUrl','scopeHash','startedAt'] as const)('rejects mismatched %s, including another simultaneous attempt', async field => {
+    await writePartial({...body(),sourceAttempt:{...attempt,[field]:field==='attemptId'?'350b241c-6f42-4f7e-8029-87178fd9e172':field==='startedAt'?'2026-09-22T00:00:00.000Z':'other'}});
+    expect(ops.readPartialObservation(attempt)).toBeUndefined();
   });
-
-  it("文件不存在、或者是半个 JSON，都当作没有", async () => {
-    expect(ops.readPartialObservation("never-explored")).toBeUndefined();
-    const { partialObservationPath } = await import("@testpilot/harness-testing/exec");
-    const path = partialObservationPath(db.ARTIFACT_DIR, "observe-p3");
-    mkdirSync(join(path, ".."), { recursive: true });
-    writeFileSync(path, '{"notes":"半个');
-    expect(ops.readPartialObservation("p3")).toBeUndefined();
+  it.each(['legacy','empty','bad-json','no-screens','older','wrong-url','not-partial'])('rejects %s artifacts',async fault=>{
+    const b:Record<string,unknown>=body();
+    if(fault==='legacy')delete b.sourceAttempt;
+    if(fault==='empty')b.notes='  ';
+    if(fault==='no-screens')b.screens=0;
+    if(fault==='older')b.at='2026-09-22T00:00:00.000Z';
+    if(fault==='wrong-url')b.url='https://other.test/';
+    if(fault==='not-partial')b.partial=false;
+    await writePartial(fault==='bad-json'?'{"notes":"half':b);
+    expect(ops.readPartialObservation(attempt)).toBeUndefined();
+  });
+  it('first capture failure cannot pick an older project file; original history is untouched',async()=>{
+    const {readFileSync}=await import('node:fs');
+    const path=await writePartial(body(),'observe-p1'),before=readFileSync(path,'utf8');
+    expect(ops.readPartialObservation({...attempt,attemptId:'ccbe53ca-d8d4-45b0-b0bd-4d0c005212d4'})).toBeUndefined();
+    expect(readFileSync(path,'utf8')).toBe(before);
   });
 });
 

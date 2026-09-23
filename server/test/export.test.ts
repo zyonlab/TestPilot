@@ -302,3 +302,24 @@ it('exports explicit none as visual assertions rather than an unobservable machi
   expect(spec).not.toContain('checkOracle(page, {"kind":"none"}');
   expect(spec).toContain('checkOracle(page, {"kind":"url"');
 });
+
+it('blocks explicit lifecycle exports instead of dropping obligations',()=>{
+ const c={...kase({}),lifecycle:{version:1} as any};
+ expect(()=>buildExportFiles(project,[c])).toThrow('export_lifecycle_unsupported');
+});
+
+it('executes all legacy exported cleanup steps, attaches unknown receipts and preserves the original exception',async()=>{
+ const files=buildExportFiles(project,[kase({steps:[{order:1,text:'Business action'}],expected:'Expected screen',postSteps:[{order:1,text:'First cleanup'},{order:2,text:'Second cleanup'}]})]);
+ const source=Object.entries(files).find(([name])=>name.endsWith('.spec.ts'))![1];
+ const ts=await import('typescript');
+ const js=ts.transpileModule(source.replace(/^import .*;\s*$/gm,''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+ const actions:string[]=[],attachments:any[]=[];let callback:any;
+ const test=Object.assign((_name:string,fn:any)=>{callback=fn;},{describe:{configure:()=>{}},info:()=>({attach:async(_name:string,data:any)=>{attachments.push(JSON.parse(data.body));}})});
+ new Function('test',js)(test);
+ const original=new Error('Original business failure');
+ await expect(callback({page:{goto:async()=>{},isClosed:()=>false},aiAction:async(text:string)=>{actions.push(text);if(text==='Business action')throw original;throw new Error('Cleanup failed '+text);},aiAssert:async()=>{}})).rejects.toBe(original);
+ expect(actions).toEqual(['Business action','First cleanup','Second cleanup']);expect(attachments[0].map((r:any)=>r.status)).toEqual(['fail','fail']);
+ actions.length=0;attachments.length=0;
+ await callback({page:{goto:async()=>{},isClosed:()=>false},aiAction:async(text:string)=>{actions.push(text);},aiAssert:async()=>{}});
+ expect(attachments[0].map((r:any)=>r.status)).toEqual(['unknown','unknown']);
+});
