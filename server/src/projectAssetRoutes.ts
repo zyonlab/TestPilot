@@ -1,3 +1,4 @@
+import {ProjectTasks} from './projectTasks.js';
 import {ProjectDiscoveries} from './projectDiscoveries.js';
 import {createProjectRunPlan,readProjectRunPlan,projectPlanInputs} from './projectRunPlans.js';
 import {createWebWorkflow} from './workflowOps.js';
@@ -17,6 +18,10 @@ export function projectAssetRouter(){
  router.get('/discoveries',wrap(req=>({discoveries:new ProjectDiscoveries(runLedger()).list(req.params.projectId)})));
  router.post('/discoveries/collect',wrap(req=>{reviewerPrincipal(req);const ledger=runLedger(),collector=new ProjectDiscoveries(ledger);for(const r of ledger.listRevisions(req.params.projectId,req.body.runId)){collector.capture(r,ledger.readRevision(r.id,req.params.projectId).content);}return {discoveries:collector.list(req.params.projectId)};}));
  router.post('/discoveries/:id/decision',wrap(req=>new ProjectDiscoveries(runLedger()).decide(req.params.projectId,req.params.id,req.body.status,req.body.reason,reviewerPrincipal(req))));
+ router.get('/tasks',wrap(req=>({tasks:new ProjectTasks(runLedger()).list(req.params.projectId)})));
+ router.post('/tasks',wrap(req=>{reviewerPrincipal(req);return new ProjectTasks(runLedger()).create(req.params.projectId,req.body);}));
+ router.post('/tasks/:id/decision',wrap(req=>new ProjectTasks(runLedger()).decide(req.params.projectId,req.params.id,req.body.approve===true,req.body.reason,reviewerPrincipal(req))));
+ router.get('/impact/:id',wrap(req=>new ProjectTasks(runLedger()).impact(req.params.projectId,req.params.id)));
  router.get('/',wrap(req=>store().list(req.params.projectId)));
  router.post('/candidates',wrap(req=>store().propose(req.params.projectId,req.body,reviewerPrincipal(req))));
  router.get('/versions/:id',wrap(req=>store().read(req.params.projectId,req.params.id)));
