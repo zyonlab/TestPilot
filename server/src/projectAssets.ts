@@ -34,6 +34,8 @@ export class ProjectAssets{
   const input=proposal.parse(raw);
   return this.ledger.db.transaction(()=>{
    const source=this.ledger.readRevision(input.sourceRevision,projectId);
+   const lineage=this.ledger.requireRun(source.revision.runId,projectId).input.parameters?.projectLineageId;
+   if(typeof lineage==='string'&&lineage.startsWith('line-')&&!input.assetKey.startsWith(lineage+'/'))throw new LedgerError(409,'asset_lineage_required:'+lineage);
    // Raw observations/reports and gold are evidence, not adopted business assets.
    if(!['material','stories','cases','modules'].includes(source.revision.kind)&&!['product/model-candidate','validated/modules'].includes(source.revision.name))throw new LedgerError(400,'asset_source_not_reusable');
    if(input.baseVersion&&this.read(projectId,input.baseVersion).version.assetKey!==input.assetKey)throw new LedgerError(409,'asset_parent_conflict');

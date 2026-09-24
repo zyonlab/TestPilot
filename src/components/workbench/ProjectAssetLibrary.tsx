@@ -5,12 +5,12 @@ import {Button} from '@/components/ui';
 import {DocumentFields} from './ArtifactDocument';
 type Version={id:string;assetKey:string;sourceRun:string;sourceRevision:string;baseVersion:string|null;status:string;staleDependencies:string[];dependencies:string[]};
 type Library={heads:Record<string,string>;versions:Version[];snapshots:Array<{id:string;label:string;digest:string;createdAt:string}>};
-export function ProjectAssetLibrary({projectId,source}:{projectId:string;source?:Revision}){
+export function ProjectAssetLibrary({projectId,source,sourceLineage}:{projectId:string;source?:Revision;sourceLineage?:string}){
  const t=useT(),base=`projects/${encodeURIComponent(projectId)}/assets`;
  const [data,setData]=useState<Library>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[assetKey,setAssetKey]=useState(''),[reason,setReason]=useState(''),[dependencies,setDependencies]=useState<string[]>([]),[selected,setSelected]=useState(''),[comparison,setComparison]=useState<{current:unknown;previous:unknown}>(),[label,setLabel]=useState('');
  const refresh=()=>workflowRequest<Library>(base).then(setData);
  useEffect(()=>{let live=true;workflowRequest<Library>(base).then(x=>{if(live)setData(x);}).catch(e=>{if(live)setError(String(e));});return()=>{live=false;};},[base]);
- useEffect(()=>{setAssetKey(source?.name??'');setDependencies([]);},[source?.id]);
+ useEffect(()=>{setAssetKey(source?(sourceLineage?.startsWith('line-')?sourceLineage+'/':'')+source.name:'');setDependencies([]);},[source?.id,sourceLineage]);
  async function act(path:string,body:unknown){setBusy(true);setError('');try{await workflowRequest(base+path,body);await refresh();}catch(e){setError(String(e));}finally{setBusy(false);}}
  useEffect(()=>{let live=true;setComparison(undefined);setReason('');if(!selected)return;
   const load=async()=>{const current=await workflowRequest<{version:Version;content:unknown}>(base+'/versions/'+selected);const prior=data?.heads[current.version.assetKey];const previous=prior===selected?current:prior?await workflowRequest<{content:unknown}>(base+'/versions/'+prior):undefined;if(live)setComparison({current:current.content,previous:previous?.content});};

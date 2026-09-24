@@ -10,6 +10,19 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "evolution.title":{"zh": "项目发现与增量任务", "en": "Project discoveries and incremental tasks", "ja": "発見と増分タスク"},
+  "evolution.hint":{"zh": "发现是待核实线索。规划任务读取固定快照并提出修订，不执行交易、不替代需求审核。依赖任务审核完成后，下游才能领取。", "en": "Discoveries are leads. Planning reads pinned inputs and proposes changes; it does not trade or approve requirements. Dependencies must be reviewed before downstream work.", "ja": "発見は未確認です。固定入力で変更を提案し、取引や要件承認は行いません。依存タスクの確認後に進みます。"},
+  "evolution.collect":{"zh": "收集已有回执中的发现", "en": "Collect discoveries from receipts", "ja": "既存記録から発見を収集"},
+  "evolution.triage":{"zh": "确认需要分析", "en": "Triage for analysis", "ja": "分析対象にする"},
+  "evolution.dismiss":{"zh": "驳回", "en": "Dismiss", "ja": "却下"},
+  "evolution.newTask":{"zh": "创建增量任务", "en": "Create incremental task", "ja": "増分タスクを作成"},
+  "evolution.target":{"zh": "目标节点", "en": "Target node", "ja": "対象ノード"},
+  "evolution.goal":{"zh": "任务目标与完成条件", "en": "Goal and completion criteria", "ja": "目標と完了条件"},
+  "evolution.dependencies":{"zh": "前置任务", "en": "Prerequisite tasks", "ja": "前提タスク"},
+  "evolution.plan":{"zh": "分析并提出修订", "en": "Analyze and propose changes", "ja": "分析・変更提案"},
+  "evolution.accept":{"zh": "审核任务结果", "en": "Accept task result", "ja": "タスク結果を承認"},
+  "evolution.followups":{"zh": "登记后续任务", "en": "Register follow-up tasks", "ja": "後続タスクを登録"},
+
   "plans.mode":{"zh": "运行方式", "en": "Run mode", "ja": "実行方式"},
   "plans.clean":{"zh": "从头生成（不读取旧产物或经验）", "en": "Generate fresh (no past artifacts or experience)", "ja": "新規生成（過去の成果・経験なし）"},
   "plans.incremental":{"zh": "基于快照增量完善", "en": "Improve from snapshot", "ja": "スナップショットから改善"},
