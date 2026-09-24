@@ -10,6 +10,16 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "plans.mode":{"zh": "运行方式", "en": "Run mode", "ja": "実行方式"},
+  "plans.clean":{"zh": "从头生成（不读取旧产物或经验）", "en": "Generate fresh (no past artifacts or experience)", "ja": "新規生成（過去の成果・経験なし）"},
+  "plans.incremental":{"zh": "基于快照增量完善", "en": "Improve from snapshot", "ja": "スナップショットから改善"},
+  "plans.rebuild":{"zh": "独立重新建档", "en": "Start independent lineage", "ja": "独立した新系統"},
+  "plans.snapshot":{"zh": "选择资产快照", "en": "Select asset snapshot", "ja": "資産スナップショットを選択"},
+  "plans.preview":{"zh": "预览并固定运行计划", "en": "Preview and pin run plan", "ja": "実行計画を確認・固定"},
+  "plans.inherit":{"zh": "仅继承所选快照资产作为参考；不转移执行批准。", "en": "Selected snapshot assets are references only; approvals do not transfer.", "ja": "選択資産は参考のみで承認は移譲しません。"},
+  "plans.isolated":{"zh": "使用所选领域资料和规则；排除历史生成产物与跨运行准备经验。", "en": "Uses selected knowledge and rules; excludes historical generated artifacts and cross-run preparation experience.", "ja": "選択した知識とルールのみ使用し、過去の生成物と実行間経験を除外します。"},
+  "plans.noReset":{"zh": "不会重置交易账户或自动清理订单、持仓。", "en": "Does not reset accounts, orders or positions.", "ja": "口座・注文・ポジションはリセットしません。"},
+
   "assets.title":{"zh": "项目资产版本", "en": "Project asset versions", "ja": "プロジェクト資産バージョン"},
   "assets.hint":{"zh": "先选择运行物料，再登记为项目候选。采纳需要审阅内容与依赖；纳入资产库不等于批准业务需求、批准执行或测试通过。", "en": "Select a run artifact to propose a project version. Review content and dependencies before adoption. Adoption is not requirement approval, execution authorization, or a passing test.", "ja": "実行成果物から資産候補を登録します。採用前に内容と依存関係を確認してください。採用は要件承認・実行許可・合格ではありません。"},
   "assets.source":{"zh": "来源", "en": "Source", "ja": "出典"},

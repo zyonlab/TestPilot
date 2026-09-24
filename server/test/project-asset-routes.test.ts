@@ -29,3 +29,12 @@ it('rejects missing projects, forged foreign sources and malformed requests',asy
  const foreign=await fetch(base.replace(project,other)+'/candidates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assetKey:'rules',sourceRevision:source,baseVersion:null})});expect(foreign.status).toBe(409);
  expect((await post('/snapshots',{})).status).toBe(400);
 });
+it('pins clean and incremental plan inputs, rejects historical imports and foreign snapshots',async()=>{
+ const clean=await post('/plans',{mode:'clean',label:'Clean',configuration:{sourceKind:'explore',sourceUrl:'http://localhost',knowledgeSelection:null,rulePackSelection:null}});expect(clean.status).toBe(200);const plan=await clean.json();expect(plan.reuseExperience).toBe(false);expect(plan.configuration.knowledge).toEqual([]);
+ expect((await post('/plans',{mode:'clean',label:'Bad',snapshotId:'anything',configuration:{}})).status).toBe(400);
+ expect((await post('/plans',{mode:'rebuild',label:'Bad',configuration:{importStories:{stories:[]}}})).status).toBe(400);
+ const snapshot=await (await post('/snapshots',{label:'Reuse'})).json();const incremental=await (await post('/plans',{mode:'incremental',label:'Incremental',snapshotId:snapshot.id,configuration:{}})).json();expect(incremental.configuration.knowledge[0].text).toContain('Reference asset rules');
+ const rebuild=await (await post('/plans',{mode:'rebuild',label:'New lineage',configuration:{}})).json();expect(rebuild.lineageId).toMatch(/^line-/);expect(rebuild.configuration.knowledge).toEqual([]);
+ expect((await (await fetch(base+'/plans/'+plan.id)).json()).inputDigest).toBe(plan.inputDigest);
+ expect((await fetch(base.replace(project,other)+'/plans/'+plan.id)).status).toBe(409);
+});

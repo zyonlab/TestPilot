@@ -1,3 +1,5 @@
+import {createProjectRunPlan,readProjectRunPlan,projectPlanInputs} from './projectRunPlans.js';
+import {createWebWorkflow} from './workflowOps.js';
 import {Router} from 'express';
 import {ProjectAssets} from './projectAssets.js';
 import {assertProject,runLedger} from './runService.js';
@@ -8,6 +10,9 @@ export function projectAssetRouter(){
  router.use((req,res,next)=>{try{assertProject((req.params as {projectId:string}).projectId);next();}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof LedgerError?e.code:'asset_request_invalid'});}});
  const wrap=(fn:(req:any)=>unknown)=>(req:any,res:any)=>{try{res.json(fn(req));}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof LedgerError?e.code:'asset_request_invalid'});}};
  const store=()=>new ProjectAssets(runLedger());
+ router.post('/plans',wrap(req=>{reviewerPrincipal(req);return createProjectRunPlan(req.params.projectId,req.body);}));
+ router.get('/plans/:id',wrap(req=>readProjectRunPlan(req.params.projectId,req.params.id)));
+ router.post('/plans/:id/start',async(req,res)=>{try{reviewerPrincipal(req);const project=(req.params as any).projectId;const plan=readProjectRunPlan(project,req.params.id);if(plan.runId){res.json({wfRunId:plan.runId,created:false});return;}const result=await createWebWorkflow(project,projectPlanInputs(project,req.params.id));runLedger().db.prepare('UPDATE project_run_plans SET runId=? WHERE id=?').run(result.wfRunId,plan.id);res.json(result);}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof Error?e.message:'plan_start_failed'});}});
  router.get('/',wrap(req=>store().list(req.params.projectId)));
  router.post('/candidates',wrap(req=>store().propose(req.params.projectId,req.body,reviewerPrincipal(req))));
  router.get('/versions/:id',wrap(req=>store().read(req.params.projectId,req.params.id)));
