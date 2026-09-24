@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import type {Principal} from '@testpilot/harness-core/run-contracts';
 import type {Story} from '@testpilot/harness-testing/casegen';
 import {runLedger} from './runService.js';
-import {LedgerError} from './runLedger.js';
+import {LedgerError,contentHash} from './runLedger.js';
 
 export function markCandidateStories(stories:Story[],rules:Array<{id:string;claimType:string}>) {
   for(const story of stories){
@@ -13,6 +13,38 @@ export function markCandidateStories(stories:Story[],rules:Array<{id:string;clai
     if(cited.some(r=>r.claimType==='hypothesis') || (rules.length>0&&rules.every(r=>r.claimType==='hypothesis')))
       story.requirementDraft ??= {reason:'来源规则包含未确认假设，验收条件为候选业务预期。',questions:[`请确认「${story.title}」的业务范围与各项候选验收条件，或补充正式需求后重新生成。`]};
   }
+}
+/** Approval reuse is limited to a verified downstream fork with unchanged business inputs. */
+function reviewContext(runId:string,projectId:string){
+ const l=runLedger(),run=l.requireRun(runId,projectId),latest=[...new Map(l.listRevisions(projectId,runId).map(r=>[r.kind+':'+r.name,r])).values()];
+ return contentHash(canonicalJSON({environment:run.binding.environmentHash,target:Object.fromEntries(['sourceUrl','targetUrl','envRef','exploreWallet'].map(k=>[k,run.input.parameters?.[k]??null])),materials:run.binding.materialRevisions.map(id=>{const r=l.readRevision(id,projectId).revision;return [r.name,r.contentHash];}).sort(),knowledge:latest.filter(r=>r.name.startsWith('knowledge/')||['validated/modules','product/model-candidate','exploration/report'].includes(r.name)).map(r=>[r.kind,r.name,r.contentHash]).sort()}));
+}
+function approvedRevision(runId:string,projectId:string,storyId:string,seen=new Set<string>()):string|undefined{
+ if(seen.has(storyId))return;seen.add(storyId);const l=runLedger(),story=l.readRevision(storyId,projectId).revision;if(story.runId!==runId||story.name!=='validated/stories')return;
+ const revisions=l.listRevisions(projectId,runId);
+ const direct=revisions.find(r=>r.name==='review/story-requirements'&&r.createdBy.kind==='human'&&r.sourceRefs.includes(storyId));if(direct)return direct.id;
+ for(const r of revisions.filter(r=>r.name==='review/story-requirements-inherited'&&r.createdBy.kind==='system'&&r.createdBy.id==='story-approval-inheritance'&&r.sourceRefs.includes(storyId))){
+  const c=l.readRevision(r.id,projectId).content as any;
+  if(typeof c.parentRunId!=='string'||typeof c.parentStoryId!=='string'||!story.sourceRefs.includes(c.parentStoryId))continue;
+  const parent=l.readRevision(c.parentStoryId,projectId).revision;
+  if(parent.runId!==c.parentRunId||parent.contentHash!==story.contentHash||c.contextDigest!==reviewContext(runId,projectId)||c.contextDigest!==reviewContext(c.parentRunId,projectId))continue;
+  const approval=approvedRevision(c.parentRunId,projectId,c.parentStoryId,seen);
+  if(approval&&approval===c.parentApprovalId&&r.sourceRefs.includes(approval))return r.id;
+ }
+}
+export function inheritStoryApproval(parentRunId:string,runId:string,projectId:string){
+ const l=runLedger();l.requireRun(parentRunId,projectId);l.requireRun(runId,projectId);
+ const parent=l.listRevisions(projectId,parentRunId).filter(r=>r.name==='validated/stories').at(-1),story=l.listRevisions(projectId,runId).filter(r=>r.name==='validated/stories').at(-1);
+ if(!parent||!story||parent.contentHash!==story.contentHash||!story.sourceRefs.includes(parent.id))return false;
+ const origin=l.listRevisions(projectId,runId).find(r=>r.name==='report/rerun-origin'&&r.createdBy.kind==='system'&&r.createdBy.id==='rerun');
+ if(!origin)return false;const o=l.readRevision(origin.id,projectId).content as any;
+ if(o.parentRunId!==parentRunId||!['cases','gate'].includes(o.fromNode))return false;
+ const approval=approvedRevision(parentRunId,projectId,parent.id),digest=reviewContext(runId,projectId);
+ if(!approval||digest!==reviewContext(parentRunId,projectId))return false;
+ if(approvedRevision(runId,projectId,story.id))return true;
+ const prior=l.listRevisions(projectId,runId).filter(r=>r.name==='review/story-requirements-inherited').at(-1);
+ l.putRevision({runId,projectId,name:'review/story-requirements-inherited',kind:'report',content:{parentRunId,parentStoryId:parent.id,parentApprovalId:approval,contextDigest:digest,reason:'Unchanged stories and business inputs copied for downstream rerun'},sourceRefs:[story.id,parent.id,approval,origin.id],parentRevision:prior?.id},{kind:'system',id:'story-approval-inheritance'});
+ storyReviewEvent(runId,projectId,'done',story.id,'沿用未变更故事的既有人工审批，来源运行 '+parentRunId);return true;
 }
 export function storyReviewState(runId:string,projectId:string){
   const ledger=runLedger();ledger.requireRun(runId,projectId);
@@ -22,8 +54,10 @@ export function storyReviewState(runId:string,projectId:string){
   if(!revision)return {pending:false,revisionId:undefined,transitions};
   const content=ledger.readRevision(revision.id,projectId).content as {stories?:Story[]};
   const candidates=(content.stories??[]).filter(s=>s.requirementDraft);
-  const approved=revisions.some(r=>r.name==='review/story-requirements'&&r.createdBy.kind==='human'&&r.sourceRefs.includes(revision.id));
-  return {pending:candidates.length>0&&!approved,revisionId:revision.id,candidates,stories:content.stories??[],transitions,transitionFindings:businessTransitionIssues(content.stories??[],transitions)};
+  const approvalRevisionId=approvedRevision(runId,projectId,revision.id),approved=!!approvalRevisionId;
+  const approval=approvalRevisionId?ledger.readRevision(approvalRevisionId,projectId):undefined;
+  const inheritedFromRun=approval?.revision.name==='review/story-requirements-inherited'?(approval.content as {parentRunId:string}).parentRunId:undefined;
+  return {pending:candidates.length>0&&!approved,approvalRevisionId,inheritedFromRun,revisionId:revision.id,candidates,stories:content.stories??[],transitions,transitionFindings:businessTransitionIssues(content.stories??[],transitions)};
 }
 export function requireStoryApproval(runId:string,projectId:string){
   if(storyReviewState(runId,projectId).pending)throw new LedgerError(409,'story_requirements_need_review: 请在用户故事节点审核候选业务预期；不能将假设直接用于用例设计。');
@@ -45,13 +79,15 @@ export function guardStoryResume(runId:string,projectId:string){
   const ledger=runLedger(),state=storyReviewState(runId,projectId);
   if(!state.pending)return;
   if(['running','queued'].includes(ledger.getRun(runId,projectId).status))throw new LedgerError(409,'host_still_running');
+  const origin=ledger.listRevisions(projectId,runId).find(r=>r.name==='report/rerun-origin'&&r.createdBy.kind==='system'&&r.createdBy.id==='rerun');
+  if(origin){const c=ledger.readRevision(origin.id,projectId).content as {parentRunId:string};if(inheritStoryApproval(c.parentRunId,runId,projectId))return;}
   pauseForStoryReview(runId,projectId);
   requireStoryApproval(runId,projectId);
 }
-export function storyReviewEvent(runId:string,projectId:string,phase:'waiting_review'|'done',revisionId:string){
+export function storyReviewEvent(runId:string,projectId:string,phase:'waiting_review'|'done',revisionId:string,message?:string){
   const ledger=runLedger();
   const sequence=(ledger.db.prepare('SELECT COALESCE(MAX(sequence),-1)+1 AS n FROM workflow_events WHERE runId=? AND node=? AND attempt=0').get(runId,'stories') as {n:number}).n;
-  ledger.appendEvent({id:'stage-'+randomUUID(),runId,node:'stories',attempt:0,sequence,at:new Date().toISOString(),phase,revisionId,message:phase==='waiting_review'?'候选需求待人工确认：请审核故事中的业务预期和问题。':'候选业务预期已由用户确认。'},projectId);
+  ledger.appendEvent({id:'stage-'+randomUUID(),runId,node:'stories',attempt:0,sequence,at:new Date().toISOString(),phase,revisionId,message:message??(phase==='waiting_review'?'候选需求待人工确认：请审核故事中的业务预期和问题。':'候选业务预期已由用户确认。')},projectId);
 }
 export function approveStoryRequirements(runId:string,projectId:string,revisionId:string,principal:Principal){
   if(principal.kind!=='human')throw new LedgerError(403,'operator_action_required');

@@ -13,3 +13,8 @@ it('shows proposed criteria and missing business decisions, not an execution pas
 it('removes the confirmation action after this revision has been approved',()=>{
  expect(renderToStaticMarkup(<StoryRequirementsPanel data={{...data,pending:false}} error="" busy={false} status="paused" approve={async()=>{}}/>)).toBe('');
 });
+
+it('shows the origin of inherited approval without another approval button',()=>{
+ const html=renderToStaticMarkup(<StoryRequirementsPanel data={{...data,pending:false,inheritedFromRun:'run-reviewed-parent'}} error="" busy={false} status="paused" approve={async()=>{}}/>);
+ expect(html).toContain('已沿用原人工审批');expect(html).toContain('run-reviewed-parent');expect(html).not.toContain('<button');
+});

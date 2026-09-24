@@ -97,6 +97,7 @@ export const dict: Record<string, Entry> = {
   "businessLifecycle.invalid":{"zh": "验收引用无效", "en": "Invalid criterion reference", "ja": "無効な検収条件参照"},
 
   "stories.review.origin":{zh:"本条来源于候选需求草稿；确认状态请查看用户故事节点。",en:"Proposed requirement draft; check the story node for approval status.",ja:"候補要件の草稿です。承認状態はストーリーノードで確認してください。"},
+  "stories.review.inherited": {"zh":"故事和业务输入未变，已沿用原人工审批。来源运行：","en":"Unchanged stories and business inputs reuse the original human approval. Source run:","ja":"ストーリーと業務入力が同一のため、既存の承認を継承しました。元の実行："},
   "stories.review.title":{zh:"候选业务需求待确认",en:"Candidate requirements need review",ja:"候補要件の確認が必要です"},
   "stories.review.hint":{zh:"以下验收条件是基于探索或领域假设提出的候选预期，尚未成为正式需求。请逐条核对；若不正确，补充项目领域资料后重新生成故事。确认前不会进入用例设计。",en:"These proposed criteria are not approved requirements. Review each one, or update project knowledge and regenerate stories. Case design is blocked until approval.",ja:"候補の検収条件は未承認です。各項目を確認するか資料を更新して再生成してください。承認前はケース設計に進みません。"},
   "stories.review.approve":{zh:"我已审核，确认这些候选业务预期",en:"I reviewed and approve these requirements",ja:"確認済みの候補要件を承認する"},

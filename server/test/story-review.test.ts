@@ -67,3 +67,21 @@ it('persists a candidate review stop when cases are queued; approval remains rev
  expect(review.storyReviewState(id,project).pending).toBe(true);
  expect(()=>controls.requireStageStarted(id,project,'cases')).toThrow('story_requirements_need_review');
 });
+
+it('inherits only a verified downstream copy of approved stories and unchanged inputs',()=>{
+ const l=service.runLedger(),actor={kind:'system' as const,id:'rerun'},human={kind:'human' as const,id:'reviewer'};
+ const register=(name:string)=>service.registerHostRun(project,{runtime:'codex',externalId:name,idempotencyKey:name,materials:[{name:'scope.md',text:'Same business input'}]}).runId;
+ const parent=register('approval-parent');const content={stories:[{id:'S',title:'Candidate',acceptance:['Outcome'],requirementDraft:{reason:'Hypothesis',questions:['Confirm']}}]};
+ const source=l.putRevision({projectId:project,runId:parent,name:'validated/stories',kind:'stories',content},actor);
+ const fork=(name:string,from=parent,revision=source,changes=content,node='cases')=>{const id=register(name);l.putRevision({projectId:project,runId:id,name:'validated/stories',kind:'stories',content:changes,sourceRefs:[revision.id]},actor);l.putRevision({projectId:project,runId:id,name:'report/rerun-origin',kind:'report',content:{parentRunId:from,fromNode:node}},actor);return id;};
+ const child=fork('approval-child');expect(review.inheritStoryApproval(parent,child,project)).toBe(false);
+ review.approveStoryRequirements(parent,project,source.id,human);
+ expect(review.inheritStoryApproval(parent,child,project)).toBe(true);expect(review.storyReviewState(child,project)).toMatchObject({pending:false,inheritedFromRun:parent});
+ const receipt=l.listRevisions(project,child).find(r=>r.name==='review/story-requirements-inherited')!;expect(receipt.createdBy.kind).toBe('system');expect(receipt.sourceRefs).toContain(source.id);
+ const copied=l.listRevisions(project,child).find(r=>r.name==='validated/stories')!;
+ const grandchild=fork('approval-grandchild',child,copied);expect(review.inheritStoryApproval(child,grandchild,project)).toBe(true);
+ const changed=fork('approval-changed',parent,source,{stories:[{...content.stories[0],acceptance:['Different outcome']}]});expect(review.inheritStoryApproval(parent,changed,project)).toBe(false);
+ const rules=fork('approval-new-rules');l.putRevision({projectId:project,runId:rules,name:'knowledge/rules',kind:'report',content:{rule:'Changed rule'}},actor);expect(review.inheritStoryApproval(parent,rules,project)).toBe(false);
+ const regenerate=fork('approval-regenerate',parent,source,content,'stories');expect(review.inheritStoryApproval(parent,regenerate,project)).toBe(false);
+ l.putRevision({projectId:project,runId:child,name:'validated/stories',kind:'stories',content:{stories:[{...content.stories[0],acceptance:['New condition']}]},parentRevision:copied.id},actor);expect(review.storyReviewState(child,project).pending).toBe(true);
+});

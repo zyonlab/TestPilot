@@ -1,4 +1,4 @@
-import {guardStoryResume,pauseForStoryReview} from './storyReview.js';
+import {guardStoryResume,pauseForStoryReview,inheritStoryApproval} from './storyReview.js';
 import {requireHost} from "./plannerHost.js";
 import {readKnowledgeLibrary} from "./knowledgeLibrary.js";
 import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
@@ -297,8 +297,8 @@ export async function resumeProjectWorkflow(runId: string, projectId: string, ne
     void launchSource(runId,projectId,dataPath(`uploads/${runId}`),params).catch(()=>{});
     return {status:'running'};
   }
-  const checkpoint = workflowCheckpoint(runId, projectId);
   guardStoryResume(runId,projectId);
+  const checkpoint = workflowCheckpoint(runId, projectId);
   const row = ledger.getRun(runId, projectId);
   /**
    * `waiting_review` 有两种，能不能续跑正相反：
@@ -375,6 +375,7 @@ export async function rerunProjectNode(runId:string,projectId:string,raw:unknown
         stageEvent(nextId,projectId,node,'done','沿用上游产物，来源 '+runId);
       }
     }
+    if(before.includes('stories'))inheritStoryApproval(runId,nextId,projectId);
     if(before.includes('stories')&&pauseForStoryReview(nextId,projectId)){stageEvent(nextId,projectId,input.node,'blocked','等待本次运行的候选故事审核；当前节点尚未启动。');return created;}
     configureNextNode(nextId,projectId,input.node);
     const nextParams=l.requireRun(nextId,projectId).input.parameters;
