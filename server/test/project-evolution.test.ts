@@ -1,7 +1,7 @@
 import {beforeAll,afterAll,it,expect,vi} from 'vitest';
 import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {captureWebModels} from './helpers/model-snapshot.js';
-const chat=vi.hoisted(()=>vi.fn());vi.mock('../src/plannerHost.js',()=>({requireHost:async()=> 'codex',nativeHostChat:chat}));
+const chat=vi.hoisted(()=>vi.fn());vi.mock('../src/plannerHost.js',()=>({savedHost:()=> 'codex',requireHost:async()=> 'codex',nativeHostChat:chat}));
 vi.mock('../src/modelSnapshots.js',async()=>({captureHostWebModels:(await import('./helpers/model-snapshot.js')).captureHostWebModels}));
 let dir:string,project:string,other:string,runId:string,ref:string,snapshot:string,discovery:string,service:typeof import('../src/runService.js'),database:typeof import('../src/db.js'),assets:import('../src/projectAssets.js').ProjectAssets,tasks:import('../src/projectTasks.js').ProjectTasks,discoveries:import('../src/projectDiscoveries.js').ProjectDiscoveries,incremental:typeof import('../src/projectIncremental.js');
 const human={kind:'human' as const,id:'reviewer'},system={kind:'system' as const,id:'fixture'};
@@ -30,4 +30,34 @@ it('global planner creates candidate assets, bounded follow-ups and preserves or
 it('rejects invented evidence and wrong base versions; clean plans cannot inherit snapshot or experience',async()=>{
  const work=task('Validate response'),context=incremental.incrementalContext(project,work.id);expect(()=>incremental.validateIncrementalProposal(context,{summary:'x',changes:[{assetKey:'rules',baseVersion:null,kind:'material',content:{},dependencies:[],evidenceRefs:[ref],reason:'x'}],followUps:[]})).toThrow('proposal_base_mismatch');
  const plans=await import('../src/projectRunPlans.js');const plan=plans.createProjectRunPlan(project,{mode:'clean',label:'Clean',configuration:{knowledgeSelection:null,rulePackSelection:null}});expect(plans.projectPlanInputs(project,plan.id).reuseExperience).toBe(false);expect(plan.configuration.knowledge).toEqual([]);expect(()=>plans.createProjectRunPlan(project,{mode:'clean',label:'Bad',configuration:{},snapshotId:snapshot})).toThrow('clean_plan_cannot_inherit_snapshot');
+});
+it('completes a second incremental cycle, preserves old snapshots and records a human comparison',async()=>{
+ const first=assets.list(project).versions.find(v=>v.assetKey==='story/partial-close')!;assets.decide(project,first.id,{action:'adopt',expectedHead:null,reason:'Fixture human review'},human);
+ const secondSnapshot=assets.snapshot(project,'Second cycle',human);
+ const work=tasks.create(project,{snapshotId:secondSnapshot.id,discoveryIds:[discovery],target:'stories',goal:'Add rejection recovery',assetKeys:['story/partial-close']});
+ chat.mockResolvedValueOnce({text:JSON.stringify({summary:'Add recovery',changes:[{assetKey:'story/partial-close',baseVersion:first.id,kind:'stories',content:{stories:[{id:'S-PARTIAL',title:'Partial close',acceptance:['Remaining active','Reject excess','Retry after correction']}]},dependencies:[],evidenceRefs:[ref],reason:'Recovery missing'}],followUps:[]}),tokens:1,ms:1});
+ const done=await incremental.runProjectTask(project,work.id),second=(done.result as {candidateVersions:string[]}).candidateVersions[0];expect(assets.readSnapshot(project,snapshot).heads['story/partial-close']).toBeUndefined();expect(assets.heads(project)['story/partial-close']).toBe(first.id);
+ const comparison=await import('../src/projectComparisons.js');const report=comparison.compareProjectAssets(project,first.id,second);expect(report.delta.acceptanceCriteria).toBe(1);expect(report.inputComparison.causalAttributionSupported).toBe(false);const reviewed=comparison.reviewProjectComparison(project,{before:first.id,after:second,verdict:'better',reason:'Fixture reviewer confirms recovery coverage'},human);expect(comparison.projectComparisons(project).map(r=>r.id)).toContain(reviewed.id);
+ const plans=await import('../src/projectRunPlans.js');const clean=plans.createProjectRunPlan(project,{mode:'clean',label:'Clean after two cycles',configuration:{}});expect(JSON.stringify(clean.configuration)).not.toContain('S-PARTIAL');const reused=plans.createProjectRunPlan(project,{mode:'incremental',label:'Reuse',snapshotId:secondSnapshot.id,configuration:{}});expect(JSON.stringify(reused.configuration)).toContain('S-PARTIAL');
+});
+it('held-out results cannot enter project discoveries or reusable assets',()=>{
+ const held=service.runLedger().register({projectId:project,externalId:'held-out',idempotencyKey:'held-out',binding:{schemaVersion:1,models:captureWebModels().binding,skillVersion:'fixture',loadedDigest:'a'.repeat(64),materialsHash:null,inputHash:null,environmentHash:null,materialRevisions:[]},parameters:{evaluationSplit:'held-out'}},system).runId;
+ const before=discoveries.list(project).length;const observation=service.runLedger().putRevision({projectId:project,runId:held,name:'exploration/report',kind:'report',content:{observations:[{status:'blocked',featureId:'secret-eval',reason:'Missing fixture'}]}},system);expect(discoveries.list(project)).toHaveLength(before);
+ expect(()=>discoveries.record(project,{runId:held,evidenceRef:observation.id,category:'missing_state',featureId:'secret-eval',observation:'secret'},human)).toThrow('held_out_discovery_not_reusable');
+ const source=service.runLedger().putRevision({projectId:project,runId:held,name:'answers',kind:'material',content:{answer:42}},system);expect(()=>assets.propose(project,{assetKey:'answers',sourceRevision:source.id,baseVersion:null},human)).toThrow('held_out_asset_not_reusable');
+});
+it('rebuild namespaces cannot overwrite main assets, and snapshots isolate lineages',()=>{
+ const line='line-fixture';const fresh=service.runLedger().register({projectId:project,externalId:'rebuild',idempotencyKey:'rebuild',binding:{schemaVersion:1,models:captureWebModels().binding,skillVersion:'fixture',loadedDigest:'a'.repeat(64),materialsHash:null,inputHash:null,environmentHash:null,materialRevisions:[]},parameters:{projectLineageId:line,projectRunMode:'rebuild',reuseExperience:false}},system).runId;
+ const source=service.runLedger().putRevision({projectId:project,runId:fresh,name:'rules',kind:'material',content:{newLineage:true}},system);
+ expect(()=>assets.propose(project,{assetKey:'rules',sourceRevision:source.id,baseVersion:null},human)).toThrow('asset_lineage_required');const v=assets.propose(project,{assetKey:line+'/rules',sourceRevision:source.id,baseVersion:null},human);assets.decide(project,v.id,{action:'adopt',expectedHead:null,reason:'Fixture review'},human);
+ expect(assets.snapshot(project,'Main',human).heads[line+'/rules']).toBeUndefined();expect(Object.keys(assets.snapshot(project,'Rebuild',human,line).heads)).toEqual([line+'/rules']);
+});
+
+it('rejects a plan if project configuration changed after preview',async()=>{
+ const plans=await import('../src/projectRunPlans.js');const plan=plans.createProjectRunPlan(project,{mode:'clean',label:'Before edit',configuration:{}});
+ database.updateProject(project,{name:'Changed after plan'});expect(()=>plans.projectPlanInputs(project,plan.id)).toThrow('project_configuration_changed_replan');
+});
+it('malformed auxiliary report collections do not prevent artifact persistence',()=>{
+ const revision=service.runLedger().putRevision({projectId:project,runId,name:'execution/malformed',kind:'execution',content:{results:{notAnArray:true},prerequisiteChecks:'invalid',status:'failed',failureReason:{message:'failure'}}},system);
+ expect(service.runLedger().readRevision(revision.id,project).revision.id).toBe(revision.id);
 });

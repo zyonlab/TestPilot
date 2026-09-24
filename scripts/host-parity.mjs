@@ -32,6 +32,7 @@ export function routeInventory() {
   for (const m of app.matchAll(new RegExp(`app\\.(${VERB})\\(\\s*['"\`](\\/api\\/[^'"\`]+)['"\`]`, "g")))
     out.push({ source: "index.ts", method: m[1].toUpperCase(), path: m[2] });
   const mounted = [
+    ["server/src/projectAssetRoutes.ts", "/api/projects/:projectId/assets"],
     ["server/src/knowledgeLibrary.ts", "/api/projects/:projectId/knowledge-library"],
     ["server/src/artifactComparisons.ts", "/api/projects/:projectId/artifact-comparisons"],
     ["server/src/runRoutes.ts", "/api/projects/:projectId/workflow-runs"],
@@ -55,7 +56,7 @@ export function routeInventory() {
     "/api/projects/:projectId/workflow-runs/:runId/stages/${action}": [
       "instructions", "retrieve", "modules", "modules/state", "stories", "cases", "gate",
       "finalize", "g2", "execute", "decisions", "status", "units/claim", "units/write",
-      "units/status", "units/merge",
+      "units/status", "units/merge", "discoveries/report",
     ],
     "/api/projects/:projectId/workflow-runs/:runId/artifacts/:revisionId/${action}": ["lineage", "diff", "export"],
   };

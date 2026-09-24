@@ -1,3 +1,4 @@
+import {compareProjectAssets,reviewProjectComparison,projectComparisons} from './projectComparisons.js';
 import {runProjectTask,materializeFollowUps} from './projectIncremental.js';
 import {ProjectTasks} from './projectTasks.js';
 import {ProjectDiscoveries} from './projectDiscoveries.js';
@@ -25,11 +26,14 @@ export function projectAssetRouter(){
  router.post('/tasks',wrap(req=>{reviewerPrincipal(req);return new ProjectTasks(runLedger()).create(req.params.projectId,req.body);}));
  router.post('/tasks/:id/decision',wrap(req=>new ProjectTasks(runLedger()).decide(req.params.projectId,req.params.id,req.body.approve===true,req.body.reason,reviewerPrincipal(req))));
  router.get('/impact/:id',wrap(req=>new ProjectTasks(runLedger()).impact(req.params.projectId,req.params.id)));
+ router.get('/compare',wrap(req=>compareProjectAssets(req.params.projectId,String(req.query.before??''),String(req.query.after??''))));
+ router.get('/comparisons',wrap(req=>({comparisons:projectComparisons(req.params.projectId)})));
+ router.post('/comparisons',wrap(req=>reviewProjectComparison(req.params.projectId,req.body,reviewerPrincipal(req))));
  router.get('/',wrap(req=>store().list(req.params.projectId)));
  router.post('/candidates',wrap(req=>store().propose(req.params.projectId,req.body,reviewerPrincipal(req))));
  router.get('/versions/:id',wrap(req=>store().read(req.params.projectId,req.params.id)));
  router.post('/versions/:id/decision',wrap(req=>store().decide(req.params.projectId,req.params.id,req.body,reviewerPrincipal(req))));
- router.post('/snapshots',wrap(req=>store().snapshot(req.params.projectId,req.body.label,reviewerPrincipal(req))));
+ router.post('/snapshots',wrap(req=>store().snapshot(req.params.projectId,req.body.label,reviewerPrincipal(req),typeof req.body.lineageId==='string'?req.body.lineageId:'main')));
  router.get('/snapshots/:id',wrap(req=>store().readSnapshot(req.params.projectId,req.params.id)));
  return router;
 }

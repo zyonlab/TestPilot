@@ -6,7 +6,7 @@ import {RunLedger,LedgerError,contentHash} from './runLedger.js';
 const key=z.string().trim().min(1).max(200);
 const proposal=z.object({assetKey:key,sourceRevision:key,baseVersion:key.nullable(),dependencies:z.array(key).max(200).default([])}).strict();
 export type AssetVersion={id:string;projectId:string;assetKey:string;kind:string;sourceRevision:string;sourceRun:string;baseVersion:string|null;dependencies:string[];contentHash:string;createdAt:string;createdBy:Principal};
-export type AssetSnapshot={id:string;projectId:string;label:string;heads:Record<string,string>;versions:string[];digest:string;createdAt:string;createdBy:Principal};
+export type AssetSnapshot={id:string;projectId:string;label:string;lineageId?:string;heads:Record<string,string>;versions:string[];digest:string;createdAt:string;createdBy:Principal};
 /** Project versions are copies of immutable artifacts, not pointers to a run's latest output. */
 export class ProjectAssets{
  constructor(readonly ledger:RunLedger){ledger.db.exec(`
@@ -34,13 +34,16 @@ export class ProjectAssets{
   const input=proposal.parse(raw);
   return this.ledger.db.transaction(()=>{
    const source=this.ledger.readRevision(input.sourceRevision,projectId);
+   if(this.ledger.requireRun(source.revision.runId,projectId).input.parameters?.evaluationSplit==='held-out')throw new LedgerError(409,'held_out_asset_not_reusable');
    const lineage=this.ledger.requireRun(source.revision.runId,projectId).input.parameters?.projectLineageId;
-   if(typeof lineage==='string'&&lineage.startsWith('line-')&&!input.assetKey.startsWith(lineage+'/'))throw new LedgerError(409,'asset_lineage_required:'+lineage);
+   const namespace=typeof lineage==='string'&&lineage.startsWith('line-')?lineage:'main';
+   const keyLineage=(k:string)=>k.startsWith('line-')?k.split('/')[0]:'main';
+   if(keyLineage(input.assetKey)!==namespace)throw new LedgerError(409,'asset_lineage_required:'+namespace);
    // Raw observations/reports and gold are evidence, not adopted business assets.
    if(!['material','stories','cases','modules'].includes(source.revision.kind)&&!['product/model-candidate','validated/modules'].includes(source.revision.name))throw new LedgerError(400,'asset_source_not_reusable');
    if(input.baseVersion&&this.read(projectId,input.baseVersion).version.assetKey!==input.assetKey)throw new LedgerError(409,'asset_parent_conflict');
    const dependencies=[...new Set(input.dependencies)].sort();
-   for(const id of dependencies)if(this.read(projectId,id).version.assetKey===input.assetKey)throw new LedgerError(409,'asset_self_dependency');
+   for(const id of dependencies){const dependencyKey=this.read(projectId,id).version.assetKey;if(dependencyKey===input.assetKey)throw new LedgerError(409,'asset_self_dependency');if(keyLineage(dependencyKey)!==namespace)throw new LedgerError(409,'asset_dependency_lineage_conflict');}
    const content=canonicalJSON(source.content),hash=contentHash(content);
    const identity=contentHash(canonicalJSON({...input,dependencies,contentHash:hash}));
    const prior=this.ledger.db.prepare('SELECT id FROM project_asset_versions WHERE projectId=? AND assetKey=? AND identity=?').get(projectId,input.assetKey,identity) as {id:string}|undefined;
@@ -73,12 +76,12 @@ export class ProjectAssets{
   const seen=new Set<string>(),queue=[...ids];
   while(queue.length){const id=queue.pop()!;if(seen.has(id))continue;seen.add(id);const v=this.read(projectId,id).version;if(v.assetKey===assetKey)return true;queue.push(...v.dependencies);}return false;
  }
- snapshot(projectId:string,label:string,actor:Principal){
+ snapshot(projectId:string,label:string,actor:Principal,lineageId="main"){
   return this.ledger.db.transaction(()=>{
-   const heads=this.heads(projectId),seen=new Set<string>(),queue=Object.values(heads);
+   const heads=Object.fromEntries(Object.entries(this.heads(projectId)).filter(([key])=>lineageId==='main'?!key.startsWith('line-'):key.startsWith(lineageId+'/'))),seen=new Set<string>(),queue=Object.values(heads);
    while(queue.length){const id=queue.pop()!;if(seen.has(id))continue;seen.add(id);queue.push(...this.read(projectId,id).version.dependencies);}
    const versions=[...seen].sort(),digest=contentHash(canonicalJSON({heads,versions:versions.map(id=>({id,hash:this.read(projectId,id).version.contentHash}))}));
-   const snapshot:AssetSnapshot={id:'as-'+randomUUID(),projectId,label:key.parse(label),heads,versions,digest,createdAt:new Date().toISOString(),createdBy:actor};
+   const snapshot:AssetSnapshot={id:'as-'+randomUUID(),projectId,label:key.parse(label),lineageId,heads,versions,digest,createdAt:new Date().toISOString(),createdBy:actor};
    this.ledger.db.prepare('INSERT INTO project_asset_snapshots VALUES(?,?,?)').run(snapshot.id,projectId,canonicalJSON(snapshot));return snapshot;
   })();
  }

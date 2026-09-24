@@ -7,3 +7,12 @@
 
 
 关联：[实施总览](README.md)
+
+状态：本轮实现与 UI 已接入；具体运行边界和验收说明见[实施总览](README.md#本轮交付边界2026-09-24)。
+
+验收记录：
+- 服务端相关回归 61 项通过；命名空间/异常报告最后补充修改后，项目模块 17 项再次通过。
+- MCP registry/gateway 10 项通过；宿主入口检查通过。
+- 全工作区 TypeScript、i18n 和 Web 构建通过；Codex 插件源副本一致性检查通过。
+- 实际 Chrome UI 点击通过，证据目录 `/var/folders/6v/n907vgj107g_rg7d_6hmb7fw0000gn/T/tp-evolution-ui-uJ608a`。
+- UI 测试使用隔离数据库，不清理用户项目或历史运行。

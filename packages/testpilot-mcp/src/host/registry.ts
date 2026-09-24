@@ -128,6 +128,8 @@ const stage: DomainSpec = {
     "按顺序跑流水线的每个节点。每步之前先 begin，返回 paused/cancelled/failed 就停下别硬闯。" +
     "冻结模块树与复核用例是**人做的决定**——把内容摆给人看，人点头了再调。",
   actions: {
+  discovery:{summary:'上报当前运行系统回执支持的新发现（非批准的业务事实）',method:'POST',path:'/api/projects/:projectId/workflow-runs/:runId/stages/discoveries/report',params:['projectId','runId'],needsRunGrant:true,mutates:true,body:json},
+
     begin: { summary: "开始一个节点（node: source|modules|instructions|stories|cases|gate|finalize|g2|execution）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/begin-stage", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     instructions: { summary: "载入这次运行冻结版本的 skill 与领域参考", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/instructions", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     retrieve: { summary: "检索材料段落，返回的 chunk id 才能写进 sourceRefs", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/retrieve", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
@@ -437,7 +439,20 @@ const system: DomainSpec = {
   },
 };
 
-export const DOMAINS: readonly DomainSpec[] = [project, run, stage, unit, artifact, review, execution,
+const assets: DomainSpec = {
+ tool:'tp_assets',title:'项目资产与增量任务',description:'读取固定版本、快照、发现和任务状态；审查、启动及采纳由 Web 操作者完成。',actions:{
+  list:{summary:'列出项目资产版本和快照',method:'GET',path:'/api/projects/:projectId/assets',params:['projectId']},
+  version:{summary:'读取不可变资产内容',method:'GET',path:'/api/projects/:projectId/assets/versions/:id',params:['projectId','id']},
+  snapshot:{summary:'读取不可变项目快照',method:'GET',path:'/api/projects/:projectId/assets/snapshots/:id',params:['projectId','id']},
+  plan:{summary:'读取固定运行计划',method:'GET',path:'/api/projects/:projectId/assets/plans/:id',params:['projectId','id']},
+  discoveries:{summary:'读取有回执的候选发现',method:'GET',path:'/api/projects/:projectId/assets/discoveries',params:['projectId']},
+  tasks:{summary:'读取项目任务 DAG 与租约状态',method:'GET',path:'/api/projects/:projectId/assets/tasks',params:['projectId']},
+  impact:{summary:'读取资产依赖影响范围',method:'GET',path:'/api/projects/:projectId/assets/impact/:id',params:['projectId','id']},
+  comparisons:{summary:'读取人工版本质量评测记录',method:'GET',path:'/api/projects/:projectId/assets/comparisons',params:['projectId']},
+ }
+};
+
+export const DOMAINS: readonly DomainSpec[] = [assets, project, run, stage, unit, artifact, review, execution,
   kase, report, exportProject, settings, evaluation, queue, graph, wf, audit, system];
 
 /** `<domain>.<action>` → 规格。`check-host-parity` 与工具注册都从这里取。 */

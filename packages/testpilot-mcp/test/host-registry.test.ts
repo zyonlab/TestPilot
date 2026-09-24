@@ -8,8 +8,8 @@ import { fillPath, describeActions } from "../src/host/tools.js";
  * 「registry 指向的路由真的存在」由 `scripts/check-host-parity.mjs` 管，那条要读服务端源码。
  */
 describe("宿主域工具", () => {
-  it("十七个域，动作名不重复", () => {
-    expect(DOMAINS.map((d) => d.tool)).toEqual(["tp_project", "tp_run", "tp_stage", "tp_unit", "tp_artifact",
+  it("十八个域，动作名不重复", () => {
+    expect(DOMAINS.map((d) => d.tool)).toEqual(["tp_assets", "tp_project", "tp_run", "tp_stage", "tp_unit", "tp_artifact",
       "tp_review", "tp_execution", "tp_case", "tp_report", "tp_export", "tp_settings", "tp_eval",
       "tp_queue", "tp_graph", "tp_wf", "tp_audit", "tp_system"]);
     expect(actionIndex().size).toBe(DOMAINS.reduce((n, d) => n + Object.keys(d.actions).length, 0));

@@ -12,7 +12,7 @@ export class ProjectTasks{
  read(project:string,id:string){const t=this.list(project).find(t=>t.id===id);if(!t)throw new LedgerError(404,'project_task_missing');return t;}
  private save(t:ProjectTask,event:string){this.ledger.db.prepare('UPDATE project_tasks SET json=? WHERE id=?').run(canonicalJSON(t),t.id);this.ledger.db.prepare('INSERT INTO project_task_events(projectId,taskId,json) VALUES(?,?,?)').run(t.projectId,t.id,canonicalJSON({event,at:new Date().toISOString(),status:t.status,attempts:t.attempts,reason:t.reason}));}
  create(projectId:string,raw:unknown){const s=spec.parse(raw),assets=new ProjectAssets(this.ledger),snapshot=assets.readSnapshot(projectId,s.snapshotId),discoveries=new ProjectDiscoveries(this.ledger);s.discoveryIds=[...new Set(s.discoveryIds)].sort();s.dependsOn=[...new Set(s.dependsOn)].sort();
- for(const id of s.discoveryIds)if(discoveries.read(projectId,id).status==='dismissed')throw new LedgerError(409,'dismissed_discovery');
+ for(const id of s.discoveryIds){const discovery=discoveries.read(projectId,id);if(discovery.status==='dismissed')throw new LedgerError(409,'dismissed_discovery');const lineage=this.ledger.requireRun(discovery.runId,projectId).input.parameters?.projectLineageId??'main';if(lineage!==(snapshot.lineageId??'main'))throw new LedgerError(409,'task_discovery_lineage_conflict');}
  const depth=(id:string):number=>{const task=this.read(projectId,id);return 1+Math.max(0,...task.dependsOn.map(depth));};
  if(s.dependsOn.some(id=>depth(id)>=4))throw new LedgerError(409,'task_generation_budget_exhausted');
  for(const id of s.dependsOn)this.read(projectId,id); // Edges can only point backward to immutable existing tasks: no cycles.
