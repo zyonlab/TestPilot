@@ -8,6 +8,12 @@ export const PrerequisitePartSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('environment'), fact: EnvironmentFactSchema, expected: z.union([z.string().min(1), z.number(), z.boolean()]) }).strict(),
   z.object({ kind: z.literal('screen'), statement: z.string().min(1).max(2000), oracle: ScreenOracleSchema.optional() }).strict(),
   z.object({ kind: z.literal('unknown'), reason: z.string().min(1).max(2000) }).strict(),
+  /**
+   * 一个由环境绑定的变量（2026-09-24）：用例要一个「由执行准备绑定」的数量或价格，环境画像给了值，
+   * 准备器却没有任何一种判据能说「它已绑定」——只能停在 missing。这一种只证明变量在当前环境里有非空值，
+   * 不证明值合适：合不合适由试跑本身回答。
+   */
+  z.object({ kind: z.literal('binding'), variable: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }).strict(),
 ]);
 export const PrerequisiteCheckSchema = z.object({
   statement: z.string().min(1).max(4000),
@@ -72,6 +78,12 @@ export async function checkPrerequisite(check: PrerequisiteCheck, input: {
       if (fact?.value !== undefined) status = fact.value === expected ? 'pass' : 'fail';
       detail = `${part.fact}: ${status} (expected ${String(expected)}, observed ${String(fact?.value ?? 'unknown')})`;
     } else if (part.kind === 'unknown') detail = part.reason;
+    else if (part.kind === 'binding') {
+      const value = input.resolve('${env.' + part.variable + '}');
+      source = 'runner:environment-variables';
+      status = value && !value.includes('${env.') ? 'pass' : 'fail';
+      detail = `${part.variable}: ${status === 'pass' ? 'bound in the execution environment' : 'not bound in the execution environment'}`;
+    }
     else if (part.oracle) {
       const snap = await input.snapshot();
       const oracle = JSON.parse(JSON.stringify(part.oracle, (_key, value) => typeof value === 'string' ? input.resolve(value) : value));

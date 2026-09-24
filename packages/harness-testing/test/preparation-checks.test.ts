@@ -28,3 +28,13 @@ it('recomputes a decimal equation using a new same-screen snapshot on every chec
  expect((await checkPrerequisite(numeric,{...base,snapshot:async()=>({text,url:'https://example.test',capturedAt:Date.now()-10001})})).status).toBe('unknown');
  expect((await checkPrerequisite(numeric,{...base,snapshot:async()=>({text:text.replace('5.00','6.00'),url:'https://example.test',capturedAt:Date.now()})})).status).toBe('fail');
 });
+
+it('a binding part passes only when the variable resolves to a value in the execution environment', async () => {
+  const { checkPrerequisite, PrerequisiteCheckSchema } = await import('../src/exec/preparationChecks.js');
+  const check = PrerequisiteCheckSchema.parse({ statement: 'order size bound', checks: [{ kind: 'binding', variable: 'TP_ORDER_SIZE' }] });
+  const io = (env: Record<string, string>) => ({ facts: [], snapshot: async () => { throw new Error('no page needed'); }, assert: async () => {},
+    resolve: (t: string) => t.replace(/\$\{env\.([A-Z0-9_]+)\}/g, (m, k) => env[k] ?? m), redact: (t: string) => t });
+  expect((await checkPrerequisite(check, io({ TP_ORDER_SIZE: '1' }) as never)).status).toBe('pass');
+  expect((await checkPrerequisite(check, io({}) as never)).status).toBe('fail');
+  expect(() => PrerequisiteCheckSchema.parse({ statement: 'x', checks: [{ kind: 'binding', variable: 'lower' }] })).toThrow();
+});

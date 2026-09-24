@@ -191,7 +191,9 @@ it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle an
  expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toBeUndefined();expect(fake.run.mock.calls.at(-1)?.[0].steps).toEqual([]);
  const receipt={version:1,status:'pass',checks:[],cleanup:[{id:'clean',resourceId:'r',postStep:1,status:'pass',detail:'Absent'}],pendingResources:[],safeToRetry:false};
  fake.run.mockResolvedValueOnce({...result(),prerequisiteChecks:[{statement:'Ready',status:'pass'}],lifecycle:receipt});
- await call({action:'trial',content:reviewed.content,reason:'Trial exact reviewed lifecycle'});
+ // 受控用例：改措辞把身份丢了——拒；保留身份的改写（写清是哪个控件）——允许。
+ await expect(call({action:'trial',content:{...reviewed.content,steps:['Click the create button']},reason:'Reword away the identity'})).rejects.toThrow('lifecycle_action_bindings_frozen');
+ await call({action:'trial',content:{...reviewed.content,steps:['Click the Create button in the toolbar to make '+identity]},reason:'Reword to locate precisely, identity kept'});
  await vi.waitFor(()=>expect(prep.preparationStatus(r,p)?.summary.verified).toBe(1));
  expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toEqual(lifecycle);expect(fake.run.mock.calls.at(-1)?.[0].opts.resolve.env.TP_LIFECYCLE_ID).toBeUndefined();
  const frozen:any=await call({action:'next'});const bundle=approvals.approvedExecutionBundle(r,p,frozen.codeRevision);expect(bundle.cases[0].lifecycle).toEqual(lifecycle);
