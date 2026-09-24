@@ -1,14 +1,15 @@
+import {BusinessLifecycle,type BusinessTransitionView,type TransitionStoryView} from './BusinessLifecycle';
 import {useEffect,useState} from 'react';
 import {workflowBase,workflowRequest} from '@/lib/workflowRuns';
 import {useT} from '@/lib/prefs';
 import {Button} from '@/components/ui';
-type Review={pending:boolean;revisionId?:string;candidates?:Array<{id:string;title:string;acceptance:string[];requirementDraft:{reason:string;questions:string[]}}>};
+type Review={transitions?:BusinessTransitionView[];stories?:TransitionStoryView[];transitionFindings?:Array<{code:string;message:string}>;pending:boolean;revisionId?:string;candidates?:Array<{id:string;title:string;acceptance:string[];requirementDraft:{reason:string;questions:string[]}}>};
 export function StoryRequirementsReview({projectId,runId,status,refresh}:{projectId:string;runId:string;status:string;refresh:()=>void}){
  const [data,setData]=useState<Review>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  const base=`${workflowBase(projectId)}/${runId}/story-requirements`;
  useEffect(()=>{let live=true;setData(undefined);setError('');workflowRequest<Review>(base).then(x=>{if(live)setData(x);}).catch(e=>{if(live)setError(String(e));});return()=>{live=false;};},[base,status]);
  async function approve(){setBusy(true);setError('');try{await workflowRequest(base+'/approve',{revisionId:data?.revisionId});setData({...data!,pending:false});refresh();}catch(e){setError(String(e));}finally{setBusy(false);}}
- return <StoryRequirementsPanel data={data} error={error} busy={busy} status={status} approve={approve}/>;
+ return <div className="space-y-4">{data&&<BusinessLifecycle transitions={data.transitions} stories={data.stories} findings={data.transitionFindings}/>}<StoryRequirementsPanel data={data} error={error} busy={busy} status={status} approve={approve}/></div>;
 }
 export function StoryRequirementsPanel({data,error,busy,status,approve}:{data?:Review;error:string;busy:boolean;status:string;approve:()=>Promise<void>}){
  const t=useT();

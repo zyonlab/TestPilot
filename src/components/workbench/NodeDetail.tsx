@@ -1,3 +1,4 @@
+import {BusinessLifecycleInputs} from './BusinessLifecycleInputs';
 import {StoryRequirementsReview} from './StoryRequirementsReview';
 import {RetrievalHistory} from './RetrievalHistory';
 import {nodeStatusKey} from './nodeStatus';
@@ -61,6 +62,7 @@ export function NodeDetail({run,node,projectId,onRunDetails,refresh}:{run:Workfl
   try{await workflowRequest(`${workflowBase(projectId)}/${run.id}/modules/freeze`,{});setFreezing('');refresh();}
   catch(e){setFreezing(e instanceof Error?e.message:'request_failed');}}
  return <section className="space-y-5">
+  {(node==='source'||node==='modules')&&<BusinessLifecycleInputs projectId={projectId} runId={run.id} status={run.status}/>}
   {node==='stories'&&<StoryRequirementsReview projectId={projectId} runId={run.id} status={run.status} refresh={refresh}/>}
   <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm space-y-3">
     <p className="font-medium">{t(`bench.guide.${node}.summary`)}</p>

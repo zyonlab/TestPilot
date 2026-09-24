@@ -1,3 +1,5 @@
+import {boundRulePack} from './rulePacks.js';
+import {businessTransitionIssues} from '@testpilot/harness-testing/casegen';
 import {randomUUID} from 'node:crypto';
 import type {Principal} from '@testpilot/harness-core/run-contracts';
 import type {Story} from '@testpilot/harness-testing/casegen';
@@ -15,11 +17,12 @@ export function storyReviewState(runId:string,projectId:string){
   const ledger=runLedger();ledger.requireRun(runId,projectId);
   const revisions=ledger.listRevisions(projectId,runId);
   const revision=revisions.filter(r=>r.name==='validated/stories').sort((a,b)=>b.revision-a.revision)[0];
-  if(!revision)return {pending:false,revisionId:undefined};
+  const transitions=boundRulePack(runId,projectId)?.businessTransitions??[];
+  if(!revision)return {pending:false,revisionId:undefined,transitions};
   const content=ledger.readRevision(revision.id,projectId).content as {stories?:Story[]};
   const candidates=(content.stories??[]).filter(s=>s.requirementDraft);
   const approved=revisions.some(r=>r.name==='review/story-requirements'&&r.createdBy.kind==='human'&&r.sourceRefs.includes(revision.id));
-  return {pending:candidates.length>0&&!approved,revisionId:revision.id,candidates};
+  return {pending:candidates.length>0&&!approved,revisionId:revision.id,candidates,stories:content.stories??[],transitions,transitionFindings:businessTransitionIssues(content.stories??[],transitions)};
 }
 export function requireStoryApproval(runId:string,projectId:string){
   if(storyReviewState(runId,projectId).pending)throw new LedgerError(409,'story_requirements_need_review: 请在用户故事节点审核候选业务预期；不能将假设直接用于用例设计。');

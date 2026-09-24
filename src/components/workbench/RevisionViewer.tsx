@@ -1,3 +1,4 @@
+import {BusinessLifecycle,type BusinessTransitionView} from './BusinessLifecycle';
 import {RetrievalAudit} from './RetrievalAudit';
 import {EvidenceReuse} from './EvidenceReuse';
 import {LifecycleDetail} from './LifecycleDetail';
@@ -65,10 +66,10 @@ export function RevisionContent({content,kind,projectId,runId}:{content:unknown;
   if(!content||typeof content!=='object')return <DocumentFields data={content}/>;
   const data=content as Record<string,unknown>;
   if(data.schemaVersion==='retrieval-audit.v1')return <RetrievalAudit value={data}/>;
-  if(data.schemaVersion==='product-rule-pack.v1')return <RulePackDocument data={{rulePack:data}}/>;
-  if(data.rulePack&&typeof data.rulePack==='object'&&Array.isArray((data.rulePack as Record<string,unknown>).rules))return <RulePackDocument data={data}/>;
+  if(data.schemaVersion==='product-rule-pack.v1')return <div className="space-y-4"><BusinessLifecycle transitions={data.businessTransitions as BusinessTransitionView[]|undefined}/><RulePackDocument data={{rulePack:data}}/></div>;
+  if(data.rulePack&&typeof data.rulePack==='object'&&Array.isArray((data.rulePack as Record<string,unknown>).rules))return <div className="space-y-4"><BusinessLifecycle transitions={(data.rulePack as {businessTransitions?:BusinessTransitionView[]}).businessTransitions}/><RulePackDocument data={data}/></div>;
   if(data.schemaVersion==='exploration-report.v1'||data.schemaVersion==='exploration-summary.v1')return <ExplorationDocument data={data}/>;
-  if(data.schemaVersion==='product-model.v1')return <DocumentFields data={data}/>;
+  if(data.schemaVersion==='product-model.v1')return <div className="space-y-4"><BusinessLifecycle transitions={data.businessTransitions as BusinessTransitionView[]|undefined}/><DocumentFields data={data}/></div>;
   if(data.graph && typeof data.graph==='object' && Array.isArray((data.graph as ExplorationGraphData).states) && Array.isArray((data.graph as ExplorationGraphData).transitions)) return <div className="space-y-5"><ExplorationGraph graph={data.graph as ExplorationGraphData}/>{data.report&&typeof data.report==='object'?<ExplorationDocument data={data.report as Record<string,unknown>}/>:<ExplorationDocument data={data}/>}{typeof data.notes==='string'&&<details><summary className="cursor-pointer font-medium">{t('artifact.notes')}</summary><Markdown text={data.notes}/></details>}</div>;
   if(typeof data.notes==='string'&&(data.partial===true||data.assessment))return <ExplorationDocument data={data}/>;
   if(data.case && typeof data.case==='object' && Array.isArray((data.case as Record<string,unknown>).steps))return <div className="space-y-4"><TextCaseDetail kase={data.case as Record<string,unknown>}/><DocumentFields data={Object.fromEntries(Object.entries(data).filter(([k])=>k!=='case'))}/></div>;

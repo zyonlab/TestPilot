@@ -10,6 +10,20 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "businessLifecycle.title":{"zh": "业务生命周期与故事覆盖", "en": "Business lifecycle and story coverage", "ja": "業務ライフサイクルとストーリー網羅"},
+  "businessLifecycle.hint":{"zh": "这里展示规划依据和验收关联，不代表页面已观察、需求已批准或测试通过。已关联仍需审核业务含义；状态准备不代表操作授权。", "en": "Planning inputs and criterion links only: not observed behavior, approved requirements, or passing tests. Review meaning; preparation is not execution authorization.", "ja": "計画と検収条件の関連です。観察・要件承認・合格ではありません。意味の確認が必要で、準備は操作許可ではありません。"},
+  "businessLifecycle.unknown":{"zh": "本版本未声明业务状态转换，生命周期覆盖未知。新运行可选择更新后的规则包。", "en": "This version declares no business transitions; lifecycle coverage is unknown. Select an updated rule pack for a new run.", "ja": "業務状態遷移が未定義のため網羅率は不明です。新規実行で更新済みルールを選択できます。"},
+  "businessLifecycle.hypothesis":{"zh": "领域假设待确认", "en": "Domain hypothesis pending review", "ja": "未確認の業務仮説"},
+  "businessLifecycle.normative":{"zh": "来源声明的业务要求", "en": "Source-declared requirement", "ja": "出典に基づく要件"},
+  "businessLifecycle.linked":{"zh": "已关联故事", "en": "Stories linked", "ja": "関連ストーリー"},
+  "businessLifecycle.missing":{"zh": "缺少故事关联", "en": "Missing story links", "ja": "ストーリー関連なし"},
+  "businessLifecycle.prerequisites":{"zh": "前置状态与条件", "en": "Prerequisite states and conditions", "ja": "前提状態と条件"},
+  "businessLifecycle.action":{"zh": "操作与预期结果", "en": "Action and expected outcome", "ja": "操作と期待結果"},
+  "businessLifecycle.failures":{"zh": "失败与恢复分支", "en": "Failure and recovery branches", "ja": "失敗と回復分岐"},
+  "businessLifecycle.preparation":{"zh": "待准备的测试状态", "en": "Test state preparation", "ja": "テスト状態の準備"},
+  "businessLifecycle.sources":{"zh": "来源与功能", "en": "Sources and feature", "ja": "出典と機能"},
+  "businessLifecycle.invalid":{"zh": "验收引用无效", "en": "Invalid criterion reference", "ja": "無効な検収条件参照"},
+
   "stories.review.origin":{zh:"本条来源于候选需求草稿；确认状态请查看用户故事节点。",en:"Proposed requirement draft; check the story node for approval status.",ja:"候補要件の草稿です。承認状態はストーリーノードで確認してください。"},
   "stories.review.title":{zh:"候选业务需求待确认",en:"Candidate requirements need review",ja:"候補要件の確認が必要です"},
   "stories.review.hint":{zh:"以下验收条件是基于探索或领域假设提出的候选预期，尚未成为正式需求。请逐条核对；若不正确，补充项目领域资料后重新生成故事。确认前不会进入用例设计。",en:"These proposed criteria are not approved requirements. Review each one, or update project knowledge and regenerate stories. Case design is blocked until approval.",ja:"候補の検収条件は未承認です。各項目を確認するか資料を更新して再生成してください。承認前はケース設計に進みません。"},

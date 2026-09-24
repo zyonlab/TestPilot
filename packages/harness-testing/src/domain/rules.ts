@@ -450,5 +450,8 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
   return { ok: true, pack, hash: rulePackHash(pack) };
 }
 
-export const rulePackHash = (pack: ProductRulePack): string =>
-  createHash("sha256").update(canonicalJSON(pack)).digest("hex");
+export const rulePackHash = (pack: ProductRulePack): string => {
+  // Empty optional lifecycle declarations must not change pre-upgrade immutable hashes.
+  const {businessTransitions,...legacy}=pack;
+  return createHash("sha256").update(canonicalJSON(businessTransitions?.length?pack:legacy)).digest("hex");
+};
