@@ -1,5 +1,5 @@
 import {markCandidateStories,requireStoryApproval,storyReviewState,storyReviewEvent} from './storyReview.js';
-import { storyPlanningIssues } from '@testpilot/harness-testing/casegen';
+import { storyPlanningIssues, businessTransitionIssues } from '@testpilot/harness-testing/casegen';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import { boundRulePack } from "./rulePacks.js";
 import { boundDomainReference } from "./domainReferences.js";
@@ -199,7 +199,7 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
       const bundle=verdict.data as StoryBundle;
       const stories = bundle.stories;
       markCandidateStories(stories,boundRulePack(runId,projectId)?.rules??[]);
-      const planningIssues=storyPlanningIssues(stories);
+      const planningIssues=[...storyPlanningIssues(stories),...businessTransitionIssues(stories,boundRulePack(runId,projectId)?.businessTransitions??[])];
       if(planningIssues.length)return {status:"blocked",gate:"planning-contract",errors:planningIssues};
       const modules=new Map(bundle.modules.map(m=>[m.id,m]));
       if(modules.size!==bundle.modules.length)throw new LedgerError(400,'duplicate_module_id');

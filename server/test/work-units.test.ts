@@ -418,3 +418,19 @@ it("claim_unit 不重发整跑级材料，load_run_instructions 发一次", () =
     expect(claimed.materials).toHaveProperty(kept);
   expect(claimed.runScope).toMatch(/load_run_instructions/);
 });
+
+it('passes unobserved business transitions to the host and rejects inspect-only stories until lifecycle bindings are supplied',()=>{
+ const original=pack;
+ const transition={id:'order.configure',featureId:'order.type',name:'Configure order',claimType:'hypothesis' as const,sourceRefs:[pack.sources[0]!.id],preconditions:['A market has been selected'],action:'Configure order',outcome:'Valid order settings retained',failureModes:['Invalid configuration rejected'],preparation:'Read-only configuration; no order submission'};
+ let runId:string;
+ try{pack={...pack,businessTransitions:[transition]};runId=newRun('business-transitions').runId;}finally{pack=original;}
+ const claimed=units.claimUnit(runId!,project,{node:'stories'});
+ expect(claimed.materials!.businessTransitions).toEqual([transition]);
+ const payload=storiesFor(claimed.unit!.unitId,1);
+ const rejected=units.writeUnit(runId!,project,{unitId:claimed.unit!.unitId,content:payload}) as {errors:Array<{code:string}>};
+ expect(rejected.errors.map(e=>e.code)).toContain('business_transition_uncovered');
+ units.claimUnit(runId!,project,{node:'stories'});
+ const candidate={...payload.stories[0],featureRefs:['order.type'],acceptance:['Given a selected market, when configuring valid settings, retain them','Given invalid settings, when applying them, show rejection and preserve prior valid settings'],requirementDraft:{reason:'Proposed behavior',questions:['Confirm retention and validation behavior']},businessTransitions:[{transitionId:transition.id,preconditions:transition.preconditions,acceptanceIndexes:[0],failureAcceptanceIndexes:[1]}]};
+ const accepted=units.writeUnit(runId!,project,{unitId:claimed.unit!.unitId,content:{stories:[candidate]}}) as {status:string};
+ expect(accepted.status).toBe('validated');
+});

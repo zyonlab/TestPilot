@@ -1,6 +1,6 @@
 import {historicalRetrievalIds} from "./retrievalAudit.js";
 import { LIFECYCLE_INSTRUCTIONS } from '@testpilot/harness-testing/casegen';
-import { STORY_PLANNING_CONTRACT, storyPlanningIssues } from '@testpilot/harness-testing/casegen';
+import { STORY_PLANNING_CONTRACT, storyPlanningIssues, businessTransitionIssues } from '@testpilot/harness-testing/casegen';
 import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
 import { acceptanceIndex } from "./acceptanceIndex.js";
@@ -101,7 +101,7 @@ function latestByName(runId: string, projectId: string, prefix: string) {
  * 伪造出来的那份迟早会被人当成「这次运行真的有产品模型」。
  */
 type UnitBasis = Pick<ProductModel, "modules" | "features" | "ruleBindings" | "claims" | "conflicts"> &
-  Partial<Pick<ProductModel, "roles" | "lifecycle">>;
+  Partial<Pick<ProductModel, "roles" | "lifecycle" | "businessTransitions">>;
 
 function productModel(runId: string, projectId: string): { model: UnitBasis; revisionId: string } {
   const found = latestByName(runId, projectId, "product/model-candidate");
@@ -279,7 +279,7 @@ export function unitMaterials(runId: string, projectId: string, unit: WorkUnit) 
    * 退化成「干脆不测」。
    */
   const subsumed = (story?.subsumes ?? []).flatMap((id) => allStories.filter((x) => x.id === id));
-  const sources = pack?.pack.sources.filter((s) => rules.some((r) => r.sourceRefs.includes(s.id))) ?? [];
+  const sources = pack?.pack.sources.filter((s) => rules.some((r) => r.sourceRefs.includes(s.id)) || (pack?.pack.businessTransitions??[]).some(t=>featureIds.includes(t.featureId)&&t.sourceRefs.includes(s.id))) ?? [];
   /**
    * 角色与生命周期跟着单元一起发下去（2026-09-12）。
    *
@@ -288,7 +288,7 @@ export function unitMaterials(runId: string, projectId: string, unit: WorkUnit) 
    * 只发和这个单元有关的那几段生命周期，加上全部角色（角色是全局的，就那么几个）。
    */
   const lifecycle = (model.lifecycle ?? []).filter((l) => !l.featureIds.length || l.featureIds.some((f) => featureIds.includes(f)));
-  return { domainReference: boundDomainReference(runId, projectId), actionVocabulary: pack?.pack.actionVocabulary ?? [], volatileReadings: pack?.pack.volatileReadings ?? [], productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
+  return { domainReference: boundDomainReference(runId, projectId), actionVocabulary: pack?.pack.actionVocabulary ?? [], volatileReadings: pack?.pack.volatileReadings ?? [], productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, businessTransitions: (pack?.pack.businessTransitions ?? model.businessTransitions ?? []).filter(t=>featureIds.includes(t.featureId)), conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
 }
 
 function manifestFor(runId: string, projectId: string, unit: WorkUnit, materials: ReturnType<typeof unitMaterials>, claimedBy: string): ContextManifest {
@@ -418,6 +418,7 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
     const parsed = UnitStoriesSchema.safeParse(typeof content === "string" ? JSON.parse(content) : content);
     if (!parsed.success) return { status: "blocked", gate: "schema", errors: parsed.error.issues.slice(0, 20).map((i) => ({ code: "schema", jsonPointer: "/" + i.path.join("/"), message: i.message })) };
     errors.push(...storyPlanningIssues(parsed.data.stories));
+    errors.push(...businessTransitionIssues(parsed.data.stories,materials.businessTransitions,unit.scope.kind!=="journeys"));
     const otherIds = new Set(units.filter((u) => u.node === "stories" && u.unitId !== unitId && u.outputRevision).flatMap((u) => ((runLedger().readRevision(u.outputRevision!, projectId).content as { stories: Story[] }).stories).map((s) => s.id)));
     // 每份材料有多少段：判据里的 `file.md#N` 要对得上，见下面 acceptance_cites_missing_section。
     const sectionCounts = new Map<string, number>();

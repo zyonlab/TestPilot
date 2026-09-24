@@ -14,6 +14,6 @@ export { ARTIFACT_WRITING_GUIDELINES } from "./readability.js";
 
 export { executionBlockers } from "./readiness.js";
 
-export { STORY_PLANNING_CONTRACT, storyPlanningIssues } from './planningContract.js';
+export { STORY_PLANNING_CONTRACT, storyPlanningIssues, businessTransitionIssues } from './planningContract.js';
 
 export { LIFECYCLE_INSTRUCTIONS } from './lifecycleContract.js';

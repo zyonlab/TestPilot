@@ -57,6 +57,7 @@ const STORY_CONTRACT=[
  * 别写在散文里让它猜**（冻结的树、可引段号已经这么做了）。
  */
 const MODULE_CONTRACT=[
+ 'Group all declared business capabilities, including those whose prerequisite state was not observed. Tree depth is not a coverage measure. Preserve each featureId from businessTransitions in the module plan; do not collapse state-changing goals into inspect-only capabilities. State missing prerequisites separately, and keep hypotheses pending confirmation.',
   'Consume exploration materials and the product model together with domain references and rules. Plan module scope, not executable tests. Missing exploration is a coverage gap, not proof that a supported module is out of scope.',
   'Return {modules:[...], outOfScope:[...]}. Each module: id (stable, dot-free unless you also set parentId), name, parentId (null for a root), purpose (one sentence: what a user does here), evidence (section ids), featureIds (the features this module covers).',
   'THE TREE MUST BE AT LEAST TWO LEVELS: 3–7 roots, and every root has children. A flat list of modules is rejected as `module_tree_is_a_list` — the tree exists to be COARSER than the stories; if it is 1:1 with them it provides no structure.',

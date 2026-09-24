@@ -8,7 +8,7 @@ export async function askExplorationPlanner(input:unknown) {
   const runtime = run?.input.parameters?.plannerRuntime;
   const knowledge = run && req.projectId ? runLedger().listRevisions(req.projectId, req.runId!).filter(r=>r.name.startsWith('knowledge/')).map(r=>({revision:r.id,content:runLedger().readRevision(r.id,req.projectId!).content})) : [];
   const request = {
-    stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。",
+    stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。结合领域业务转换的前置条件、动作和结果判断可交互组件可能承担的功能。区分当前空状态与其他状态下的能力；未成交资源不等于已建立资源。优先检查相关弹窗、下拉和标签页；缺少状态时说明准备条件，不能宣称功能不存在。业务状态转换是规划上下文，不是页面事实或执行授权，不得为补齐覆盖自动实施有副作用的操作。",
     variable: `领域资料（业务假设不是页面事实）：${JSON.stringify(knowledge)}\n\n${String(req.prompt ?? "")}`,
     ...(req.imageDataUrl ? { images: [req.imageDataUrl] } : {}),
     ...(req.schema ? { schema: req.schema as Record<string, unknown> } : {}),

@@ -375,6 +375,12 @@ export const STORIES_SCHEMA = {
             reason:{type:"string",enum:["not_attempted","route_blocked","requires_session","requires_fixture","budget_exhausted","not_found","insufficient_evidence","observed"]},
             observationIds:{type:"array",items:{type:"string"}},nextSteps:{type:"array",items:{type:"string"}}
           },required:["acceptanceIndex","status","reason","observationIds","nextSteps"]} },
+          businessTransitions: {type:'array',items:{type:'object',additionalProperties:false,properties:{
+            transitionId:{type:'string'},preconditions:{type:'array',items:{type:'string'},minItems:1},
+            acceptanceIndexes:{type:'array',items:{type:'integer',minimum:0},minItems:1},failureAcceptanceIndexes:{type:'array',items:{type:'integer',minimum:0},minItems:1},
+          },required:['transitionId','preconditions','acceptanceIndexes','failureAcceptanceIndexes']}},
+          requirementDraft:{type:'object',additionalProperties:false,properties:{reason:{type:'string'},questions:{type:'array',items:{type:'string'},minItems:1}},required:['reason','questions']},
+          featureRefs:{type:'array',items:{type:'string'}},ruleRefs:{type:'array',items:{type:'string'}},
           requirementId: { type: "string" },
           // Guided decoding constrains the reply to this schema, so a field the prompt asks
           // for and the schema omits is a field the model is not allowed to produce.

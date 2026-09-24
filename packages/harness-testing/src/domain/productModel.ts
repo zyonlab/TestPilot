@@ -381,6 +381,7 @@ export function describeProductModel(m: ProductModel): string {
       }
     }
   }
+  if(m.businessTransitions?.length)lines.push('', '业务状态转换（规划依据，不代表已观察或操作授权）：',...m.businessTransitions.map(t=>`- ${t.id} [${t.claimType}] ${t.preconditions.join('；')} → ${t.action} → ${t.outcome}；失败分支：${t.failureModes.join('；')}；状态准备：${t.preparation}`));
   if (m.conflicts.length) lines.push("", "冲突（要求与观察不一致，两边证据都保留）：", ...m.conflicts.map((c) => `- ${c.ruleId} @ ${c.featureId}`));
   return lines.join("\n");
 }

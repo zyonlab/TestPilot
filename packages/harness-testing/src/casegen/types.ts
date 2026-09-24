@@ -18,6 +18,11 @@ export const StorySchema = z.object({
   /** Which requirement this came from, when the material had ids. */
   requirementId: z.string().optional(),
   requirementDraft: z.object({reason:z.string().min(1),questions:z.array(z.string().min(1)).min(1)}).optional(),
+  businessTransitions: z.array(z.object({
+    transitionId:z.string().min(1), preconditions:z.array(z.string().min(1)).min(1),
+    acceptanceIndexes:z.array(z.number().int().nonnegative()).min(1),
+    failureAcceptanceIndexes:z.array(z.number().int().nonnegative()).min(1),
+  }).strict()).optional(),
   observationLinks: z.array(z.object({
     acceptanceIndex: z.number().int().nonnegative(),
     status: z.enum(['observed', 'partial', 'unobserved']),
