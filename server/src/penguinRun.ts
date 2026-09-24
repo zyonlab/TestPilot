@@ -479,7 +479,7 @@ async function finish(
 
   if (target.projectId && ['failed','paused','cancelled'].includes(status)) {
     for (const node of runLedger().nodeStates(wfRunId)) {
-      if (node.phase === 'running') stageEvent(wfRunId, target.projectId, node.node,
+      if (['running','queued'].includes(node.phase)) stageEvent(wfRunId, target.projectId, node.node,
         status === 'cancelled' ? 'cancelled' : status === 'paused' ? 'blocked' : 'failed', r.error ?? `Run stopped: ${status}`);
     }
   }

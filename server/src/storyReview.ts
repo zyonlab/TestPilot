@@ -1,5 +1,6 @@
 import {boundRulePack} from './rulePacks.js';
 import {businessTransitionIssues} from '@testpilot/harness-testing/casegen';
+import {canonicalJSON} from '@testpilot/harness-core/run-contracts';
 import {randomUUID} from 'node:crypto';
 import type {Principal} from '@testpilot/harness-core/run-contracts';
 import type {Story} from '@testpilot/harness-testing/casegen';
@@ -27,12 +28,24 @@ export function storyReviewState(runId:string,projectId:string){
 export function requireStoryApproval(runId:string,projectId:string){
   if(storyReviewState(runId,projectId).pending)throw new LedgerError(409,'story_requirements_need_review: 请在用户故事节点审核候选业务预期；不能将假设直接用于用例设计。');
 }
+/** Persist the review stop before returning from a stage transaction (do not throw and roll it back). */
+export function pauseForStoryReview(runId:string,projectId:string){
+ const ledger=runLedger(),state=storyReviewState(runId,projectId);if(!state.pending)return false;
+ ledger.db.transaction(()=>{
+  for(const node of ledger.nodeStates(runId))if(['cases','gate','finalize','g2','execution'].includes(node.node)&&['queued','running'].includes(node.phase)){
+   const sequence=(ledger.db.prepare('SELECT COALESCE(MAX(sequence),-1)+1 AS n FROM workflow_events WHERE runId=? AND node=? AND attempt=?').get(runId,node.node,node.attempt) as {n:number}).n;
+   ledger.appendEvent({id:'stage-'+randomUUID(),runId,node:node.node,attempt:node.attempt,sequence,at:new Date().toISOString(),phase:'blocked',message:'等待本次运行的候选故事审核；尚未开始用例设计。'},projectId);
+  }
+  if(ledger.nodeStates(runId).find(n=>n.node==='stories')?.phase!=='waiting_review')storyReviewEvent(runId,projectId,'waiting_review',state.revisionId!);
+  const detail={...ledger.getRun(runId,projectId).detail};if(detail.error){detail.adapterDiagnostic=detail.error;delete detail.error;}
+  ledger.db.prepare("UPDATE wf_runs SET status='waiting_review',json=? WHERE id=?").run(canonicalJSON(detail),runId);
+ })();return true;
+}
 export function guardStoryResume(runId:string,projectId:string){
   const ledger=runLedger(),state=storyReviewState(runId,projectId);
   if(!state.pending)return;
   if(['running','queued'].includes(ledger.getRun(runId,projectId).status))throw new LedgerError(409,'host_still_running');
-  if(ledger.nodeStates(runId).find(n=>n.node==='stories')?.phase!=='waiting_review')storyReviewEvent(runId,projectId,'waiting_review',state.revisionId!);
-  ledger.db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+  pauseForStoryReview(runId,projectId);
   requireStoryApproval(runId,projectId);
 }
 export function storyReviewEvent(runId:string,projectId:string,phase:'waiting_review'|'done',revisionId:string){

@@ -54,3 +54,16 @@ it('native host launch uses the same candidate contract for unit and whole-bundl
   expect(message).toContain('requiresHumanReview');
  }
 });
+
+it('persists a candidate review stop when cases are queued; approval remains revision-bound',async()=>{
+ const id=service.registerHostRun(project,{runtime:'codex',externalId:'queued-review',idempotencyKey:'queued-review',materials:[{name:'scope.md',text:'Candidate requirement'}]}).runId;
+ const l=service.runLedger(),controls=await import('../src/workflowControls.js');
+ l.putRevision({runId:id,projectId:project,name:'validated/stories',kind:'stories',content:{stories:[{id:'C1',title:'Candidate',acceptance:['Proposed outcome'],requirementDraft:{reason:'Hypothesis',questions:['Confirm outcome']}}]}},{kind:'system',id:'fixture'});
+ controls.stageEvent(id,project,'stories','done');controls.stageEvent(id,project,'cases','queued','Starting');
+ const response=controls.beginStage(id,project,{node:'cases'});
+ expect(response).toMatchObject({status:'paused',code:'story_requirements_need_review'});
+ const run=l.getRun(id,project);expect(run.status).toBe('waiting_review');
+ expect(run.nodes.find(n=>n.node==='cases')?.phase).toBe('blocked');expect(run.nodes.find(n=>n.node==='stories')?.phase).toBe('waiting_review');
+ expect(review.storyReviewState(id,project).pending).toBe(true);
+ expect(()=>controls.requireStageStarted(id,project,'cases')).toThrow('story_requirements_need_review');
+});

@@ -1,4 +1,4 @@
-import {guardStoryResume} from './storyReview.js';
+import {guardStoryResume,pauseForStoryReview} from './storyReview.js';
 import {requireHost} from "./plannerHost.js";
 import {readKnowledgeLibrary} from "./knowledgeLibrary.js";
 import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
@@ -375,6 +375,7 @@ export async function rerunProjectNode(runId:string,projectId:string,raw:unknown
         stageEvent(nextId,projectId,node,'done','沿用上游产物，来源 '+runId);
       }
     }
+    if(before.includes('stories')&&pauseForStoryReview(nextId,projectId)){stageEvent(nextId,projectId,input.node,'blocked','等待本次运行的候选故事审核；当前节点尚未启动。');return created;}
     configureNextNode(nextId,projectId,input.node);
     const nextParams=l.requireRun(nextId,projectId).input.parameters;
     stageEvent(nextId,projectId,input.node,'queued','正在启动：等待执行器会话就绪');

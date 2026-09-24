@@ -82,11 +82,24 @@ describe('story evidence candidates',()=>{
  });
 });
 
-import {nodeStatusKey} from '../../src/components/workbench/nodeStatus';
+import {nodeStatusKey,displayNodePhase} from '../../src/components/workbench/nodeStatus';
 describe('shared node status labels',()=>{
  it('distinguishes queued startup from untouched nodes consistently',()=>{
   expect(nodeStatusKey()).toBe('workflow.status.queued');
   expect(nodeStatusKey('queued')).toBe('bench.nodeStarting');
   for(const phase of ['running','done','failed','blocked','waiting_review'])expect(nodeStatusKey(phase)).toBe('workflow.status.'+phase);
+ });
+});
+
+describe('stopped startup and review progress',()=>{
+ it('does not fall back to a completed upstream node after startup failure',()=>{
+  expect(progressNode({status:'failed',nodes:[{node:'stories',phase:'done',at:'2026-09-24T10:00:00Z'},{node:'cases',phase:'queued',at:'2026-09-24T10:01:00Z'}]})).toBe('cases');
+  expect(displayNodePhase('queued','failed')).toBe('failed');
+  expect(displayNodePhase('running','waiting_review')).toBe('blocked');
+  expect(displayNodePhase(undefined,'failed')).toBeUndefined();
+  expect(displayNodePhase('done','failed')).toBe('done');
+ });
+ it('follows the pending reviewer rather than a completed node',()=>{
+  expect(progressNode({status:'waiting_review',nodes:[{node:'stories',phase:'waiting_review',at:'2026-09-24T10:00:00Z'},{node:'cases',phase:'blocked',at:'2026-09-24T10:01:00Z'}]})).toBe('stories');
  });
 });
