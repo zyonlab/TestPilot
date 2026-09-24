@@ -411,7 +411,10 @@
         "连接失效",
         "可用资产不足"
       ],
-      "preparation": "准备测试账户；不默认充值或签名"
+      "preparation": "准备测试账户；不默认充值或签名",
+      "requiresStates": [
+        "wallet.connected"
+      ]
     },
     {
       "id": "market.select",
@@ -451,7 +454,15 @@
         "余额不足",
         "提交失败或重复提交"
       ],
-      "preparation": "提交需要明确授权的测试资金与清理方案；观察模式只检查入口"
+      "preparation": "提交需要明确授权的测试资金与清理方案；观察模式只检查入口",
+      "requiresStates": [
+        "wallet.connected"
+      ],
+      "producesStates": [
+        "order.open",
+        "position.open",
+        "history.present"
+      ]
     },
     {
       "id": "orders.cancel",
@@ -471,7 +482,10 @@
         "部分成交后撤销剩余量",
         "撤单失败"
       ],
-      "preparation": "准备可识别归属的挂单；不撤销未知归属订单"
+      "preparation": "准备可识别归属的挂单；不撤销未知归属订单",
+      "requiresStates": [
+        "order.open"
+      ]
     },
     {
       "id": "orders.history",
@@ -490,7 +504,10 @@
         "无历史记录",
         "部分成交产生多条记录"
       ],
-      "preparation": "准备可追溯历史记录；费用公式与舍入待确认"
+      "preparation": "准备可追溯历史记录；费用公式与舍入待确认",
+      "requiresStates": [
+        "history.present"
+      ]
     },
     {
       "id": "positions.open",
@@ -510,7 +527,15 @@
         "部分成交",
         "相反方向交易导致减仓"
       ],
-      "preparation": "需要成交形成的测试持仓；不得把空表头当作持仓证据"
+      "preparation": "需要成交形成的测试持仓；不得把空表头当作持仓证据",
+      "requiresStates": [
+        "wallet.connected"
+      ],
+      "producesStates": [
+        "position.open",
+        "position.isolated",
+        "history.present"
+      ]
     },
     {
       "id": "positions.close",
@@ -530,7 +555,10 @@
         "部分成交",
         "数量超过可平仓量"
       ],
-      "preparation": "需要非零测试持仓和明确操作授权，核对残留委托"
+      "preparation": "需要非零测试持仓和明确操作授权，核对残留委托",
+      "requiresStates": [
+        "position.open"
+      ]
     },
     {
       "id": "margin.add",
@@ -552,7 +580,10 @@
         "可用余额不足",
         "调整失败"
       ],
-      "preparation": "准备适用模式的测试持仓；具体模式与计算规则待确认"
+      "preparation": "准备适用模式的测试持仓；具体模式与计算规则待确认",
+      "requiresStates": [
+        "position.isolated"
+      ]
     },
     {
       "id": "margin.configure",
@@ -572,7 +603,51 @@
         "已有持仓或挂单限制变更",
         "超出允许范围"
       ],
-      "preparation": "先查看模式与限制；实际变更需要授权及恢复方案"
+      "preparation": "先查看模式与限制；实际变更需要授权及恢复方案",
+      "requiresStates": [
+        "wallet.connected"
+      ]
+    }
+  ],
+  "states": [
+    {
+      "id": "wallet.connected",
+      "name": "钱包已连接且可交易",
+      "kind": "session",
+      "description": "注入钱包已连接测试网账户；断开或切网属于会话变化"
+    },
+    {
+      "id": "order.open",
+      "name": "本账户未成交挂单",
+      "kind": "resource",
+      "identity": "attribute",
+      "description": "挂单行不显示自定义标签；用本次选定、远离盘口不会成交的限价与数量认出它"
+    },
+    {
+      "id": "position.open",
+      "name": "某市场的非零持仓",
+      "kind": "resource",
+      "identity": "slot",
+      "description": "每个账户每个市场一个净持仓；执行前证明该市场无持仓，结束后平掉并再次证明为空"
+    },
+    {
+      "id": "position.isolated",
+      "name": "某市场的逐仓非零持仓",
+      "kind": "resource",
+      "identity": "slot",
+      "description": "加保证金只对逐仓持仓成立"
+    },
+    {
+      "id": "history.present",
+      "name": "本账户已有订单或成交记录",
+      "kind": "resource",
+      "description": "由本次执行的下单/成交产生，历史不可删除，属于不可逆副作用"
+    },
+    {
+      "id": "market.leverage",
+      "name": "某市场的杠杆与保证金模式设置",
+      "kind": "setting",
+      "description": "刷新后仍保留的账户设置；改动后须还原为执行前屏幕显示的原值"
     }
   ]
 }

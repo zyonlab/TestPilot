@@ -37,6 +37,53 @@ async function installExplorationBoundary(page: Page, entry?: string, templates:
     else void req.continue(undefined, 0);
   });
 }
+/**
+ * 禁止名单上的主机，整个浏览器生命周期都拦，不只看入口 URL。
+ *
+ * 2026-09-23 实测：准备阶段从测试网点着点着落到了主网域名——入口检查只看第一个 URL，
+ * 之后的点击、重定向、`window.open` 都没人管，而同一个钱包在主网上有真钱。
+ * 这里对每个页面（含后开的新窗口）拦所有发往禁止主机的请求；新窗口一开到禁止主机就关掉。
+ * 名单来自运营方配置（`setNavigationDenyHosts`，服务端启动时设）加 `DENY_HOSTS` 与 `LaunchOpts.denyHosts`，只增不减。
+ */
+let processDenyHosts: string[] = [];
+export function setNavigationDenyHosts(hosts: string[]): void {
+  processDenyHosts = [...new Set(hosts.map(h => h.trim().toLowerCase()).filter(Boolean))];
+}
+function effectiveDenyHosts(extra: string[] = []): string[] {
+  const env = (process.env.DENY_HOSTS ?? '').split(',');
+  return [...new Set([...processDenyHosts, ...env, ...extra].map(h => h.trim().toLowerCase()).filter(Boolean))];
+}
+export function isDeniedHost(url: string, hosts: string[]): boolean {
+  let host: string;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  return hosts.some(h => host === h || host.endsWith('.' + h));
+}
+async function guardPage(page: Page, hosts: string[], violations: string[]): Promise<void> {
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    if (req.isInterceptResolutionHandled()) return;
+    if (isDeniedHost(req.url(), hosts)) { violations.push(req.url()); void req.abort('blockedbyclient', 100); }
+    else void req.continue(undefined, 0);
+  });
+}
+export async function installHostGuard(browser: Browser, hosts: string[], violations: string[]): Promise<void> {
+  if (!hosts.length) return;
+  const guarded = new WeakSet<Page>();
+  const guard = async (page: Page | null) => {
+    if (!page || guarded.has(page)) return;
+    guarded.add(page);
+    if (isDeniedHost(page.url(), hosts)) { violations.push(page.url()); await page.close().catch(() => {}); return; }
+    await guardPage(page, hosts, violations).catch(() => {});
+  };
+  browser.on('targetcreated', target => { if (target.type() === 'page') void target.page().then(guard, () => {}); });
+  browser.on('targetchanged', target => {
+    if (target.type() !== 'page' || !isDeniedHost(target.url(), hosts)) return;
+    violations.push(target.url());
+    void target.page().then(p => p?.goto('about:blank').catch(() => {}), () => {});
+  });
+  for (const page of await browser.pages()) await guard(page);
+}
+
 async function installQueryInterception(
   page: Page,
   query?: Record<string, string>,
@@ -179,9 +226,13 @@ export interface Session {
   /** Private local adapter connection, retained only for this browser's lifetime. */
   executorModel?: RoleModelConnection;
   modelRequests?: RoleRequestRecord[];
+  /** 被禁止主机拦下的请求或页面（见 installHostGuard）；非空即本次会话越界过。 */
+  guardViolations?: string[];
 }
 
 export interface LaunchOpts {
+  /** 追加的禁止主机；与运营方配置、DENY_HOSTS 合并，不能用来放开。 */
+  denyHosts?: string[];
   explorationEntryUrl?: string;
   explorationRouteTemplates?: string[];
   signal?: AbortSignal;
@@ -308,6 +359,8 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     onLaunch(browser);
+    const guardViolations: string[] = [];
+    await installHostGuard(browser, effectiveDenyHosts(opts.denyHosts), guardViolations);
     const page = await browser.newPage();
     await page.setViewport(resolveViewport(opts.viewport));
     await installQueryInterception(page, opts.query);
@@ -330,7 +383,7 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
         /* ignore */
       }
     };
-    return { agent, page, browser, injectedAddress: address, injectedChainId: cfg.chainId, sentTxs, signatureReceipts, cleanup };
+    return { agent, page, browser, injectedAddress: address, injectedChainId: cfg.chainId, sentTxs, signatureReceipts, guardViolations, cleanup };
   }
 
   const wantsWallet = opts.wallet && isWalletInstalled();
@@ -385,6 +438,8 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
         : undefined,
   });
   onLaunch(browser);
+  const guardViolations: string[] = [];
+  await installHostGuard(browser, effectiveDenyHosts(opts.denyHosts), guardViolations);
 
   let walletId: string | undefined;
   let walletUnlocked: boolean | undefined;
@@ -430,7 +485,7 @@ async function launchBrowserSession(url: string, opts: LaunchOpts, onLaunch: (br
       /* ignore */
     }
   };
-  return { agent, page, browser, walletId, walletUnlocked, walletPage, cleanup };
+  return { agent, page, browser, walletId, walletUnlocked, walletPage, guardViolations, cleanup };
 }
 
 // Open the wallet's own UI page (onboarding/home) so an agent can drive it.

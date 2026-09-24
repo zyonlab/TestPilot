@@ -54,6 +54,12 @@ it('native host launch uses the same candidate contract for unit and whole-bundl
   expect(message).toContain('requiresHumanReview');
  }
 });
+it('unit launch tells the host to go back to reopened case units when the gate blocks, not to finalize',async()=>{
+ const {generationMessage}=await import('../src/runtime/skill-launch.js');
+ const message=generationMessage({materialsDir:dir,outDir:join(dir,'run-fixture'),generationMode:'skill',workUnits:true});
+ expect(message).toContain('repair.reopened');
+ expect(message).toContain('Only call finalize_run after gate_run passes');
+});
 
 it('persists a candidate review stop when cases are queued; approval remains revision-bound',async()=>{
  const id=service.registerHostRun(project,{runtime:'codex',externalId:'queued-review',idempotencyKey:'queued-review',materials:[{name:'scope.md',text:'Candidate requirement'}]}).runId;
@@ -84,4 +90,40 @@ it('inherits only a verified downstream copy of approved stories and unchanged i
  const rules=fork('approval-new-rules');l.putRevision({projectId:project,runId:rules,name:'knowledge/rules',kind:'report',content:{rule:'Changed rule'}},actor);expect(review.inheritStoryApproval(parent,rules,project)).toBe(false);
  const regenerate=fork('approval-regenerate',parent,source,content,'stories');expect(review.inheritStoryApproval(parent,regenerate,project)).toBe(false);
  l.putRevision({projectId:project,runId:child,name:'validated/stories',kind:'stories',content:{stories:[{...content.stories[0],acceptance:['New condition']}]},parentRevision:copied.id},actor);expect(review.storyReviewState(child,project).pending).toBe(true);
+});
+
+it('does not reuse a story approval when the frozen environment profile differs',()=>{
+ const l=service.runLedger(),actor={kind:'system' as const,id:'rerun'},human={kind:'human' as const,id:'reviewer'};
+ const register=(name:string,profile:string)=>service.registerHostRun(project,{runtime:'codex',externalId:name,idempotencyKey:name,parameters:{environmentProfile:profile},materials:[{name:'scope.md',text:'Same business input'}]}).runId;
+ const content={stories:[{id:'S',title:'Candidate',acceptance:['Outcome'],requirementDraft:{reason:'Hypothesis',questions:['Confirm']}}]};
+ const fork=(parent:string,source:{id:string},name:string,profile:string)=>{const id=register(name,profile);l.putRevision({projectId:project,runId:id,name:'validated/stories',kind:'stories',content,sourceRefs:[source.id]},actor);l.putRevision({projectId:project,runId:id,name:'report/rerun-origin',kind:'report',content:{parentRunId:parent,fromNode:'cases'}},{kind:'system',id:'rerun'});return id;};
+ const parent=register('env-parent','env-A');const source=l.putRevision({projectId:project,runId:parent,name:'validated/stories',kind:'stories',content},actor);
+ review.approveStoryRequirements(parent,project,source.id,human);
+ expect(review.inheritStoryApproval(parent,fork(parent,source,'env-same','env-A'),project)).toBe(true);
+ expect(review.inheritStoryApproval(parent,fork(parent,source,'env-changed','env-B'),project)).toBe(false);
+});
+it('a parent that predates environment profiles is not failed for lacking one, and the receipt says the environment was not compared',()=>{
+ const l=service.runLedger(),actor={kind:'system' as const,id:'rerun'},human={kind:'human' as const,id:'reviewer'};
+ const content={stories:[{id:'S',title:'Candidate',acceptance:['Outcome'],requirementDraft:{reason:'Hypothesis',questions:['Confirm']}}]};
+ const parent=service.registerHostRun(project,{runtime:'codex',externalId:'legacy-parent',idempotencyKey:'legacy-parent',materials:[{name:'scope.md',text:'Same business input'}]}).runId;
+ const source=l.putRevision({projectId:project,runId:parent,name:'validated/stories',kind:'stories',content},actor);review.approveStoryRequirements(parent,project,source.id,human);
+ const child=service.registerHostRun(project,{runtime:'codex',externalId:'legacy-child',idempotencyKey:'legacy-child',parameters:{environmentProfile:'env-new'},materials:[{name:'scope.md',text:'Same business input'}]}).runId;
+ l.putRevision({projectId:project,runId:child,name:'validated/stories',kind:'stories',content,sourceRefs:[source.id]},actor);l.putRevision({projectId:project,runId:child,name:'report/rerun-origin',kind:'report',content:{parentRunId:parent,fromNode:'cases'}},{kind:'system',id:'rerun'});
+ expect(review.inheritStoryApproval(parent,child,project)).toBe(true);
+ const receipt=l.listRevisions(project,child).find(r=>r.name==='review/story-requirements-inherited')!;
+ expect(l.readRevision(receipt.id,project).content).toMatchObject({environmentChecked:false});
+ expect(review.storyReviewState(child,project).pending).toBe(false);
+});
+
+it('rejecting candidate stories needs a reason, keeps them pending and records who and why',()=>{
+ const l=service.runLedger(),human={kind:'human' as const,id:'reviewer'};
+ const id=service.registerHostRun(project,{runtime:'codex',externalId:'reject-me',idempotencyKey:'reject-me',materials:[{name:'scope.md',text:'Candidate requirement'}]}).runId;
+ const rev=l.putRevision({runId:id,projectId:project,name:'validated/stories',kind:'stories',content:{stories:[{id:'C1',title:'Candidate',acceptance:['Proposed outcome'],requirementDraft:{reason:'Hypothesis',questions:['Confirm outcome']}}]}},{kind:'system',id:'fixture'});
+ l.db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(id);
+ expect(()=>review.rejectStoryRequirements(id,project,rev.id,'  no ',human)).toThrow('rejection_requires_reason');
+ expect(()=>review.rejectStoryRequirements(id,project,rev.id,'wrong scope',{kind:'agent',id:'codex'} as never)).toThrow('operator_action_required');
+ const state=review.rejectStoryRequirements(id,project,rev.id,'  下单结果不该包含撤单  ',human);
+ expect(state).toMatchObject({pending:true,rejection:{note:'下单结果不该包含撤单'}});
+ expect(review.storyRejection(id,project,rev.id)?.note).toBe('下单结果不该包含撤单');
+ expect(()=>review.requireStoryApproval(id,project)).toThrow('story_requirements_need_review');
 });

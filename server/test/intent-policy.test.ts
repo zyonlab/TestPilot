@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 let dir: string, database: typeof import('../src/db.js'), policy: typeof import('../src/intentPolicy.js'), service: typeof import('../src/runService.js');
 let caseId: string, projectId: string;
 beforeAll(async () => { dir = mkdtempSync(join(tmpdir(), 'tp-intent-')); vi.stubEnv('TP_DATA_DIR', dir);
@@ -26,7 +27,7 @@ it('routes versioned human edits to a new review revision and detects direct pro
   const stages = await import('../src/runStages.js'), approvals = await import('../src/approvedRuns.js'), delivery = await import('../src/decisionDelivery.js');
   stages.loadRunInstructions(runId, projectId); const ref = stages.retrieveRunSpec(runId, projectId, { query: 'Counter', budgetTokens: 2000 }).chunks[0].id;
   const stories = [{ id: 's1', title: 'Counter', acceptance: [] }]; stages.writeRunStage(runId, projectId, 'stories', { stories });
-  stages.writeRunStage(runId, projectId, 'cases', { stories, cases: [{ id: 'c1', storyId: 's1', title: 'Increment', designMethod: 'boundary', tier: 3, key: 'zero-one', sourceRefs: [ref], steps: ['Click Increment'], expected: 'Counter is 1', assertions: [{id:'a1',statement:'Counter is 1',afterStep:1,oracle:{kind:'text',value:'Counter is 1'}}] }] });
+  stages.writeRunStage(runId, projectId, 'cases', { stories, cases: [{ id: 'c1', storyId: 's1', title: 'Increment', designMethod: 'boundary', tier: 3, key: 'zero-one', sourceRefs: [ref], lifecycle: readOnlyLifecycle(ref), steps: ['Click Increment'], expected: 'Counter is 1', assertions: [{id:'a1',statement:'Counter is 1',afterStep:1,oracle:{kind:'text',value:'Counter is 1'}}] }] });
   stages.gateRun(runId, projectId); stages.finalizeRun(runId, projectId);
   const first = approvals.reviewRevisions(runId, projectId)[0]; const human = { kind: 'human' as const, id: 'UNIT_FIXTURE' };
   approvals.decideRevisions(runId, projectId, { items: [{ caseId: first.caseId, revisionId: first.revision.id, decision: 'approved' }] }, human); await delivery.flushDecisionDelivery();

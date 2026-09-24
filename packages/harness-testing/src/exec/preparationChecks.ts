@@ -29,10 +29,19 @@ export const SetupRecipeSchema = z.object({
   entryChecks: z.array(PrerequisiteCheckSchema).min(1).max(10),
   steps: z.array(z.string().min(1).max(2000)).min(1).max(15),
   postconditions: z.array(PrerequisiteCheckSchema).min(1).max(10),
-  sideEffects: z.enum(['none', 'ui-only']),
-  // Mutable fixtures need a separate lifecycle contract; this first recipe tier cannot own one.
+  /**
+   * controlled（2026-09-24）：配方为用例建立一个业务前提状态（「平仓」用例要先有持仓），必须声明 provides
+   * （规则包 states 的 id）并带补偿：用例结束后按倒序执行，每一步都有同屏判据。none/ui-only 不能带补偿。
+   */
+  sideEffects: z.enum(['none', 'ui-only', 'controlled']),
+  provides: z.array(z.string().min(1)).max(10).optional(),
+  // Legacy field: recipes never owned free-text cleanup. Controlled recipes use `compensation` with screen checks.
   cleanup: z.array(z.string()).max(0),
-}).strict();
+  compensation: z.array(z.object({ step: z.string().min(1).max(2000), verified: PrerequisiteCheckSchema }).strict()).max(10).optional(),
+}).strict().superRefine((r, ctx) => {
+  if (r.sideEffects === 'controlled' && (!r.provides?.length || !r.compensation?.length)) ctx.addIssue({ code: 'custom', path: ['compensation'], message: 'a controlled recipe declares provides and at least one compensation step with a screen check' });
+  if (r.sideEffects !== 'controlled' && (r.provides?.length || r.compensation?.length)) ctx.addIssue({ code: 'custom', path: ['sideEffects'], message: 'only a controlled recipe may provide states or carry compensation' });
+});
 export type SetupRecipe = z.infer<typeof SetupRecipeSchema>;
 export type RecipeRef = { id: string; version: number };
 export type Preparation = {

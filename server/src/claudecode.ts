@@ -31,6 +31,7 @@ import {
   type StartRunInput,
   type StartedRun,
 } from "./penguin.js";
+import { hostActorEnv } from "./runtime/hostActorTag.js";
 
 export { readRun, writeDecisions };
 
@@ -172,7 +173,7 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   const streamPath = join(outDir, "claude-stream.jsonl");
   const child = spawn(claudeBin(), claudeArgs(message, workspace, plugin), {
     cwd: workspace,
-    env: { ...process.env, ...stageEnv, TP_RUNTIME: "claude-code" },
+    env: { ...process.env, ...stageEnv, ...hostActorEnv(process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`), TP_RUNTIME: "claude-code" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const entry: Live = { child, sessionId: "", exited: false, exitCode: null, outDir };

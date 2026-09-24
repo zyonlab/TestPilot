@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { generationMessage, prepareSkillLaunch } from './runtime/skill-launch.js';
 import { configuredRunBudget } from './runBudget.js';
 import { REPO_ROOT, defaultWorkspace, newRunId, readRun, writeDecisions, watchRun as sharedWatchRun, type StartRunInput, type StartedRun } from './penguin.js';
+import { hostActorEnv } from './runtime/hostActorTag.js';
 export { readRun, writeDecisions };
 const live = new Map<string, { child: ChildProcess; state: 'running' | 'idle' | 'gone'; wallMs: number; stopReason?: string; finalMessage?:string }>();
 export const codexBin = () => process.env.TP_CODEX_BIN || 'codex';
@@ -32,7 +33,7 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   const env = { ...stageEnv, TP_RUNTIME: 'codex', TP_RUNS_DIR: join(workspace, 'runs'), TP_SERVER_URL: process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`,
     ...(input.scopeProjectId ? { TP_PROJECT_ID: input.scopeProjectId } : {}), ...(input.envRef ? { TP_ENV_ID: input.envRef } : {}),
     ...(existsSync(join(REPO_ROOT, 'server/.env')) ? { TP_MODEL_ENV_FILE: join(REPO_ROOT, 'server/.env') } : {}) };
-  const childEnv = { ...process.env };
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, ...hostActorEnv(process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`) };
   // TestPilot's Web planner and executor must not override the native Codex planner.
   for (const key of Object.keys(childEnv)) if (/^(TP_PLANNER_|MIDSCENE_)/.test(key)) delete childEnv[key];
   const budget = input.budget ?? configuredRunBudget();

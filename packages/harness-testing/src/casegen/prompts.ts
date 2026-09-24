@@ -165,17 +165,23 @@ export const CASES_STABLE = [
    * 冻结基线校验是**事后**拦住它的；源头在这里。
    */
   "- " + LIFECYCLE_INSTRUCTIONS,
-  "- `postSteps` puts the product back. If the case creates, edits or deletes anything,",
-  "  give the actions that undo it — delete what was added, restore what was changed.",
+  "- `postSteps` puts the product back. If the case creates a resource or changes a persisted",
+  "  setting, give the actions that undo it — delete what was added, set the setting back to its",
+  "  original value — each bound to one lifecycle cleanup entry.",
   "  A case that leaves a record behind poisons every later run of itself: the second run",
   "  starts from a different product than the first, and the difference is invisible until",
   "  a count assertion fails for no reason anyone can see.",
+  "  UI-only state (a tab, an open panel, unsaved input) and session state need no postSteps:",
+  "  every case starts on a fresh page, and session changes are declared in lifecycle.session.",
   "  You MUST give every case a `postSteps` array. A read-only case gets an empty one —",
   "  that is an answer, not a blank. Read-only cases leave it empty.",
   "",
   'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","priority":"P1",',
   '"precondition":["..."],"steps":["..."],"postSteps":[],"expected":"...","tier":1,',
-  '"key":"login|valid-credentials|dashboard-shown","sourceRefs":["spec#3"]}]}',
+  '"key":"login|valid-credentials|dashboard-shown","sourceRefs":["spec#3"],',
+  '"lifecycle":{"version":2,"mode":"read-only","rationale":"...","sourceRefs":["spec#3"],"supports":["$expected"],',
+  '"baseline":[{"statement":"...","checks":[{"kind":"screen","statement":"...","oracle":{"kind":"text","value":"..."}}]}],',
+  '"session":"unchanged","resources":[],"settings":[],"cleanup":[],"sideEffects":[]}}]}',
 ].join("\n");
 
 /**
@@ -544,6 +550,7 @@ export const CASES_SCHEMA = {
            */
           priority: { type: "string", enum: ["P0", "P1", "P2"] },
           lifecycle: LIFECYCLE_JSON_SCHEMA,
+          requiresStates: { type: "array", items: { type: "object", additionalProperties: false, properties: { state: { type: "string" }, provided: { type: "string", enum: ["steps", "preparation"] } }, required: ["state", "provided"] } },
           postSteps: { type: "array", items: { type: "string", minLength: 1 } },
         },
         /**

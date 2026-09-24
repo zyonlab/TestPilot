@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui';
 import { KnowledgeSelect } from './KnowledgeSelect';
 import { workflowRequest } from '@/lib/workflowRuns';
+import { exampleForUrl, useExamples } from '@/lib/examples';
 const field='w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary';
 export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCreated:(id:string)=>void;onClose:()=>void}) {
   const t=useT(),project=useStore(s=>s.projects.find(p=>p.id===projectId));
@@ -32,7 +33,7 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
   const [knowledgeReady,setKnowledgeReady]=useState(false),[rulesReady,setRulesReady]=useState(false);
   const [runMode,setRunMode]=useState('clean'),[snapshotId,setSnapshotId]=useState(''),[snapshots,setSnapshots]=useState<Array<{id:string;label:string}>>([]),[preview,setPreview]=useState<{id:string;hash:string;mode:string;inputDigest:string}>();
   useEffect(()=>{let live=true;workflowRequest<{snapshots:Array<{id:string;label:string}>}>(`projects/${projectId}/assets`).then(x=>{if(live)setSnapshots(x.snapshots);}).catch(e=>setError(String(e)));return()=>{live=false;};},[projectId]);
-  const exampleDefault=(()=>{try{return new URL(project?.targetUrl??'').hostname==='app.hyperliquid-testnet.xyz';}catch{return false;}})();
+  const examples=useExamples(),exampleId=exampleForUrl(examples,project?.targetUrl)?.id;
   async function start(e:FormEvent) {e.preventDefault();if(!hostReady||!knowledgeReady||!rulesReady||busy)return;setBusy(true);setError('');
     const payload={pageVersion:pageVersion.trim()||undefined,sourceKind,outputLanguage,maxScreens,explorationScope,planner:'connected',sourceUrl:sourceKind==='explore'?sourceUrl:undefined,
       ...(sourceKind==='explore'?{exploreWallet,exploreActions:exploreInteract?'interact':'observe'}:{}),materials:[...materials,...(text.trim()?[{name:'requirements.md',text}]:[])],knowledgeSelection,rulePackSelection,workUnits,limit};const hash=JSON.stringify({payload,runMode,snapshotId});try{if(!preview||preview.hash!==hash){const plan=await workflowRequest<{id:string;mode:string;inputDigest:string}>(`projects/${projectId}/assets/plans`,{mode:runMode,label:new Date().toISOString(),...(runMode==='incremental'?{snapshotId}:{}),configuration:payload});setPreview({...plan,hash});return;}const run=await workflowRequest<{wfRunId:string}>(`projects/${projectId}/assets/plans/${preview.id}/start`,{});onCreated(run.wfRunId);}catch(e){setError(e instanceof Error?e.message:'request_failed');}finally{setBusy(false);}}
@@ -44,8 +45,8 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
     <label className="block text-sm">{t('plans.mode')}<select className={field} value={runMode} onChange={e=>{setRunMode(e.target.value);setPreview(undefined);}}>{['clean','incremental','rebuild'].map(m=><option key={m} value={m}>{t(`plans.${m}`)}</option>)}</select></label>
     {runMode==='incremental'&&<select aria-label={t('plans.snapshot')} className={field} value={snapshotId} onChange={e=>{setSnapshotId(e.target.value);setPreview(undefined);}} required><option value="">{t('plans.snapshot')}</option>{snapshots.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select>}
     {preview&&<div className="rounded border border-border p-3 text-sm"><p>{t('plans.preview')} · {t(`plans.${preview.mode}`)}</p><p>{t(preview.mode==='incremental'?'plans.inherit':'plans.isolated')}</p><p className="break-all text-xs">{preview.inputDigest}</p><p>{t('plans.noReset')}</p></div>}
-    <KnowledgeSelect key={`${projectId}:knowledge`} projectId={projectId} kind="domainKnowledge" value={knowledgeSelection} onChange={setKnowledgeSelection} onReady={setKnowledgeReady} exampleDefault={exampleDefault}/>
-    <KnowledgeSelect key={`${projectId}:rules`} projectId={projectId} kind="rulePack" value={rulePackSelection} onChange={setRulePackSelection} onReady={setRulesReady} exampleDefault={exampleDefault}/>
+    <KnowledgeSelect key={`${projectId}:knowledge`} projectId={projectId} kind="domainKnowledge" value={knowledgeSelection} onChange={setKnowledgeSelection} onReady={setKnowledgeReady} exampleId={exampleId}/>
+    <KnowledgeSelect key={`${projectId}:rules`} projectId={projectId} kind="rulePack" value={rulePackSelection} onChange={setRulePackSelection} onReady={setRulesReady} exampleId={exampleId}/>
     <div className="flex flex-wrap gap-4"><label className="flex items-center gap-3 text-sm">{t('bench.outputLanguage')}<select className={field} value={outputLanguage} onChange={e=>setOutputLanguage(e.target.value)}><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>{sourceKind==='explore'&&<ExplorationSettings maxScreens={maxScreens} scope={explorationScope} onChange={(n,s)=>{setMaxScreens(n);setExplorationScope(s);}}/>}</div>
     <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={workUnits} onChange={e=>setWorkUnits(e.target.checked)}/>
       <span><span className="font-medium">{t('bench.workUnits')}</span><span className="mt-1 block text-xs text-muted-foreground">{t('bench.workUnitsHint')}</span></span></label>

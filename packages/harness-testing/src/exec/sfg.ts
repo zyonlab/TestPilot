@@ -25,7 +25,8 @@ export const SfgActionSchema = z.object({
    * 它和其余三种性质不同——那三种是「走到某处」，它是「故意造一个坏输入」。
    * 遍历永远走不到校验状态，因为通往它们的边需要有人故意去踩。
    */
-  kind: z.enum(["goto", "click", "login", "probe"]),
+  // restore：探索器自己关浮层（Escape）回到原状态，不是产品上的一次操作，不计入走过的转移。
+  kind: z.enum(["goto", "click", "login", "probe", "restore"]),
   /** 人能看懂的目标：控件的可见文案，或它指向的地址。 */
   target: z.string().default(""),
   /** 怎么再找到它。可复现的关键：`data-test` / `#id` / 一条 nth-of-type 路径。 */

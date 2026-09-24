@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import express from "express";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 let dir: string, url: string, server: Server, projectId: string;
 let database: typeof import("../src/db.js"), service: typeof import("../src/runService.js");
 const input = { externalId: "session-one", idempotencyKey: "session-one", runtime: "codex", materials: [{ name: "counter.md", text: "Count increases once." }] };
@@ -78,7 +79,7 @@ const stories = { stories: [{ id: "s1", title: "Increment count", role: "visitor
 function cases(ref: string) {
   // acRefs：账本路径上认领准则是契约的一部分，门禁分数也算它（design-gate-v2）。不填的话这条用例
   // 明明点了 Increment，却不算做过 s1/AC-1，分数直接归零。
-  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", oracle: {kind: "text", value: "Count equals 1"}, readiness: {design: "candidate", execution: "ready"}, tier: 1, designMethod: "boundary", key: "zero-one", sourceRefs: [ref], acRefs: ["s1/AC-1"] }] };
+  return { stories: stories.stories, cases: [{ id: "c1", storyId: "s1", title: "Count increments", steps: ["Click Increment"], expected: "Count equals 1", oracle: {kind: "text", value: "Count equals 1"}, readiness: {design: "candidate", execution: "ready"}, tier: 1, designMethod: "boundary", key: "zero-one", sourceRefs: [ref], acRefs: ["s1/AC-1"], lifecycle: readOnlyLifecycle(ref) }] };
 }
 it("serves frozen skills and material chunks; refuses stage skipping and untrusted imported cases", async () => {
   const r = await staged("skip-stages");

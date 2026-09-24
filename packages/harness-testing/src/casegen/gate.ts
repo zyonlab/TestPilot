@@ -1,4 +1,4 @@
-import { lifecycleIssues } from '../exec/lifecycle.js';
+import { lifecycleIssues, lifecycleIssueHint } from '../exec/lifecycle.js';
 import { tierOf } from "../exec/oracle.js";
 import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from "./types.js";
 import { isOpenQuestion } from "../exec/stepSemantics.js";
@@ -42,6 +42,8 @@ export interface GateOptions {
   actionVocabulary?: string[];
   /** 这个产品会自己变的读数名（规则包 `volatileReadings`）：断言把它们钉在一个数上就报 oracle-volatile。 */
   volatileReadings?: string[];
+  /** 规则包的业务转换（只用到 id 与 requiresStates）：认领了转换成功条件的用例，要声明它依赖的状态。 */
+  businessTransitions?: Array<{ id: string; requiresStates?: string[] }>;
 }
 
 /** 一串字面词拼成一个正则；空表返回 undefined——没有数据就没有这一条，不回落到任何内置词。 */
@@ -50,7 +52,7 @@ function wordsPattern(words: readonly string[] | undefined): RegExp | undefined 
   return list.length ? new RegExp(list.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i") : undefined;
 }
 
-const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [],
+const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [], businessTransitions: [],
   minNegativeRatio: 0.3,
   maxSteps: 8,
   minSteps: 1,
@@ -197,7 +199,22 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
 
   // 2. Structure and granularity.
   for (const c of cases) {
-    for(const issue of lifecycleIssues(c)) add('lifecycle',issue,c.id,c.lifecycle?'warn':'info',{field:'steps'});
+    // 缺 lifecycle 与写错同级：原先只记 info，删掉 lifecycle 反而比写了不全得分更高。修复单带上「改哪里、写什么」。
+    for(const issue of lifecycleIssues(c)) add('lifecycle',`${issue}: ${lifecycleIssueHint(issue)}`,c.id,'warn',{field:'steps'});
+    /**
+     * 前提状态要从故事传到用例（2026-09-24 审查：84 条里 46 条丢了故事绑定的原文前置，没有任何检查报出来）。
+     * 只查认领了某个转换「成功条件」的用例：成功路径一定需要那个转换声明的前提状态；失败路径可能恰恰是没有它。
+     */
+    const story = bundle.stories.find((s) => s.id === c.storyId);
+    const needed = new Set<string>();
+    for (const b of story?.businessTransitions ?? []) {
+      const t = cfg.businessTransitions.find((x) => x.id === b.transitionId);
+      if (!t?.requiresStates?.length) continue;
+      if (b.acceptanceIndexes.some((i) => (c.acRefs ?? []).includes(`${story!.id}/AC-${i + 1}`))) for (const st of t.requiresStates) needed.add(st);
+    }
+    const declared = new Set((c.requiresStates ?? []).map((r) => r.state));
+    const missingStates = [...needed].filter((st) => !declared.has(st));
+    if (missingStates.length) add('requires-state', `requires_state_undeclared: ${missingStates.join(', ')} — this case claims a success criterion of a transition that needs these states; declare requiresStates:[{state, provided:"steps"|"preparation"}] (steps: its own steps create it and lifecycle declares it; preparation: a preparation recipe must provide it, readiness stays blocked until then)`, c.id, 'warn', { field: 'precondition', args: { states: missingStates.join(', ') } });
     if (!c.expected.trim())
       add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
     if (cfg.gradeOracles && VAGUE.test(c.expected))

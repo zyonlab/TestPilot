@@ -13,9 +13,10 @@ type Entry = {
   invalidatedBy?:string;
 };
 export function experienceScope(ledger:RunLedger,runId:string,projectId:string,configuration:unknown):ExperienceScope {
-  const run=ledger.requireRun(runId,projectId);
+  const run=ledger.requireRun(runId,projectId),lineage=String(run.input.parameters?.projectLineageId??'main');
   return {projectId,runId,enabled:run.input.parameters?.reuseExperience!==false && run.input.parameters?.evaluationSplit!=='held-out' && !!run.binding.materialsHash,
-    hash:contentHash(canonicalJSON({policy,projectId,materials:run.binding.materialsHash,environment:run.binding.environmentHash,configuration}))};
+    // rebuild 线与主线不共用准备配方：lineage 进 scope。主线不写这个键，已有主线配方的 scope 哈希不变。
+    hash:contentHash(canonicalJSON({policy,projectId,materials:run.binding.materialsHash,environment:run.binding.environmentHash,configuration,...(lineage!=='main'?{lineage}:{})}))};
 }
 function table(ledger:RunLedger){ledger.db.exec(`CREATE TABLE IF NOT EXISTS preparation_recipes (
   projectId TEXT NOT NULL, scopeHash TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL,

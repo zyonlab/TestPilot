@@ -7,6 +7,7 @@ import {join,resolve} from 'node:path';
 import {EventBus,MemoryEventStore,Supervisor,Gate,lendGate} from '@testpilot/harness-core';
 import {validateRulePack} from '@testpilot/harness-testing/domain';
 import {captureHostWebModels} from './helpers/model-snapshot.js';
+import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 const fake=vi.hoisted(()=>({observe:vi.fn(),run:vi.fn(),start:vi.fn(),host:vi.fn(async()=>({}))}));
 vi.mock('../src/procs.js',async original=>({...await original<typeof import('../src/procs.js')>(),observeProduct:fake.observe}));
 vi.mock('../src/exec.js',()=>({execOnRunner:fake.run,cancelExecution:vi.fn()}));
@@ -43,7 +44,7 @@ it('real Chrome collector → sealed materials → preparation probe/trial → f
  const retrievalAudit:any=svc.runLedger().readRevision(retrieval.audit.revisionId,project).content;
  expect(retrievalAudit.materials[0]).toMatchObject({sourceType:'runtime-observation',sourceEvidence:'collector-ancestry',sourceRefs:[source.id]});
  expect(retrievalAudit.materials[0].sources[0].contentHash).toBe(source.contentHash);
- const stories=[{id:'s1',title:'Panel',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Panel opens',designMethod:'boundary',steps:['Click Open'],expected:'Panel visible',tier:1,key:'open-panel',sourceRefs:[ref],oracle:{kind:'text',value:'Panel visible'},readiness:{design:'candidate',execution:'blocked',reason:'Needs trial'}}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
+ const stories=[{id:'s1',title:'Panel',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Panel opens',designMethod:'boundary',steps:['Click Open'],expected:'Panel visible',tier:1,key:'open-panel',sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref,[],'Ready'),oracle:{kind:'text',value:'Panel visible'},readiness:{design:'candidate',execution:'blocked',reason:'Needs trial'}}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
  const reviewed=approval.reviewRevisions(run,project)[0];approval.decideRevisions(run,project,{items:[{caseId:'c1',revisionId:reviewed.revision.id,decision:'approved'}]},{kind:'human',id:'synthetic-human'});
  const batch=await prep.startPreparation(run,project,{revisionIds:[reviewed.revision.id]});const call=(input:any)=>prep.preparationStep(run,project,{batchId:batch.batchId,caseId:'c1',...input});
  const next:any=await call({action:'next'});expect(next.experienceContext.exploration.hints).toEqual(selected.hints);

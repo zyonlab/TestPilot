@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 
 /**
  * The review queue's contract: nothing reaches the board without a decision, an approval
@@ -77,6 +78,8 @@ const textCase = (id: string, over: Record<string, unknown> = {}) => ({
   // tier is a claim with nothing behind it, which would drown this file's assertions.
   oracle: { kind: "text", value: "Invalid username or password" },
   tier: 1,
+  sourceRefs: ["spec#1"],
+  lifecycle: readOnlyLifecycle("spec#1", ["已打开登录页"]),
   ...over,
 });
 

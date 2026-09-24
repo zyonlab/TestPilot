@@ -225,6 +225,7 @@ export async function executeRun(
   const poolKey = opts.sessionKey && !opts.mutation ? opts.sessionKey : undefined;
   let reused = false;
   let sessionClosed = false;
+  let recipeStarted = false;
   const lifecycle = lifecycleExecution(opts.lifecycle, opts.postSteps ?? [], {
     check: check => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
       if(!session || sessionClosed || opts.signal?.aborted || session.page.isClosed?.()) throw new Error('SESSION_UNAVAILABLE');
@@ -305,7 +306,7 @@ export async function executeRun(
   };
   try {
     checkCancelled();
-    if(opts.lifecycle?.mode==='controlled' && opts.preparation?.steps.length && (!opts.preparation.recipe || JSON.stringify(opts.preparation.steps)!==JSON.stringify(opts.preparation.recipe.steps) || !['none','ui-only'].includes(opts.preparation.recipe.sideEffects)))throw new Error('LIFECYCLE_UNCONTROLLED_PREPARATION');
+    if(opts.lifecycle?.mode==='controlled' && opts.preparation?.steps.length && (!opts.preparation.recipe || JSON.stringify(opts.preparation.steps)!==JSON.stringify(opts.preparation.recipe.steps) || !['none','ui-only','controlled'].includes(opts.preparation.recipe.sideEffects)))throw new Error('LIFECYCLE_UNCONTROLLED_PREPARATION');
     if(opts.lifecycle){
       LifecycleSchema.parse(opts.lifecycle);
       const issues=lifecycleIssues({lifecycle:opts.lifecycle,steps,postSteps:opts.postSteps??[],sourceRefs:opts.sourceRefs,precondition:opts.precondition,assertions:opts.assertions?.filter((a):a is typeof a & {id:string}=>!!a.id)});
@@ -333,9 +334,12 @@ export async function executeRun(
     const modelFingerprint = createHash("sha256").update(JSON.stringify(dataOpts.executorModel)).digest("hex");
     // loggedIn 进指纹：复用会话会跳过登录，一条从未登录开始的用例不能接一个已登录的浏览器，反之亦然。
     const fingerprint = JSON.stringify({ url, injected, wallet, rpcUrl: opts.rpcUrl, chainId: opts.chainId, viewport: opts.viewport, sutProfileDir: opts.sutProfileDir, extraHeaders: opts.extraHeaders, query: opts.query, modelFingerprint, modelBudget: opts.modelBudget, loggedIn: (opts.login?.length ?? 0) > 0 || !!opts.storageState });
+    // 复用的浏览器可能带着上一条用例的越界记录；这条用例只认自己之后的。
+    let guardMark = 0;
     if (poolKey) {
       const got = await acquireSession(poolKey, fingerprint, () => launchSession(url, launchOpts), (sess) => sess.cleanup());
       session = got.session;
+      guardMark = session.guardViolations?.length ?? 0;
       requestOffset = session.modelRequests?.length ?? 0;
       reused = got.reused;
       requestSource = session.modelRequests;
@@ -427,7 +431,7 @@ export async function executeRun(
     await recipeCheck('entry');
     // Preparation checks happen in this browser, before any business test step.
     for (const [i, step] of (opts.preparation?.steps ?? []).entries()) {
-      lifecycle.beforePreparation();
+      lifecycle.beforePreparation();recipeStarted=true;
       rlog(`prepare ${i+1}: ${step}`);
       await withModel(() => act(resolveText(step,ctx)));
       await shot(); await observe(-(i+1));
@@ -731,6 +735,9 @@ export async function executeRun(
         rlog(`chain assertions skipped — ${redact((e as Error).message, secretVals).slice(0, 70)}`);
       }
     }
+    // 碰过禁止主机（主网等）的用例一律不算通过，不管断言怎么说：那一刻的操作可能落在真钱上。
+    const crossed = session.guardViolations?.slice(guardMark) ?? [];
+    if (crossed.length) { assertFailed = `DENIED_HOST_NAVIGATION: ${redact(crossed[0]!, secretVals)}` + (assertFailed ? `; ${assertFailed}` : ''); rlog(`guard ✗ — blocked ${crossed.length} request(s) to a denied host`); }
     if (assertFailed) observer.issue("failed", classifyFailure(assertFailed));
     else if (unobservable) observer.issue("unknown");
     mark("assertMs");
@@ -807,6 +814,31 @@ export async function executeRun(
     let lifecycleReceipt:LifecycleReceipt;
     try { lifecycleReceipt=await lifecycle.finish(); }
     catch(e){lifecycleReceipt=lifecycle.receipt;lifecycleReceipt.status='unknown';lifecycleReceipt.safeToRetry=false;lifecycleReceipt.pendingResources.push({id:'unknown',identity:'unknown',reason:redact(String(e),secretVals)});}
+    /**
+     * 受控配方建立的前提状态（比如一笔持仓），用例自己的清理之后倒序补偿（2026-09-24）。
+     * 每一步都要同屏判据通过才算收拾干净；没核实的记成待处理资源，这条用例不许自动重试。
+     */
+    const recipe=opts.preparation?.recipe;
+    if(recipe?.sideEffects==='controlled'&&recipeStarted){
+      lifecycleReceipt.safeToRetry=false;
+      const steps=[...(recipe.compensation??[])].reverse();
+      let unverified=false;
+      for(const [i,x] of steps.entries()){
+        const item:LifecycleReceipt['cleanup'][number]={id:`recipe-compensation-${i+1}`,resourceId:`recipe:${recipe.capability}`,postStep:i+1,status:'not-run',detail:''};
+        lifecycleReceipt.cleanup.push(item);
+        if(!session||sessionClosed||opts.signal?.aborted){item.status='unknown';item.detail='Session closed or execution cancelled';unverified=true;continue;}
+        try{
+          await withModel(()=>act(resolveText(x.step,ctx)));
+          const receipt=await checkPrerequisite(x.verified,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
+          item.status=receipt.status;item.detail=receipt.detail??receipt.statement;
+          if(receipt.status!=='pass')unverified=true;
+        }catch(e){item.status='fail';item.detail=redact(String(e instanceof Error?e.message:e),secretVals);unverified=true;}
+      }
+      if(unverified){
+        lifecycleReceipt.pendingResources.push({id:`recipe:${recipe.capability}`,identity:(recipe.provides??[]).join(', '),reason:'Preparation compensation was not verified'});
+        if(lifecycleReceipt.status==='pass')lifecycleReceipt.status='unknown';
+      }
+    }
     if(evidenceReuse.events.some(e=>e.status==='action-error'))lifecycleReceipt.safeToRetry=false;
     phases.teardownMs += Date.now() - cleanupStarted;
     if(result){
@@ -820,7 +852,8 @@ export async function executeRun(
       }
     }
     // A business action may have taken effect before throwing. Never reuse that session.
-    if(poolKey && (result?.status!=='passed' || lifecycleReceipt.pendingResources.length)) {
+    // 会话被这条用例改过（断开钱包、切网络），同样不留给下一条：它面对的会是另一个起点。
+    if(poolKey && (result?.status!=='passed' || lifecycleReceipt.pendingResources.length || lifecycle.sessionChanged)) {
       await evictSession(poolKey).catch(()=>{}); session=undefined;
     }
     opts.signal?.removeEventListener("abort", abortSession);

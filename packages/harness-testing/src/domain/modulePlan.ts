@@ -163,14 +163,15 @@ export function checkModulePlan(input: ModulePlanInput): PlanFinding[] {
      * 其中一段（高级订单类型）的理由里自己写着「TWAP 和追价在账户面板中有独立标签」。
      *
      * 范围外的意思是**这一段根本不描述这个产品的行为**（定义、写用例的规矩）；
-     * 「我没看到」的正确去处是 `acceptance` 里的【待确认】，它是缺口，要有人去补。
+     * 「我没看到」是覆盖缺口：功能留在范围内，看没看到记进故事的 observationLinks（2026-09-24 与故事契约对齐；
+     * 原先让写成 acceptance 里的【待确认】，而故事校验器拒收「界面观察不到」式的验收条件）。
      * 这条判不了「该不该在范围内」，只判「这个理由的形状不对」，所以记 info 交给人。
      */
     const VISIBILITY = /看不到|观察不到|未展示|未显示|未展开|无直接展示|尚未观察|没有观察到|界面中未|界面上未/;
     for (const o of outOfScope) {
       if (o.reason && VISIBILITY.test(o.reason))
         add("out_of_scope_is_actually_a_gap", "info",
-          "以「界面上看不到」为由宣布不在范围内：那是覆盖缺口，该写成【待确认】让人去补，而不是从范围里划掉",
+          "以「界面上看不到」为由宣布不在范围内：那是覆盖缺口——留在范围内照需求写故事，看没看到记进 observationLinks，而不是从范围里划掉",
           { sectionId: o.sectionId });
       if (!o.reason?.trim())
         add("out_of_scope_without_reason", "warn", "声明了不在范围内却没说为什么：那和漏掉一样", { sectionId: o.sectionId });

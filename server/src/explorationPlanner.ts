@@ -6,7 +6,9 @@ export async function askExplorationPlanner(input:unknown) {
   if(req.runId && !req.projectId)throw new Error('explore_planner_project_required');
   const run = req.runId && req.projectId ? runLedger().requireRun(req.runId, req.projectId) : undefined;
   const runtime = run?.input.parameters?.plannerRuntime;
-  const knowledge = run && req.projectId ? runLedger().listRevisions(req.projectId, req.runId!).filter(r=>r.name.startsWith('knowledge/')).map(r=>({revision:r.id,content:runLedger().readRevision(r.id,req.projectId!).content})) : [];
+  // 只给探索看角色含 source 的知识（新建运行时用户按角色指定）；规则包一律给——charter 本来就从它来。旧产物没写角色的照旧给。
+  const forSource = (name:string, content:unknown) => name.startsWith('knowledge/rulepack/') || !Array.isArray((content as {roles?:unknown})?.roles) || ((content as {roles:string[]}).roles).includes('source');
+  const knowledge = run && req.projectId ? runLedger().listRevisions(req.projectId, req.runId!).filter(r=>r.name.startsWith('knowledge/')).map(r=>({revision:r.id,name:r.name,content:runLedger().readRevision(r.id,req.projectId!).content})).filter(k=>forSource(k.name,k.content)).map(({revision,content})=>({revision,content})) : [];
   const request = {
     stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。结合领域业务转换的前置条件、动作和结果判断可交互组件可能承担的功能。区分当前空状态与其他状态下的能力；未成交资源不等于已建立资源。优先检查相关弹窗、下拉和标签页；缺少状态时说明准备条件，不能宣称功能不存在。业务状态转换是规划上下文，不是页面事实或执行授权，不得为补齐覆盖自动实施有副作用的操作。",
     variable: `领域资料（业务假设不是页面事实）：${JSON.stringify(knowledge)}\n\n${String(req.prompt ?? "")}`,
@@ -23,13 +25,22 @@ export async function askExplorationPlanner(input:unknown) {
     ledger.putRevision({runId:req.runId!,projectId:req.projectId,name:'exploration/planner-call',kind:'report',parentRevision:prior?.id,
       content:{runtime,knowledgeRefs:knowledge.map(k=>k.revision),...content},sourceRefs:knowledge.map(k=>k.revision)}, {kind:'system',id:'explorer-planner'});
   };
-  record({status:'running',startedAt:new Date().toISOString()});
+  // 本机宿主的非交互调用只收文本：截图带不过去。回执里写明，不装作模型看过图。
+  const imagesDropped = !!run && !!req.imageDataUrl;
+  record({status:'running',startedAt:new Date().toISOString(),...(imagesDropped?{imagesDropped:true}:{})});
+  const controller = new AbortController();
+  if (req.runId) live.set(req.runId, controller);
   try {
-    const r = run ? await nativeHostChat(runtime as 'codex'|'claude-code',request,{timeoutMs:300000}) : await projectPlannerModel(req.projectId, "explore.scenario").chat(request);
+    const r = run ? await nativeHostChat(runtime as 'codex'|'claude-code',request,{timeoutMs:300000,signal:controller.signal}) : await projectPlannerModel(req.projectId, "explore.scenario").chat(request);
     record({status:'done',response:r.text,tokens:r.tokens,ms:r.ms});
     return r.text;
   } catch(error) {
     record({status:'failed',error:error instanceof Error?error.message:'planner_failed'});
     throw error;
+  } finally {
+    if (req.runId && live.get(req.runId) === controller) live.delete(req.runId);
   }
 }
+const live = new Map<string, AbortController>();
+/** 运行被取消时，正在等的规划宿主子进程一起停（原先要等满 300 秒超时）。 */
+export function cancelExplorationPlanner(runId: string): void { live.get(runId)?.abort(); live.delete(runId); }

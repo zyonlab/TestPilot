@@ -477,10 +477,11 @@ async function finish(
     });
   }
 
-  if (target.projectId && ['failed','paused','cancelled'].includes(status)) {
+  // waiting_review 也要收尾：等人冻结模块树或审核故事时宿主退出，挂着的 queued/running 节点原先一直转圈（2026-09-24 审查）。
+  if (target.projectId && ['failed','paused','cancelled','waiting_review'].includes(status)) {
     for (const node of runLedger().nodeStates(wfRunId)) {
       if (['running','queued'].includes(node.phase)) stageEvent(wfRunId, target.projectId, node.node,
-        status === 'cancelled' ? 'cancelled' : status === 'paused' ? 'blocked' : 'failed', r.error ?? `Run stopped: ${status}`);
+        status === 'cancelled' ? 'cancelled' : status === 'paused' || status === 'waiting_review' ? 'blocked' : 'failed', r.error ?? (status === 'waiting_review' ? '等待人工决定；宿主已退出，决定后续跑' : `Run stopped: ${status}`));
     }
   }
   outputStore.saveRun({

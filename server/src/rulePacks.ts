@@ -83,11 +83,23 @@ export function readRulePack(projectId: string, hash: string): ProductRulePack {
 }
 
 /** 上传一版。校验不过就整份拒收，错误带 jsonPointer——那正是编辑器要的东西。 */
-export function saveRulePack(projectId: string, raw: unknown): RulePackVersion & { created: boolean } {
+function authorTable() {
+  db.exec(`CREATE TABLE IF NOT EXISTS rule_pack_authors (
+    id INTEGER PRIMARY KEY, projectId TEXT NOT NULL, hash TEXT NOT NULL, actorKind TEXT NOT NULL, actorId TEXT NOT NULL, at TEXT NOT NULL)`);
+  return db;
+}
+export type RulePackAuthor = { kind: "human" | "agent" | "system"; id: string };
+/** 谁在什么时候存过这一版（同一份内容可被模型起草、再被人存一次——那一次才算人采纳）。 */
+export function rulePackAuthors(projectId: string, hash: string): Array<RulePackAuthor & { at: string }> {
+  return (authorTable().prepare("SELECT actorKind,actorId,at FROM rule_pack_authors WHERE projectId=? AND hash=? ORDER BY id").all(projectId, hash) as Array<{ actorKind: RulePackAuthor["kind"]; actorId: string; at: string }>)
+    .map((r) => ({ kind: r.actorKind, id: r.actorId, at: r.at }));
+}
+export function saveRulePack(projectId: string, raw: unknown, author?: RulePackAuthor): RulePackVersion & { created: boolean } {
   const v = validateRulePack(raw);
   if (!v.ok) throw new LedgerError(400, `invalid_rule_pack:${JSON.stringify(v.errors.slice(0, 8))}`);
   const existing = table().prepare("SELECT * FROM rule_packs WHERE projectId=? AND packId=? AND hash=?")
     .get(projectId, v.pack.id, v.hash) as Parameters<typeof rowToVersion>[0] | undefined;
+  if (author) authorTable().prepare("INSERT INTO rule_pack_authors (projectId,hash,actorKind,actorId,at) VALUES (?,?,?,?,?)").run(projectId, v.hash, author.kind, author.id, new Date().toISOString());
   // 走到这里说明 validateRulePack 已经过了，所以这一版按定义就是合法的。
   if (existing) return { ...rowToVersion(existing), valid: true, created: false };
   // id 带上项目：同一份包装进两个项目是两行。
@@ -103,9 +115,22 @@ export function deleteRulePack(projectId: string, hash: string): void {
   table().prepare("DELETE FROM rule_packs WHERE projectId=? AND hash=?").run(projectId, hash);
 }
 
-/** 这个项目当前那一份（最新上传的一版）。新建运行没显式给包时用它。 */
+/**
+ * 这个项目当前那一份：**人存过的**最新一版。新建运行没显式给包时用它。
+ *
+ * 宿主工具 `add_rule_pack` 允许规划器把起草好的包落库（带 `x-testpilot-actor` 头，记为 agent），
+ * 但那只是候选：没人存过的版本不会被没指定规则包的运行静默用上，要用就在表单里显式选它，或由人再存一次。
+ * 审计表出现之前存下的版本没有作者记录，按原来的口径当作项目自己的版本。
+ */
 export function currentRulePack(projectId: string): ProductRulePack | undefined {
-  const row = table().prepare("SELECT json FROM rule_packs WHERE projectId=? ORDER BY createdAt DESC LIMIT 1").get(projectId) as { json: string } | undefined;
+  authorTable();
+  const row = table().prepare(`SELECT json FROM (
+      SELECT rp.json AS json, rp.createdAt AS createdAt,
+        (SELECT MAX(a.at) FROM rule_pack_authors a WHERE a.projectId=rp.projectId AND a.hash=rp.hash AND a.actorKind='human') AS adoptedAt,
+        (SELECT COUNT(*) FROM rule_pack_authors a WHERE a.projectId=rp.projectId AND a.hash=rp.hash) AS authored
+      FROM rule_packs rp WHERE rp.projectId=?)
+    WHERE authored=0 OR adoptedAt IS NOT NULL
+    ORDER BY COALESCE(adoptedAt, createdAt) DESC LIMIT 1`).get(projectId) as { json: string } | undefined;
   return row ? (JSON.parse(row.json) as ProductRulePack) : undefined;
 }
 

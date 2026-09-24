@@ -26,6 +26,7 @@ import {
   type ProcStatus,
 } from "@testpilot/harness-core";
 import harnessFile from "../harness.config.js";
+import { setNavigationDenyHosts } from "@testpilot/harness-testing/exec";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
@@ -54,6 +55,7 @@ export const bus = new EventBus(eventStore, {
  * sides — the gateway's own code-generation calls and every step a runner drives.
  */
 export const config = resolveHarnessConfig(harnessFile);
+setNavigationDenyHosts(config.guard.denyHosts);
 
 export const modelGate = new Gate(config.model.concurrency);
 setModelLease((fn) => modelGate.run(fn));
@@ -226,6 +228,8 @@ for (let i = 1; i <= RUNNER_COUNT; i++) {
     execArgv: TSX_ARGV,
     env: {
       MIDSCENE_RUN_DIR: ensureRunnerMidsceneDir(`runner-${i}`),
+      // 禁止主机随每个浏览器装上（session.ts::installHostGuard），执行、准备、探索都拦，不只入口。
+      DENY_HOSTS: config.guard.denyHosts.join(','),
       // Both roles arrive over private RPC. Ambient host credentials and old proxy URLs
       // must not become a fallback when a saved project configuration clears a value.
       ...Object.fromEntries(Object.keys(process.env)

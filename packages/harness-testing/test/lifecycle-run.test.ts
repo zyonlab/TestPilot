@@ -17,7 +17,7 @@ it('compensates after an action throws, preserves the original failure and recor
  expect(result.observation?.stages).toContainEqual(expect.objectContaining({stage:'cleanup',status:'completed'}));
 });
 it('attempts every cleanup even when several fail and keeps the business error',async()=>{
- f.fail='Fail';f.cleanupFails=true;const options=opts();options.postSteps.push('Delete '+identity);options.lifecycle.cleanup.push({...options.lifecycle.cleanup[0],id:'delete-again',postStep:2});
+ f.fail='Fail';f.cleanupFails=true;const options=opts();options.postSteps.push('Delete '+identity);(options.lifecycle.cleanup as Array<(typeof options.lifecycle.cleanup)[number]>).push({...options.lifecycle.cleanup[0]!,id:'delete-again',postStep:2});
  const result=await executeRun('https://example.test',['Create '+identity,'Fail'],'Ready',options);
  expect(f.calls.filter(s=>s.startsWith('Delete'))).toHaveLength(2);expect(result.lifecycle?.cleanup.map(x=>x.status)).toEqual(['fail','fail']);expect(result.lifecycle?.pendingResources).toHaveLength(1);expect(result.failureReason).toBe('cannot find target');
 });

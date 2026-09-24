@@ -1,4 +1,4 @@
-import { assessExploration, buildExplorationReport, ExplorationReportSchema, ExplorationAttemptSchema, type ExplorationCharter } from '@testpilot/harness-testing/domain';
+import { applyPlanningGaps, assessExploration, buildExplorationReport, ExplorationReportSchema, ExplorationAttemptSchema, type ExplorationCharter } from '@testpilot/harness-testing/domain';
 import { StateFlowGraphSchema } from '@testpilot/harness-testing/exec';
 
 /** Server-owned evaluation. Never persist a collector/model's completion claim unchanged. */
@@ -12,7 +12,8 @@ export function evaluateExplorationResult<T extends {url:string; graph:unknown; 
   if(charter && graph && parsedReport.success) {
     if(parsedReport.data.charterId!==charter.id || parsedReport.data.rulePack.hash!==charter.rulePack.hash || parsedReport.data.entryUrl!==charter.scope.entryUrl)throw new Error('exploration_report_scope_mismatch');
     const report=buildExplorationReport({charter,graph,targets:parsedReport.data.targets,observations:parsedReport.data.observations,stop,budget:parsedReport.data.budget,unknowns:parsedReport.data.unknowns});
-    return {...result,report:{...report,planning:parsedReport.data.planning,...provenance},assessment:report.assessment};
+    const assessment=applyPlanningGaps(report.assessment as never,parsedReport.data.planning as never) as typeof report.assessment;
+    return {...result,report:{...report,assessment,completion:assessment?.status==='complete'?'complete':'partial',planning:parsedReport.data.planning,...provenance},assessment};
   }
   const assessment=assessExploration({entryUrl:result.url,charter,graph,stop});
   return {...result,assessment,report:{schemaVersion:'exploration-summary.v1',entryUrl:result.url,assessment,stopReason:stop,...provenance}};

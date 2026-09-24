@@ -8,7 +8,8 @@ import {readKnowledgeLibrary} from './knowledgeLibrary.js';
 import {getProject,resolveEnvironment,getSecretValues} from './db.js';
 import {savedHost} from './plannerHost.js';
 import {projectProfileLayers} from './modelProfiles.js';
-function configurationHash(projectId:string,configuration:Record<string,unknown>){return contentHash(canonicalJSON({project:getProject(projectId),environment:resolveEnvironment(projectId,typeof configuration.envRef==='string'?configuration.envRef:undefined)??null,secrets:getSecretValues(projectId),models:projectProfileLayers(projectId),host:savedHost(projectId),skills:skillBinding().loadedDigest}));}
+import {currentDomainReference} from './domainReferences.js';
+function configurationHash(projectId:string,configuration:Record<string,unknown>){return contentHash(canonicalJSON({project:getProject(projectId),environment:resolveEnvironment(projectId,typeof configuration.envRef==='string'?configuration.envRef:undefined)??null,secrets:getSecretValues(projectId),models:projectProfileLayers(projectId),host:savedHost(projectId),skills:skillBinding().loadedDigest,domainReference:currentDomainReference(projectId)?.hash??null}));}
 const schema=z.object({mode:z.enum(['incremental','clean','rebuild']),snapshotId:z.string().optional(),configuration:z.record(z.unknown()),label:z.string().min(1).max(200)}).strict();
 export function planTable(){runLedger().db.exec('CREATE TABLE IF NOT EXISTS project_run_plans(id TEXT PRIMARY KEY,projectId TEXT NOT NULL,json TEXT NOT NULL,runId TEXT)');}
 export function createProjectRunPlan(projectId:string,raw:unknown){
@@ -24,7 +25,7 @@ export function createProjectRunPlan(projectId:string,raw:unknown){
  configuration.knowledgeSelection=null;configuration.rulePackSelection=null;
  if(snapshot)for(const id of Object.values(snapshot.heads)){const {version,content}=assets.read(projectId,id);knowledge.push({name:`project-asset-${id}.md`,text:`Reference asset ${version.assetKey} (${id}). This is prior work, not current observation or transferred approval.\n${canonicalJSON(content)}`,roles:['source','stories','cases','gate']});}
  configuration.knowledge=knowledge;
- const id='plan-'+randomUUID(),plan={id,projectId,...input,configuration,createdAt:new Date().toISOString(),snapshot:snapshot??null,lineageId:input.mode==='rebuild'?'line-'+randomUUID():snapshot?.lineageId??'main',reuseExperience:input.mode==='incremental',projectConfigurationHash:configurationHash(projectId,configuration),inputDigest:contentHash(canonicalJSON(configuration))};
+ const id='plan-'+randomUUID(),plan={id,projectId,...input,configuration,createdAt:new Date().toISOString(),snapshot:snapshot??null,lineageId:input.mode==='rebuild'?'line-'+randomUUID():snapshot?.lineageId??'main',reuseExperience:input.mode==='incremental',domainReferenceHash:currentDomainReference(projectId)?.hash??null,projectConfigurationHash:configurationHash(projectId,configuration),inputDigest:contentHash(canonicalJSON(configuration))};
  ledger.db.prepare('INSERT INTO project_run_plans VALUES(?,?,?,NULL)').run(id,projectId,canonicalJSON(plan));return plan;
 }
 export function readProjectRunPlan(projectId:string,id:string){planTable();const row=runLedger().db.prepare('SELECT projectId,json,runId FROM project_run_plans WHERE id=?').get(id) as {projectId:string;json:string;runId:string|null}|undefined;if(!row)throw new LedgerError(404,'project_plan_missing');if(row.projectId!==projectId)throw new LedgerError(409,'project_plan_scope');const plan=JSON.parse(row.json) as ReturnType<typeof createProjectRunPlan>;if(contentHash(canonicalJSON(plan.configuration))!==plan.inputDigest)throw new LedgerError(409,'project_plan_changed');return {...plan,runId:row.runId};}
