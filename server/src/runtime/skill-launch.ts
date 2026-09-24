@@ -1,3 +1,4 @@
+import { STORY_PLANNING_CONTRACT } from '@testpilot/harness-testing/casegen';
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { adapterRunGrant, registerHostRun, runLedger } from "../runService.js";
@@ -38,7 +39,8 @@ export function unitGenerationMessage(input: GenerationMessageInput): string {
     "  3. Call retrieve_spec({runId, query, budgetTokens}) with a query built from THIS unit's feature names and rule statements. Cite the returned chunk ids in sourceRefs.",
     "  4. Reason only about this unit, then call write_unit({runId, unitId, content}) with just that unit's stories or cases.",
     "  5. A blocked result lists errors with jsonPointer and repairScope: fix only that unit and call write_unit again. Never widen the scope to make an error go away.",
-    "Rules that hold for every unit: keep ids stable and globally unique; never invent a feature or rule id that is not in the unit materials; a rule with riskFloor P0 forces priority P0 even when a fixture is missing; a hypothesis claim may only become an open question, never an acceptance criterion; expected results come from the rules, not from what the page happened to show.",
+    "Rules that hold for every unit: keep ids stable and globally unique; never invent a feature or rule id that is not in the unit materials; a rule with riskFloor P0 forces priority P0 even when a fixture is missing; expected results must distinguish normative rules from explicitly unapproved proposals, never infer correctness from what the page happened to show.",
+    STORY_PLANNING_CONTRACT,
     ...(input.limit ? [`Aim for at most ${input.limit} stories per module unit.`] : []),
     "If merge_units returns requiresHumanReview, stop the turn: candidate story requirements need human approval in Web. Report the story counts and pending questions; do not begin cases or seek gate/finalize receipts.",
     "Do not call write_stories or write_cases: with work units they are refused. Finish at waiting_review and report the unit counts.",
@@ -59,7 +61,8 @@ export function generationMessage(input: GenerationMessageInput) {
     "Before planning EACH stage call begin_stage with node=modules/instructions/stories/cases/gate/finalize. If it returns paused/cancelled/failed, STOP this turn immediately without executing or planning later stages. Never resume yourself.",
     "Call load_run_instructions, then retrieve_spec with runId, query and budgetTokens. Read the returned skills and domain references.",
     "For node=modules: begin_stage returns `sections` — the exact list of citable material section ids; cite only from it, verbatim. Each module claims the features it covers (featureIds) — unclaimed features never reach the story units. Call plan_modules({runId, content}) with this product's module tree and then STOP that node — a human freezes it in TestPilot Web; you cannot freeze it yourself.",
-    "Then call write_stories, write_cases, gate_run and finalize_run in order. Correct concrete validation findings before continuing.",
+    STORY_PLANNING_CONTRACT,
+    "Then call write_stories; if it requiresHumanReview, stop for human review in Web. Only after story approval may you call write_cases, gate_run and finalize_run in order. Correct concrete validation findings before continuing.",
     "The cases must preserve the stored stories exactly and cite chunk IDs returned by retrieve_spec for this run.",
     ...(input.limit ? [`Generate at most ${input.limit} stories.`] : []),
     "Return the finalized run ID, story count, case count, gate score and waiting_review status. Human review happens in TestPilot Web.",

@@ -41,3 +41,16 @@ it('normative stories are not automatically marked as hypotheses',()=>{
  const story={id:'S',title:'Order',acceptance:['valid order accepted'],ruleRefs:['R']};
  review.markCandidateStories([story],[{id:'R',claimType:'normative'}]);expect(story).not.toHaveProperty('requirementDraft');
 });
+
+it('native host launch uses the same candidate contract for unit and whole-bundle stories',async()=>{
+ const {generationMessage}=await import('../src/runtime/skill-launch.js');
+ const {STORY_PLANNING_CONTRACT}=await import('@testpilot/harness-testing/casegen');
+ for(const workUnits of [true,false]){
+  const message=generationMessage({materialsDir:dir,outDir:join(dir,'run-fixture'),generationMode:'skill',workUnits});
+  expect(message).toContain(STORY_PLANNING_CONTRACT);
+  expect(message).toContain('Keep proposed criteria in story.acceptance');
+  expect(message).toContain('NOT approved requirements or failure criteria');
+  expect(message).not.toContain('never an acceptance criterion');
+  expect(message).toContain('requiresHumanReview');
+ }
+});
