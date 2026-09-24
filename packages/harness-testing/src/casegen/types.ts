@@ -17,6 +17,7 @@ export const StorySchema = z.object({
   acceptance: z.array(z.string()).default([]),
   /** Which requirement this came from, when the material had ids. */
   requirementId: z.string().optional(),
+  requirementDraft: z.object({reason:z.string().min(1),questions:z.array(z.string().min(1)).min(1)}).optional(),
   observationLinks: z.array(z.object({
     acceptanceIndex: z.number().int().nonnegative(),
     status: z.enum(['observed', 'partial', 'unobserved']),

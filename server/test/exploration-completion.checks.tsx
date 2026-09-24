@@ -43,5 +43,5 @@ it('preserves host planning across server reassessment and renders hypotheses se
  const result=evaluateExplorationResult({url:charter.scope.entryUrl,graph,report:{...report(),planning},stopped:{kind:'screenCap',n:8}},charter);
  expect((result.report as any).planning).toEqual(planning);
  const html=renderToStaticMarkup(<RevisionContent kind="report" content={result.report}/>);
- expect(html).toContain('限价单');expect(html).toContain('尚未探索');expect(html).toContain('不代表业务验证通过');
+ expect(html).toContain('限价单');expect(html).toContain('尚未探索');expect(html).toContain('尚未核验变化是否符合预期');
 });

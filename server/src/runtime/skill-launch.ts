@@ -40,6 +40,7 @@ export function unitGenerationMessage(input: GenerationMessageInput): string {
     "  5. A blocked result lists errors with jsonPointer and repairScope: fix only that unit and call write_unit again. Never widen the scope to make an error go away.",
     "Rules that hold for every unit: keep ids stable and globally unique; never invent a feature or rule id that is not in the unit materials; a rule with riskFloor P0 forces priority P0 even when a fixture is missing; a hypothesis claim may only become an open question, never an acceptance criterion; expected results come from the rules, not from what the page happened to show.",
     ...(input.limit ? [`Aim for at most ${input.limit} stories per module unit.`] : []),
+    "If merge_units returns requiresHumanReview, stop the turn: candidate story requirements need human approval in Web. Report the story counts and pending questions; do not begin cases or seek gate/finalize receipts.",
     "Do not call write_stories or write_cases: with work units they are refused. Finish at waiting_review and report the unit counts.",
   ].join("\n");
 }

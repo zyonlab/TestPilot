@@ -1,3 +1,4 @@
+import {guardStoryResume} from './storyReview.js';
 import {requireHost} from "./plannerHost.js";
 import {readKnowledgeLibrary} from "./knowledgeLibrary.js";
 import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
@@ -297,6 +298,7 @@ export async function resumeProjectWorkflow(runId: string, projectId: string, ne
     return {status:'running'};
   }
   const checkpoint = workflowCheckpoint(runId, projectId);
+  guardStoryResume(runId,projectId);
   const row = ledger.getRun(runId, projectId);
   /**
    * `waiting_review` 有两种，能不能续跑正相反：

@@ -1,3 +1,4 @@
+import {markCandidateStories,requireStoryApproval,storyReviewState,storyReviewEvent} from './storyReview.js';
 import { storyPlanningIssues } from '@testpilot/harness-testing/casegen';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
 import { boundRulePack } from "./rulePacks.js";
@@ -82,6 +83,7 @@ function basis(runId: string) {
   return { retrieved: historicalRetrievalIds(store(),runId), retrieveCalls: rows.length, indexed: null };
 }
 function verifyCases(runId: string, projectId: string, content: unknown) {
+  requireStoryApproval(runId,projectId);
   const stories = current(runId, projectId, "stories");
   const verdict = validateCases(content, basis(runId));
   if (!verdict.ok) return verdict;
@@ -196,6 +198,7 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
     if (stage === "stories") {
       const bundle=verdict.data as StoryBundle;
       const stories = bundle.stories;
+      markCandidateStories(stories,boundRulePack(runId,projectId)?.rules??[]);
       const planningIssues=storyPlanningIssues(stories);
       if(planningIssues.length)return {status:"blocked",gate:"planning-contract",errors:planningIssues};
       const modules=new Map(bundle.modules.map(m=>[m.id,m]));
@@ -272,7 +275,10 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
         throw new LedgerError(409, "stories_frozen_after_case_design");
     }
     const refs = stage === "stories" ? [...ready(runId, projectId).binding.materialRevisions, ...store().listRevisions(projectId,runId).filter(r=>r.name==="validated/modules").slice(-1).map(r=>r.id)] : [current(runId, projectId, "stories").revision.id];
-    return { status: "validated", ...verdict.output, ...save(runId, projectId, stage, verdict.data, refs),
+    const saved=save(runId, projectId, stage, verdict.data, refs);
+    const pending=stage==="stories"&&storyReviewState(runId,projectId).pending;
+    if(pending)storyReviewEvent(runId,projectId,"waiting_review",saved.revision.id);
+    return { status: "validated", ...verdict.output, ...saved, ...(pending?{requiresHumanReview:true,instruction:"Stop after merging stories. Candidate requirements await human review in Web; do not design cases."}:{}),
       ...(modulePlan.length ? { modulePlan } : {}), ...(acceptance.length ? { acceptance } : {}) };
   })();
 }
@@ -350,7 +356,7 @@ export function finalizeRun(runId: string, projectId: string) {
 export function registeredStageProducts(runId: string) {
   const run = runLedger().registration(runId);
   if (!run || run.binding.models.mode !== "skill") return { protected: false as const };
-  if (!receipt(runId, "finalize")) return { protected: true as const, finalized: false as const };
+  if (!receipt(runId, "finalize")) return { protected: true as const, finalized: false as const, paused: ["paused","waiting_review"].includes(store().getRun(runId,run.projectId).status) || store().nodeStates(runId).some(n=>n.phase==="waiting_review") };
   finalizeRun(runId, run.projectId); // Revalidate immutable inputs and all stage receipts at every read.
   const cases = current(runId, run.projectId, "cases").content as CaseBundle;
   const gate = current(runId, run.projectId, "gate").content as { report: ReturnType<typeof runGate> };

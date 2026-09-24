@@ -430,7 +430,7 @@ export async function startRun(
  */
 export function completionDiagnostics(status: string, error?: string) {
   // The file adapter expects final artifacts even when the ledger intentionally waits for a human.
-  if (status === 'waiting_review' && error?.includes('没有 gate.json')) {
+  if (status === 'waiting_review' && error && (error.includes('没有 gate.json') || error.startsWith('宿主已结束，但当前节点尚未提交完成回执') || /^session .*已结束，但当前节点尚未提交完成回执/.test(error))) {
     return { error: undefined, adapterDiagnostic: error };
   }
   return { error };
