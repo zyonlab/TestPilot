@@ -1,0 +1,18 @@
+import {Router} from 'express';
+import {ProjectAssets} from './projectAssets.js';
+import {assertProject,runLedger} from './runService.js';
+import {LedgerError} from './runLedger.js';
+import {reviewerPrincipal} from './reviewPrincipal.js';
+export function projectAssetRouter(){
+ const router=Router({mergeParams:true});
+ router.use((req,res,next)=>{try{assertProject((req.params as {projectId:string}).projectId);next();}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof LedgerError?e.code:'asset_request_invalid'});}});
+ const wrap=(fn:(req:any)=>unknown)=>(req:any,res:any)=>{try{res.json(fn(req));}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof LedgerError?e.code:'asset_request_invalid'});}};
+ const store=()=>new ProjectAssets(runLedger());
+ router.get('/',wrap(req=>store().list(req.params.projectId)));
+ router.post('/candidates',wrap(req=>store().propose(req.params.projectId,req.body,reviewerPrincipal(req))));
+ router.get('/versions/:id',wrap(req=>store().read(req.params.projectId,req.params.id)));
+ router.post('/versions/:id/decision',wrap(req=>store().decide(req.params.projectId,req.params.id,req.body,reviewerPrincipal(req))));
+ router.post('/snapshots',wrap(req=>store().snapshot(req.params.projectId,req.body.label,reviewerPrincipal(req))));
+ router.get('/snapshots/:id',wrap(req=>store().readSnapshot(req.params.projectId,req.params.id)));
+ return router;
+}

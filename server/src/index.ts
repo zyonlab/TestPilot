@@ -1,3 +1,4 @@
+import {projectAssetRouter} from './projectAssetRoutes.js';
 import {askExplorationPlanner} from "./explorationPlanner.js";
 import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
@@ -754,6 +755,7 @@ app.patch("/api/projects/:id", (req, res) => {
  */
 app.get("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await hostStatus(req.params.id));}catch(e){res.status(400).json({error:(e as Error).message});}});
 app.post("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await selectHost(req.params.id,req.body?.runtime));}catch(e){res.status(400).json({error:(e as Error).message});}});
+app.use("/api/projects/:projectId/assets", projectAssetRouter());
 app.use("/api/projects/:projectId/knowledge-library", knowledgeLibraryRouter());
 app.get("/api/projects/:id/rule-packs", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
