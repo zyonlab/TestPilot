@@ -1,7 +1,7 @@
 {
   "schemaVersion": "product-rule-pack.v1",
   "id": "hyperliquid-testnet-example",
-  "version": "2026-09-24.2",
+  "version": "2026-09-24.3",
   "domain": "perpetual-trading",
   "product": "Hyperliquid Testnet 内置示例",
   "network": "testnet",
@@ -88,6 +88,87 @@
       "id": "margin.inspect",
       "moduleId": "margin",
       "name": "杠杆、保证金与风险",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "account.ready",
+      "moduleId": "account",
+      "name": "确认交易账户准备就绪",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "market.select",
+      "moduleId": "market",
+      "name": "选择交易市场",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "orders.submit",
+      "moduleId": "orders",
+      "name": "配置并提交订单",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "orders.cancel",
+      "moduleId": "orders",
+      "name": "撤销未成交订单",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "orders.history",
+      "moduleId": "orders",
+      "name": "核对订单和成交历史",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "positions.open",
+      "moduleId": "positions",
+      "name": "成交后建立或增加持仓",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "positions.close",
+      "moduleId": "positions",
+      "name": "减少或关闭持仓",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "margin.add",
+      "moduleId": "margin",
+      "name": "增加持仓保证金",
+      "applicability": "unresolved",
+      "applicabilitySourceRefs": [
+        "example"
+      ]
+    },
+    {
+      "id": "margin.configure",
+      "moduleId": "margin",
+      "name": "配置杠杆与保证金模式",
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
@@ -311,5 +392,187 @@
     "^Approve$",
     "^Sign$",
     "^(下单|确认|提交|撤单|平仓|提现|转账)$"
+  ],
+  "businessTransitions": [
+    {
+      "id": "account.ready",
+      "featureId": "account.ready",
+      "name": "确认交易账户准备就绪",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "钱包已连接；网络与账户身份已确认"
+      ],
+      "action": "核对可用资产与交易权限",
+      "outcome": "明确可交易或受阻原因",
+      "failureModes": [
+        "连接失效",
+        "可用资产不足"
+      ],
+      "preparation": "准备测试账户；不默认充值或签名"
+    },
+    {
+      "id": "market.select",
+      "featureId": "market.select",
+      "name": "选择交易市场",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "行情页面可访问"
+      ],
+      "action": "切换币对",
+      "outcome": "订单输入与行情对应所选市场",
+      "failureModes": [
+        "市场不可用",
+        "旧市场输入残留"
+      ],
+      "preparation": "使用可访问市场；确认输入保留规则"
+    },
+    {
+      "id": "orders.submit",
+      "featureId": "orders.submit",
+      "name": "配置并提交订单",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "账户具备交易权限",
+        "所选市场与数量、价格有效"
+      ],
+      "action": "配置订单并提交",
+      "outcome": "区分已接收待成交、即时成交与拒绝；接收不等于成交",
+      "failureModes": [
+        "数量或价格无效",
+        "余额不足",
+        "提交失败或重复提交"
+      ],
+      "preparation": "提交需要明确授权的测试资金与清理方案；观察模式只检查入口"
+    },
+    {
+      "id": "orders.cancel",
+      "featureId": "orders.cancel",
+      "name": "撤销未成交订单",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "存在本账户可撤销的未成交订单；不等于已有持仓"
+      ],
+      "action": "撤销指定订单",
+      "outcome": "确认剩余委托撤销并核对订单状态",
+      "failureModes": [
+        "订单已成交",
+        "部分成交后撤销剩余量",
+        "撤单失败"
+      ],
+      "preparation": "准备可识别归属的挂单；不撤销未知归属订单"
+    },
+    {
+      "id": "orders.history",
+      "featureId": "orders.history",
+      "name": "核对订单和成交历史",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "已有订单事件或成交记录；两类历史不等价"
+      ],
+      "action": "查看对应历史记录",
+      "outcome": "按订单或成交身份核对状态、数量与费用",
+      "failureModes": [
+        "无历史记录",
+        "部分成交产生多条记录"
+      ],
+      "preparation": "准备可追溯历史记录；费用公式与舍入待确认"
+    },
+    {
+      "id": "positions.open",
+      "featureId": "positions.open",
+      "name": "成交后建立或增加持仓",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "有效订单成交；仅提交挂单不足以形成持仓"
+      ],
+      "action": "核对成交及持仓变化",
+      "outcome": "关联成交与目标市场持仓数量变化",
+      "failureModes": [
+        "订单未成交",
+        "部分成交",
+        "相反方向交易导致减仓"
+      ],
+      "preparation": "需要成交形成的测试持仓；不得把空表头当作持仓证据"
+    },
+    {
+      "id": "positions.close",
+      "featureId": "positions.close",
+      "name": "减少或关闭持仓",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "存在本账户非零持仓；不只是未成交订单"
+      ],
+      "action": "选择持仓并减仓或平仓",
+      "outcome": "核对成交与剩余持仓；未成交平仓委托不代表已经平仓",
+      "failureModes": [
+        "平仓委托未成交",
+        "部分成交",
+        "数量超过可平仓量"
+      ],
+      "preparation": "需要非零测试持仓和明确操作授权，核对残留委托"
+    },
+    {
+      "id": "margin.add",
+      "featureId": "margin.add",
+      "name": "增加持仓保证金",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "已有持仓",
+        "保证金模式支持独立调整",
+        "有可用资产"
+      ],
+      "action": "为指定持仓增加保证金",
+      "outcome": "核对持仓保证金与可用资产变化",
+      "failureModes": [
+        "不支持的保证金模式",
+        "可用余额不足",
+        "调整失败"
+      ],
+      "preparation": "准备适用模式的测试持仓；具体模式与计算规则待确认"
+    },
+    {
+      "id": "margin.configure",
+      "featureId": "margin.configure",
+      "name": "配置杠杆与保证金模式",
+      "claimType": "hypothesis",
+      "sourceRefs": [
+        "example"
+      ],
+      "preconditions": [
+        "已选择市场",
+        "已区分空仓、持仓和挂单状态"
+      ],
+      "action": "检查并调整杠杆或保证金模式",
+      "outcome": "明确适用范围、允许变更条件与结果",
+      "failureModes": [
+        "已有持仓或挂单限制变更",
+        "超出允许范围"
+      ],
+      "preparation": "先查看模式与限制；实际变更需要授权及恢复方案"
+    }
   ]
 }

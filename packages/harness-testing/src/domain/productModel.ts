@@ -1,3 +1,4 @@
+import {BusinessTransitionSchema} from './businessLifecycle.js';
 import { z } from "zod";
 import { ApplicabilitySchema, ClaimTypeSchema, DomainIdSchema, ModuleDefSchema, SourceRefSchema, type ProductRulePack, type Rule } from "./rules.js";
 import type { ExplorationReport, Observation } from "./report.js";
@@ -75,6 +76,7 @@ export const ProductModelSchema = z
      */
     roles: z.array(z.object({ id: DomainIdSchema, name: z.string(), goal: z.string() }).strict()).default([]),
     lifecycle: z.array(z.object({ id: DomainIdSchema, name: z.string(), order: z.number(), featureIds: z.array(DomainIdSchema) }).strict()).default([]),
+    businessTransitions: z.array(BusinessTransitionSchema).default([]),
     summary: z.object({ features: z.number().int(), confirmed: z.number().int(), unverified: z.number().int(), blocked: z.number().int(), conflicted: z.number().int(), inconclusive: z.number().int().default(0) }).strict(),
   })
   .strict();
@@ -354,6 +356,7 @@ export function buildProductModel(input: { pack: ProductRulePack; report: Explor
     claims,
     conflicts,
     sources: pack.sources,
+    businessTransitions: pack.businessTransitions,
     roles: pack.roles.map((r) => ({ id: r.id, name: r.name, goal: r.goal })),
     lifecycle: [...pack.lifecycle].sort((a, b) => a.order - b.order).map((l) => ({ id: l.id, name: l.name, order: l.order, featureIds: l.featureIds })),
     summary: { features: features.length, confirmed: count("confirmed"), unverified: count("unverified"), blocked: count("blocked"), conflicted: count("conflicted"), inconclusive: count("inconclusive") },

@@ -1,3 +1,4 @@
+import {BusinessTransitionSchema} from './businessLifecycle.js';
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
@@ -225,6 +226,7 @@ export const ProductRulePackSchema = z
      * 要么这里声明它来自外部。两样都没有 = 那个目标永远点不动，而这在实测里
      * 表现为四行看起来很正常的 `blocked`。见下面 `target_requires_unprovidable`。
      */
+    businessTransitions: z.array(BusinessTransitionSchema).default([]),
     externalCapabilities: z.array(z.string()).default([]),
     /**
      * 这个产品特有的**禁点文案**，接在通用默认后面。
@@ -297,6 +299,11 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
   const sources = uniq(pack.sources, "/sources", errors);
   const modules = uniq(pack.modules, "/modules", errors);
   const features = uniq(pack.features, "/features", errors);
+  uniq(pack.businessTransitions, '/businessTransitions', errors);
+  pack.businessTransitions.forEach((t,i)=>{
+    if(!features.has(t.featureId))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/featureId`,message:`feature ${t.featureId} missing`});
+    t.sourceRefs.forEach((id,j)=>{if(!sources.has(id))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/sourceRefs/${j}`,message:`source ${id} missing`});});
+  });
   const rules = uniq(pack.rules, "/rules", errors);
   uniq(pack.targets, "/targets", errors);
   /**
