@@ -1,3 +1,4 @@
+import {ProjectDiscoveries} from './projectDiscoveries.js';
 import {storyReviewState,approveStoryRequirements} from './storyReview.js';
 import { startPreparation, preparationStep, preparationStatus } from './preparation.js';
 import { controls, setControls, beginStage, stageEvent } from './workflowControls.js';
@@ -85,6 +86,7 @@ export function runRouter() {
   router.post("/:runId/regression-candidates/:candidateId", wrap((req, res) => res.json(decideRegressionCandidate(req.params.projectId, req.params.candidateId, req.body, reviewerPrincipal(req)))));
   router.patch("/:runId/review", wrap((req, res) => res.json(reviseReviewedCase(req.params.runId, req.params.projectId, req.body, reviewerPrincipal(req)))));
   const stageActions: Record<string, (runId: string, projectId: string, body: any) => unknown> = {
+    'discoveries/report':(id,project,body)=>new ProjectDiscoveries(runLedger()).record(project,{...body,runId:id},{kind:'agent',id:'planner'}),
     instructions: loadRunInstructions, retrieve: retrieveRunSpec,
     // 模块树：模型提议 → 服务端机检；冻结那一步在下面单独一条路由，因为它必须是人。
     modules: (id, project, body) => writeModulePlan(id, project, body?.content ?? body),
