@@ -101,6 +101,7 @@ export const CoverageSchema = z
 
 export const ExplorationReportSchema = z
   .object({
+    planning: z.array(z.object({state:z.string(),business:z.string(),error:z.string().optional(),decisions:z.array(z.object({control:z.number().optional(),label:z.string(),selector:z.string(),feature:z.string(),reason:z.string(),expected:z.string(),risk:z.string(),status:z.string()}))})).optional(),
     schemaVersion: z.literal("exploration-report.v1"),
     charterId: DomainIdSchema,
     rulePack: z.object({ id: DomainIdSchema, version: z.string(), hash: z.string() }).strict(),

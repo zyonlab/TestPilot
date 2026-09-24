@@ -1,3 +1,4 @@
+import {askExplorationPlanner} from "./explorationPlanner.js";
 import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
@@ -1573,21 +1574,10 @@ function observeLaunch(projectId: string, envRef?: string): {
  *
  * 放在网关而不是 runner，有两条硬理由：runner 没有 `ModelClient`，
  * 而且它的 `OPENAI_BASE_URL` 被改写成了 Midscene 的 no-think 代理；
- * 另外这里走 `traced()`，这次调用在 Langfuse 上看得见——
- * 用 Midscene 自己的 `ai*` 问，成本和效果都量不出来。
+ * 已登记运行按冻结的宿主调用并保存 planner-call 回执；独立观察仍走项目模型。
+ * 不让规划请求借用 Midscene 的执行模型。
  */
-setChildAsk(async (input) => {
-  const req = (input ?? {}) as { prompt?: string; imageDataUrl?: string; schema?: unknown; maxTokens?: number; projectId?: string };
-  const r = await projectPlannerModel(req.projectId, "explore.scenario").chat({
-    stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。",
-    variable: String(req.prompt ?? ""),
-    ...(req.imageDataUrl ? { images: [req.imageDataUrl] } : {}),
-    ...(req.schema ? { schema: req.schema as Record<string, unknown> } : {}),
-    maxTokens: req.maxTokens ?? 2400,
-    label: "explore.scenario",
-  });
-  return r.text;
-});
+setChildAsk(askExplorationPlanner);
 
 /*
  * 血缘保留：还没跑完的那些运行，事件一行都不删。

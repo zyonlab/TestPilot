@@ -1,4 +1,17 @@
 /** Browser functions: self-contained so both Puppeteer and fixture tests run the production code. */
+export function availableControlSelectors(selectors:string[]):string[] {
+  const available:string[]=[];
+  for(const selector of selectors){
+    const e=document.querySelector(selector);
+    if(!e)continue;
+    const r=e.getBoundingClientRect();
+    const x=r.left+r.width/2,y=r.top+r.height/2;
+    const hit=document.elementFromPoint(x,y);
+    if(r.width>0&&r.height>0&&hit&&(hit===e||e.contains(hit)))available.push(selector);
+  }
+  return available;
+}
+
 export function readControlScopes(selectors:string[]):string[][] {
   const results:string[][]=[];
   for(const selector of selectors){
@@ -44,9 +57,19 @@ export function activateScopedControl(input:{sel:string;label:string;within?:str
     }
     candidates.push(e);
   }
-  // A valid exact selector is useful only while its label and scope still match.
-  if(direct&&candidates.includes(direct as HTMLElement)){(direct as HTMLElement).click();return 'selector';}
-  const leaves=candidates.filter(e=>!candidates.some(other=>other!==e&&e.contains(other)));
-  if(leaves.length!==1)return `ambiguous:${leaves.length}`;
-  leaves[0]!.click();return 'relocated';
+  // Keep the browser function self-contained: named inner closures acquire __name
+  // helpers under the production tsx loader, which do not exist in the page.
+  let selected:HTMLElement|undefined;
+  let result='selector';
+  if(direct&&candidates.includes(direct as HTMLElement))selected=direct as HTMLElement;
+  else {
+    const leaves=candidates.filter(e=>!candidates.some(other=>other!==e&&e.contains(other)));
+    if(leaves.length!==1)return `ambiguous:${leaves.length}`;
+    selected=leaves[0];result='relocated';
+  }
+  selected!.scrollIntoView({block:'center',inline:'nearest'});
+  const r=selected!.getBoundingClientRect();
+  const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+  if(!hit || (hit!==selected && !selected!.contains(hit)))return 'ambiguous:occluded';
+  selected!.click();return result;
 }

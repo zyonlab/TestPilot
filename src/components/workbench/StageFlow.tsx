@@ -29,7 +29,7 @@ const StageNode = memo(function StageNode({ data }: NodeProps<Node<StageData>>) 
   const [artifactsOpen, setArtifactsOpen] = useState(true);
   const artifactsId = useId();
   const Icon = data.state === 'done' ? CheckCircle2 : data.state === 'stopped' ? AlertCircle : ['running','starting'].includes(data.state) ? Loader2 : Circle;
-  const artifactLabel = (r: Revision) => r.name === 'exploration/observations' ? t('exploration.graph') : r.name === 'knowledge/domain-reference' ? t('surface.domainReferences') : r.name.startsWith('knowledge/rulepack/') ? `${t('surface.rulePacks')} · ${r.name.slice('knowledge/rulepack/'.length)}` : r.kind === 'execution' ? t('surface.runs') : r.kind === 'code' ? t('workflow.kind.code') : r.name.startsWith('validated/') ? data.label : r.name;
+  const artifactLabel = (r: Revision) => r.name === 'exploration/report' ? t('artifact.explorationReport') : r.name === 'exploration/planner-call' ? t('exploration.planning.title') : r.name === 'exploration/observations' ? t('exploration.graph') : r.name === 'knowledge/domain-reference' ? t('surface.domainReferences') : r.name.startsWith('knowledge/rulepack/') ? `${t('surface.rulePacks')} · ${r.name.slice('knowledge/rulepack/'.length)}` : r.kind === 'execution' ? t('surface.runs') : r.kind === 'code' ? t('workflow.kind.code') : r.name.startsWith('validated/') ? data.label : r.name;
   return <div style={{ width: NODE_W }} className="group">
     <Handle id="tl" type="target" position={Position.Left} style={{ top: 38 }} className={hidden} isConnectable={false} />
     <Handle id="tr" type="target" position={Position.Right} style={{ top: 38 }} className={hidden} isConnectable={false} />

@@ -51,6 +51,9 @@ export function ExplorationDocument({data}:{data:DocumentData}) {
   return <article className="space-y-6">
     <header><h3 className="text-xl font-semibold">{t('artifact.explorationReport')}</h3><p className="mt-2 font-medium">{text(collected?a.status:'unknown')}</p><p className="mt-2 text-sm text-muted-foreground">{t('exploration.evidence.boundary')}</p></header>
     {!collected&&<p role="status">{t('exploration.evidence.legacy')}</p>}
+    <section className="space-y-3"><h4 className="font-semibold">{t('exploration.planning.title')}</h4><p className="text-sm text-muted-foreground">{t('exploration.planning.hint')}</p>
+      {!rows(data.planning).length ? <p>{t('exploration.planning.missing')}</p> : rows(data.planning).map((plan,index)=><details key={index} className="rounded border border-border p-3" open={index===0}><summary>{t('exploration.planning.round')} {index+1} · {String(plan.business||plan.error||'—')}</summary><div className="mt-3 space-y-3">{rows(plan.decisions).map((d,i)=><div key={i} className="border-l-2 border-border pl-3 text-sm"><p className="font-medium">{String(d.label)} → {String(d.feature)}</p><p>{t(`exploration.planning.${String(d.status)}`)} · {String(d.risk)}</p><p>{String(d.reason)}</p><p className="text-muted-foreground">{t('exploration.planning.expected')}: {String(d.expected)}</p></div>)}</div></details>)}
+    </section>
     <section className="space-y-2 text-sm"><h4 className="font-semibold">{t('exploration.scope')}</h4><p className="break-all">{String(scope.entryUrl??data.entryUrl??data.url??'—')}</p>
       <p>{[...list(scope.routes),...list(scope.urlPatterns)].join(' · ')}</p>
       <p>{t('exploration.evidence.denominator')}: {collected&&scope.denominator!=null?String(scope.denominator):t('exploration.evidence.unknown')}</p>

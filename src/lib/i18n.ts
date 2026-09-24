@@ -10,6 +10,16 @@ export const LANGS: { code: Lang; label: string; name: string }[] = [
 
 type Entry = Record<Lang, string>;
 export const dict: Record<string, Entry> = {
+  "exploration.planning.title": {"zh": "宿主业务规划与组件探索", "en": "Host planning and component exploration", "ja": "ホスト計画とコンポーネント探索"},
+  "exploration.planning.hint": {"zh": "业务归属是模型假设；状态变化只说明操作后观察到页面变化，尚未核验变化是否符合预期或由该操作导致。未探索项不能计为完成。", "en": "Business mappings are hypotheses. Changes observed after an action do not prove its expected outcome or causality. Unexplored items remain gaps.", "ja": "業務分類は仮説です。操作後の変化だけでは期待結果や因果関係を証明できません。未探索項目は未完了です。"},
+  "exploration.planning.missing": {"zh": "本次没有可审计的宿主组件计划。", "en": "No auditable host component plan was collected.", "ja": "監査可能なホスト計画はありません。"},
+  "exploration.planning.round": {"zh": "规划批次", "en": "Planning round", "ja": "計画ラウンド"},
+  "exploration.planning.expected": {"zh": "预期观察", "en": "Expected observation", "ja": "期待する観察"},
+  "exploration.planning.unexplored": {"zh": "尚未探索", "en": "Unexplored", "ja": "未探索"},
+  "exploration.planning.policy_blocked": {"zh": "策略阻止或风险待确认", "en": "Blocked or risk unknown", "ja": "制限またはリスク未確認"},
+  "exploration.planning.state_changed": {"zh": "操作后状态已变化", "en": "Visible state changed", "ja": "操作後に状態変化"},
+  "exploration.planning.no_change": {"zh": "已操作，未观察到变化", "en": "Attempted, no visible change", "ja": "操作済み・変化なし"},
+
   "host.title": {zh:"Web 使用的本机宿主",en:"Local host for Web tasks",ja:"Web タスクのローカルホスト"},
   "host.choose": {zh:"请选择已登录的宿主",en:"Select a signed-in host",ja:"ログイン済みホストを選択"},
   "host.model": {zh:"规划模型：由所选宿主管理，实际模型名称尚未回报。",en:"Planner model: managed by the selected host; actual model name not yet reported.",ja:"計画モデルは選択したホストが管理します。実際のモデル名はまだ報告されていません。"},

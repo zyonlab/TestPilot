@@ -37,14 +37,14 @@ export async function requireHost(projectId:string){const status=await hostStatu
 export function nativeDraftArgs(host:NativeHost){return host==='codex'
  ? ['-a','never','exec','--json','--ephemeral','--skip-git-repo-check','--sandbox','read-only','-c','mcp_servers={}','-c','features.shell_tool=false','-c','web_search="disabled"','-']
  : ['-p','--output-format','json','--tools','','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--no-session-persistence'];}
-export async function nativeHostChat(host:NativeHost,request:ChatRequest):Promise<ChatResponse>{
+export async function nativeHostChat(host:NativeHost,request:ChatRequest, options:{timeoutMs?:number}={}):Promise<ChatResponse>{
  const directory=mkdtempSync(join(tmpdir(),'testpilot-draft-')),started=Date.now();
  const env={...process.env};for(const key of Object.keys(env))if(/^(TP_PLANNER_|MIDSCENE_)/.test(key))delete env[key];
  const prompt=[request.stable,'Draft only from the supplied context. Do not use tools or access files. Return only the requested answer.',request.schema?`Return a JSON object matching this schema: ${JSON.stringify(request.schema)}`:'',request.variable].join('\n\n');
  try{return await new Promise<ChatResponse>((resolve,reject)=>{
   const child=spawn(bin(host),nativeDraftArgs(host),{cwd:directory,env,stdio:['pipe','pipe','pipe']});let output='',overflow=false,timedOut=false;
   const stop=()=>{child.kill('SIGTERM');const forced=setTimeout(()=>child.kill('SIGKILL'),3000);forced.unref();};
-  const timeout=setTimeout(()=>{timedOut=true;stop();},180000);timeout.unref();
+  const timeout=setTimeout(()=>{timedOut=true;stop();},options.timeoutMs??180000);timeout.unref();
   child.stdout.on('data',chunk=>{if(overflow)return;output+=chunk.toString();if(output.length>2000000){overflow=true;stop();}});child.stderr.on('data',()=>{});child.stdin.on('error',()=>{});
   child.on('error',()=>{clearTimeout(timeout);reject(new Error('planner_host_spawn_failed'));});
   child.on('close',code=>{clearTimeout(timeout);if(timedOut||overflow||code!==0)return reject(new Error(timedOut?'planner_host_timeout':overflow?'planner_host_output_too_large':'planner_host_request_failed'));

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "product-rule-pack.v1",
   "id": "hyperliquid-testnet-example",
-  "version": "2026-09-24.1",
+  "version": "2026-09-24.2",
   "domain": "perpetual-trading",
   "product": "Hyperliquid Testnet 内置示例",
   "network": "testnet",
@@ -180,27 +180,31 @@
       ],
       "match": {
         "label": [
-          "^(Balances|Manual|Unified)$"
+          "^Balances$"
         ],
         "ignoreCountSuffix": true
       },
-      "action": "observe-only",
-      "sideEffect": "none"
+      "action": "activate",
+      "sideEffect": "ui-only"
     },
     {
       "id": "T-market",
-      "featureId": "market.inspect",
+      "featureId": "orders.inspect",
       "ruleRefs": [
-        "R-market"
+        "R-orders"
       ],
       "match": {
         "label": [
           "^(Market|Limit)$"
         ],
-        "ignoreCountSuffix": true
+        "ignoreCountSuffix": true,
+        "near": [
+          "Buy / Long",
+          "Sell / Short"
+        ]
       },
-      "action": "observe-only",
-      "sideEffect": "none"
+      "action": "activate",
+      "sideEffect": "ui-only"
     },
     {
       "id": "T-orders",
@@ -214,8 +218,8 @@
         ],
         "ignoreCountSuffix": true
       },
-      "action": "observe-only",
-      "sideEffect": "none"
+      "action": "activate",
+      "sideEffect": "ui-only"
     },
     {
       "id": "T-positions",
@@ -229,8 +233,8 @@
         ],
         "ignoreCountSuffix": true
       },
-      "action": "observe-only",
-      "sideEffect": "none"
+      "action": "activate",
+      "sideEffect": "ui-only"
     },
     {
       "id": "T-margin",
@@ -240,15 +244,72 @@
       ],
       "match": {
         "label": [
-          "^(Cross|Isolated|Leverage)$"
+          "^(Cross|Isolated|Leverage|[0-9]+x)$"
         ],
         "ignoreCountSuffix": true
       },
-      "action": "observe-only",
-      "sideEffect": "none"
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-market-picker",
+      "featureId": "market.inspect",
+      "ruleRefs": [
+        "R-market"
+      ],
+      "match": {
+        "label": [
+          "^[A-Z0-9]+-(USDC|USD|USDT)$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-history",
+      "featureId": "orders.inspect",
+      "ruleRefs": [
+        "R-orders"
+      ],
+      "match": {
+        "label": [
+          "^(Trade History|Order History|Funding History)$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
+    },
+    {
+      "id": "T-order-options",
+      "featureId": "orders.inspect",
+      "ruleRefs": [
+        "R-orders"
+      ],
+      "match": {
+        "label": [
+          "^(Pro|Reduce Only|Take Profit / Stop Loss)$"
+        ],
+        "ignoreCountSuffix": true
+      },
+      "action": "activate",
+      "sideEffect": "ui-only"
     }
   ],
   "roles": [],
   "lifecycle": [],
-  "externalCapabilities": []
+  "externalCapabilities": [],
+  "forbidLabels": [
+    "^Place Order$",
+    "^Cancel All$",
+    "^Close All$",
+    "^Close Position$",
+    "^Confirm$",
+    "^Withdraw$",
+    "^Transfer$",
+    "^Approve$",
+    "^Sign$",
+    "^(下单|确认|提交|撤单|平仓|提现|转账)$"
+  ]
 }

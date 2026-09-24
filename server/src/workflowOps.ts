@@ -198,7 +198,7 @@ async function launchSource(runId:string,projectId:string,directory:string,param
       if(!result.notes?.trim())throw new Error('exploration_returned_no_observations');
       const observation=putSourceRevision({runId,projectId,name:'exploration/observations',kind:'report',content:{...result,sourceCharter:bound.charter},sourceRefs:[attemptRevision.id,manifestRevision.id]},{kind:'system',id:'explorer'});
       let productText='';
-      const reportRevision=result.report?putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:result.report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'}):undefined;
+      const reportRevision=result.report?putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:result.report,sourceRefs:[observation.id,manifestRevision.id,...ledger.listRevisions(projectId,runId).filter(r=>r.name==='exploration/planner-call').map(r=>r.id)]},{kind:'system',id:'explorer'}):undefined;
       if(bound.charter && reportRevision && ExplorationReportSchema.safeParse(result.report).success){
         // 无结构化回执的半成品只保存 unknown 摘要，不推导产品模型。
         const report=ExplorationReportSchema.parse(result.report);
