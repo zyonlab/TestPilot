@@ -39,7 +39,7 @@ describe('transition coverage across stories', () => {
 });
 
 describe('gate and readiness', () => {
-  const bundle = (requiresStates?: Array<{ state: string; provided: 'steps' | 'preparation' }>, acRefs = ['S1/AC-1']) => ({
+  const bundle = (requiresStates?: Array<{ state: string; provided: 'steps' | 'preparation' | 'environment' }>, acRefs = ['S1/AC-1']) => ({
     stories: [{ id: 'S1', title: 'close', acceptance: ['When I close it, it is gone', 'When none exists, the close control is absent'], businessTransitions: [{ transitionId: 'T-close', preconditions: ['p'], acceptanceIndexes: [0], failureAcceptanceIndexes: [1] }] }],
     cases: [readOnly({ id: 'C1', storyId: 'S1', title: 'close', designMethod: 'state-transition', steps: ['Click Close'], postSteps: [], expected: 'gone', tier: 3, key: 'k', covers: [], sourceRefs: ['spec#1'], acRefs, ...(requiresStates ? { requiresStates } : {}) })],
     flows: [],
@@ -57,6 +57,11 @@ describe('gate and readiness', () => {
   it('a state to be provided by preparation blocks execution admission until prepared', () => {
     const c = (bundle([{ state: 'holding.open', provided: 'preparation' }]) as { cases: never[] }).cases[0];
     expect(executionBlockers(c)).toContain('requires_state:holding.open');
+  });
+  it('a session state the environment provides needs no recipe and does not block admission', () => {
+    const c = (bundle([{ state: 'holding.open', provided: 'environment' }]) as { cases: never[] }).cases[0];
+    expect(executionBlockers(c).some((b: string) => b.startsWith('requires_state'))).toBe(false);
+    expect(runGate(bundle([{ state: 'holding.open', provided: 'environment' }]), opts).findings.some(x => x.rule === 'requires-state')).toBe(false);
   });
 });
 
@@ -96,6 +101,7 @@ describe('one UI action per step', () => {
   it('flags chained actions, including in postSteps, and conditional clicks', () => {
     expect(rule(kase(['点击币对名→在 Search 输入 BTC→点击 BTC-USDC']))?.args).toEqual({ steps: '1' });
     expect(rule(kase(['在杠杆框输入 41 并点击确认']))).toBeDefined();
+    expect(rule(kase(['点击「Place Order」提交限价买单，出现确认框时点确认']))).toBeDefined();
     expect(rule(kase(['Click Place Order', 'If a confirmation dialog appears, click Confirm']))?.args).toEqual({ steps: '2' });
     expect(rule(kase(['Click Close'], ['Click Market Close and then click Confirm']))?.args).toEqual({ steps: 'post 1' });
   });

@@ -200,7 +200,7 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 不得用模型声明代替执行回执，不调用被测接口。清理在失败时也作为补偿执行。
 用例需要但**不由它自己建立**的状态（比如关闭或修改某个已有资源之前，要先有这个资源）是前提，不是资源：保留用例，readiness 标 blocked 并写明缺什么前提。
 单元材料里的转换列了 `requiresStates` 时，认领该转换**成功条件**的用例要写 `requiresStates:[{state, provided}]`：
-`provided:"steps"` 是自己的步骤建立它（lifecycle 声明为资源或设置并清理），`provided:"preparation"` 是由执行准备的配方提供（准备好之前不能执行）。
+`provided:"steps"` 是自己的步骤建立它（lifecycle 声明为资源或设置并清理），`provided:"preparation"` 是由执行准备的配方提供（准备好之前不能执行），`provided:"environment"` 是会话类状态（登录、钱包已连接）由执行环境的登录提供，不写配方也不进 lifecycle。
 需要这个状态**不存在**的失败路径用例不写。
 前置、基线、身份、归属和清理依据来自项目材料。准备器不能删改已审核义务或移动其步骤绑定。
 低影响 recipe 仍只允许 none/ui-only；旧产物缺契约为 unknown，不自动补成 verified。

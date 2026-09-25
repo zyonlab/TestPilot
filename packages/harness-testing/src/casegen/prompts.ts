@@ -550,7 +550,7 @@ export const CASES_SCHEMA = {
            */
           priority: { type: "string", enum: ["P0", "P1", "P2"] },
           lifecycle: LIFECYCLE_JSON_SCHEMA,
-          requiresStates: { type: "array", items: { type: "object", additionalProperties: false, properties: { state: { type: "string" }, provided: { type: "string", enum: ["steps", "preparation"] } }, required: ["state", "provided"] } },
+          requiresStates: { type: "array", items: { type: "object", additionalProperties: false, properties: { state: { type: "string" }, provided: { type: "string", enum: ["steps", "preparation", "environment"] } }, required: ["state", "provided"] } },
           postSteps: { type: "array", items: { type: "string", minLength: 1 } },
         },
         /**

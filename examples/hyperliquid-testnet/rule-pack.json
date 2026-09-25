@@ -1,7 +1,7 @@
 {
   "schemaVersion": "product-rule-pack.v1",
   "id": "hyperliquid-testnet-example",
-  "version": "2026-09-25.1",
+  "version": "2026-09-25.2",
   "domain": "perpetual-trading",
   "product": "Hyperliquid Testnet 内置示例",
   "network": "testnet",
@@ -18,6 +18,13 @@
       "kind": "domain-reference",
       "locator": "examples/hyperliquid-testnet/domain-knowledge.md",
       "note": "示例设计假设，不是实测证据"
+    },
+    {
+      "id": "user-2026-09-25",
+      "kind": "domain-reference",
+      "locator": "examples/hyperliquid-testnet/domain-knowledge.md",
+      "fragment": "杠杆与保证金",
+      "note": "用户 2026-09-25 提供的领域规则：有持仓时可能不能切换保证金模式；待实测"
     }
   ],
   "modules": [
@@ -249,6 +256,21 @@
       "verification": {
         "kind": "open-question",
         "question": "当前页面支持哪些杠杆、保证金与风险状态？缺少哪些前提？"
+      }
+    },
+    {
+      "id": "R-margin-mode-position",
+      "featureIds": [
+        "margin.configure"
+      ],
+      "claimType": "hypothesis",
+      "statement": "某市场存在持仓时，该市场的保证金模式（Cross / Isolated）可能不能切换；切换模式的用例须先证明该市场无持仓，涉及持仓的用例须先平仓再还原保证金模式",
+      "sourceRefs": [
+        "user-2026-09-25"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "有持仓时切换保证金模式，产品是禁用切换、提交后拒绝（文案是什么），还是允许？"
       }
     }
   ],
@@ -591,16 +613,19 @@
       "name": "配置杠杆与保证金模式",
       "claimType": "hypothesis",
       "sourceRefs": [
-        "example"
+        "example",
+        "user-2026-09-25"
       ],
       "preconditions": [
         "已选择市场",
-        "已区分空仓、持仓和挂单状态"
+        "已区分空仓、持仓和挂单状态",
+        "切换保证金模式时该市场没有持仓（有持仓时可能不允许切换）"
       ],
       "action": "检查并调整杠杆或保证金模式",
       "outcome": "明确适用范围、允许变更条件与结果",
       "failureModes": [
-        "已有持仓或挂单限制变更",
+        "该市场已有持仓时切换保证金模式被禁止或拒绝",
+        "已有挂单限制变更",
         "超出允许范围"
       ],
       "preparation": "先查看模式与限制；实际变更需要授权及恢复方案",

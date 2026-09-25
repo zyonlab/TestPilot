@@ -123,7 +123,7 @@ const ACCEPTANCE_ACTION =
  * 执行准备又不许改步数，这种用例到了准备阶段只能退回（2026-09-25：89 条里至少 8 条卡在这）。
  */
 const STEP_SEPARATOR = /→|->|=>|；|;|，|,|然后|随后|接着|之后再|并且?(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|再(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|\band then\b|\bthen\b|\band (?=click|tap|type|fill|enter|select|press|confirm|submit)/i;
-const CONDITIONAL_STEP = /(?:如果|若|如|一旦)(?:弹出|出现|显示|有)|(?:\bif\b|\bwhen\b|\bin case\b)[^.]{0,60}\b(?:appears?|shows?|shown|pops? up|displayed|visible)\b/i;
+const CONDITIONAL_STEP = /(?:如果|若|如|一旦)(?:弹出|出现|显示|有)|(?:出现|弹出)[^，,。；;]{0,12}时|(?:\bif\b|\bwhen\b|\bin case\b)[^.]{0,60}\b(?:appears?|shows?|shown|pops? up|displayed|visible)\b/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
   // 只认子句开头的 When（句首，或 `/ ， ; 换行` 之后）——2026-09-14 实测模型两种分隔都用。服务端同义实现见 acceptanceIndex.ts。
@@ -223,7 +223,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     }
     const declared = new Set((c.requiresStates ?? []).map((r) => r.state));
     const missingStates = [...needed].filter((st) => !declared.has(st));
-    if (missingStates.length) add('requires-state', `requires_state_undeclared: ${missingStates.join(', ')} — this case claims a success criterion of a transition that needs these states; declare requiresStates:[{state, provided:"steps"|"preparation"}] (steps: its own steps create it and lifecycle declares it; preparation: a preparation recipe must provide it, readiness stays blocked until then)`, c.id, 'warn', { field: 'precondition', args: { states: missingStates.join(', ') } });
+    if (missingStates.length) add('requires-state', `requires_state_undeclared: ${missingStates.join(', ')} — this case claims a success criterion of a transition that needs these states; declare requiresStates:[{state, provided:"steps"|"preparation"|"environment"}] (steps: its own steps create it and lifecycle declares it; preparation: a preparation recipe must provide it, readiness stays blocked until then; environment: a session state the environment login provides, no recipe)`, c.id, 'warn', { field: 'precondition', args: { states: missingStates.join(', ') } });
     /**
      * 产品会记住的选择（2026-09-25：订单类型切到 Limit 后刷新仍是 Limit，三条只读用例在收尾复查时失败，
      * 还把共享浏览器留在 Limit 上）。命中的步骤必须有一条 settings 以它为 changedAfterStep。
