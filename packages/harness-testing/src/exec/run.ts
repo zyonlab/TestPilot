@@ -585,6 +585,7 @@ export async function executeRun(
     for (const [i, step] of steps.entries()) {
       observer.begin("actions");
       rlog(`step ${i + 1}: ${step}`);
+      await lifecycle.beforeAction(i+1);
       lifecycle.beforeStep(i+1);
       await withModel(() => act(resolveText(step, ctx)));
       await lifecycle.afterStep(i+1);

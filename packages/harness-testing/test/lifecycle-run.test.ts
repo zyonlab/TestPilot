@@ -71,3 +71,23 @@ it('accepts complete short read-only cases without minimum, average or maximum s
   expect(gate.findings.filter(f=>f.rule==='granularity'||f.rule==='lifecycle')).toEqual([]);
  }
 });
+const v2=(over:Record<string,unknown>)=>LifecycleSchema.parse({version:2,mode:'controlled',rationale:'Creates then removes its own resource',sourceRefs:['spec#1'],supports:['$expected'],baseline:[check('Ready')],session:'unchanged',resources:[],settings:[],cleanup:[],sideEffects:[],...over});
+const released=()=>v2({resources:[{id:'new',sourceRef:'spec#1',identityKind:'generated',identity,establishAfterStep:1,releasedByStep:2,established:check(identity),ownership:check(identity+' owner-A')}],cleanup:[{id:'delete',resourceId:'new',postStep:1,verified:check(identity,'noText')}]});
+it('a resource the case removes itself is verified gone and not cleaned again',async()=>{
+ const result=await executeRun('https://example.test',['Create '+identity,'Delete '+identity],'Ready',{...opts(),lifecycle:released()});
+ expect(f.calls.filter(s=>s.startsWith('Delete'))).toHaveLength(1);
+ expect(result.lifecycle?.cleanup[0]).toMatchObject({status:'pass',detail:expect.stringMatching(/Released by step 2/)});
+ expect(result.lifecycle?.pendingResources).toEqual([]);expect(result.status).toBe('passed');
+});
+it('when the removing step never runs, cleanup still compensates',async()=>{
+ f.fail='Fail';const result=await executeRun('https://example.test',['Create '+identity,'Fail','Delete '+identity],'Ready',{...opts(),lifecycle:v2({...released(),resources:[{...released().resources[0]!,releasedByStep:3}]})});
+ expect(f.calls.at(-1)).toMatch(/^Delete test-/);expect(result.lifecycle?.cleanup[0].status).toBe('pass');expect(result.lifecycle?.pendingResources).toEqual([]);
+});
+it('checks a setting original right before the step that changes it, not on the entry page',async()=>{
+ const setting=v2({settings:[{id:'mode',sourceRef:'spec#1',name:'mode',original:'Mode-A',changedAfterStep:2,observed:check('Mode-A')}],cleanup:[{id:'restore',settingId:'mode',postStep:1,verified:check('Mode-A','noText')}]});
+ const result=await executeRun('https://example.test',['Create Mode-A','Switch mode'],'Ready',{...opts(),lifecycle:setting,postSteps:['Delete Mode-A']});
+ expect(result.lifecycle?.checks).toContainEqual(expect.objectContaining({id:'mode',phase:'baseline',status:'pass'}));
+ expect(f.calls).toEqual(['Create Mode-A','Switch mode','Delete Mode-A']);
+ expect(lifecycleIssues({lifecycle:released(),steps:['Create '+identity,'Delete '+identity],postSteps:['Delete '+identity],sourceRefs:['spec#1']})).toEqual([]);
+ expect(lifecycleIssues({lifecycle:released(),steps:['Create '+identity,'Delete something'],postSteps:['Delete '+identity],sourceRefs:['spec#1']})).toContain('lifecycle_release_unbound:new');
+});

@@ -90,6 +90,10 @@ describe('persisted settings', () => {
     const declared = [{ id: 'mode', sourceRef: 'spec#1', name: 'mode', original: 'Basic', changedAfterStep: 2, observed: { statement: 'Basic', checks: [] } }];
     expect(runGate(kase(['Open the panel', 'Click the Advanced tab'], declared), opts).findings.some(x => x.rule === 'setting-undeclared')).toBe(false);
   });
+  it('a setting committed by a later confirm step covers the selecting step', () => {
+    const declared = [{ id: 'mode', sourceRef: 'spec#1', name: 'mode', original: 'Basic', changedAfterStep: 3, observed: { statement: 'Basic', checks: [] } }];
+    expect(runGate(kase(['Open the panel', 'Click the Advanced tab', 'Click Confirm'], declared), opts).findings.some(x => x.rule === 'setting-undeclared')).toBe(false);
+  });
   it('without rule pack data there is no such rule', () => {
     expect(runGate(kase(['Click the Advanced tab'])).findings.some(x => x.rule === 'setting-undeclared')).toBe(false);
   });

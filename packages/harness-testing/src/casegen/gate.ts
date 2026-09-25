@@ -230,7 +230,8 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
      */
     if (persisted.length) {
       const armed = new Set((c.lifecycle && 'settings' in c.lifecycle ? (c.lifecycle.settings ?? []) : []).map((s: { changedAfterStep: number }) => s.changedAfterStep));
-      const hits = c.steps.flatMap((step, i) => (persisted.some((re) => re.test(step)) && !armed.has(i + 1) ? [i + 1] : []));
+      // 弹窗里的设置是「选好 → 确认」才生效：命中的那一步之后两步内有一条登记的设置就算覆盖。
+      const hits = c.steps.flatMap((step, i) => (persisted.some((re) => re.test(step)) && ![i + 1, i + 2, i + 3].some((n) => armed.has(n)) ? [i + 1] : []));
       if (hits.length) add('setting-undeclared', `persisted_setting_undeclared: step ${hits.join(', ')} changes a choice the product remembers after reload — make the lifecycle controlled, add settings:[{id,name,original,changedAfterStep,observed}] for it and a cleanup step with settingId that restores the original`, c.id, 'warn', { field: 'steps', args: { steps: hits.join(', ') } });
     }
     const packed = (step: string) => !step.startsWith('waitFor:') && (CONDITIONAL_STEP.test(step) || step.split(STEP_SEPARATOR).filter((part) => isAction(part)).length >= 2);

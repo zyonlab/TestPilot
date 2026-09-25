@@ -180,7 +180,7 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
    **不要**写「重新连接」的 postStep。可以仍是只读。
 3. **持久设置**（刷新后还在的偏好或配置：某种模式、档位、产品会保存的默认值）：`mode:"controlled"`，
    `settings:[{id,sourceRef,name,original,changedAfterStep,observed}]`。`original` 是执行前屏幕上的原值，
-   `observed` 的判据值包含 original；一条 `cleanup{id,settingId,postStep,verified}`，postStep 把它设回**原样的 original**，
+   `observed` 的判据值包含 original（它在第 changedAfterStep 步之前核对，可以依赖前面步骤打开的界面）；一条 `cleanup{id,settingId,postStep,verified}`，postStep 把它设回**原样的 original**，
    verified 的判据值包含 original。
 4. **本次创建的业务资源**：`mode:"controlled"`，`resources:[{id,sourceRef,identityKind,identity,establishAfterStep,established,ownership,vacant?}]`，
    每个资源一条 `cleanup{id,resourceId,postStep,verified}`。`identityKind` 三选一：
@@ -191,6 +191,8 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
      `vacant` 是证明该格位执行前为空的同屏判据（清理后也会再核一次）。
    `establishAfterStep`（从 1 起）那一步和清理 postStep 都要**原样包含 identity**。generated/attribute 的
    established、ownership、cleanup verified 三处判据都要包含 identity；ownership 同时写出项目提供的账户/上下文。
+   被测动作本身就会拿掉它（删除、取消这个资源）时，写 `releasedByStep` = 那一步（这一步也要原样包含 identity）：
+   那一步跑完核对它确实不在，收尾不再动它；没跑到那一步时清理 postStep 照常补偿。
 5. **不可逆副作用**（手续费、消耗的额度）：列进 `sideEffects`，判据不能要求它们还原。
 
 总是要有：`mode`、`rationale`、`sourceRefs`（本用例真实来源）、`supports`（`$expected` 或断言 id）；
