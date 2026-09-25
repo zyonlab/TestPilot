@@ -288,6 +288,18 @@ export interface OracleVerdict {
   judge?: JudgeStats;
 }
 
+/**
+ * 一个纯数字的判据值，屏幕上可能带也可能不带千分位：「42000」与「42,000」是同一个数。
+ * 2026-09-25：准备配方的后置检查找「42000」，挂单表显示「42,000」，检查失败、配方补偿没跑到撤单，挂单留在账户上，
+ * 连累后面 20 条用例。只对整段是数字的值展开，别的文字原样比较。
+ */
+export function numberForms(value: string): string[] {
+  const plain = /^([+-]?)(\d{4,})(\.\d+)?$/.exec(value);
+  if (plain) return [value, `${plain[1]}${plain[2]!.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${plain[3] ?? ""}`];
+  if (/^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(value)) return [value, value.replace(/,/g, "")];
+  return [value];
+}
+
 export function evaluateOracle(
   oracle: MachineOracle,
   after: PageSnapshot,
@@ -304,14 +316,14 @@ export function evaluateOracle(
     case "judge":
       return after.judge ? aggregateJudge(oracle, after.judge) : { status: "unobservable", detail: "judge 判据没有采样结果" };
     case "text": {
-      const hit = after.text.includes(oracle.value);
+      const hit = numberForms(oracle.value).some((v) => after.text.includes(v));
       return {
         status: hit ? "pass" : "fail",
         detail: hit ? `找到「${oracle.value}」` : `页面上没有「${oracle.value}」`,
       };
     }
     case "noText": {
-      const hit = after.text.includes(oracle.value);
+      const hit = numberForms(oracle.value).some((v) => after.text.includes(v));
       return {
         status: hit ? "fail" : "pass",
         detail: hit ? `页面上仍有「${oracle.value}」` : `确认没有「${oracle.value}」`,

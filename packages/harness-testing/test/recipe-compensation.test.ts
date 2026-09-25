@@ -44,3 +44,9 @@ it('checks the baseline after the recipe establishes the state the case requires
   expect(f.calls[0]).toBe('Open a holding');
   expect(result.status).toBe('passed');
 });
+
+it('runs compensation top to bottom, in the order it was written', async () => {
+  const two = { ...recipe, compensation: [{ step: 'Close the holding row', verified: check('holding row', 'noText') }, { step: 'Return to the entry market', verified: check('Ready') }] };
+  await executeRun('https://example.test', ['Look at the holding row'], 'Ready', { ...opts(), preparation: { steps: recipe.steps, checks: [], recipe: two } });
+  expect(f.calls.slice(-2)).toEqual(['Close the holding row', 'Return to the entry market']);
+});

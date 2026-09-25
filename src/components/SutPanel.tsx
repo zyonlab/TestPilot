@@ -50,7 +50,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
     setVpH(e?.viewport?.height ? String(e.viewport.height) : "");
     setCaps((e?.capabilities ?? []).join(", "));
     setInjectWallet(!!e?.injectWallet);
-    setOverlays((e?.login?.overlays ?? []).map((o) => `${o.present} => ${o.close}`).join("\n"));
+    setOverlays((e?.login?.overlays ?? []).map((o) => [o.present, o.close, ...(o.selector ? [o.selector] : [])].join(" => ")).join("\n"));
     setIdentityChecks(readIdentity(e?.login?.sessionChecks));
   }, [projectId]);
 
@@ -90,7 +90,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
           authRequired: env.login?.authRequired,
           steps: env.login?.steps,
           apiLogin: env.login?.apiLogin ?? null,
-          overlays: overlays.split("\n").map((line) => line.split("=>").map((x) => x.trim())).filter(([present, close]) => present && close).map(([present, close], i) => ({ id: `overlay-${i + 1}`, present: present!, close: close! })),
+          overlays: overlays.split("\n").map((line) => line.split("=>").map((x) => x.trim())).filter(([present, close]) => present && close).map(([present, close, selector], i) => ({ id: `overlay-${i + 1}`, present: present!, close: close!, ...(selector ? { selector } : {}) })),
         },
         isDefault: env.isDefault,
         capabilities: caps.split(/[,，\s]+/).map((c) => c.trim()).filter(Boolean),

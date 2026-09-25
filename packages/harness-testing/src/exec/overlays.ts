@@ -16,6 +16,11 @@ export const DismissibleOverlaySchema = z.object({
   present: z.string().min(1).max(200),
   /** 关掉它的**一个**界面动作，比如「点击右下角公告面板标题栏的关闭按钮」。 */
   close: z.string().min(1).max(300),
+  /**
+   * 可选：关闭按钮的 CSS 选择器。命中**恰好一个**元素、且它所在的块里有 present 那段文字时，直接点它，不交给模型找；
+   * 否则退回 close 那句话。2026-09-25 实测：模型点公告面板的 × 大多点不中（「still visible after close」几乎每次都有）。
+   */
+  selector: z.string().min(1).max(300).optional(),
 }).strict();
 export type DismissibleOverlay = z.infer<typeof DismissibleOverlaySchema>;
 export const DismissibleOverlaysSchema = z.array(DismissibleOverlaySchema).max(10);
@@ -32,6 +37,8 @@ export interface OverlayIo {
   act: (instruction: string) => Promise<void>;
   settle: () => Promise<void>;
   log: (line: string) => void;
+  /** 按选择器确定性地点一下；点到了返回 true。不提供就只用 close 那句话。 */
+  clickSelector?: (selector: string, present: string) => Promise<boolean>;
   /** 测试可替换的等待。 */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -58,7 +65,8 @@ export async function dismissOverlays(overlays: readonly DismissibleOverlay[], i
       // 立刻复查仍「still visible」，而重开入口页时同一个动作一次就关掉了）。
       let still = true;
       for (let attempt = 1; attempt <= 2 && still; attempt++) {
-        await io.act(o.close);
+        const clicked = o.selector && io.clickSelector ? await io.clickSelector(o.selector, o.present).catch(() => false) : false;
+        if (!clicked) await io.act(o.close);
         await io.settle();
         still = await gone(io, o.present).then((g) => !g);
       }

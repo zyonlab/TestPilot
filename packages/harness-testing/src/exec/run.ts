@@ -292,6 +292,16 @@ export async function executeRun(
     text: () => session!.page.evaluate(() => document.body?.innerText ?? ""),
     act: async (instruction) => { if (leased) await withModel(() => session!.agent.aiAction(instruction)); else await session!.agent.aiAction(instruction); },
     settle: async () => { await settleOn(session!.page, { minMs: 400, maxMs: 6_000 }).catch(() => {}); },
+    clickSelector: (selector, present) => session!.page.evaluate(([sel, text]) => {
+      const hits = [...document.querySelectorAll(sel)];
+      if (hits.length !== 1) return false;
+      const el = hits[0] as HTMLElement;
+      let block: HTMLElement | null = el;
+      while (block && !(block.innerText ?? "").includes(text)) block = block.parentElement;
+      if (!block || block === document.body) return false;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      return true;
+    }, [selector, present] as const) as Promise<boolean>,
     log: rlog,
   }, reason).then(n => n > 0);
   const act = async (t: string) => {
@@ -417,11 +427,25 @@ export async function executeRun(
     const login = shouldRunLogin(verified, restored, !!opts.login?.length) ? opts.login! : [];
     if (login.length) {
       rlog(`login flow (${login.length} steps)`);
-      for (const t of login) {
-        rlog(`  login: ${t}`);
-        const step = resolveText(t, ctx);
-        if (step.startsWith("waitFor:")) await withModel(() => session!.agent.aiWaitFor(step.slice(8), {timeoutMs:30_000}));
-        else await withModel(() => act(step));
+      const runLogin = async () => {
+        for (const t of login) {
+          rlog(`  login: ${t}`);
+          const step = resolveText(t, ctx);
+          if (step.startsWith("waitFor:")) await withModel(() => session!.agent.aiWaitFor(step.slice(8), {timeoutMs:30_000}));
+          else await withModel(() => act(step));
+        }
+      };
+      /**
+       * 登录一步失败时重开入口页、整段登录重来一次。2026-09-26 第四轮准备：新浏览器打开交易页后主区域整块黑屏，
+       * 「等 Enable Trading 出现」超时，同一条用例三次探查都死在这，被判成基础设施问题而放弃。重开一次多数就好了。
+       */
+      try { await runLogin(); }
+      catch (e) {
+        if (opts.signal?.aborted || !session || session.page.isClosed()) throw e;
+        rlog(`login failed (${String((e as Error)?.message ?? e).slice(0, 120)}); reloading the entry page and retrying login once`);
+        await session.page.goto(url, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }));
+        await settleOn(session.page, { minMs: 600, maxMs: 12_000 }).catch(() => {});
+        await runLogin();
       }
       await shot();
       /**
@@ -865,7 +889,9 @@ export async function executeRun(
     const recipe=opts.preparation?.recipe;
     if(recipe?.sideEffects==='controlled'&&recipeStarted){
       lifecycleReceipt.safeToRetry=false;
-      const steps=[...(recipe.compensation??[])].reverse();
+      // 按写的顺序执行：compensation 本身就是「先撤最后建的」那张清单。2026-09-25 以前这里再倒一次，准备器按撤销顺序
+      // 写好的「撤单 → 改回 Market → 切回 HYPE」被倒成「先切回 HYPE」，回到别的市场后撤不到那张单，挂单留在账户上。
+      const steps=[...(recipe.compensation??[])];
       let unverified=false;
       for(const [i,x] of steps.entries()){
         const item:LifecycleReceipt['cleanup'][number]={id:`recipe-compensation-${i+1}`,resourceId:`recipe:${recipe.capability}`,postStep:i+1,status:'not-run',detail:''};

@@ -274,3 +274,11 @@ it('rejects question-shaped screen checks before spending a probe',async()=>{
  expect(fake.run.mock.calls.length).toBe(calls);
  await prep.cancelPreparation(run,project);
 });
+it('stops the whole batch when a run leaves an uncleaned resource behind',{timeout:20000},async()=>{
+ await prep.cancelPreparation(run,project).catch(()=>{});
+ const b=await start();
+ fake.run.mockReset();fake.run.mockResolvedValue({...result(),lifecycle:{version:1,status:'unknown',checks:[],cleanup:[],pendingResources:[{id:'recipe:order',identity:'order.open',reason:'Preparation compensation was not verified'}],safeToRetry:false}});
+ await step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],reason:'look'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.status).toBe('interrupted'),{timeout:8000,interval:200});
+ await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+});

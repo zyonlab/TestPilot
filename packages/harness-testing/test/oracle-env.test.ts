@@ -17,3 +17,12 @@ it('never resolves secrets into an oracle', async () => {
   const r = await executeRun('https://example.test', ['Look'], 'Ready', { ...base, oracle: { kind: 'text', value: '${secret.S}' } });
   expect(JSON.stringify(r.oracle)).not.toContain('hunter2');
 });
+it('a plain number matches the screen with or without thousands separators', async () => {
+  const { evaluateOracle, numberForms } = await import('../src/exec/oracle.js');
+  expect(numberForms('42000')).toEqual(['42000', '42,000']);
+  expect(numberForms('120,000.5')).toEqual(['120,000.5', '120000.5']);
+  expect(numberForms('BTC')).toEqual(['BTC']);
+  const snap = { text: 'Limit BTC 0.001 @ 42,000', url: 'x' };
+  expect(evaluateOracle({ kind: 'text', value: '42000' }, snap as never).status).toBe('pass');
+  expect(evaluateOracle({ kind: 'noText', value: '42000' }, snap as never).status).toBe('fail');
+});

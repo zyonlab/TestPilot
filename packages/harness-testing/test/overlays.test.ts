@@ -56,3 +56,14 @@ it('waits for a closing animation and clicks close a second time when the first 
   expect(await dismissOverlays([{ id: 'n', present: 'Notice panel', close: 'Close it' }], io, 'test')).toBe(1);
   expect(clicks).toBe(2);
 });
+
+it('clicks a declared close selector deterministically and falls back to the instruction when it cannot', async () => {
+  let text = 'x\nNotice panel'; const acts: string[] = []; const sels: string[] = [];
+  const io = { text: async () => text, act: async (a: string) => { acts.push(a); text = 'x'; }, settle: async () => {}, log: () => {}, sleep: async () => {},
+    clickSelector: async (s: string) => { sels.push(s); if (s === '#ok') { text = 'x'; return true; } return false; } };
+  expect(await dismissOverlays([{ id: 'n', present: 'Notice panel', close: 'Close it', selector: '#ok' }], io, 't')).toBe(1);
+  expect(acts).toEqual([]);
+  text = 'x\nNotice panel';
+  expect(await dismissOverlays([{ id: 'n', present: 'Notice panel', close: 'Close it', selector: '#missing' }], io, 't')).toBe(1);
+  expect(acts).toEqual(['Close it']);
+});
