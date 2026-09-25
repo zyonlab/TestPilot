@@ -49,3 +49,10 @@ it('an ambiguous target inside a dialog is retried once, scoped to the topmost d
   expect(f.calls[1]).toMatch(/^Click Isolated（只在当前最上层打开的弹窗或对话框内操作/);
   expect(result.status).toBe('passed');
 });
+
+it('waits for a closing animation and clicks close a second time when the first click did not take', async () => {
+  let text = 'x\nNotice panel'; let clicks = 0; let polls = 0;
+  const io = { text: async () => { polls++; if (clicks >= 2 && polls > 3) text = 'x'; return text; }, act: async () => { clicks++; }, settle: async () => {}, log: () => {}, sleep: async () => {} };
+  expect(await dismissOverlays([{ id: 'n', present: 'Notice panel', close: 'Close it' }], io, 'test')).toBe(1);
+  expect(clicks).toBe(2);
+});

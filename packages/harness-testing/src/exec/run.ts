@@ -185,12 +185,22 @@ export async function executeRun(
 ): Promise<RunResult> {
   const observer = executionObserver();
   observer.begin("session-navigation");
-  const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
   const auxiliaryChecks: NonNullable<RunResult["auxiliaryChecks"]> = [];
   const injected = !!opts.injected;
   const wallet = !injected && !!opts.wallet;
   const ctx: ResolveContext = { env: {...opts.resolve?.env, TP_LIFECYCLE_ID: randomUUID()}, secrets: opts.resolve?.secrets ?? {} };
   const secretVals = Object.values(ctx.secrets);
+  /**
+   * 判据里的 ${env.*} 在判之前换成这次执行的值。2026-09-25 以前从没换过：text 判据找字面的「${env.X}」必挂，
+   * noText 判据则永远过——一条「挂单已撤掉」的用例没撤也会过。只换 env，不换 secret（判据细节会进日志与报告）；
+   * api 判据有自己的解析（observeApi），不动。
+   */
+  const envOnly: ResolveContext = { env: ctx.env, secrets: {} };
+  const resolveDeep = (v: unknown): unknown => typeof v === "string" ? resolveText(v, envOnly) : Array.isArray(v) ? v.map(resolveDeep) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, resolveDeep(x)])) : v;
+  const withEnv = <T extends MachineOracle | undefined>(o: T): T => (o && o.kind !== "api" ? resolveDeep(o) as T : o);
+  opts = { ...opts, oracle: withEnv(opts.oracle), assertions: opts.assertions?.map((a) => ({ ...a, oracle: withEnv(a.oracle) })),
+    ...(opts.preparation ? { preparation: { ...opts.preparation, auxiliaryAssertions: opts.preparation.auxiliaryAssertions?.map((a) => ({ ...a, oracle: withEnv(a.oracle) })) } } : {}) };
+  const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
   const rlog = (s: string) => logs.push(redact(s, secretVals));
   const startedAt = new Date().toISOString();
   const sinceMs = Date.now();

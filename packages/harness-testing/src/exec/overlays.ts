@@ -32,6 +32,18 @@ export interface OverlayIo {
   act: (instruction: string) => Promise<void>;
   settle: () => Promise<void>;
   log: (line: string) => void;
+  /** 测试可替换的等待。 */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** 最多等 waitMs 看文字是否消失。 */
+async function gone(io: OverlayIo, present: string, waitMs = 5_000, stepMs = 500): Promise<boolean> {
+  const until = Date.now() + waitMs;
+  for (;;) {
+    if (!(await io.text()).includes(present)) return true;
+    if (Date.now() >= until) return false;
+    await (io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(stepMs);
+  }
 }
 
 /** 关掉当前还开着的声明浮层。返回关掉了几个；关不掉的只记日志，不抛——它不是用例的判决。 */
@@ -42,9 +54,14 @@ export async function dismissOverlays(overlays: readonly DismissibleOverlay[], i
     try { text = await io.text(); } catch { return closed; }
     if (!text.includes(o.present)) continue;
     try {
-      await io.act(o.close);
-      await io.settle();
-      const still = (await io.text()).includes(o.present);
+      // 关面板有动画，文字要过一会儿才从页面上消失；没消失就再点一次（2026-09-25 实测：入口页第一次关后
+      // 立刻复查仍「still visible」，而重开入口页时同一个动作一次就关掉了）。
+      let still = true;
+      for (let attempt = 1; attempt <= 2 && still; attempt++) {
+        await io.act(o.close);
+        await io.settle();
+        still = await gone(io, o.present).then((g) => !g);
+      }
       io.log(`overlay ${o.id} ${still ? "still visible after close" : "dismissed"} (${reason})`);
       if (!still) closed++;
     } catch (e) {
