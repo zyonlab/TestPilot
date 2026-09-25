@@ -61,6 +61,8 @@ export interface ExecSpec {
     sessionKey?: string;
     authentication?: {sessionChecks?:SessionCheck[];injectedSessionCheck?:InjectedSessionCheck};
     login?: string[];
+    /** 环境声明的常驻可关闭浮层，原样交给执行器。见 exec/overlays.ts。 */
+    overlays?: import("@testpilot/harness-testing/domain").DismissibleOverlay[];
     postSteps?: string[];
     resolve?: ResolveContext;
     rowLabel?: string;

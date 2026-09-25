@@ -1,0 +1,44 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { blockedByOverlay, dismissOverlays, DismissibleOverlaysSchema } from '../src/exec/overlays.js';
+
+/** 常驻可关闭浮层（2026-09-25）：登录后关掉；某步因被挡住失败时，关掉再重试一次。具体面板是环境数据。 */
+const f = vi.hoisted(() => ({ text: 'Ready\nNotice panel\nTrade', calls: [] as string[], hideTarget: true }));
+vi.mock('../src/exec/session.js', () => ({ launchSession: async () => ({
+  page: { url: () => 'https://example.test/', isClosed: () => false, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? f.text.split('\n') : f.text, goto: async () => {} },
+  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t === 'Show notice') f.text += '\nNotice panel'; else if (t === 'Close the notice panel') f.text = f.text.replace('\nNotice panel', ''); else if (t === 'Click Withdraw' && f.text.includes('Notice panel')) throw new Error('Failed to plan actions: Withdraw not found, covered by a panel'); }, aiAssert: async () => {} },
+  cleanup: async () => {}, modelRequests: [] }), reopenPage: vi.fn() }));
+vi.mock('../src/exec/pageReady.js', () => ({ settleOn: async () => ({ settled: true, controls: 1, textLen: 5, ms: 0 }) }));
+vi.mock('../src/baselines/perf.js', () => ({ capturePerf: async () => ({}) }));
+import { executeRun } from '../src/exec/run.js';
+const overlays = [{ id: 'notice', present: 'Notice panel', close: 'Close the notice panel' }];
+const opts = (o = overlays) => ({ executorModel: { baseUrl: 'https://fixture.test', apiKey: 'fixture', model: 'fixture' } as never, oracle: { kind: 'text' as const, value: 'Ready' }, overlays: o });
+beforeEach(() => { f.text = 'Ready\nNotice panel\nTrade'; f.calls = []; });
+
+it('closes a declared overlay on the entry page before the first step', async () => {
+  const result = await executeRun('https://example.test', ['Click Withdraw'], 'Ready', opts());
+  expect(f.calls).toEqual(['Close the notice panel', 'Click Withdraw']);
+  expect(result.status).toBe('passed');
+});
+it('when a step is blocked and the overlay came back, closes it and retries the step once', async () => {
+  f.text = 'Ready\nTrade';
+  const result = await executeRun('https://example.test', ['Show notice', 'Click Withdraw'], 'Ready', opts());
+  expect(f.calls).toEqual(['Show notice', 'Click Withdraw', 'Close the notice panel', 'Click Withdraw']);
+  expect(result.status).toBe('passed');
+  expect(result.logs?.some(l => /overlay notice dismissed/.test(l))).toBe(true);
+});
+it('without declared overlays a blocked step fails as before', async () => {
+  const result = await executeRun('https://example.test', ['Click Withdraw'], 'Ready', opts([]));
+  expect(result.status).not.toBe('passed');
+  expect(f.calls).toEqual(['Click Withdraw']);
+});
+it('retry path: dismiss runs only for overlay-like failures and only when the overlay is present', async () => {
+  expect(blockedByOverlay(new Error('Failed to plan actions: button not found'))).toBe(true);
+  expect(blockedByOverlay(new Error('Assertion failed: balance is 0'))).toBe(false);
+  expect(blockedByOverlay(new Error('EXEC_CANCELLED'))).toBe(false);
+  let text = 'x\nNotice panel'; const acts: string[] = [];
+  const io = { text: async () => text, act: async (a: string) => { acts.push(a); text = 'x'; }, settle: async () => {}, log: () => {} };
+  expect(await dismissOverlays(overlays, io, 'test')).toBe(1);
+  expect(await dismissOverlays(overlays, io, 'test')).toBe(0);
+  expect(acts).toEqual(['Close the notice panel']);
+  expect(DismissibleOverlaysSchema.safeParse([{ id: 'a', present: '', close: 'x' }]).success).toBe(false);
+});

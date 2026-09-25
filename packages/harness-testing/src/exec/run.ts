@@ -1,5 +1,6 @@
 import { lifecycleExecution, lifecycleIssues, LifecycleSchema, type Lifecycle, type LifecycleReceipt } from './lifecycle.js';
 import { executionObserver, type ExecutionObservation } from '@testpilot/harness-core/execution-observation';
+import { dismissOverlays, blockedByOverlay, type DismissibleOverlay } from "./overlays.js";
 import { checkPrerequisite, type Preparation, type EnvironmentFact, type PrerequisiteReceipt } from './preparationChecks.js';
 import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
 import {settleOn} from './pageReady.js';
@@ -118,6 +119,8 @@ export async function executeRun(
     sessionKey?: string;
     authentication?: AuthenticationChecks;
     login?: string[]; // login-flow step templates (登录态), run before case steps
+    /** 环境声明的常驻可关闭浮层：登录后、重开入口页后关掉；某步定位失败时若它还在，关掉重试一次。见 overlays.ts。 */
+    overlays?: DismissibleOverlay[];
     postSteps?: string[]; // teardown/cleanup step templates, run after the assert
     resolve?: ResolveContext; // ${env.*}/${secret.*} resolution context
     rowLabel?: string; // data-driven row label, logged for forensics
@@ -238,7 +241,7 @@ export async function executeRun(
     redact:t=>redact(t,secretVals),
     act:async t=>{rlog(`teardown: ${t}`);await withModel(()=>act(resolveText(t,ctx)));},
     available:()=>!!session && !sessionClosed && !opts.signal?.aborted && !session.page.isClosed?.(),
-    reopen:async()=>{rlog('reopen entry page before read-only baseline re-check');const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);await session!.page.goto(entry.toString(),{waitUntil:'domcontentloaded',timeout:45000});await settleOn(session!.page,{minMs:600,maxMs:12_000}).catch(()=>{});},
+    reopen:async()=>{rlog('reopen entry page before read-only baseline re-check');const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);await session!.page.goto(entry.toString(),{waitUntil:'domcontentloaded',timeout:45000});await settleOn(session!.page,{minMs:600,maxMs:12_000}).catch(()=>{});if(opts.overlays?.length)await closeOverlays('reopened entry page');},
   });
   const checkCancelled = () => { if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED"); };
   const abortSession = () => { if (poolKey) void evictSession(poolKey).catch(() => {}); else void session?.cleanup().catch(() => {}); };
@@ -274,6 +277,13 @@ export async function executeRun(
       return false;
     }
   };
+  // leased=false：调用方（act 里的重试）已经持有一次模型租约，再申请会在并发闸门上自锁。
+  const closeOverlays = (reason: string, leased = true) => dismissOverlays(opts.overlays ?? [], {
+    text: () => session!.page.evaluate(() => document.body?.innerText ?? ""),
+    act: async (instruction) => { if (leased) await withModel(() => session!.agent.aiAction(instruction)); else await session!.agent.aiAction(instruction); },
+    settle: async () => { await settleOn(session!.page, { minMs: 400, maxMs: 6_000 }).catch(() => {}); },
+    log: rlog,
+  }, reason).then(n => n > 0);
   const act = async (t: string) => {
     checkCancelled();
     if (t.startsWith("waitFor:")) return session!.agent.aiWaitFor(t.slice("waitFor:".length).trim(), { timeoutMs: 30_000 });
@@ -283,11 +293,19 @@ export async function executeRun(
       rlog(`  直接跳转（纯导航步骤，不交给模型）：${navTo}`);
       await session!.page.goto(navTo, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(navTo, { waitUntil: "domcontentloaded", timeout: 45000 }));
       await settleOn(session!.page, { minMs: 600, maxMs: 12_000 });
+      if (opts.overlays?.length) await closeOverlays('after navigation', false);
       return;
     }
     if (await byLocator(t)) return;
     try {
-      await session!.agent.aiAction(t);
+      try {
+        await session!.agent.aiAction(t);
+      } catch (e) {
+        // 被常驻浮层挡住：关掉再做这一步一次。关不掉或本来就没有浮层，原样抛出。
+        if (!opts.overlays?.length || !blockedByOverlay(e) || !(await closeOverlays('step failed: ' + t.slice(0, 60), false))) throw e;
+        rlog('  retrying step after closing overlay');
+        await session!.agent.aiAction(t);
+      }
     } catch (e) {
       /**
        * Midscene 0.30.10 回放 bug（06 §6.1）：缓存的 yaml 流程里 locate 失效、模型重定位并写回缓存之后，
@@ -318,7 +336,7 @@ export async function executeRun(
     logs.push(`navigate → ${url}${injected ? " (injected wallet)" : wallet ? " (with MetaMask)" : ""}`);
     const dataOpts = {
       signal: opts.signal, modelBudget: opts.modelBudget,
-      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],lifecycle:opts.lifecycle??null,login:opts.login??[],resolve:ctx,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
+      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],lifecycle:opts.lifecycle??null,login:opts.login??[],overlays:opts.overlays??[],resolve:ctx,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
       executorModel: opts.executorModel ?? executorConnectionFromEnv(),
       extraHeaders: opts.extraHeaders,
       query: opts.query,
@@ -401,6 +419,7 @@ export async function executeRun(
     checkCancelled();
     if(!ready.settled&&ready.controls===0&&ready.textLen===0)throw new Error('PAGE_NOT_READY: the target page remained blank before execution');
     rlog(`page ready after ${ready.ms}ms (${ready.controls} controls, ${ready.textLen} text characters)`);
+    if (opts.overlays?.length) await closeOverlays('entry page');
     if (!opts.preparation && await verifyAuthentication() === false) throw new Error('AUTHENTICATION_NOT_VERIFIED: configured login checks failed before case execution');
     await observe(0);
     if(opts.captureObservations||opts.preparation)await shot();

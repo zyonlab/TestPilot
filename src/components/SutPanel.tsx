@@ -33,6 +33,8 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
   const [caps, setCaps] = useState("");
   const [identityChecks,setIdentityChecks] = useState(emptyIdentity);
   const [injectWallet, setInjectWallet] = useState(false);
+  /** 常驻可关闭浮层：每行「出现这段文字 => 关掉它的一个动作」。 */
+  const [overlays, setOverlays] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [log, setLog] = useState<string[]>([]);
@@ -48,6 +50,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
     setVpH(e?.viewport?.height ? String(e.viewport.height) : "");
     setCaps((e?.capabilities ?? []).join(", "));
     setInjectWallet(!!e?.injectWallet);
+    setOverlays((e?.login?.overlays ?? []).map((o) => `${o.present} => ${o.close}`).join("\n"));
     setIdentityChecks(readIdentity(e?.login?.sessionChecks));
   }, [projectId]);
 
@@ -87,6 +90,7 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
           authRequired: env.login?.authRequired,
           steps: env.login?.steps,
           apiLogin: env.login?.apiLogin ?? null,
+          overlays: overlays.split("\n").map((line) => line.split("=>").map((x) => x.trim())).filter(([present, close]) => present && close).map(([present, close], i) => ({ id: `overlay-${i + 1}`, present: present!, close: close! })),
         },
         isDefault: env.isDefault,
         capabilities: caps.split(/[,，\s]+/).map((c) => c.trim()).filter(Boolean),
@@ -212,6 +216,16 @@ export function SutPanel({ projectId, onChanged }: { projectId: string; onChange
         onChange={(e) => setCaps(e.target.value)}
       />
       <p className="mt-1 text-[0.75rem] leading-relaxed text-muted-foreground">{t("sut.capabilitiesWhy")}</p>
+      <label htmlFor="sut-overlays" className="mt-4 block text-[0.75rem] font-medium">{t("sut.overlays")}</label>
+      <textarea
+        id="sut-overlays"
+        rows={3}
+        className="mt-1 w-full rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[0.8125rem]"
+        placeholder={t("sut.overlaysPlaceholder")}
+        value={overlays}
+        onChange={(e) => setOverlays(e.target.value)}
+      />
+      <p className="mt-1 text-[0.75rem] leading-relaxed text-muted-foreground">{t("sut.overlaysWhy")}</p>
       <label className="mt-3 flex items-start gap-2 text-[0.8125rem]">
         <input id="sut-inject-wallet" type="checkbox" className="mt-1" checked={injectWallet} onChange={(e) => setInjectWallet(e.target.checked)} />
         <span><span className="font-medium">{t("sut.injectWallet")}</span><span className="mt-0.5 block text-[0.75rem] text-muted-foreground">{t("sut.injectWalletWhy")}</span></span>

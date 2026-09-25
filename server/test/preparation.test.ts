@@ -254,3 +254,12 @@ it('re-scoping a batch keeps cases already verified at the same revision and app
  expect(prep.preparationStatus(r,project)!.units.find(u=>u.unitId==='c1')?.status).not.toBe('verified');
  await prep.cancelPreparation(r,project);
 });
+it('passes the environment-declared dismissible overlays to every probe and trial',async()=>{
+ const overlays=[{id:'notice',present:'Announcements',close:'Click the close button on the announcements panel'}];
+ db.upsertEnvironment({projectId:project,name:'with-overlays',baseUrl:'http://localhost:9876',isDefault:true,login:{overlays}} as never);
+ await prep.cancelPreparation(run,project).catch(()=>{});
+ const b=await start();fake.run.mockResolvedValueOnce(result());
+ await step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],reason:'look'});
+ await vi.waitFor(()=>expect(fake.run.mock.calls.at(-1)![0].opts.overlays).toEqual(overlays));
+ await prep.cancelPreparation(run,project);
+});

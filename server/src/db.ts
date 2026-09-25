@@ -646,6 +646,8 @@ export interface LoginFlow {
   apiLogin?: ApiLoginConfig; // API-style login config (alternative to UI steps)
   session?: StorageState | null; // captured login state — when present, injected + login SKIPPED
   capturedAt?: string; // when the session was captured (for staleness display)
+  /** 常驻、可关闭、会挡住操作的面板（公告、引导浮层……）：执行器登录后关掉，某步被挡住时关掉重试。见 exec/overlays.ts。 */
+  overlays?: import("@testpilot/harness-testing/domain").DismissibleOverlay[];
 }
 export interface Environment {
   id: string;

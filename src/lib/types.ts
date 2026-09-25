@@ -25,6 +25,8 @@ export interface LoginFlow {
   authRequired?: boolean;
   steps?: string[];
   apiLogin?: ApiLoginConfig | null; // API-style login config (no UI driving)
+  /** 常驻可关闭的浮层：执行器登录后关掉，某步被挡住时关掉重试。 */
+  overlays?: { id: string; present: string; close: string }[];
   // Captured-session summary (the blob itself never leaves the server).
   capturedAt?: string;
   hasSession?: boolean;

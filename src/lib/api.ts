@@ -237,7 +237,7 @@ export const api = {
       vars: Record<string, string | string[]>;
       headers: Record<string, string>;
       query: Record<string, string>;
-      login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null; sessionChecks?: import("./types").LoginFlow["sessionChecks"] };
+      login: { authRequired?: boolean; steps?: string[]; apiLogin?: ApiLoginConfig | null; sessionChecks?: import("./types").LoginFlow["sessionChecks"]; overlays?: import("./types").LoginFlow["overlays"] };
       isDefault: boolean; capabilities?: string[]; injectWallet?: boolean;
       viewport?: {width?:number;height?:number};
     },
