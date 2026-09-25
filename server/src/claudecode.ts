@@ -40,6 +40,8 @@ interface Live {
   child: ChildProcess;
   sessionId: string;
   exited: boolean;
+  /** 宿主自己说了为什么停（例如用量额度用完）；看门狗用它代替笼统的「未提交回执」。 */
+  stopReason?: string;
   exitCode: number | null;
   outDir: string;
 }
@@ -196,6 +198,12 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
           const line = JSON.parse(raw) as StreamLine;
           const sid = sessionIdOf(line);
           if (line.type === "system" && line.subtype === "init" && typeof line.model === "string") nativeModel = line.model;
+          /**
+           * 宿主用量额度用完（2026-09-25 实测 five_hour 额度打满，finalize 节点只报「已结束但未提交回执」，要翻 trace 才知道）。
+           * 记下原因与重置时间：这不是产品或用例问题，额度恢复后续跑即可。
+           */
+          const stop = hostStopReasonOf(line);
+          if (stop) entry.stopReason = stop;
           if (line.type === "result" && line.usage && entry.sessionId && input.scopeProjectId) recordHostSummary(runId, "claude-code", entry.sessionId, line.usage as Record<string, unknown>, nativeModel, line.total_cost_usd);
           if (sid && !settled) {
             settled = true;
@@ -222,10 +230,22 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   return { sessionId, workspace, runId, outDir };
 }
 
+/**
+ * 宿主流水里「额度用完被拒」的那一行，翻成一句人能直接看懂的停止原因；别的行返回 undefined。
+ * 2026-09-25 实测：five_hour 额度打满时 finalize 只报「已结束但未提交回执」，要翻 trace 才知道是额度。
+ */
+export function hostStopReasonOf(line: unknown): string | undefined {
+  const rl = line as { type?: string; rate_limit_info?: { status?: string; rateLimitType?: string; resetsAt?: number } };
+  if (rl?.type !== "rate_limit_event" || rl.rate_limit_info?.status !== "rejected") return undefined;
+  const at = rl.rate_limit_info.resetsAt ? `，${new Date(rl.rate_limit_info.resetsAt * 1000).toLocaleString("zh-CN", { hour12: false })} 重置` : "";
+  return `宿主 Claude Code 的用量额度已用完（${rl.rate_limit_info.rateLimitType ?? "unknown"}）${at}；额度恢复后续跑即可，不是产品或用例问题`;
+}
+
 /** 与 `penguin.watchRun` 同一个看门狗，只换「session 还在跑吗」这一问。 */
 export function watchRun(opts: Parameters<typeof penguinWatchRun>[0]): void {
   penguinWatchRun({
     ...opts,
+    errorOf: () => live.get(opts.runId)?.stopReason,
     stateOf: () => {
       const l = live.get(opts.runId);
       if (!l) return "gone";

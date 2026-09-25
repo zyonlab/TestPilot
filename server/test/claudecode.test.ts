@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sessionIdOf, isHookBlock, nodeEventsOf, writeMcpConfig, claudeArgs, runMessage } from "../src/claudecode.js";
+import { sessionIdOf, hostStopReasonOf, isHookBlock, nodeEventsOf, writeMcpConfig, claudeArgs, runMessage } from "../src/claudecode.js";
 import { getRuntime, isRuntimeName } from "../src/runtimes.js";
 
 /** T-05：第二个接缝的纯函数部分——不起 claude 也能钉住的那些。 */
@@ -10,6 +10,13 @@ describe("claudecode 接缝", () => {
   it("session_id 只从 system/init 那一行取", () => {
     expect(sessionIdOf({ type: "system", subtype: "init", session_id: "abc" })).toBe("abc");
     expect(sessionIdOf({ type: "assistant", session_id: "abc" })).toBeUndefined();
+  });
+
+  it("额度被拒的那一行翻成停止原因；允许的额度事件与别的行不算", () => {
+    const why = hostStopReasonOf({ type: "rate_limit_event", rate_limit_info: { status: "rejected", rateLimitType: "five_hour", resetsAt: 1790298000 } });
+    expect(why).toMatch(/用量额度已用完（five_hour）/);expect(why).toMatch(/不是产品或用例问题/);
+    expect(hostStopReasonOf({ type: "rate_limit_event", rate_limit_info: { status: "allowed" } })).toBeUndefined();
+    expect(hostStopReasonOf({ type: "assistant" })).toBeUndefined();
   });
 
   it("hook 拦截 = 带 is_error 且像 hook 说的话的 tool_result", () => {
