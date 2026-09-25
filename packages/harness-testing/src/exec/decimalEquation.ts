@@ -16,9 +16,14 @@ const mul=(a:Rat,b:Rat)=>rat(a.n*b.n,a.d*b.d);
 const cmp=(a:Rat,b:Rat)=>{const n=a.n*b.d-b.n*a.d;return n<0n?-1:n>0n?1:0;};
 const escape=(s:string)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 function range(text:string,input:z.infer<typeof DecimalEquationSchema>['inputs'][number]):Interval|undefined {
- const re=new RegExp(`^\\s*${escape(input.label)}\\s*[:：]?\\s*([+-]?\\d+(?:\\.\\d+)?)\\s*${escape(input.unit)}\\s*$`,'gm');
+ // 单位可以写在数值后（`12.5 USDC`）也可以写在前面（`$984.02`、`-$3.10`）；千分位逗号照读。
+ // 2026-09-25 以前只认后缀，「Balance\n$984.02」读不出来，三次探查都卡在这。
+ const num='[+-]?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|[+-]?\\d+(?:\\.\\d+)?',unit=escape(input.unit);
+ const re=new RegExp(`^\\s*${escape(input.label)}\\s*[:：]?\\s*(?:([+-]?)\\s*${unit}\\s*(${num})|(${num})\\s*${unit})\\s*$`,'gm');
  const matches=[...text.matchAll(re)];if(matches.length!==1)return;
- const raw=matches[0]![1]!;const value=decimal(raw);if(!value||value.scale>input.decimals)return;
+ const m=matches[0]!;const body=(m[2]??m[3]!).replace(/,/g,'');
+ if(m[1]&&/^[+-]/.test(body))return;
+ const raw=m[1]==='-'?`-${body}`:body;const value=decimal(raw);if(!value||value.scale>input.decimals)return;
  const v=rat(value.coefficient,10n**BigInt(value.scale));const step=rat(1n,10n**BigInt(input.decimals));
  if(input.rounding==='exact')return[v,v];
  if(input.rounding==='nearest'){const half=rat(step.n,step.d*2n);return[add(v,neg(half)),add(v,half)];}

@@ -34,3 +34,13 @@ it('an unverified compensation leaves a pending resource and never lets the case
   expect(result.lifecycle?.pendingResources).toContainEqual(expect.objectContaining({ id: 'recipe:holding.open', identity: 'holding.open' }));
   expect(result.status).not.toBe('passed');
 });
+
+it('checks the baseline after the recipe establishes the state the case requires', async () => {
+  const lifecycle = { version: 2, mode: 'read-only', rationale: 'reads the holding row', sourceRefs: ['spec#1'], supports: ['$expected'],
+    baseline: [{ statement: 'an open holding exists', checks: [{ kind: 'screen', statement: 'an open holding exists', oracle: { kind: 'text', value: 'holding row' } }] }],
+    session: 'unchanged', resources: [], settings: [], cleanup: [], sideEffects: [] };
+  const result = await executeRun('https://example.test', ['Look at the holding row'], 'Ready', { ...opts(), lifecycle: lifecycle as never, sourceRefs: ['spec#1'], precondition: ['an open holding exists'] });
+  expect(result.lifecycle?.checks).toContainEqual(expect.objectContaining({ phase: 'baseline', status: 'pass' }));
+  expect(f.calls[0]).toBe('Open a holding');
+  expect(result.status).toBe('passed');
+});

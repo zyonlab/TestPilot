@@ -268,6 +268,12 @@ export const ProductRulePackSchema = z
      * 通用规则只认数字的形状（时刻、长小数百分比、大额数字），认不出名字。
      */
     volatileReadings: z.array(z.string().min(1)).default([]),
+    /**
+     * **这个产品会记住的选择**：点了之后刷新还在的控件（某个模式、某个默认值）。每条是正则，对着用例步骤匹配；
+     * 命中的步骤要在 lifecycle.settings 里登记并在收尾改回去，否则共享浏览器里的下一条用例从一个被改过的界面开始。
+     * 可选、无默认值，不改旧规则包的哈希。
+     */
+    persistedSettings: z.array(z.string().min(1)).optional(),
   })
   .strict();
 export type ProductRulePack = z.infer<typeof ProductRulePackSchema>;

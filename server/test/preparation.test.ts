@@ -23,7 +23,7 @@ const result=(status='passed')=>({status,infraError:false,durationMs:5,modelRequ
 async function start(mode:'retry'|'all'='all'){svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);return prep.startPreparation(run,project,{revisionIds:[revision],maxRounds:2,mode});}
 const step=(b:string,body:any)=>prep.preparationStep(run,project,{batchId:b,...body});
 it('accepts approved unlocated cases, repairs after failure, and bundles only runner-verified plans',async()=>{
- const b=await start();expect(fake.host).toHaveBeenCalled();expect((await step(b.batchId,{action:'next'})).status).toBe('work');
+ const b=await start();expect(fake.host).toHaveBeenCalled();const work:any=await step(b.batchId,{action:'next'});expect(work.status).toBe('work');expect(work.actionPolicy).toMatchObject({irreversibleBlocked:false});expect(work.actionPolicy.deniedHosts).toContain('app.hyperliquid.xyz');
  fake.run.mockResolvedValueOnce(result('failed'));await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'Initial trial'});
  await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('repair'));
  const next:any=await step(b.batchId,{action:'next'});expect(next.result.status).toBe('failed');

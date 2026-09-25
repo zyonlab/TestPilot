@@ -428,7 +428,10 @@ export async function executeRun(
       }
     };
     if(opts.lifecycle)LifecycleSchema.parse(opts.lifecycle);
-    await lifecycle.baseline();
+    // 配方提供的状态（requiresStates provided:"preparation"）在配方跑完才存在；基线说的是
+    // 「业务步骤开始时的样子」，先查就永远不过（2026-09-25 ORD-04-02/04 两条就是这样卡住的）。
+    const baselineAfterRecipe = !!opts.preparation?.recipe?.provides?.length;
+    if(!baselineAfterRecipe)await lifecycle.baseline();
     await recipeCheck('entry');
     // Preparation checks happen in this browser, before any business test step.
     for (const [i, step] of (opts.preparation?.steps ?? []).entries()) {
@@ -439,6 +442,7 @@ export async function executeRun(
     }
     await refreshFacts();
     await recipeCheck('postcondition');
+    if(baselineAfterRecipe)await lifecycle.baseline();
     if (await verifyAuthentication() === false) throw new Error('AUTHENTICATION_NOT_VERIFIED: configured login checks failed after preparation');
     for (const check of opts.preparation?.checks ?? []) {
       // Legacy frozen packages retain their original visual-check implementation.

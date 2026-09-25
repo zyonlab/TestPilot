@@ -1,7 +1,7 @@
 {
   "schemaVersion": "product-rule-pack.v1",
   "id": "hyperliquid-testnet-example",
-  "version": "2026-09-24.3",
+  "version": "2026-09-25.1",
   "domain": "perpetual-trading",
   "product": "Hyperliquid Testnet 内置示例",
   "network": "testnet",
@@ -649,5 +649,10 @@
       "kind": "setting",
       "description": "刷新后仍保留的账户设置；改动后须还原为执行前屏幕显示的原值"
     }
+  ],
+  "persistedSettings": [
+    "(?:点击?|单击|click|tap|选择?|select|切(?:换)?到|switch to)[^,，;；→]{0,20}\\b(?:Limit|Market)\\b(?!\\s*(?:Close|Price|单平|平仓))",
+    "(?:点击?|单击|click|tap|选择?|select|切(?:换)?到|switch to)[^,，;；→]{0,20}\\b(?:Cross|Isolated)\\b",
+    "(?:杠杆|leverage)[^,，;；→]{0,30}(?:输入|设为|改为|拖|enter|set|drag|type)|(?:输入|设为|改为|enter|set|type)[^,，;；→]{0,30}(?:杠杆|leverage)"
   ]
 }

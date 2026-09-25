@@ -38,4 +38,5 @@ it('preserves structured story evidence and rejects invalid states',async()=>{
 it('does not classify slash-separated trading labels as arithmetic',()=>{
  for(const value of ['Buy / Long','Sell / Short']) expect(executionBlockers({...base,expected:value,oracle:{kind:'text',value}})).toEqual([]);
  expect(executionBlockers({...base,expected:'Q / P'})).toContain('missing_numeric_calculation:expected');
+ expect(executionBlockers({...base,expected:'Order Value 仍显示 N/A',oracle:{kind:'text',value:'N/A'}})).toEqual([]);
 });

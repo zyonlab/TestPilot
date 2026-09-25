@@ -44,6 +44,8 @@ export interface GateOptions {
   volatileReadings?: string[];
   /** 规则包的业务转换（只用到 id 与 requiresStates）：认领了转换成功条件的用例，要声明它依赖的状态。 */
   businessTransitions?: Array<{ id: string; requiresStates?: string[] }>;
+  /** 规则包 `persistedSettings`：会被产品记住的选择（正则）。命中的步骤没登记成 lifecycle 设置就报 setting-undeclared。 */
+  persistedSettings?: string[];
 }
 
 /** 一串字面词拼成一个正则；空表返回 undefined——没有数据就没有这一条，不回落到任何内置词。 */
@@ -52,7 +54,7 @@ function wordsPattern(words: readonly string[] | undefined): RegExp | undefined 
   return list.length ? new RegExp(list.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i") : undefined;
 }
 
-const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [], businessTransitions: [],
+const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [], businessTransitions: [], persistedSettings: [],
   minNegativeRatio: 0.3,
   maxSteps: 8,
   minSteps: 1,
@@ -116,6 +118,12 @@ const STEP_IS_ASSERTION = {
  */
 const ACCEPTANCE_ACTION =
   /(?<![节终观重焦特优缺地时起热盲难要看论支据零冰卖买基]) ?点(?![差位评子心缀])|单击|双击|敲|按下|按住|长按|填入|填写|键入|粘贴|输入(?!框)|勾选|取消勾选|勾上|选择(?!器|框)|选中|选定|切换(?!器)|切到|滚动|拖动|拖拽|悬停|提交|上传|清空|设置|设为|设成|执行|打开|关闭|展开|收起|滑动|调整|修改|启用|停用|连接|断开|撤销|取消|刷新|重新加载|重新进入|返回|跳转|click|tap|type|fill|enter|select|toggle|scroll|drag|hover|submit|upload|press|connect|disconnect|cancel|enable|disable|reload|refresh|open|close/i;
+/**
+ * 一步里塞了几个界面动作，或者把动作写成「出现就点」——执行器一步只做一件事，重规划十次就放弃；
+ * 执行准备又不许改步数，这种用例到了准备阶段只能退回（2026-09-25：89 条里至少 8 条卡在这）。
+ */
+const STEP_SEPARATOR = /→|->|=>|；|;|，|,|然后|随后|接着|之后再|并且?(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|再(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|\band then\b|\bthen\b|\band (?=click|tap|type|fill|enter|select|press|confirm|submit)/i;
+const CONDITIONAL_STEP = /(?:如果|若|如|一旦)(?:弹出|出现|显示|有)|(?:\bif\b|\bwhen\b|\bin case\b)[^.]{0,60}\b(?:appears?|shows?|shown|pops? up|displayed|visible)\b/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
   // 只认子句开头的 When（句首，或 `/ ， ; 换行` 之后）——2026-09-14 实测模型两种分隔都用。服务端同义实现见 acceptanceIndex.ts。
@@ -168,6 +176,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
   const extraAction = wordsPattern(cfg.actionVocabulary);
   const isAction = (text: string) => ACCEPTANCE_ACTION.test(text) || !!extraAction?.test(text);
   const volatileNames = wordsPattern(cfg.volatileReadings);
+  const persisted = (cfg.persistedSettings ?? []).flatMap((re) => { try { return [new RegExp(re, "i")]; } catch { return []; } });
   const findings: GateFinding[] = [];
   const storyIds = new Set(bundle.stories.map((s) => s.id));
   const cases = bundle.cases;
@@ -215,6 +224,18 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     const declared = new Set((c.requiresStates ?? []).map((r) => r.state));
     const missingStates = [...needed].filter((st) => !declared.has(st));
     if (missingStates.length) add('requires-state', `requires_state_undeclared: ${missingStates.join(', ')} — this case claims a success criterion of a transition that needs these states; declare requiresStates:[{state, provided:"steps"|"preparation"}] (steps: its own steps create it and lifecycle declares it; preparation: a preparation recipe must provide it, readiness stays blocked until then)`, c.id, 'warn', { field: 'precondition', args: { states: missingStates.join(', ') } });
+    /**
+     * 产品会记住的选择（2026-09-25：订单类型切到 Limit 后刷新仍是 Limit，三条只读用例在收尾复查时失败，
+     * 还把共享浏览器留在 Limit 上）。命中的步骤必须有一条 settings 以它为 changedAfterStep。
+     */
+    if (persisted.length) {
+      const armed = new Set((c.lifecycle && 'settings' in c.lifecycle ? (c.lifecycle.settings ?? []) : []).map((s: { changedAfterStep: number }) => s.changedAfterStep));
+      const hits = c.steps.flatMap((step, i) => (persisted.some((re) => re.test(step)) && !armed.has(i + 1) ? [i + 1] : []));
+      if (hits.length) add('setting-undeclared', `persisted_setting_undeclared: step ${hits.join(', ')} changes a choice the product remembers after reload — make the lifecycle controlled, add settings:[{id,name,original,changedAfterStep,observed}] for it and a cleanup step with settingId that restores the original`, c.id, 'warn', { field: 'steps', args: { steps: hits.join(', ') } });
+    }
+    const packed = (step: string) => !step.startsWith('waitFor:') && (CONDITIONAL_STEP.test(step) || step.split(STEP_SEPARATOR).filter((part) => isAction(part)).length >= 2);
+    const compound = [...c.steps.flatMap((step, i) => (packed(step) ? [String(i + 1)] : [])), ...(c.postSteps ?? []).flatMap((step, i) => (packed(step) ? [`post ${i + 1}`] : []))];
+    if (compound.length) add('step-compound', `step_not_single_action: step ${compound.join(', ')} packs several UI actions or a conditional action into one step — write one UI action per step (a confirmation dialog is its own step); the executor performs exactly one action per step`, c.id, 'warn', { field: 'steps', args: { steps: compound.join(', ') } });
     if (!c.expected.trim())
       add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
     if (cfg.gradeOracles && VAGUE.test(c.expected))
