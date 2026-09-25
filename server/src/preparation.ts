@@ -121,7 +121,12 @@ export async function startPreparation(runId:string,projectId:string,raw:unknown
  if(!selected.length||new Set(selected.map(c=>c.caseId)).size!==selected.length)throw new LedgerError(409,'approved_cases_required');
  let b=latest(runId,projectId);const signature=selected.map(c=>c.revision.id+':'+c.approval!.id).sort().join(',');
  if(!b||b.units.map(u=>u.source+':'+u.approval).sort().join(',')!==signature||input.mode==='all'){
-  const budget=caseRunBudget(selected.length);b={id:randomUUID(),runId,projectId,status:'running',units:selected.map(c=>({caseId:c.caseId,source:c.revision.id,approval:c.approval!.id,status:'pending',round:0})),maxRounds:input.maxRounds,generation:1,deadline:Date.now()+budget.wallMs,calls:0,maxCalls:budget.executorCalls,protocol:2};
+  /**
+   * 范围变了才新建批次；审核版本与批准都没变、上一批已验证的用例原样带过来（2026-09-25：改了一条用例，
+   * 新批次把已验证的 23 条也重跑了一遍——又是一小时和一轮宿主额度）。mode=all 仍然全部重验。
+   */
+  const carried=new Map(input.mode==='all'||!b?[]:b.units.filter(u=>u.status==='verified').map(u=>[u.source+':'+u.approval,u] as const));
+  const budget=caseRunBudget(selected.length);b={id:randomUUID(),runId,projectId,status:'running',units:selected.map(c=>{const prior=carried.get(c.revision.id+':'+c.approval!.id);return prior?structuredClone(prior):{caseId:c.caseId,source:c.revision.id,approval:c.approval!.id,status:'pending',round:0};}),maxRounds:input.maxRounds,generation:1,deadline:Date.now()+budget.wallMs,calls:0,maxCalls:budget.executorCalls,protocol:2};
  }else{
   const migrating=b.protocol!==2;b.protocol=2;b.status='running';b.generation=(b.generation??0)+1;b.deadline=Date.now()+caseRunBudget(selected.length).wallMs;b.maxCalls=b.calls+caseRunBudget(selected.length).executorCalls;b.maxRounds=input.maxRounds;b.codeRevision=undefined;
   b.units.sort((a,c)=>selected.findIndex(v=>v.caseId===a.caseId)-selected.findIndex(v=>v.caseId===c.caseId));

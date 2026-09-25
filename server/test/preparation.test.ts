@@ -228,3 +228,29 @@ it('a case that needs a state from preparation runs only with a controlled recip
  await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].reason??'').toContain('required_state_not_prepared:counter.nonzero'));
  await prep.cancelPreparation(r,project);
 });
+
+it('re-scoping a batch keeps cases already verified at the same revision and approval; mode all re-verifies them',async()=>{
+ const stage=await import('../src/runStages.js');
+ const r=svc.registerHostRun(project,{runtime:'codex',externalId:'carry-verified',idempotencyKey:'carry-verified',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
+ stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
+ const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
+ stage.writeRunStage(r,project,'cases',{stories,cases:['c1','c2'].map(id=>({...original,id,key:id,precondition:[],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref)}))});stage.gateRun(r,project);stage.finalizeRun(r,project);
+ const reviewed=approvals.reviewRevisions(r,project);approvals.decideRevisions(r,project,{items:reviewed.map(c=>({caseId:c.caseId,revisionId:c.revision.id,decision:'approved'}))},{kind:'human',id:'TEST_FIXTURE'});
+ const c1=reviewed.find(c=>c.caseId==='c1')!;
+ const first=await prep.startPreparation(r,project,{revisionIds:[c1.revision.id]});
+ const call=(b:string,body:any)=>prep.preparationStep(r,project,{batchId:b,caseId:'c1',...body});
+ fake.run.mockResolvedValueOnce(result());await call(first.batchId,{action:'probe',setupSteps:[],reason:'look'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].status).toBe('planning'));
+ fake.run.mockResolvedValueOnce(result());await call(first.batchId,{action:'trial',content:c1.content,reason:'trial'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].status).toBe('verified'));
+ await prep.cancelPreparation(r,project);
+ await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(r);
+ const second=await prep.startPreparation(r,project,{});
+ expect(second.batchId).not.toBe(first.batchId);
+ const units=prep.preparationStatus(r,project)!.units;
+ expect(units.find(u=>u.unitId==='c1')?.status).toBe('verified');expect(units.find(u=>u.unitId==='c2')?.status).not.toBe('verified');
+ await prep.cancelPreparation(r,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(r);
+ await prep.startPreparation(r,project,{mode:'all'});
+ expect(prep.preparationStatus(r,project)!.units.find(u=>u.unitId==='c1')?.status).not.toBe('verified');
+ await prep.cancelPreparation(r,project);
+});
