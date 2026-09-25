@@ -281,7 +281,7 @@ export function latestExecution(runId: string, projectId: string) {
   const results: Any[] = (artifact?.results ?? []).filter((r: Any) => r?.caseId);
   const failing = results.filter((r) => r.status !== "passed");
   // 与 regressionCandidates 同一口径：带着环境错误标记的，不管 failure.code 写的是什么，都不算判决。
-  const attributionOf = (r: Any): string => r.infraError ? "infra" : r.failure?.attribution ?? (r.status === "unobservable" ? "unobservable" : "unknown");
+  const attributionOf = (r: Any): string => r.failure?.attribution === "precondition" ? "precondition" : r.infraError ? "infra" : r.failure?.attribution ?? (r.status === "unobservable" ? "unobservable" : "unknown");
   // 判挂这条的是程序还是模型：失败的判据里只要有一条是程序判的，就算程序。
   const decidedBy = (r: Any): "machine" | "judge" | null => {
     const failed = (r.oracle ?? []).filter((o: Any) => o.status === "fail");
@@ -408,6 +408,10 @@ export function attribute(parts: {
     if (infra.length)
       add({ layer: "tool", alternatives: infra.some((f) => f.code === "MODEL_UNAVAILABLE") ? ["model"] : undefined, level: "problem", code: "exec_infra",
         message: `${infra.length} 条用例因环境、端点或超时没跑成，不算判决`, evidence: { byCode: tally(infra, (f) => f.code ?? "?") } });
+    const precondition = ex.failing.filter((f) => f.attribution === "precondition");
+    if (precondition.length)
+      add({ layer: "case", alternatives: ["tool"], level: "watch", code: "exec_precondition",
+        message: `${precondition.length} 条用例开始前的前提不成立（缺夹具、基线不符或格位被占），不算判决`, evidence: { byCode: tally(precondition, (f) => f.code ?? "?") } });
     const locate = ex.failing.filter((f) => f.attribution === "locate");
     if (locate.length)
       // 定位/规划失败：多数是步骤措辞不可执行，少数是视觉模型没认出来；数据分不开，两层都列。

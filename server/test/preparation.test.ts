@@ -226,6 +226,8 @@ it('a case that needs a state from preparation runs only with a controlled recip
  fake.run.mockResolvedValueOnce(result());
  await call({action:'trial',caseId:'c1',content:reviewed[0].content,prerequisiteChecks:checks,reason:'no recipe'});
  await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].reason??'').toContain('required_state_not_prepared:counter.nonzero'));
+ const receipt=svc.runLedger().listRevisions(project,r).filter(v=>v.name.endsWith('/error-observation')).at(-1)!;
+ expect(svc.runLedger().readRevision(receipt.id,project).content).toMatchObject({error:{code:'required_state_not_prepared',message:expect.stringContaining('counter.nonzero')}});
  await prep.cancelPreparation(r,project);
 });
 
@@ -261,5 +263,14 @@ it('passes the environment-declared dismissible overlays to every probe and tria
  const b=await start();fake.run.mockResolvedValueOnce(result());
  await step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],reason:'look'});
  await vi.waitFor(()=>expect(fake.run.mock.calls.at(-1)![0].opts.overlays).toEqual(overlays));
+ expect(fake.run.mock.calls.at(-1)![0].opts.sessionKey).toBe(`prep-${b.batchId}`);
+ await prep.cancelPreparation(run,project);
+});
+it('rejects question-shaped screen checks before spending a probe',async()=>{
+ await prep.cancelPreparation(run,project).catch(()=>{});
+ const b=await start();const calls=fake.run.mock.calls.length;
+ await expect(step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],probeChecks:['页面有没有最小订单价值之类的提示'],reason:'look'})).rejects.toThrow(/check_must_be_assertion/);
+ await expect(step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],probeChecks:['Is there a warning?'],reason:'look'})).rejects.toThrow(/check_must_be_assertion/);
+ expect(fake.run.mock.calls.length).toBe(calls);
  await prep.cancelPreparation(run,project);
 });

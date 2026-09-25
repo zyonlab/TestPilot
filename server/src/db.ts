@@ -727,7 +727,7 @@ export interface RunRecord {
   healed?: boolean; // passed only after a self-heal retry → a flake signal
   infraError?: boolean; // model/network failure — not a real test failure; excluded from flake/MTTR
   failCode?: string; // wire code, e.g. EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT
-  failKind?: "infra" | "locate" | "assert"; // which bucket the statistics should count it in
+  failKind?: "infra" | "precondition" | "locate" | "assert"; // which bucket the statistics should count it in
   /**
    * Which project this execution belongs to.
    *

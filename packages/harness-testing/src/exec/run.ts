@@ -301,6 +301,15 @@ export async function executeRun(
       try {
         await session!.agent.aiAction(t);
       } catch (e) {
+        /**
+         * 同名控件：弹窗里的选项和背后页面上的按钮同名（2026-09-25 J02-03「Isolated」，locate 找到 2 个）。
+         * 限定到最上层的弹窗/对话框再做一次；不是这种错误就走下面的浮层处理。
+         */
+        if (/multiple elements found/i.test(String((e as Error)?.message ?? e))) {
+          rlog('  ambiguous target; retrying inside the topmost dialog');
+          await session!.agent.aiAction(`${t}（只在当前最上层打开的弹窗或对话框内操作；背后页面上同名的元素不算）`);
+          return;
+        }
         // 被常驻浮层挡住：关掉再做这一步一次。关不掉或本来就没有浮层，原样抛出。
         if (!opts.overlays?.length || !blockedByOverlay(e) || !(await closeOverlays('step failed: ' + t.slice(0, 60), false))) throw e;
         rlog('  retrying step after closing overlay');

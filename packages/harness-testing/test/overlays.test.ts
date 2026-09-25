@@ -5,7 +5,7 @@ import { blockedByOverlay, dismissOverlays, DismissibleOverlaysSchema } from '..
 const f = vi.hoisted(() => ({ text: 'Ready\nNotice panel\nTrade', calls: [] as string[], hideTarget: true }));
 vi.mock('../src/exec/session.js', () => ({ launchSession: async () => ({
   page: { url: () => 'https://example.test/', isClosed: () => false, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? f.text.split('\n') : f.text, goto: async () => {} },
-  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t === 'Show notice') f.text += '\nNotice panel'; else if (t === 'Close the notice panel') f.text = f.text.replace('\nNotice panel', ''); else if (t === 'Click Withdraw' && f.text.includes('Notice panel')) throw new Error('Failed to plan actions: Withdraw not found, covered by a panel'); }, aiAssert: async () => {} },
+  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t === 'Show notice') f.text += '\nNotice panel'; else if (t === 'Close the notice panel') f.text = f.text.replace('\nNotice panel', ''); else if (t === 'Click Isolated') throw new Error('locate: multiple elements found, length = 2'); else if (t === 'Click Withdraw' && f.text.includes('Notice panel')) throw new Error('Failed to plan actions: Withdraw not found, covered by a panel'); }, aiAssert: async () => {} },
   cleanup: async () => {}, modelRequests: [] }), reopenPage: vi.fn() }));
 vi.mock('../src/exec/pageReady.js', () => ({ settleOn: async () => ({ settled: true, controls: 1, textLen: 5, ms: 0 }) }));
 vi.mock('../src/baselines/perf.js', () => ({ capturePerf: async () => ({}) }));
@@ -41,4 +41,11 @@ it('retry path: dismiss runs only for overlay-like failures and only when the ov
   expect(await dismissOverlays(overlays, io, 'test')).toBe(0);
   expect(acts).toEqual(['Close the notice panel']);
   expect(DismissibleOverlaysSchema.safeParse([{ id: 'a', present: '', close: 'x' }]).success).toBe(false);
+});
+
+it('an ambiguous target inside a dialog is retried once, scoped to the topmost dialog', async () => {
+  f.text = 'Ready\nTrade';
+  const result = await executeRun('https://example.test', ['Click Isolated'], 'Ready', opts([]));
+  expect(f.calls[1]).toMatch(/^Click Isolated（只在当前最上层打开的弹窗或对话框内操作/);
+  expect(result.status).toBe('passed');
 });

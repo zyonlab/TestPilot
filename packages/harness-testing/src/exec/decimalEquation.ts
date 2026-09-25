@@ -4,8 +4,14 @@ import {decimal} from './decimal.js';
 export const DecimalEquationSchema=z.object({
  kind:z.literal('decimal-equation'),
  scope:z.object({start:z.string().min(1),end:z.string().min(1)}).strict(),
- inputs:z.array(z.object({id:z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/),label:z.string().min(1),unit:z.string().min(1),decimals:z.number().int().min(0).max(30),rounding:z.enum(['exact','nearest','truncate'])}).strict()).min(2).max(40),
+ inputs:z.array(z.object({id:z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/),label:z.string().min(1),unit:z.string().min(1),decimals:z.number().int().min(0).max(30),rounding:z.enum(['exact','nearest','truncate'])}).strict()).min(1).max(40),
  actual:z.string().min(1), formula:z.array(z.string().min(1)).min(1).max(100),
+ /**
+  * 实际读数与公式结果怎么比（默认 eq：两个区间相交）。gt/gte/lt/lte 只在两个区间**完全分开**时判过或不过，
+  * 落在显示精度之内分不清就是「没量到」。公式里可以写十进制常数（`0`、`10.5`）：
+  * 2026-09-25 以前「Unrealized PNL 为 0」「可交易额大于 0」都写不出来，准备器只好拿 Balance 自减凑 0。
+  */
+ compare:z.enum(['eq','gt','gte','lt','lte']).optional(),
  maxAgeMs:z.number().int().positive().max(60000),
 }).strict();
 type Rat={n:bigint;d:bigint};type Interval=[Rat,Rat];
@@ -40,6 +46,7 @@ export function evaluateDecimalEquation(oracle:z.infer<typeof DecimalEquationSch
  const stack:Interval[]=[];
  for(const token of oracle.formula){
   if(values.has(token)){stack.push(values.get(token)!);continue;}
+  if(/^-?\d+(?:\.\d+)?$/.test(token)){const v=decimal(token)!;const r=rat(v.coefficient,10n**BigInt(v.scale));stack.push([r,r]);continue;}
   if(!['+','-','*','/'].includes(token)||stack.length<2)return unknown('公式缺输入或运算符无效');
   const b=stack.pop()!,a=stack.pop()!;
   if(token==='+')stack.push([add(a[0],b[0]),add(a[1],b[1])]);
@@ -53,5 +60,13 @@ export function evaluateDecimalEquation(oracle:z.infer<typeof DecimalEquationSch
  const actual=values.get(oracle.actual);if(!actual||stack.length!==1)return unknown('结果输入或公式不完整');
  if(oracle.formula.includes(oracle.actual))return unknown('不能用被测结果自身重建预期值');
  const expected=stack[0]!;const intersects=cmp(actual[1],expected[0])>=0&&cmp(expected[1],actual[0])>=0;
- return {status:intersects?'pass':'fail',detail:intersects?'同快照十进制计算区间与显示区间相交（仅证明显示精度内一致）':'同快照十进制计算区间与显示区间不相交'};
+ const op=oracle.compare??'eq';
+ if(op==='eq')return {status:intersects?'pass':'fail',detail:intersects?'同快照十进制计算区间与显示区间相交（仅证明显示精度内一致）':'同快照十进制计算区间与显示区间不相交'};
+ // 区间完全在一侧才下结论；strict 比较要求严格分开，非 strict 允许端点相接。
+ const above=op==='gt'?cmp(actual[0],expected[1])>0:cmp(actual[0],expected[1])>=0;
+ const below=op==='lt'?cmp(actual[1],expected[0])<0:cmp(actual[1],expected[0])<=0;
+ const wantAbove=op==='gt'||op==='gte';
+ if(wantAbove?above:below)return {status:'pass',detail:`实际读数区间整体${wantAbove?'高于':'低于'}计算区间（${op}）`};
+ const opposite=wantAbove?cmp(actual[1],expected[0])<(op==='gte'?0:1):cmp(actual[0],expected[1])>(op==='lte'?0:-1);
+ return opposite?{status:'fail',detail:`实际读数区间不满足 ${op}`}:unknown(`实际读数与计算结果在显示精度内分不清（${op}）`);
 }

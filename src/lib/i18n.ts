@@ -2434,6 +2434,7 @@ export const dict: Record<string, Entry> = {
   "report.noBaseline": {zh:"没有执行基线：分不开「刚坏的」和「一直坏的」",en:"No execution baseline: new failures and old ones cannot be told apart",ja:"実行ベースラインなし：新しい失敗と既存の失敗を区別できません"},
   "report.attribution.assert": {zh:"判定失败",en:"Assertion failed",ja:"判定失敗"},
   "report.attribution.locate": {zh:"步骤没落到界面上",en:"Step not applied to the UI",ja:"操作が画面に適用されず"},
+  "report.attribution.precondition": {zh:"前提不成立",en:"Precondition not met",ja:"前提条件が不成立"},
   "report.attribution.infra": {zh:"环境失败",en:"Environment failure",ja:"環境の失敗"},
   "report.attribution.unobservable": {zh:"没量到",en:"Not observed",ja:"観測できず"},
   "report.attribution.unknown": {zh:"未知",en:"Unknown",ja:"不明"},

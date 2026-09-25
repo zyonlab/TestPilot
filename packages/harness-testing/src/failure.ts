@@ -9,7 +9,8 @@
  * Protocol side (docs/archive/spec/06): the code is what crosses the wire, the attribution is what
  * statistics bucket it into.
  */
-export type Attribution = "infra" | "locate" | "assert";
+/** precondition：用例开始前要成立的东西不成立（前提、基线、格位被占）——不是环境坏了，也不是产品判决。 */
+export type Attribution = "infra" | "precondition" | "locate" | "assert";
 
 export interface Failure {
   /** Wire code, e.g. EXEC_TIMEOUT. Stable enough to switch on, coarse enough to survive. */
@@ -51,7 +52,13 @@ export function isInfraError(msg: string): boolean {
 
 export function classifyFailure(message: string): Failure {
   const msg = message ?? "";
-  const preparation = /^(LIFECYCLE_[A-Z_]+|PREREQUISITE_NOT_VERIFIED|AUXILIARY_CHECK_NOT_VERIFIED)/.exec(msg)?.[0];
+  /**
+   * 前提不成立（2026-09-25：三批准备 60 多次 PREREQUISITE_NOT_VERIFIED 全记成 infra，报告看起来像环境一直在坏，
+   * 其实是缺夹具或用例写法）。单独一档，不算判决、也不算基础设施故障。
+   */
+  const precondition = /^(PREREQUISITE_NOT_VERIFIED|LIFECYCLE_BASELINE_NOT_VERIFIED|LIFECYCLE_SETTING_BASELINE_NOT_VERIFIED|LIFECYCLE_SLOT_OCCUPIED|LIFECYCLE_RESOURCE_ALREADY_EXISTS)/.exec(msg)?.[0];
+  if (precondition) return { code: precondition, attribution: "precondition", retryable: false, message: msg };
+  const preparation = /^(LIFECYCLE_[A-Z_]+|AUXILIARY_CHECK_NOT_VERIFIED)/.exec(msg)?.[0];
   if (preparation) return { code: preparation, attribution: "infra", retryable: false, message: msg };
   const stopped = /AUTHENTICATION_NOT_VERIFIED|EXEC_CANCELLED|ENV_RESET_FAILED|ENV_TEARDOWN_FAILED|BUDGET_EXHAUSTED/.exec(msg)?.[0];
   if (stopped) return { code: stopped, attribution: "infra", retryable: false, message: msg };

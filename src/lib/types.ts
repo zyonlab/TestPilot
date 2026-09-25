@@ -240,7 +240,7 @@ export interface RunRecord {
   attempts?: number;
   healed?: boolean;
   failCode?: string; // EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT / MODEL_UNAVAILABLE …
-  failKind?: "infra" | "locate" | "assert"; // infra failures are NOT product defects
+  failKind?: "infra" | "precondition" | "locate" | "assert"; // infra/precondition failures are NOT product defects
   /**
    * Where the execution came from — a green row means a different thing in each.
    *

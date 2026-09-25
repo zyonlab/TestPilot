@@ -23,4 +23,15 @@ describe('independent decimal equation',()=>{
   expect(check(body('$3.10'),dollars)).toBe('fail');
   expect(check(body('-$-3.10'),dollars)).toBe('unobservable');
  });
+ it('compares against constants and supports inequalities, unknown when the display precision cannot tell',()=>{
+  const one=(value:string,compare?:'eq'|'gt'|'gte'|'lt'|'lte',formula=['0'],rounding:'exact'|'nearest'='exact')=>check(`ORDER\nPNL\n${value}\nEND`,DecimalEquationSchema.parse({kind:'decimal-equation',scope:{start:'ORDER',end:'END'},inputs:[{id:'pnl',label:'PNL',unit:'$',decimals:2,rounding}],actual:'pnl',formula,maxAgeMs:1000,...(compare?{compare}:{})}));
+  expect(one('$0.00')).toBe('pass');
+  expect(one('$1.20')).toBe('fail');
+  expect(one('$984.01','gt')).toBe('pass');
+  expect(one('$0.00','gt')).toBe('fail');
+  expect(one('-$3.10','lt')).toBe('pass');
+  expect(one('$0.00','gte')).toBe('pass');
+  expect(one('$0.00','gt',['0'],'nearest')).toBe('unobservable');
+  expect(one('$10.00','eq',['2.5','4','*'])).toBe('pass');
+ });
 });

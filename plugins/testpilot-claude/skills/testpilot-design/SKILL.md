@@ -13,7 +13,7 @@ rule e2ff0801  "exploratory": the evidence is a charter and what was observed un
 rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
-rule 65239af8  For tier 1 and tier 2 you MUST also give `oracle`, the same
+rule 03eea4fb  For tier 1 and tier 2 you MUST also give `oracle`, the same 
 rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
@@ -103,7 +103,7 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 - **tier 1 和 tier 2 必须同时给 `oracle`**——同一个结果，写成程序不用看图就能核对的形式。
   基本形式见 `REFERENCE.md`，同屏数值计算的扩展形式见下文。结果没法写成其中任何一种，那它就是 tier 3——
   就说它是 3，并且不写 `oracle`。**声称 tier 1 却不给 oracle，是唯一一件让这个标签彻底作废的事。**
-  同屏数值关系可用 `decimal-equation`：`scope.start/end` 唯一限定可见区域，`inputs` 至少两个输入，每项声明 id、精确 label、unit、decimals、rounding（exact/nearest/truncate）；`actual` 指向结果输入，`formula` 使用后缀表达式与 +、-、*、/，不能引用结果本身，`maxAgeMs` 限制快照新鲜度。仅使用已观察的标签和有依据的舍入方式；缺少证据应阻止执行。
+  同屏数值关系可用 `decimal-equation`：`scope.start/end` 唯一限定可见区域，`inputs` 列出屏幕上的读数（和常数比较时一个就够），每项声明 id、精确 label、unit、decimals、rounding（exact/nearest/truncate）；`actual` 指向结果输入，`formula` 使用后缀表达式，可含输入 id、十进制常数（如 `0`）与 +、-、*、/，不能引用结果本身；`compare` 取 eq（默认）/gt/gte/lt/lte，比如「读数大于 0」写 formula `["0"]`、compare `gt`，显示精度内分不清的算「没量到」；`maxAgeMs` 限制快照新鲜度。仅使用已观察的标签和有依据的舍入方式；缺少证据应阻止执行。
 
 - **`oracle` 这个对象永远在**：tier 3 写 `{"kind":"none"}`——**除非**结果是每次都不一样的生成内容（一张图、一段摘要、一句配文、一段译文）。那就写
   `{"kind":"judge","criteria":["<一句对着屏幕能答是或否的话>", ...],"samples":3,"minPass":2}`：

@@ -83,3 +83,10 @@ describe("runMessage（07 T-12）", () => {
     expect(JSON.parse(readFileSync(join(ws, ".mcp.json"), "utf8")).mcpServers.testpilot.env.TP_ABLATE).toBe("");
   });
 });
+
+it('reads the usage-limit reset time only from a rejected rate limit event', async () => {
+  const { rateLimitResetOf } = await import('../src/claudecode.js');
+  expect(rateLimitResetOf({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1790000000 } })).toBe(1790000000000);
+  expect(rateLimitResetOf({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', resetsAt: 1790000000 } })).toBeUndefined();
+  expect(rateLimitResetOf({ type: 'result' })).toBeUndefined();
+});

@@ -85,7 +85,7 @@ export function CaseRunDetail({ item, defaultTab }: { item: CaseRun; defaultTab?
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center gap-2">
       <Badge tone={passed ? 'good' : item.infraError ? 'warn' : 'bad'}>{t(`workflow.status.${item.infraError ? 'infra_error' : item.status}`)}</Badge>
-      {!passed && attribution && <Badge tone={attribution === 'infra' ? 'warn' : 'bad'}>{t(`report.attribution.${attribution}`)}</Badge>}
+      {!passed && attribution && <Badge tone={attribution === 'infra' || attribution === 'precondition' ? 'warn' : 'bad'}>{t(`report.attribution.${attribution}`)}</Badge>}
       {item.failure?.code && <code className="text-[0.6875rem] text-muted-foreground">{String(item.failure.code)}</code>}
       {typeof item.durationMs === 'number' && <span className="font-mono text-xs text-muted-foreground">{(item.durationMs / 1000).toFixed(1)} s</span>}
       <span className="ml-auto flex flex-wrap gap-2">

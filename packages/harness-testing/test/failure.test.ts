@@ -83,3 +83,9 @@ it("放弃规划的理由五花八门，但开头那句是固定的", () => {
   const msg = "Failed to plan actions: 右侧区域当前显示的是交易下单面板，而非订单簿（Order Book）。";
   expect(classifyFailure(msg)).toMatchObject({ code: "EXEC_PLAN", attribution: "locate", retryable: true });
 });
+
+it('a precondition that did not hold is its own bucket, not an infrastructure failure', () => {
+  for (const m of ['PREREQUISITE_NOT_VERIFIED: 已有持仓: 页面上仍有「No open positions yet」', 'LIFECYCLE_BASELINE_NOT_VERIFIED', 'LIFECYCLE_SLOT_OCCUPIED'])
+    expect(classifyFailure(m)).toMatchObject({ attribution: 'precondition', retryable: false });
+  expect(classifyFailure('LIFECYCLE_CLEANUP_NOT_VERIFIED').attribution).toBe('infra');
+});

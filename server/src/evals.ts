@@ -803,7 +803,7 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
   for (const c of code) {
     const outcome = await run(c, baseUrl);
     if (outcome.status === "passed") { healthyPassed.add(c.caseId); healthyEvaluated++; }
-    if (outcome.status === "failed" && outcome.failKind !== "infra") { falseAlarms.push(c.caseId); healthyEvaluated++; }
+    if (outcome.status === "failed" && !["infra", "precondition"].includes(outcome.failKind ?? "")) { falseAlarms.push(c.caseId); healthyEvaluated++; }
   }
 
   // 2. Each fault in turn.
@@ -823,8 +823,8 @@ export async function runDetectionEval(req: DetectionEvalRequest): Promise<Detec
       // A case that already cries wolf on the healthy build cannot be credited with a kill.
       if (!healthyPassed.has(c.caseId)) continue;
       const outcome = await run(c, withDefect(defect));
-      if (outcome.status === "passed" || (outcome.status === "failed" && outcome.failKind !== "infra")) ran += 1;
-      if (outcome.status === "failed" && outcome.failKind !== "infra") killedBy.push(c.caseId);
+      if (outcome.status === "passed" || (outcome.status === "failed" && !["infra", "precondition"].includes(outcome.failKind ?? ""))) ran += 1;
+      if (outcome.status === "failed" && !["infra", "precondition"].includes(outcome.failKind ?? "")) killedBy.push(c.caseId);
     }
     mutants.push({ defect, title: DEFECT_TITLES[defect] ?? defect, killed: killedBy.length > 0, killedBy, ran, applied });
     bus.publish("eval.mutant", { id, defect, killed: killedBy.length > 0, applied }, {});

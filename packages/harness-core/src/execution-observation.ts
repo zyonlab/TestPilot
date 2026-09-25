@@ -3,7 +3,7 @@ import { z } from 'zod';
 // A closed, content-free contract: no prompts, URLs, endpoints, accounts or errors.
 export const ExecutionStageSchema = z.enum(['compilation', 'validation', 'reset', 'dispatch', 'retry-wait', 'session-navigation', 'authentication', 'preparation', 'actions', 'assertions', 'cleanup']);
 const Status = z.enum(['completed', 'failed', 'cancelled', 'unknown']);
-const Failure = z.object({ attribution: z.enum(['infra', 'locate', 'assert', 'unknown']), retryable: z.boolean() }).strip();
+const Failure = z.object({ attribution: z.enum(['infra', 'precondition', 'locate', 'assert', 'unknown']), retryable: z.boolean() }).strip();
 export const ExecutionObservationSchema = z.object({
   version: z.literal(1),
   stages: z.array(z.object({
