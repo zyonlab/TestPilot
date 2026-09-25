@@ -110,6 +110,7 @@ describe('one UI action per step', () => {
     expect(rule(kase(['Click Close'], ['Click Market Close and then click Confirm']))?.args).toEqual({ steps: 'post 1' });
   });
   it('leaves single actions alone', () => {
+    expect(rule(kase(['按 Escape 键关闭划转界面，不点任何确认按钮', '点击弹窗右上角的关闭按钮，不点「Confirm」']))).toBeUndefined();
     expect(rule(kase(['Click the Buy / Long tab', '在 Size 输入 0.01', '点击 Place Order', 'waitFor: the order row shows up, then read it']))).toBeUndefined();
   });
 });

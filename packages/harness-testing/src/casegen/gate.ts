@@ -123,6 +123,8 @@ const ACCEPTANCE_ACTION =
  * 执行准备又不许改步数，这种用例到了准备阶段只能退回（2026-09-25：89 条里至少 8 条卡在这）。
  */
 const STEP_SEPARATOR = /→|->|=>|；|;|，|,|然后|随后|接着|之后再|并且?(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|再(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|\band then\b|\bthen\b|\band (?=click|tap|type|fill|enter|select|press|confirm|submit)/i;
+/** 「按 Escape 关闭，不点任何确认按钮」的后半句是在说**别做**什么，不是第二个动作。 */
+const NEGATED_PART = /^\s*(?:不要?|别|勿|无需|不用|切勿|do not|don't|without|never)/i;
 const CONDITIONAL_STEP = /(?:如果|若|如|一旦)(?:弹出|出现|显示|有)|(?:出现|弹出)[^，,。；;]{0,12}时|(?:\bif\b|\bwhen\b|\bin case\b)[^.]{0,60}\b(?:appears?|shows?|shown|pops? up|displayed|visible)\b/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
@@ -234,7 +236,7 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       const hits = c.steps.flatMap((step, i) => (persisted.some((re) => re.test(step)) && ![i + 1, i + 2, i + 3].some((n) => armed.has(n)) ? [i + 1] : []));
       if (hits.length) add('setting-undeclared', `persisted_setting_undeclared: step ${hits.join(', ')} changes a choice the product remembers after reload — make the lifecycle controlled, add settings:[{id,name,original,changedAfterStep,observed}] for it and a cleanup step with settingId that restores the original`, c.id, 'warn', { field: 'steps', args: { steps: hits.join(', ') } });
     }
-    const packed = (step: string) => !step.startsWith('waitFor:') && (CONDITIONAL_STEP.test(step) || step.split(STEP_SEPARATOR).filter((part) => isAction(part)).length >= 2);
+    const packed = (step: string) => !step.startsWith('waitFor:') && (CONDITIONAL_STEP.test(step) || step.split(STEP_SEPARATOR).filter((part) => isAction(part) && !NEGATED_PART.test(part)).length >= 2);
     const compound = [...c.steps.flatMap((step, i) => (packed(step) ? [String(i + 1)] : [])), ...(c.postSteps ?? []).flatMap((step, i) => (packed(step) ? [`post ${i + 1}`] : []))];
     if (compound.length) add('step-compound', `step_not_single_action: step ${compound.join(', ')} packs several UI actions or a conditional action into one step — write one UI action per step (a confirmation dialog is its own step); the executor performs exactly one action per step`, c.id, 'warn', { field: 'steps', args: { steps: compound.join(', ') } });
     if (!c.expected.trim())
