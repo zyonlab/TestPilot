@@ -238,6 +238,7 @@ export async function executeRun(
     redact:t=>redact(t,secretVals),
     act:async t=>{rlog(`teardown: ${t}`);await withModel(()=>act(resolveText(t,ctx)));},
     available:()=>!!session && !sessionClosed && !opts.signal?.aborted && !session.page.isClosed?.(),
+    reopen:async()=>{rlog('reopen entry page before read-only baseline re-check');const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);await session!.page.goto(entry.toString(),{waitUntil:'domcontentloaded',timeout:45000});await settleOn(session!.page,{minMs:600,maxMs:12_000}).catch(()=>{});},
   });
   const checkCancelled = () => { if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED"); };
   const abortSession = () => { if (poolKey) void evictSession(poolKey).catch(() => {}); else void session?.cleanup().catch(() => {}); };

@@ -87,3 +87,17 @@ describe('runtime', () => {
     expect(lifecycleExecution(undefined, [], io({ text: '' }, [])).sessionChanged).toBe(false);
   });
 });
+
+it('re-checks a read-only baseline on a reopened entry page, so UI-only changes do not count as mutations', async () => {
+  const screen = { text: 'Ready Market Slippage' };
+  const lc = (reopen?: () => Promise<void>) => lifecycleExecution(LifecycleSchema.parse({ version: 2, mode: 'read-only', ...common, baseline: [check('Slippage')] }), [], {
+    check: async (c: { statement: string; checks: unknown[] }) => { const o = (c.checks[0] as { oracle: { value: string } }).oracle; return { statement: c.statement, status: screen.text.includes(o.value) ? 'pass' as const : 'fail' as const }; },
+    resolve: (t: string) => t, redact: (t: string) => t, available: () => true, act: async () => {}, ...(reopen ? { reopen } : {}),
+  });
+  const withReopen = lc(async () => { screen.text = 'Ready Market Slippage'; });
+  await withReopen.baseline(); withReopen.beforeStep(1); screen.text = 'Ready Limit Price (USDC)';
+  expect((await withReopen.finish()).status).toBe('pass');
+  screen.text = 'Ready Market Slippage';
+  const without = lc(); await without.baseline(); without.beforeStep(1); screen.text = 'Ready Limit Price (USDC)';
+  expect((await without.finish()).status).toBe('fail');
+});

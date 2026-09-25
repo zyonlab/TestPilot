@@ -164,6 +164,8 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
   redact: (text:string)=>string;
   act: (text:string)=>Promise<void>;
   available: ()=>boolean;
+  /** 重新打开入口页（读回持久状态、丢掉界面临时状态）；没有就在当前页复核。 */
+  reopen?: ()=>Promise<void>;
 }) {
   const contract=raw?normalizeLifecycle(raw):undefined;
   const receipt:LifecycleReceipt={version:1,status:'unknown',checks:[],cleanup:[],pendingResources:[],safeToRetry:true};
@@ -211,7 +213,15 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
         if(started&&postSteps.length)receipt.pendingResources.push({id:'legacy-unknown',identity:'unknown',reason:'Legacy cleanup outcome cannot be verified'});
         return receipt;
       }
-      if(contract.mode==='read-only' && started)for(const [i,check] of contract.baseline.entries())await verify(`baseline-after-${i+1}`,'cleanup',check);
+      /**
+       * 只读用例跑完复核基线，查的是「有没有改到会保存的东西」。先重新打开入口页：会保存的状态刷新后还在，
+       * 切 Tab、选订单类型这类界面临时状态不在——v2 明说后者不用还原（2026-09-25：C-ORD-01-01 切到 Limit 后
+       * 在当前页复核「处于 Market」失败，而那正是用例本身的效果）。打不开入口页就照旧在当前页复核。
+       */
+      if(contract.mode==='read-only' && started){
+        if(io.reopen && io.available()){try{await io.reopen();}catch{/* 复核照旧在当前页做；失败会记在复核结果里 */}}
+        for(const [i,check] of contract.baseline.entries())await verify(`baseline-after-${i+1}`,'cleanup',check);
+      }
       const cleaned=new Set<string>();
       for(const x of contract.cleanup){
         const r=x.resourceId?contract.resources.find(r=>r.id===x.resourceId):undefined;
