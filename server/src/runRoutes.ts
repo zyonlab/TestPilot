@@ -13,6 +13,7 @@ import { assertProject, authorizeRun, registerHostRun, runLedger } from "./runSe
 import type { ArtifactRevision } from "@testpilot/harness-core/run-contracts";
 import { loadRunInstructions, retrieveRunSpec, writeRunStage, gateRun, finalizeRun, registeredStageProducts } from "./runStages.js";
 import { claimUnit, mergeUnits, unitStatus, writeUnit } from "./workUnits.js";
+import { reviewAdmission } from "./preparationAdmission.js";
 import { reviewRevisions, compiledReadiness, reviseReviewedCase, decideRevisions, generateApprovedCode } from "./approvedRuns.js";
 import { reviewerPrincipal } from "./reviewPrincipal.js";
 import { flushDecisionDelivery } from "./decisionDelivery.js";
@@ -62,7 +63,7 @@ export function runRouter() {
   router.post("/:runId/cancel", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await cancelProjectWorkflow(req.params.runId, req.params.projectId)); }));
   router.post("/:runId/rerun", wrap(async (req,res) => { reviewerPrincipal(req); res.status(202).json(await rerunProjectNode(req.params.runId,req.params.projectId,req.body)); }));
   router.post("/:runId/resume", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await resumeProjectWorkflow(req.params.runId, req.params.projectId, req.body?.mode === 'next-node')); }));
-  router.get("/:runId/review", wrap((req, res) => res.json({ cases: reviewRevisions(req.params.runId, req.params.projectId), compiled: compiledReadiness(req.params.runId,req.params.projectId) })));
+  router.get("/:runId/review", wrap(async (req, res) => res.json({ cases: await reviewAdmission(req.params.runId, req.params.projectId, reviewRevisions(req.params.runId, req.params.projectId)), compiled: compiledReadiness(req.params.runId,req.params.projectId) })));
   router.post('/:runId/preparation/start', wrap(async (req,res)=>{reviewerPrincipal(req);res.status(202).json(await startPreparation(req.params.runId,req.params.projectId,req.body));}));
   router.post('/:runId/preparation/step', wrap(async (req,res)=>{authorizeRun(req.params.runId,req.headers.authorization?.replace(/^Bearer /,''));res.json(await preparationStep(req.params.runId,req.params.projectId,req.body));}));
   router.get("/:runId/executions", wrap((req, res) => res.json({ executions: listWorkflowExecutions(req.params.runId, req.params.projectId) })));
