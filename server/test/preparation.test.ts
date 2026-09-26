@@ -281,4 +281,8 @@ it('stops the whole batch when a run leaves an uncleaned resource behind',{timeo
  await step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],reason:'look'});
  await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.status).toBe('interrupted'),{timeout:8000,interval:200});
  await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+ expect(prep.preparationStatus(run,project)?.units[0]).toMatchObject({status:'needs_review'});
+ await prep.startPreparation(run,project,{revisionIds:[revision]});
+ expect(prep.preparationStatus(run,project)?.units[0].status).toBe('needs_review');
+ await prep.cancelPreparation(run,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
 });

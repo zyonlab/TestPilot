@@ -33,7 +33,7 @@ import { dataPath } from './datadir.js';
 
 const actor={kind:'system' as const,id:'preparation-controller'};
 const terminal=new Set(['verified','blocked','product_defect','needs_review','exhausted']);
-type Unit={caseId:string;source:string;approval:string;status:string;round:number;priority?:PriorityVerdict;reason?:string;plan?:string;result?:string;probeRound?:number;probePlan?:string;probeResult?:string;setup?:string[];prerequisiteChecks?:PrerequisiteCheck[];recipe?:SetupRecipe;recipeRef?:{id:string;version:number};experienceContext?:string};
+type Unit={caseId:string;source:string;approval:string;status:string;round:number;priority?:PriorityVerdict;leftResources?:string[];reason?:string;plan?:string;result?:string;probeRound?:number;probePlan?:string;probeResult?:string;setup?:string[];prerequisiteChecks?:PrerequisiteCheck[];recipe?:SetupRecipe;recipeRef?:{id:string;version:number};experienceContext?:string};
 type Batch={id:string;runId:string;projectId:string;status:string;units:Unit[];maxRounds:number;generation:number;deadline:number;calls:number;maxCalls:number;codeRevision?:string;protocol?:number};
 const active=new Map<string,AbortController>();
 function store(){const l=runLedger();l.db.exec('CREATE TABLE IF NOT EXISTS preparation_batches (id TEXT PRIMARY KEY,runId TEXT NOT NULL,projectId TEXT NOT NULL,json TEXT NOT NULL)');return l;}
@@ -167,7 +167,7 @@ export async function startPreparation(runId:string,projectId:string,raw:unknown
  }else{
   const migrating=b.protocol!==2;b.protocol=2;b.status='running';b.generation=(b.generation??0)+1;b.deadline=Date.now()+caseRunBudget(selected.length).wallMs;b.maxCalls=b.calls+caseRunBudget(selected.length).executorCalls;b.maxRounds=input.maxRounds;b.codeRevision=undefined;
   b.units.sort((a,c)=>selected.findIndex(v=>v.caseId===a.caseId)-selected.findIndex(v=>v.caseId===c.caseId));
-  for(const u of b.units)if(u.status!=='verified'){
+  for(const u of b.units)if(u.status!=='verified'&&!u.leftResources?.length){
     u.status='pending';u.round=0;u.probeRound=0;u.reason=undefined;
     // Retain old immutable artifacts in history; new attempts must collect current evidence.
     u.probePlan=undefined;u.probeResult=undefined;u.plan=undefined;u.result=undefined;u.setup=undefined;u.prerequisiteChecks=undefined;u.recipe=undefined;u.recipeRef=undefined;u.experienceContext=undefined;
@@ -310,6 +310,9 @@ async function trial(b:Batch,u:Unit,plan:TextCase,probe=false,probePreparation?:
    */
   const pending=(result.lifecycle?.pendingResources??[]) as Array<{id:string;identity?:string;reason?:string}>;
   if(pending.length&&current.status==='running'){
+   // 这一条留下过没清理的资源：隔离它，续跑时不再自动重试，等人看过（2026-09-26：J02-03 连续四次开仓没平掉，每次都要人工清理）。
+   item.status='needs_review';item.leftResources=pending.map(p=>p.identity??p.id);
+   item.reason=`留下过没清理的资源（${item.leftResources.join('、')}）：已隔离，续跑不再自动重试，需人复核配方的建立与补偿`;save(current);
    log(current,`${u.caseId} 留下了没清理的资源：${pending.map(p=>`${p.id}（${p.identity??''}）`).join('、')}。整批已停下：先在被测环境里清理，再点「继续」`,'blocked',receipt);
    void cancelPreparation(b.runId,b.projectId,`环境不干净：${u.caseId} 留下 ${pending.map(p=>p.identity??p.id).join('、')}，清理后继续`);
   }
