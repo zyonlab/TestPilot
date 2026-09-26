@@ -22,14 +22,14 @@ it('closes a declared overlay on the entry page before the first step', async ()
 it('when a step is blocked and the overlay came back, closes it and retries the step once', async () => {
   f.text = 'Ready\nTrade';
   const result = await executeRun('https://example.test', ['Show notice', 'Click Withdraw'], 'Ready', opts());
-  expect(f.calls).toEqual(['Show notice', 'Click Withdraw', 'Close the notice panel', 'Click Withdraw']);
+  expect(f.calls).toEqual(['Show notice', 'Click Withdraw', 'Click Withdraw', 'Close the notice panel', 'Click Withdraw']);
   expect(result.status).toBe('passed');
   expect(result.logs?.some(l => /overlay notice dismissed/.test(l))).toBe(true);
 });
 it('without declared overlays a blocked step fails as before', async () => {
   const result = await executeRun('https://example.test', ['Click Withdraw'], 'Ready', opts([]));
   expect(result.status).not.toBe('passed');
-  expect(f.calls).toEqual(['Click Withdraw']);
+  expect(f.calls).toEqual(['Click Withdraw', 'Click Withdraw']); // 一次 Escape 重试，没有声明浮层就不再多试
 });
 it('retry path: dismiss runs only for overlay-like failures and only when the overlay is present', async () => {
   expect(blockedByOverlay(new Error('Failed to plan actions: button not found'))).toBe(true);

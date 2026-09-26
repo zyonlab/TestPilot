@@ -263,7 +263,11 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
           const verdict=await verify(x.id,'cleanup',x.verified,target.id);
           item.status=verdict.status;item.detail=verdict.detail??verdict.statement;
           if(verdict.status==='pass')cleaned.add(x.id);
-        }catch(e){item.status=io.available()?'fail':'unknown';item.detail=io.redact(String(e instanceof Error?e.message:e));receipt.status=item.status==='fail'?'fail':receipt.status==='fail'?'fail':'unknown';}
+        }catch(e){
+          // 动作做不了但核对已成立（要撤的东西本来就不在了）：以核对为准，算清理完成。
+          const verdict=io.available()?await verify(x.id,'cleanup',x.verified,target.id).catch(()=>undefined):undefined;
+          if(verdict?.status==='pass'){item.status='pass';item.detail=`already in the restored state; ${verdict.detail??verdict.statement}`;cleaned.add(x.id);continue;}
+          item.status=io.available()?'fail':'unknown';item.detail=io.redact(String(e instanceof Error?e.message:e));receipt.status=item.status==='fail'?'fail':receipt.status==='fail'?'fail':'unknown';}
       }
       for(const r of contract.resources)if(armed.has(r.id)&&contract.cleanup.some(x=>x.resourceId===r.id&&!cleaned.has(x.id)))receipt.pendingResources.push({id:r.id,identity:io.resolve(r.identity),reason:'Required cleanup was not verified'});
       for(const s of contract.settings)if(armed.has(s.id)&&contract.cleanup.some(x=>x.settingId===s.id&&!cleaned.has(x.id)))receipt.pendingResources.push({id:s.id,identity:`${s.name} = ${io.resolve(s.original)}`,reason:'Setting was not verified as restored'});

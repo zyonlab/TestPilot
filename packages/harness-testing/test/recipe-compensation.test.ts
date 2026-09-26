@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({ text: 'Ready', calls: [] as string[], failClose: false }));
 vi.mock('../src/exec/session.js', () => ({ launchSession: async () => ({
   page: { url: () => 'https://example.test/', isClosed: () => false, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? ['Ready'] : f.text },
-  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t.startsWith('Open a holding')) f.text += '\nholding row'; if (t.startsWith('Close the holding') && !f.failClose) f.text = f.text.replace('\nholding row', ''); }, aiAssert: async () => {} },
+  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t.startsWith('Close the missing')) throw new Error('Failed to plan actions: no such row'); if (t.startsWith('Open a holding')) f.text += '\nholding row'; if (t.startsWith('Close the holding') && !f.failClose) f.text = f.text.replace('\nholding row', ''); }, aiAssert: async () => {} },
   cleanup: async () => {}, modelRequests: [] }), reopenPage: vi.fn() }));
 vi.mock('../src/exec/pageReady.js', () => ({ settleOn: async () => ({ settled: true, controls: 1, textLen: 5, ms: 0 }) }));
 vi.mock('../src/baselines/perf.js', () => ({ capturePerf: async () => ({}) }));
@@ -49,4 +49,16 @@ it('runs compensation top to bottom, in the order it was written', async () => {
   const two = { ...recipe, compensation: [{ step: 'Close the holding row', verified: check('holding row', 'noText') }, { step: 'Return to the entry market', verified: check('Ready') }] };
   await executeRun('https://example.test', ['Look at the holding row'], 'Ready', { ...opts(), preparation: { steps: recipe.steps, checks: [], recipe: two } });
   expect(f.calls.slice(-2)).toEqual(['Close the holding row', 'Return to the entry market']);
+});
+
+it('a compensation action that cannot run because the state is already undone counts as done when its check holds', async () => {
+  const gone = { ...recipe, steps: ['Look around'], postconditions: [check('Ready')], compensation: [{ step: 'Close the missing row', verified: check('holding row', 'noText') }] };
+  const result = await executeRun('https://example.test', ['Look at the page'], 'Ready', { ...opts(), preparation: { steps: gone.steps, checks: [], recipe: gone } });
+  expect(result.lifecycle?.cleanup).toContainEqual(expect.objectContaining({ id: 'recipe-compensation-1', status: 'pass', detail: expect.stringMatching(/already undone/) }));
+  expect(result.lifecycle?.pendingResources).toEqual([]);
+});
+it('when the action fails and the check still does not hold, the resource stays pending', async () => {
+  const stuck = { ...recipe, compensation: [{ step: 'Close the missing row', verified: check('holding row', 'noText') }] };
+  const result = await executeRun('https://example.test', ['Look at the holding row'], 'Ready', { ...opts(), preparation: { steps: recipe.steps, checks: [], recipe: stuck } });
+  expect(result.lifecycle?.pendingResources).toHaveLength(1);
 });

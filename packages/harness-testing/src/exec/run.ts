@@ -334,15 +334,16 @@ export async function executeRun(
          * 上一步留下了一个还开着的对话框（2026-09-26：保证金模式弹窗「点选项即生效」、没有 Confirm、也不自己关，
          * 下一步「点 Market」在截图里只看得到弹窗）。按一次 Escape——等于取消，不确认任何东西——关上后重试这一步。
          */
-        if (blockedByOverlay(e) && await session!.page.evaluate(() => !![...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')].some((d) => { const r = (d as HTMLElement).getBoundingClientRect(); return r.width > 0 && r.height > 0; })).catch(() => false)) {
-          rlog('  a dialog is still open; pressing Escape and retrying the step once');
-          await session!.page.keyboard.press('Escape');
+        // 很多产品的弹窗不带 role=dialog / aria-modal（Hyperliquid 就不带），所以不去认它：被挡住类的失败先按一次 Escape 再重试一次。
+        let failure: unknown = e;
+        if (blockedByOverlay(failure)) {
+          rlog('  step blocked; pressing Escape (closes a dialog left open, confirms nothing) and retrying the step once');
+          await Promise.resolve(session!.page.keyboard?.press('Escape')).catch(() => {});
           await settleOn(session!.page, { minMs: 400, maxMs: 4_000 }).catch(() => {});
-          await session!.agent.aiAction(t);
-          return;
+          try { await session!.agent.aiAction(t); return; } catch (again) { failure = again; }
         }
         // 被常驻浮层挡住：关掉再做这一步一次。关不掉或本来就没有浮层，原样抛出。
-        if (!opts.overlays?.length || !blockedByOverlay(e) || !(await closeOverlays('step failed: ' + t.slice(0, 60), false))) throw e;
+        if (!opts.overlays?.length || !blockedByOverlay(failure) || !(await closeOverlays('step failed: ' + t.slice(0, 60), false))) throw failure;
         rlog('  retrying step after closing overlay');
         await session!.agent.aiAction(t);
       }
@@ -908,12 +909,22 @@ export async function executeRun(
         const item:LifecycleReceipt['cleanup'][number]={id:`recipe-compensation-${i+1}`,resourceId:`recipe:${recipe.capability}`,postStep:i+1,status:'not-run',detail:''};
         lifecycleReceipt.cleanup.push(item);
         if(!session||sessionClosed||opts.signal?.aborted){item.status='unknown';item.detail='Session closed or execution cancelled';unverified=true;continue;}
+        const verify=()=>checkPrerequisite(x.verified,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
         try{
           await withModel(()=>act(resolveText(x.step,ctx)));
-          const receipt=await checkPrerequisite(x.verified,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
+          const receipt=await verify();
           item.status=receipt.status;item.detail=receipt.detail??receipt.statement;
           if(receipt.status!=='pass')unverified=true;
-        }catch(e){item.status='fail';item.detail=redact(String(e instanceof Error?e.message:e),secretVals);unverified=true;}
+        }catch(e){
+          /**
+           * 动作做不了，但核对显示已经是撤销后的样子（用例半路失败、根本没建成那笔持仓，「点平仓」自然找不到）：
+           * 以核对为准，算撤销完成。2026-09-26 第六轮 J02-03 就是这样被误判成「留下持仓」，整批停了三次。
+           */
+          const message=redact(String(e instanceof Error?e.message:e),secretVals);
+          const receipt=session&&!sessionClosed&&!opts.signal?.aborted?await verify().catch(()=>undefined):undefined;
+          if(receipt?.status==='pass'){item.status='pass';item.detail=`already undone (action not needed: ${message.slice(0,120)}); ${receipt.detail??receipt.statement}`;}
+          else{item.status='fail';item.detail=message;unverified=true;}
+        }
       }
       if(unverified){
         lifecycleReceipt.pendingResources.push({id:`recipe:${recipe.capability}`,identity:(recipe.provides??[]).join(', '),reason:'Preparation compensation was not verified'});
