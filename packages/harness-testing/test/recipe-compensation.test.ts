@@ -52,9 +52,11 @@ it('runs compensation top to bottom, in the order it was written', async () => {
 });
 
 it('a compensation action that cannot run because the state is already undone counts as done when its check holds', async () => {
-  const gone = { ...recipe, steps: ['Look around'], postconditions: [check('Ready')], compensation: [{ step: 'Close the missing row', verified: check('holding row', 'noText') }] };
+  // 配方没建成（后置条件「holding row」不成立），补偿「关掉那一行」做不了、核对「没有那一行」成立：回入口复查后算还原。
+  const gone = { ...recipe, steps: ['Look around'], postconditions: [check('holding row')], compensation: [{ step: 'Close the missing row', verified: check('holding row', 'noText') }] };
   const result = await executeRun('https://example.test', ['Look at the page'], 'Ready', { ...opts(), preparation: { steps: gone.steps, checks: [], recipe: gone } });
   expect(result.lifecycle?.cleanup).toContainEqual(expect.objectContaining({ id: 'recipe-compensation-1', status: 'pass', detail: expect.stringMatching(/already undone/) }));
+  expect(result.lifecycle?.cleanup).toContainEqual(expect.objectContaining({ id: 'recipe-entry-restored', status: 'pass' }));
   expect(result.lifecycle?.pendingResources).toEqual([]);
 });
 it('when the action fails and the check still does not hold, the resource stays pending', async () => {

@@ -904,7 +904,7 @@ export async function executeRun(
       // 按写的顺序执行：compensation 本身就是「先撤最后建的」那张清单。2026-09-25 以前这里再倒一次，准备器按撤销顺序
       // 写好的「撤单 → 改回 Market → 切回 HYPE」被倒成「先切回 HYPE」，回到别的市场后撤不到那张单，挂单留在账户上。
       const steps=[...(recipe.compensation??[])];
-      let unverified=false;
+      let unverified=false,forgiven=false;
       for(const [i,x] of steps.entries()){
         const item:LifecycleReceipt['cleanup'][number]={id:`recipe-compensation-${i+1}`,resourceId:`recipe:${recipe.capability}`,postStep:i+1,status:'not-run',detail:''};
         lifecycleReceipt.cleanup.push(item);
@@ -922,7 +922,7 @@ export async function executeRun(
            */
           const message=redact(String(e instanceof Error?e.message:e),secretVals);
           const receipt=session&&!sessionClosed&&!opts.signal?.aborted?await verify().catch(()=>undefined):undefined;
-          if(receipt?.status==='pass'){item.status='pass';item.detail=`already undone (action not needed: ${message.slice(0,120)}); ${receipt.detail??receipt.statement}`;}
+          if(receipt?.status==='pass'){item.status='pass';forgiven=true;item.detail=`already undone (action not needed: ${message.slice(0,120)}); ${receipt.detail??receipt.statement}`;}
           else{item.status='fail';item.detail=message;unverified=true;}
         }
       }
@@ -931,6 +931,8 @@ export async function executeRun(
        * 全部成立 = 账户已回到配方之前的样子，什么都没留下；这时一两步中间核对失败（去找一笔已经被用例撤掉的单）
        * 不再让整批停下。2026-09-26 第七、八轮：POS-04-03、POS-03-01、ORD-04-02 三次误判，账户都是干净的。
        */
+      // 靠「动作做不了但核对成立」放过的一步，也要回入口复查一次：资源可能只是在另一个标签里看不见，而不是真的没了。
+      if(forgiven&&!unverified)unverified=true;
       if(unverified&&recipe.entryChecks?.length&&session&&!sessionClosed&&!opts.signal?.aborted){
         try{
           const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);
