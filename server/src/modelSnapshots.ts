@@ -69,3 +69,28 @@ export function snapshotExecutor(runId: string, projectId?: string): RoleModelCo
   try { RunModelsSchema.parse(JSON.parse(row.bindingJson)); return requireModelConnection("executor", JSON.parse(decryptSecret(row.connectionsEnc)).executor); }
   catch { throw new ProfileStoreError(400, "run_model_snapshot_unreadable"); }
 }
+
+/**
+ * 暂停中的运行换执行模型（人来做，留审计）。
+ *
+ * 运行把模型冻结在开始时，续跑沿用原凭据——这是对的，除非那个执行模型已经不能用了：
+ * 2026-09-26 执行器模型服务额度用完，每次调用都 402，剩下的用例一条也跑不了。
+ * 这里只换执行器（规划器不动），按项目当前的执行模型配置重新解析；换前换后的模型身份
+ * （不含密钥）写进账本。已经验证过的用例保留原回执，回执里记着当时用的是哪个模型。
+ */
+export function rebindRunExecutor(runId: string, projectId: string): { before: RunModels["executor"]; after: RunModels["executor"] } {
+  return db.transaction(() => {
+    const row = db.prepare("SELECT projectId,bindingJson,connectionsEnc FROM run_model_snapshots WHERE runId=?").get(runId) as Row | undefined;
+    if (!row) throw new ProfileStoreError(404, "run_model_snapshot_missing", "executor");
+    if (row.projectId !== projectId) throw new ProfileStoreError(409, "run_model_scope_conflict");
+    const binding = RunModelsSchema.parse(JSON.parse(row.bindingJson));
+    const fresh = binding.entry === "host"
+      ? resolveRunModels({ entry: "host", mode: binding.mode, runtime: binding.runtime as HostRuntime, profiles: projectProfileLayers(projectId, "executor"), hostPlanner: binding.planner as never })
+      : resolveRunModels({ entry: "web", mode: binding.mode, runtime: binding.runtime, profiles: projectProfileLayers(projectId) });
+    const connections = JSON.parse(decryptSecret(row.connectionsEnc)) as Record<string, unknown>;
+    connections.executor = projectModelConnection(projectId, "executor");
+    const next = RunModelsSchema.parse({ ...binding, executor: fresh.executor });
+    db.prepare("UPDATE run_model_snapshots SET bindingJson=?, connectionsEnc=? WHERE runId=?").run(JSON.stringify(next), encryptSecret(JSON.stringify(connections)), runId);
+    return { before: binding.executor, after: next.executor };
+  })();
+}

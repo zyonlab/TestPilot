@@ -9,6 +9,7 @@ import { proposeFromExecution, proposeFromRejections, listRegressionCandidates, 
 import { revisionLineage, revisionDiff, approvalHistory } from "./artifactViews.js";
 import { Router } from "express";
 import { LedgerError } from "./runLedger.js";
+import { rebindRunExecutor } from "./modelSnapshots.js";
 import { assertProject, authorizeRun, registerHostRun, runLedger } from "./runService.js";
 import type { ArtifactRevision } from "@testpilot/harness-core/run-contracts";
 import { loadRunInstructions, retrieveRunSpec, writeRunStage, gateRun, finalizeRun, registeredStageProducts } from "./runStages.js";
@@ -60,6 +61,16 @@ export function runRouter() {
       events:[...events.map(e=>JSON.parse(e.json)), ...run.revisions.filter(r=>r.name.startsWith(`units/${node}/`)).map(r=>({id:r.id,at:r.createdAt,phase:'done',artifactName:r.name}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-100), error:run.detail.error});
   }));
   router.get("/:runId/checkpoint", wrap((req, res) => res.json(workflowCheckpoint(req.params.runId, req.params.projectId))));
+  // 暂停中的运行换执行模型：只有人能做，运行不能在跑；换前换后写进账本（不含密钥）。见 modelSnapshots.rebindRunExecutor。
+  router.post("/:runId/models/executor/rebind", wrap((req, res) => {
+    const actor = reviewerPrincipal(req);
+    const run = runLedger().getRun(req.params.runId, req.params.projectId);
+    if (["running", "queued", "registered", "executing"].includes(run.status)) throw new LedgerError(409, "workflow_active");
+    const change = rebindRunExecutor(req.params.runId, req.params.projectId);
+    runLedger().putRevision({ runId: req.params.runId, projectId: req.params.projectId, name: "report/model-rebind", kind: "report",
+      content: { role: "executor", at: new Date().toISOString(), before: change.before, after: change.after } }, actor);
+    res.json(change);
+  }));
   router.post("/:runId/cancel", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await cancelProjectWorkflow(req.params.runId, req.params.projectId)); }));
   router.post("/:runId/rerun", wrap(async (req,res) => { reviewerPrincipal(req); res.status(202).json(await rerunProjectNode(req.params.runId,req.params.projectId,req.body)); }));
   router.post("/:runId/resume", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await resumeProjectWorkflow(req.params.runId, req.params.projectId, req.body?.mode === 'next-node')); }));
