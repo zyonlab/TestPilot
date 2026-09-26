@@ -330,6 +330,17 @@ export async function executeRun(
           await session!.agent.aiAction(`${t}（只在当前最上层打开的弹窗或对话框内操作；背后页面上同名的元素不算）`);
           return;
         }
+        /**
+         * 上一步留下了一个还开着的对话框（2026-09-26：保证金模式弹窗「点选项即生效」、没有 Confirm、也不自己关，
+         * 下一步「点 Market」在截图里只看得到弹窗）。按一次 Escape——等于取消，不确认任何东西——关上后重试这一步。
+         */
+        if (blockedByOverlay(e) && await session!.page.evaluate(() => !![...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')].some((d) => { const r = (d as HTMLElement).getBoundingClientRect(); return r.width > 0 && r.height > 0; })).catch(() => false)) {
+          rlog('  a dialog is still open; pressing Escape and retrying the step once');
+          await session!.page.keyboard.press('Escape');
+          await settleOn(session!.page, { minMs: 400, maxMs: 4_000 }).catch(() => {});
+          await session!.agent.aiAction(t);
+          return;
+        }
         // 被常驻浮层挡住：关掉再做这一步一次。关不掉或本来就没有浮层，原样抛出。
         if (!opts.overlays?.length || !blockedByOverlay(e) || !(await closeOverlays('step failed: ' + t.slice(0, 60), false))) throw e;
         rlog('  retrying step after closing overlay');

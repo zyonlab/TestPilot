@@ -2,10 +2,10 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { blockedByOverlay, dismissOverlays, DismissibleOverlaysSchema } from '../src/exec/overlays.js';
 
 /** 常驻可关闭浮层（2026-09-25）：登录后关掉；某步因被挡住失败时，关掉再重试一次。具体面板是环境数据。 */
-const f = vi.hoisted(() => ({ text: 'Ready\nNotice panel\nTrade', calls: [] as string[], hideTarget: true }));
+const f = vi.hoisted(() => ({ text: 'Ready\nNotice panel\nTrade', calls: [] as string[], hideTarget: true, dialog: false, keys: [] as string[] }));
 vi.mock('../src/exec/session.js', () => ({ launchSession: async () => ({
-  page: { url: () => 'https://example.test/', isClosed: () => false, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? f.text.split('\n') : f.text, goto: async () => {} },
-  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t === 'Show notice') f.text += '\nNotice panel'; else if (t === 'Close the notice panel') f.text = f.text.replace('\nNotice panel', ''); else if (t === 'Click Isolated') throw new Error('locate: multiple elements found, length = 2'); else if (t === 'Click Withdraw' && f.text.includes('Notice panel')) throw new Error('Failed to plan actions: Withdraw not found, covered by a panel'); }, aiAssert: async () => {} },
+  page: { url: () => 'https://example.test/', isClosed: () => false, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? f.text.split('\n') : fn.toString().includes('aria-modal') ? f.dialog : f.text, goto: async () => {}, keyboard: { press: async (k: string) => { f.keys.push(k); f.dialog = false; } } },
+  agent: { aiAction: async (t: string) => { f.calls.push(t); if (t === 'Open mode dialog') f.dialog = true; else if (t === 'Click Market' && f.dialog) throw new Error('Failed to plan actions: Market not found'); else if (t === 'Show notice') f.text += '\nNotice panel'; else if (t === 'Close the notice panel') f.text = f.text.replace('\nNotice panel', ''); else if (t === 'Click Isolated') throw new Error('locate: multiple elements found, length = 2'); else if (t === 'Click Withdraw' && f.text.includes('Notice panel')) throw new Error('Failed to plan actions: Withdraw not found, covered by a panel'); }, aiAssert: async () => {} },
   cleanup: async () => {}, modelRequests: [] }), reopenPage: vi.fn() }));
 vi.mock('../src/exec/pageReady.js', () => ({ settleOn: async () => ({ settled: true, controls: 1, textLen: 5, ms: 0 }) }));
 vi.mock('../src/baselines/perf.js', () => ({ capturePerf: async () => ({}) }));
@@ -66,4 +66,12 @@ it('clicks a declared close selector deterministically and falls back to the ins
   text = 'x\nNotice panel';
   expect(await dismissOverlays([{ id: 'n', present: 'Notice panel', close: 'Close it', selector: '#missing' }], io, 't')).toBe(1);
   expect(acts).toEqual(['Close it']);
+});
+
+it('a dialog left open by the previous step is closed with Escape and the step retried once', async () => {
+  f.text = 'Ready\nTrade'; f.dialog = false; f.keys = [];
+  const result = await executeRun('https://example.test', ['Open mode dialog', 'Click Market'], 'Ready', opts([]));
+  expect(f.keys).toEqual(['Escape']);
+  expect(f.calls.filter(c => c === 'Click Market')).toHaveLength(2);
+  expect(result.status).toBe('passed');
 });
