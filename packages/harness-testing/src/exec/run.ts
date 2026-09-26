@@ -926,6 +926,26 @@ export async function executeRun(
           else{item.status='fail';item.detail=message;unverified=true;}
         }
       }
+      /**
+       * 有补偿步骤没核实：回到入口页，把配方开始前的 entryChecks（「没有挂单」「没有持仓」……）再查一遍。
+       * 全部成立 = 账户已回到配方之前的样子，什么都没留下；这时一两步中间核对失败（去找一笔已经被用例撤掉的单）
+       * 不再让整批停下。2026-09-26 第七、八轮：POS-04-03、POS-03-01、ORD-04-02 三次误判，账户都是干净的。
+       */
+      if(unverified&&recipe.entryChecks?.length&&session&&!sessionClosed&&!opts.signal?.aborted){
+        try{
+          const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);
+          await session.page.goto(entry.toString(),{waitUntil:'domcontentloaded',timeout:45000});await settleOn(session.page,{minMs:600,maxMs:12_000}).catch(()=>{});
+          // 两件事都要成立才算还原：配方的后置条件（「建出来的东西在」）已经不成立，且入口检查重新成立。
+          // 只看入口检查不够——入口检查可能只是「页面打开了」，挡不住真的残留。
+          const probe=(check:typeof recipe.entryChecks[number])=>checkPrerequisite(check,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
+          let restored=true;const details:string[]=[];
+          for(const check of recipe.postconditions??[]){const receipt=await probe(check);details.push(`gone? ${receipt.statement}: ${receipt.status}`);if(receipt.status!=='fail')restored=false;}
+          if(!(recipe.postconditions??[]).length)restored=false;
+          for(const check of recipe.entryChecks){const receipt=await probe(check);details.push(`${receipt.statement}: ${receipt.status}`);if(receipt.status!=='pass')restored=false;}
+          lifecycleReceipt.cleanup.push({id:'recipe-entry-restored',resourceId:`recipe:${recipe.capability}`,postStep:steps.length+1,status:restored?'pass':'fail',detail:`entry checks after compensation: ${details.join('; ')}`});
+          if(restored)unverified=false;
+        }catch(e){rlog(`entry re-check after compensation failed: ${String((e as Error)?.message??e).slice(0,120)}`);}
+      }
       if(unverified){
         lifecycleReceipt.pendingResources.push({id:`recipe:${recipe.capability}`,identity:(recipe.provides??[]).join(', '),reason:'Preparation compensation was not verified'});
         if(lifecycleReceipt.status==='pass')lifecycleReceipt.status='unknown';

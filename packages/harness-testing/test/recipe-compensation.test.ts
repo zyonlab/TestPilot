@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({ text: 'Ready', calls: [] as string[], failClose: false }));
 vi.mock('../src/exec/session.js', () => ({ launchSession: async () => ({
-  page: { url: () => 'https://example.test/', isClosed: () => false, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? ['Ready'] : f.text },
+  page: { url: () => 'https://example.test/', isClosed: () => false, goto: async () => {}, screenshot: async () => Buffer.from('png'), evaluate: async (fn: Function) => fn.toString().includes('.split(') ? ['Ready'] : f.text },
   agent: { aiAction: async (t: string) => { f.calls.push(t); if (t.startsWith('Close the missing')) throw new Error('Failed to plan actions: no such row'); if (t.startsWith('Open a holding')) f.text += '\nholding row'; if (t.startsWith('Close the holding') && !f.failClose) f.text = f.text.replace('\nholding row', ''); }, aiAssert: async () => {} },
   cleanup: async () => {}, modelRequests: [] }), reopenPage: vi.fn() }));
 vi.mock('../src/exec/pageReady.js', () => ({ settleOn: async () => ({ settled: true, controls: 1, textLen: 5, ms: 0 }) }));
@@ -61,4 +61,11 @@ it('when the action fails and the check still does not hold, the resource stays 
   const stuck = { ...recipe, compensation: [{ step: 'Close the missing row', verified: check('holding row', 'noText') }] };
   const result = await executeRun('https://example.test', ['Look at the holding row'], 'Ready', { ...opts(), preparation: { steps: recipe.steps, checks: [], recipe: stuck } });
   expect(result.lifecycle?.pendingResources).toHaveLength(1);
+});
+
+it('a failed intermediate compensation check is forgiven when the entry checks hold again afterwards', async () => {
+  const mid = { ...recipe, entryChecks: [check('holding row', 'noText')], compensation: [{ step: 'Close the holding row', verified: check('holding row') }] };
+  const result = await executeRun('https://example.test', ['Look at the holding row'], 'Ready', { ...opts(), preparation: { steps: recipe.steps, checks: [], recipe: mid } });
+  expect(result.lifecycle?.cleanup).toContainEqual(expect.objectContaining({ id: 'recipe-entry-restored', status: 'pass' }));
+  expect(result.lifecycle?.pendingResources).toEqual([]);
 });
