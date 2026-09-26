@@ -52,6 +52,11 @@ export const FeatureDefSchema = z
     /** 适用性和「验证了没有」是两个字段：一个功能可以适用但未验证，也可以不适用但被观察到。 */
     applicability: ApplicabilitySchema.default("unresolved"),
     applicabilitySourceRefs: z.array(DomainIdSchema).default([]),
+    /**
+     * 用户用得多不多（项目数据，由人给）。执行优先级的三项之一：生命周期主链、影响资金、高频使用。
+     * 可选、无默认值，不改旧规则包的哈希。
+     */
+    usage: z.enum(["high", "medium", "low"]).optional(),
   })
   .strict();
 export type FeatureDef = z.infer<typeof FeatureDefSchema>;

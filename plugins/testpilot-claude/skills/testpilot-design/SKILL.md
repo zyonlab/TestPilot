@@ -13,7 +13,7 @@ rule e2ff0801  "exploratory": the evidence is a charter and what was observed un
 rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
-rule 03eea4fb  For tier 1 and tier 2 you MUST also give `oracle`, the same 
+rule 03eea4fb  For tier 1 and tier 2 you MUST also give `oracle`, the same
 rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
