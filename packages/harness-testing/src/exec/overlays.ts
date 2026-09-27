@@ -29,7 +29,8 @@ export const DismissibleOverlaysSchema = z.array(DismissibleOverlaySchema).max(1
 export function blockedByOverlay(error: unknown): boolean {
   const message = String(error instanceof Error ? error.message : error);
   if (/EXEC_CANCELLED|aborted|Target closed/i.test(message)) return false;
-  return /Failed to plan actions|Element not found|Replanning \d+ times|locate: multiple elements|not found|找不到|未找到|看不到|遮挡|covered|obscured|intercept/i.test(message);
+  // 「failed to locate … not present」：2026-09-27 C-MAR-01-04 收尾，杠杆弹窗没关，模型说元素列表里只有弹窗、没有 Market。
+  return /Failed to plan actions|failed to locate|Element not found|Replanning \d+ times|locate: multiple elements|not found|not present|找不到|未找到|看不到|遮挡|covered|obscured|intercept/i.test(message);
 }
 
 export interface OverlayIo {

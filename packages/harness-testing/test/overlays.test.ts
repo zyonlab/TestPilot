@@ -34,6 +34,7 @@ it('without declared overlays a blocked step fails as before', async () => {
 it('retry path: dismiss runs only for overlay-like failures and only when the overlay is present', async () => {
   expect(blockedByOverlay(new Error('Failed to plan actions: button not found'))).toBe(true);
   expect(blockedByOverlay(new Error('Assertion failed: balance is 0'))).toBe(false);
+  expect(blockedByOverlay(new Error("AI model failed to locate: The 'Market' tab is not present; the visible elements are from the 'Adjust Leverage' modal"))).toBe(true);
   expect(blockedByOverlay(new Error('EXEC_CANCELLED'))).toBe(false);
   let text = 'x\nNotice panel'; const acts: string[] = [];
   const io = { text: async () => text, act: async (a: string) => { acts.push(a); text = 'x'; }, settle: async () => {}, log: () => {} };

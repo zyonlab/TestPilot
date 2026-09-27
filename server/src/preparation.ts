@@ -224,7 +224,12 @@ export async function preparationStep(runId:string,projectId:string,raw:unknown)
  }
  if(input.action==='resolve'){if(!input.status)throw new LedgerError(400,'preparation_resolution_required');if(input.status==='blocked'&&!u.probeResult&&!u.result)return {status:'needs_probe',message:'No environment attempt recorded. Call probe first; missing narrative evidence is not a confirmed blocker.'};if(input.status==='product_defect'){const result=u.result?store().readRevision(u.result,projectId).content as {status?:string;infraError?:boolean;failureReason?:string}:null;if(!result||result.status!=='failed'||result.infraError||/^(PREREQUISITE_NOT_VERIFIED|AUXILIARY_CHECK_NOT_VERIFIED)/.test(result.failureReason??''))throw new LedgerError(409,'product_failure_evidence_required');}u.status=input.status;u.reason=input.reason;save(b);log(b,`${u.caseId} · ${u.status} · ${u.reason}`);return {status:u.status};}
  if(!input.content)throw new LedgerError(400,'preparation_plan_required');
- const original=approved(b,u),plan=input.content;
+ const original=approved(b,u);
+ /**
+  * 准备器漏写 lifecycle 不是改了它：生命周期从来不许准备器删（删了就是改业务意图），缺省就是「照审核版」。
+  * 2026-09-27 C-POS-01-02：两次因改 readiness 被 409 之后，第三次提交干脆没带 lifecycle，被判「改变了已审核业务预期」退回。
+  */
+ const plan=input.content.lifecycle==null&&original.lifecycle?{...input.content,lifecycle:original.lifecycle}:input.content;
  configureRecipe(b,u,input);const experienceContext=contextFor(b,u);
  const auxiliaryAssertions=auxiliaryChecks(original,plan,input.auxiliaryAssertions??[]);
  const checks=preparationChecks(original,input.prerequisiteChecks??u.prerequisiteChecks);
@@ -239,7 +244,7 @@ export async function preparationStep(runId:string,projectId:string,raw:unknown)
  if(original.lifecycle && (canonicalJSON(original.postSteps)!==canonicalJSON(plan.postSteps) || lifecycleBindsActions(original.lifecycle) && (original.steps.length!==plan.steps.length || lifecycleIssues({...original,steps:plan.steps}).length>0)))throw new LedgerError(409,'lifecycle_action_bindings_frozen');
  if(original.postSteps.some(step=>!plan.postSteps.includes(step)))throw new LedgerError(409,'cleanup_steps_removed');
  // Structured prerequisites cannot be asserted verified by the planner.
- if(canonicalJSON(original.readiness?.requirements??[])!==canonicalJSON(plan.readiness?.requirements??[]))throw new LedgerError(409,'prerequisite_evidence_frozen');
+ if(canonicalJSON(original.readiness?.requirements??[])!==canonicalJSON(plan.readiness?.requirements??[]))throw new LedgerError(409,'prerequisite_evidence_frozen: copy readiness.requirements from the reviewed case unchanged; report what you observed through prerequisiteChecks, not by editing requirement status');
  if(prerequisites(original).length&&!u.probeResult)return {status:'needs_probe',message:'Inspect the real environment with probe before trial.'};
  const numeric=executionBlockers({...plan,readiness:{...plan.readiness,design:plan.readiness?.design??'candidate',execution:'ready',reason:'Trial candidate'}}).filter(s=>s.startsWith('missing_numeric_calculation'));
  if(numeric.length)return {status:'repair',issues:numeric};
