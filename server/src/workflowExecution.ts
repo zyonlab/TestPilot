@@ -219,7 +219,9 @@ async function perform(row: ExecutionRow) {
         } catch (error) {
           observer.issue(cancelled()?'cancelled':'failed',{attribution:'infra',retryable:false});
           attempts.push({attempt:attempts.length+1,status:cancelled()?'cancelled':'unknown',durationMs:performance.now()-start,observation:null});
-          results.push({caseId:kase.id,lifecycle:unavailableLifecycle(kase.lifecycle,kase.postSteps),status:cancelled()?'cancelled':'unobservable',infraError:true,attempts});
+          // 派发失败的原文要留下：2026-09-27 exec-3533eaef 第一条 47ms 就失败，结果里只有 execution_unavailable，查不出是谁抛的。
+          const reason=String(error instanceof Error?error.message:error).replace(/\b(sk|key|token)[-_][A-Za-z0-9_-]{8,}/gi,'[redacted]').slice(0,300);
+          results.push({caseId:kase.id,lifecycle:unavailableLifecycle(kase.lifecycle,kase.postSteps),status:cancelled()?'cancelled':'unobservable',infraError:true,failureReason:reason,attempts});
           throw error;
         } finally { observer.end(); }
       };

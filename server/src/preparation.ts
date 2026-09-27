@@ -42,7 +42,8 @@ function latest(runId:string,projectId:string):Batch|undefined{store().requireRu
 function load(id:string,runId:string,projectId:string):Batch{const b=latest(runId,projectId);if(!b||b.id!==id)throw new LedgerError(409,'preparation_batch_changed');return b;}
 function log(b:Batch,message:string,phase:'running'|'done'|'blocked'|'cancelled'='running',revisionId?:string){stageEvent(b.runId,b.projectId,'g2',phase,message.slice(0,1900),revisionId);}
 function put(b:Batch,name:string,content:unknown,refs:string[]=[]){const path=`preparation/${b.id}/${name}`;const prior=store().listRevisions(b.projectId,b.runId).filter(r=>r.name===path).sort((a,c)=>c.revision-a.revision)[0];return store().putRevision({runId:b.runId,projectId:b.projectId,name:path,kind:'report',content,sourceRefs:refs,parentRevision:prior?.id},actor);}
-function approved(b:Batch,u:Unit){const c=reviewRevisions(b.runId,b.projectId).find(c=>c.caseId===u.caseId);if(!c||c.revision.id!==u.source||c.approval?.id!==u.approval||c.approval?.decision!=='approved')throw new LedgerError(409,'preparation_approval_changed');return c.content;}
+/** reviews：一批里逐条核对时先取一次传进来——reviewRevisions 一次约 177ms，70 条逐条取就是 12 秒同步阻塞（见 validatePreparedBundle）。 */
+function approved(b:Batch,u:Unit,reviews?:ReturnType<typeof reviewRevisions>){const c=(reviews??reviewRevisions(b.runId,b.projectId)).find(c=>c.caseId===u.caseId);if(!c||c.revision.id!==u.source||c.approval?.id!==u.approval||c.approval?.decision!=='approved')throw new LedgerError(409,'preparation_approval_changed');return c.content;}
 function prerequisites(c:TextCase){return [...c.precondition,...(c.readiness?.requirements??[]).map(r=>`Required ${r.kind}: ${r.id}`)];}
 /**
  * 交给判官的屏幕检查必须是一句「应当成立」的陈述。2026-09-25 准备器把「页面有没有最小订单价值的提示」
@@ -65,13 +66,14 @@ function auxiliaryChecks(original:TextCase, plan:TextCase, checks:NonNullable<Pr
  if(new Set(checks.map(a=>a.id)).size!==checks.length||checks.some(a=>ids.has(a.id)||a.supports.some(id=>id!=='$expected'&&!ids.has(id))||(a.afterStep??0)>plan.steps.length))throw new LedgerError(400,'auxiliary_assertion_invalid');
  return checks;
 }
-function currentScope(b:Batch,u:Unit):ExperienceScope {
+function currentScope(b:Batch,u:Unit,reviews?:ReturnType<typeof reviewRevisions>):ExperienceScope {
+ const kase=approved(b,u,reviews);
  const detail=store().getRun(b.runId,b.projectId).detail as any,env=resolveEnvironment(b.projectId,detail.target?.envRef);
  const context={env:env?.vars??{},secrets:getSecretValues(b.projectId)};
- const target=caseEntryUrl(approved(b,u).precondition,resolveText(env?.baseUrl||detail.parameters?.sourceUrl||getProject(b.projectId)!.targetUrl,context));
+ const target=caseEntryUrl(kase.precondition,resolveText(env?.baseUrl||detail.parameters?.sourceUrl||getProject(b.projectId)!.targetUrl,context));
  // The injected provider's private configuration belongs to the runner; without a frozen
  // identity contract do not propagate those methods across runs.
- return experienceScope(store(),b.runId,b.projectId,{target,environment:env,secretVersion:contentHash(canonicalJSON(context.secrets)),pageVersion:detail.parameters?.pageVersion,loggedOut:caseStartsLoggedOut(approved(b,u).precondition),injectedRun:detail.parameters?.exploreWallet?b.runId:undefined});
+ return experienceScope(store(),b.runId,b.projectId,{target,environment:env,secretVersion:contentHash(canonicalJSON(context.secrets)),pageVersion:detail.parameters?.pageVersion,loggedOut:caseStartsLoggedOut(kase.precondition),injectedRun:detail.parameters?.exploreWallet?b.runId:undefined});
 }
 function contextFor(b:Batch,u:Unit,deliver=false){
  if(u.experienceContext){
@@ -356,4 +358,12 @@ function finish(b:Batch){
 }
 export async function cancelPreparation(runId:string,projectId:string,reason='用户停止'){const b=latest(runId,projectId);if(!b||b.status!=='running')return;releasePrepSession(b);b.status='interrupted';save(b);active.get(runId)?.abort();cancelCodex(runId);cancelClaude(runId);cancelPenguin(runId);cancelNativeRun(runId);log(b,reason,'cancelled');store().db.prepare("UPDATE wf_runs SET status='interrupted' WHERE id=?").run(runId);}
 export function recoverPreparations(){const rows=store().db.prepare('SELECT json FROM preparation_batches').all() as {json:string}[];for(const row of rows){const b=JSON.parse(row.json) as Batch;if(b.status==='running'){b.status='interrupted';for(const u of b.units)if(['trial','probing'].includes(u.status))u.status='repair';save(b);store().db.prepare("UPDATE wf_runs SET status='interrupted' WHERE id=?").run(b.runId);log(b,'服务重启，执行准备已中断；继续将保留已完成用例','blocked');}}}
-export function validatePreparedBundle(runId:string,projectId:string,content:any){const b=load(content.batchId,runId,projectId);for(const ref of content.verification??[]){const u=b.units.find(u=>u.caseId===ref.caseId);if(!u||u.status!=='verified'||u.plan!==ref.plan||u.result!==ref.result)throw new LedgerError(409,'preparation_evidence_changed');approved(b,u);const saved=store().readRevision(u.plan!,projectId).content as {case:TextCase;preparation?:Preparation};if(saved.preparation?.recipe)assertRecipeNotRevoked(store(),currentScope(b,u),saved.preparation.recipe);if(canonicalJSON(content.preparation?.[u.caseId]??{steps:[],checks:[]})!==canonicalJSON(saved.preparation??{steps:[],checks:[]}))throw new LedgerError(409,'prepared_setup_changed');const plan=saved.case;const prepared=content.cases?.find((c:TextCase)=>c.id===u.caseId);if(!prepared||canonicalJSON({...prepared,readiness:undefined})!==canonicalJSON({...plan,readiness:undefined}))throw new LedgerError(409,'prepared_case_changed');const result=store().readRevision(u.result!,projectId).content as {status:string};if(result.status!=='passed')throw new LedgerError(409,'preparation_not_verified');}if(content.cases?.length!==content.verification?.length)throw new LedgerError(409,'preparation_scope_changed');if(!content.verification?.length)throw new LedgerError(409,'preparation_evidence_required');return content as CodeBundle & {approvedRevisions:string[];preparation?:Record<string,Preparation>};}
+/** 修订一经写入不再变：按 id 记住内容。结果修订带整页截图文字，每次重读都是几兆 JSON。 */
+const revisionCache=new Map<string,unknown>(),statusCache=new Map<string,string>();
+function immutable(id:string,projectId:string){const key=projectId+'/'+id;if(!revisionCache.has(key)){if(revisionCache.size>500)revisionCache.clear();revisionCache.set(key,store().readRevision(id,projectId).content);}return revisionCache.get(key);}
+function resultStatus(id:string,projectId:string){const key=projectId+'/'+id;let v=statusCache.get(key);if(v===undefined){v=String((store().readRevision(id,projectId).content as {status?:string}).status);statusCache.set(key,v);}return v;}
+/**
+ * 执行包每条用例派发前后都要重核一次。2026-09-27 exec-3533eaef：逐条 approved() 各取一次 reviewRevisions，
+ * 70 条一次核对 12.8 秒、同步占住事件循环，三次核对下来 runner 40 秒收不到心跳被 SIGKILL，正式执行第一条就停。
+ */
+export function validatePreparedBundle(runId:string,projectId:string,content:any){const b=load(content.batchId,runId,projectId);const reviews=reviewRevisions(runId,projectId);for(const ref of content.verification??[]){const u=b.units.find(u=>u.caseId===ref.caseId);if(!u||u.status!=='verified'||u.plan!==ref.plan||u.result!==ref.result)throw new LedgerError(409,'preparation_evidence_changed');approved(b,u,reviews);const saved=immutable(u.plan!,projectId) as {case:TextCase;preparation?:Preparation};if(saved.preparation?.recipe)assertRecipeNotRevoked(store(),currentScope(b,u,reviews),saved.preparation.recipe);if(canonicalJSON(content.preparation?.[u.caseId]??{steps:[],checks:[]})!==canonicalJSON(saved.preparation??{steps:[],checks:[]}))throw new LedgerError(409,'prepared_setup_changed');const plan=saved.case;const prepared=content.cases?.find((c:TextCase)=>c.id===u.caseId);if(!prepared||canonicalJSON({...prepared,readiness:undefined})!==canonicalJSON({...plan,readiness:undefined}))throw new LedgerError(409,'prepared_case_changed');if(resultStatus(u.result!,projectId)!=='passed')throw new LedgerError(409,'preparation_not_verified');}if(content.cases?.length!==content.verification?.length)throw new LedgerError(409,'preparation_scope_changed');if(!content.verification?.length)throw new LedgerError(409,'preparation_evidence_required');return content as CodeBundle & {approvedRevisions:string[];preparation?:Record<string,Preparation>};}
