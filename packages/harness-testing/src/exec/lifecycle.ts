@@ -241,7 +241,7 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
         if(io.reopen && io.available()){try{await io.reopen();}catch{/* 复核照旧在当前页做；失败会记在复核结果里 */}}
         for(const [i,check] of contract.baseline.entries())await verify(`baseline-after-${i+1}`,'cleanup',check);
       }
-      const cleaned=new Set<string>();
+      const cleaned=new Set<string>(),statusBefore=receipt.status;
       for(const x of contract.cleanup){
         const r=x.resourceId?contract.resources.find(r=>r.id===x.resourceId):undefined;
         const s=x.settingId?contract.settings.find(s=>s.id===x.settingId):undefined;
@@ -268,6 +268,24 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
           const verdict=io.available()?await verify(x.id,'cleanup',x.verified,target.id).catch(()=>undefined):undefined;
           if(verdict?.status==='pass'){item.status='pass';item.detail=`already in the restored state; ${verdict.detail??verdict.statement}`;cleaned.add(x.id);continue;}
           item.status=io.available()?'fail':'unknown';item.detail=io.redact(String(e instanceof Error?e.message:e));receipt.status=item.status==='fail'?'fail':receipt.status==='fail'?'fail':'unknown';}
+      }
+      /**
+       * 同一个资源/设置的收尾是几步手段（切标签、开弹窗）加最后一步核对。最后一步的核对成立，就是它已经回到原样，
+       * 前面某个手段没做成（要平的仓早被用例平掉了，表里没有那一行可点）不再算残留——失败原文留在 detail。
+       * 2026-09-27 C-POS-04-03：用例自己平了仓，收尾「点 Market 平仓」找不到行而失败，
+       * 最后一步「Positions 标签不带数量」成立，却被记成留下持仓、整批停下。
+       */
+      let superseded=false;
+      for(const id of new Set(receipt.cleanup.map(c=>c.resourceId).filter((v):v is string=>!!v))){
+        const items=receipt.cleanup.filter(c=>c.resourceId===id),last=items[items.length-1]!;
+        if(!cleaned.has(last.id))continue;
+        for(const c of items.slice(0,-1))if(!cleaned.has(c.id)&&(c.status==='fail'||c.status==='unknown')){
+          c.detail=`superseded: final cleanup check ${last.id} held; this step: ${c.detail??c.status}`;c.status='pass';cleaned.add(c.id);superseded=true;
+        }
+      }
+      if(superseded){
+        const open=receipt.cleanup.filter(c=>c.status==='fail'||c.status==='unknown');
+        receipt.status=statusBefore==='fail'||open.some(c=>c.status==='fail')?'fail':statusBefore!=='pass'||open.length?'unknown':'pass';
       }
       for(const r of contract.resources)if(armed.has(r.id)&&contract.cleanup.some(x=>x.resourceId===r.id&&!cleaned.has(x.id)))receipt.pendingResources.push({id:r.id,identity:io.resolve(r.identity),reason:'Required cleanup was not verified'});
       for(const s of contract.settings)if(armed.has(s.id)&&contract.cleanup.some(x=>x.settingId===s.id&&!cleaned.has(x.id)))receipt.pendingResources.push({id:s.id,identity:`${s.name} = ${io.resolve(s.original)}`,reason:'Setting was not verified as restored'});

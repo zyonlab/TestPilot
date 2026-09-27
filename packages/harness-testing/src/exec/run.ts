@@ -86,6 +86,14 @@ export interface RunResult {
  * thing it can honestly refer to is what a person would read on the screen. No selectors
  * get invented here, and none leak into stage-one artifacts.
  */
+/**
+ * 断言里只有「应当出现」的文字值得再看：晚一点出现仍是正面证据。「不应出现」不重看——
+ * 成功提示几秒后自己消失，重看就会把「下单其实成功了」判成「没有成功提示」。
+ * 生命周期核对（释放、收尾、基线）看的是状态，不是提示，两种都重看。
+ */
+const SETTLING_KINDS = new Set(["text"]);
+const SETTLE_RETRIES = 4, SETTLE_INTERVAL_MS = 1000;
+
 async function snapshotPage(page: { evaluate: (fn: () => unknown) => Promise<unknown>; url: () => string }): Promise<PageSnapshot> {
   const capturedAt = Date.now();
   const text = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")) as string;
@@ -117,6 +125,8 @@ export async function executeRun(
      * 谁给的 key 谁负责 `releaseRunSession(key)`——批次结束时。
      */
     sessionKey?: string;
+    /** 屏幕判据不成立时隔多久再看一次（默认 1000ms，共再看四次）；测试给 0。 */
+    settleIntervalMs?: number;
     authentication?: AuthenticationChecks;
     login?: string[]; // login-flow step templates (登录态), run before case steps
     /** 环境声明的常驻可关闭浮层：登录后、重开入口页后关掉；某步定位失败时若它还在，关掉重试一次。见 overlays.ts。 */
@@ -239,14 +249,24 @@ export async function executeRun(
   let reused = false;
   let sessionClosed = false;
   let recipeStarted = false;
+  /**
+   * 界面跟上动作要时间：撤单/平仓点完，「Open Orders (1)」要过一会儿才变回「Open Orders」。
+   * 屏幕判据不成立时隔一秒再看，最多再看四次；成立就不再等。只对读屏的判据这样做——判官不重采。
+   * 2026-09-27 C-POS-04-03：平仓后立刻核对「没有 Positions (」失败，两步后同一个页面已经是「No open positions yet」。
+   */
+  const settle = async <T extends { status: string }>(read: () => Promise<T>): Promise<T> => {
+    let out = await read();
+    for (let i = 0; i < SETTLE_RETRIES && out.status === "fail"; i++) { await new Promise((r) => setTimeout(r, opts.settleIntervalMs ?? SETTLE_INTERVAL_MS)); out = await read(); }
+    return out;
+  };
   const lifecycle = lifecycleExecution(opts.lifecycle, opts.postSteps ?? [], {
-    check: check => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
+    check: check => settle(() => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
       if(!session || sessionClosed || opts.signal?.aborted || session.page.isClosed?.()) throw new Error('SESSION_UNAVAILABLE');
       // A failed snapshot is unknown, never evidence of resource absence.
       const text = await session.page.evaluate(()=>document.body?.innerText ?? '');
       if(!String(text).trim())throw new Error('SCREEN_UNAVAILABLE');
       return {text:String(text),url:session.page.url(),capturedAt:Date.now()};
-    }, assert:async()=>{throw new Error('LIFECYCLE_REQUIRES_SCREEN_ORACLE');},resolve:t=>resolveText(t,ctx),redact:t=>redact(t,secretVals)}),
+    }, assert:async()=>{throw new Error('LIFECYCLE_REQUIRES_SCREEN_ORACLE');},resolve:t=>resolveText(t,ctx),redact:t=>redact(t,secretVals)})),
     resolve:t=>redact(resolveText(t,ctx),secretVals),
     redact:t=>redact(t,secretVals),
     act:async t=>{rlog(`teardown: ${t}`);await withModel(()=>act(resolveText(t,ctx)));},
@@ -620,9 +640,13 @@ export async function executeRun(
         return;
       }
       if (a.oracle && a.oracle.kind !== "none") {
-        const snap = await snapshotPage(session!.page);
+        let snap = await snapshotPage(session!.page);
         if (a.oracle.kind === "judge" && !(await judgeInto(snap, a.oracle))) return;
-        const verdict = evaluateOracle(a.oracle, snap, snapBefore);
+        let verdict = evaluateOracle(a.oracle, snap, snapBefore);
+        if (SETTLING_KINDS.has(a.oracle.kind) && verdict.status === "fail") {
+          const o = a.oracle;
+          verdict = await settle(async () => { snap = await snapshotPage(session!.page); return evaluateOracle(o, snap, snapBefore); });
+        }
         const detail = redact(verdict.detail, secretVals);
         oracle.push({ assertion: a.statement, status: verdict.status, detail, decidedBy: a.oracle.kind === "judge" ? "judge" : "machine",
           ...(verdict.judge ? { judge: verdict.judge } : {}) });

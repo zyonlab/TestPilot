@@ -8,7 +8,7 @@ import {LifecycleSchema,lifecycleIssues} from '../src/exec/lifecycle.js';
 const identity='test-${env.TP_LIFECYCLE_ID}';
 const check=(value:string,kind:'text'|'noText'='text')=>({statement:value,checks:[{kind:'screen' as const,statement:value,oracle:{kind,value}}]});
 const lifecycle=()=>LifecycleSchema.parse({version:1,mode:'controlled',rationale:'Creates an isolated resource',sourceRefs:['spec#1'],supports:['$expected'],baseline:[check('Ready')],resources:[{id:'new',sourceRef:'spec#1',identity,establishAfterStep:1,established:check(identity),ownership:check(identity+' owner-A')}],cleanup:[{id:'delete',resourceId:'new',postStep:1,verified:check(identity,'noText')}]});
-const opts=()=>({executorModel:{baseUrl:'https://fixture.test',apiKey:'fixture',model:'fixture'} as never,lifecycle:lifecycle(),sourceRefs:['spec#1'],postSteps:['Delete '+identity],oracle:{kind:'text' as const,value:'Ready'}});
+const opts=()=>({settleIntervalMs:0,executorModel:{baseUrl:'https://fixture.test',apiKey:'fixture',model:'fixture'} as never,lifecycle:lifecycle(),sourceRefs:['spec#1'],postSteps:['Delete '+identity],oracle:{kind:'text' as const,value:'Ready'}});
 beforeEach(()=>{f.text='Ready';f.calls=[];f.fail='';f.closed=false;f.cleanupFails=false;f.abort=undefined;});
 it('compensates after an action throws, preserves the original failure and records independent screen proof',async()=>{
  f.fail='Fail';const result=await executeRun('https://example.test',['Create '+identity,'Fail'],'Ready',opts());
