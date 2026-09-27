@@ -125,6 +125,8 @@ const ACCEPTANCE_ACTION =
 const STEP_SEPARATOR = /→|->|=>|；|;|，|,|然后|随后|接着|之后再|并且?(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|再(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|\band then\b|\bthen\b|\band (?=click|tap|type|fill|enter|select|press|confirm|submit)/i;
 /** 「按 Escape 关闭，不点任何确认按钮」的后半句是在说**别做**什么，不是第二个动作。 */
 const NEGATED_PART = /^\s*(?:不要?|别|勿|无需|不用|切勿|do not|don't|without|never)/i;
+/** 撤掉 / 关闭 / 删除一类动作（领域中立的动词）。 */
+const REMOVAL_STEP = /\b(?:cancel|close|delete|remove|clear|dismiss)\b|撤|关闭|删除|移除|清空|取消/i;
 const CONDITIONAL_STEP = /(?:如果|若|如|一旦)(?:弹出|出现|显示|有)|(?:出现|弹出)[^，,。；;]{0,12}时|(?:\bif\b|\bwhen\b|\bin case\b)[^.]{0,60}\b(?:appears?|shows?|shown|pops? up|displayed|visible)\b/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
@@ -239,6 +241,13 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     const packed = (step: string) => !step.startsWith('waitFor:') && (CONDITIONAL_STEP.test(step) || step.split(STEP_SEPARATOR).filter((part) => isAction(part) && !NEGATED_PART.test(part)).length >= 2);
     const compound = [...c.steps.flatMap((step, i) => (packed(step) ? [String(i + 1)] : [])), ...(c.postSteps ?? []).flatMap((step, i) => (packed(step) ? [`post ${i + 1}`] : []))];
     if (compound.length) add('step-compound', `step_not_single_action: step ${compound.join(', ')} packs several UI actions or a conditional action into one step — write one UI action per step (a confirmation dialog is its own step); the executor performs exactly one action per step`, c.id, 'warn', { field: 'steps', args: { steps: compound.join(', ') } });
+    /**
+     * 执行语义（docs/v3/15 阶段 2）：在「撤掉 / 关闭 / 删除」的同一步就用 noText 断言它没了，界面还没刷新就判失败。
+     * 2026-09-27 C-POS-04-03：关闭后当步核对「标签不带数量」失败，两步后同一页面已是空表。断言里的 noText 执行器不重看
+     * （成功提示几秒就消失，重看会误判），所以这条只能在设计时拦。
+     */
+    const early = (c.assertions ?? []).filter((a) => a.afterStep && a.oracle?.kind === 'noText' && REMOVAL_STEP.test(c.steps[a.afterStep - 1] ?? ''));
+    if (early.length) add('absence-same-step', `absence_asserted_on_removal_step: ${early.map((a) => a.id).join(', ')} assert with noText right after a step that removes or closes something — the screen needs time to catch up; assert after the next step, or read a label that stays visible everywhere`, c.id, 'warn', { field: 'steps', args: { assertions: early.map((a) => a.id).join(', ') } });
     if (!c.expected.trim())
       add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
     if (cfg.gradeOracles && VAGUE.test(c.expected))

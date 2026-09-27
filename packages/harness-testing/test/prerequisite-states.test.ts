@@ -114,3 +114,12 @@ describe('one UI action per step', () => {
     expect(rule(kase(['Click the Buy / Long tab', '在 Size 输入 0.01', '点击 Place Order', 'waitFor: the order row shows up, then read it']))).toBeUndefined();
   });
 });
+
+describe('absence asserted on the removal step', () => {
+  // 2026-09-27 C-POS-04-03：关闭后当步核对「没有了」失败，界面还没刷新。
+  const kase = (afterStep: number) => ({ stories: [{ id: 'S1', title: 's', acceptance: ['a'] }], cases: [readOnly({ id: 'C1', storyId: 'S1', title: 't', designMethod: 'equivalence', steps: ['Click the row Cancel button', 'Click the History tab'], postSteps: [], expected: 'Row gone', tier: 1, key: 'k|p|a', priority: 'P1', scenarioType: 'positive', sourceRefs: ['spec#1'], assertions: [{ id: 'A1', afterStep, statement: 'row gone', oracle: { kind: 'noText', value: 'Row 1' } }] })], flows: [] }) as never;
+  it('warns when noText follows the removing step directly, not one step later', () => {
+    expect(runGate(kase(1)).findings.find(x => x.rule === 'absence-same-step')?.args).toEqual({ assertions: 'A1' });
+    expect(runGate(kase(2)).findings.some(x => x.rule === 'absence-same-step')).toBe(false);
+  });
+});

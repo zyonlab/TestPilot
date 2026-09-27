@@ -1,3 +1,4 @@
+import { EXECUTION_SEMANTICS } from "./executionSemantics.js";
 import { LIFECYCLE_INSTRUCTIONS, LIFECYCLE_JSON_SCHEMA } from './lifecycleContract.js';
 import { STORY_PLANNING_CONTRACT } from './planningContract.js';
 import { ARTIFACT_WRITING_GUIDELINES } from "./readability.js";
@@ -175,6 +176,10 @@ export const CASES_STABLE = [
   "  every case starts on a fresh page, and session changes are declared in lifecycle.session.",
   "  You MUST give every case a `postSteps` array. A read-only case gets an empty one —",
   "  that is an answer, not a blank. Read-only cases leave it empty.",
+  "",
+  // docs/v3/15 阶段 2：执行语义常驻，单一来源在 executionSemantics.ts。
+  "What happens when the case runs — true for every case, whatever the product:",
+  ...EXECUTION_SEMANTICS.map((rule) => "- " + rule),
   "",
   'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","priority":"P1",',
   '"precondition":["..."],"steps":["..."],"postSteps":[],"expected":"...","tier":1,',

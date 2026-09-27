@@ -1,7 +1,7 @@
 import { PRIORITY_RULE_TEXT } from "@testpilot/harness-testing/casegen";
 import {historicalRetrievalIds} from "./retrievalAudit.js";
 import { LIFECYCLE_INSTRUCTIONS } from '@testpilot/harness-testing/casegen';
-import { STORY_PLANNING_CONTRACT, CASE_PLANNING_CONTRACT, storyPlanningIssues, businessTransitionIssues } from '@testpilot/harness-testing/casegen';
+import { STORY_PLANNING_CONTRACT, CASE_PLANNING_CONTRACT, EXECUTION_SEMANTICS, storyPlanningIssues, businessTransitionIssues } from '@testpilot/harness-testing/casegen';
 import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
 import { acceptanceIndex } from "./acceptanceIndex.js";
@@ -765,6 +765,12 @@ export function unitContract(
           "  key is a dedupe triple 'transition|parameters|assertion'. steps are short end-agnostic actions. priority takes the rule's riskFloor as its lower bound.",
           `  ${PRIORITY_RULE_TEXT} Preparation and execution run cases in P0 → P1 → P2 order by this same rule.`,
           "  expected is ONE independently checkable result, phrased for a person to read.",
+          /**
+           * 执行语义常驻（docs/v3/15 阶段 2）。2026-09-25～27 首轮试跑只过 50.7%，没过的一大块是设计时
+           * 看不到执行器怎么读屏、界面何时刷新、收尾靠什么认资源。单一来源在 casegen/executionSemantics.ts。
+           */
+          "What happens when the case runs — true for every case, whatever the product:",
+          ...EXECUTION_SEMANTICS.map((rule) => "  - " + rule),
           /**
            * **两个 `sourceRefs`，同名不同义。**
            *
