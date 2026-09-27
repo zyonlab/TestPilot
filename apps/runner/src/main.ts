@@ -1,4 +1,5 @@
 import { EventKind, setModelLease, startChild } from "@testpilot/harness-core";
+import { sweepOrphanBrowsers } from "@testpilot/harness-testing";
 import {
   cancelAll,
   cancelInteractive,
@@ -28,6 +29,13 @@ import {
  * reason, and whether to retry the WORK belongs to the loop layer, not the supervisor.
  */
 let busy = false;
+
+/**
+ * 上一个 runner 被 SIGKILL 时留下的浏览器，这里接手关掉（docs/v3/15 阶段 5.3）。
+ * 2026-09-27 本机积了 10 个孤儿无头 Chrome，内存吃光，打开页面 45 秒超时、整批停下。
+ */
+const orphans = sweepOrphanBrowsers();
+if (orphans) console.error(`[runner] closed ${orphans} browser(s) left by a runner that was killed`);
 
 const child = startChild({
   heartbeatMs: 1000,

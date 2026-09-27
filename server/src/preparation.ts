@@ -1,4 +1,6 @@
 import {ProjectDiscoveries} from './projectDiscoveries.js';
+import { snapshotExecutor } from './modelSnapshots.js';
+import { executorPreflight } from './modelPreflight.js';
 import { GUIDES, GUIDE_NAMES, withFix, type GuideName } from './preparationGuidance.js';
 import {selectExplorationContext,dispatchedEnvironment} from './explorationReuse.js';
 import { unavailableLifecycle, lifecycleBindsActions, lifecycleIssues } from '@testpilot/harness-testing';
@@ -172,10 +174,17 @@ function admit(b:Batch){
   if(issues.length){u.status='blocked';u.reason=`准备前裁决（没有花探查）：${issues.join('；')}`.slice(0,3000);n++;}}
  if(n)log(b,`${n} 条用例在准备前就判为准备不出来（变量未绑定、持久设置未登记、一步多动作、lifecycle 契约或不可执行），理由见各条`,'blocked');
 }
+/** 开跑前探一次执行模型（docs/v3/15 阶段 5.1）：额度用完、key 失效就不开跑，带回服务商原话。没有模型快照的运行不探。 */
+async function assertExecutorAvailable(runId:string,projectId:string){
+ let c;try{c=snapshotExecutor(runId,projectId);}catch{return;}
+ const v=await executorPreflight(c);
+ if(!v.ok)throw new LedgerError(503,'executor_model_unavailable',`The executor model refused a test call (HTTP ${v.status}): ${v.message} — switch the run's executor model or wait for the quota, then start again.`);
+}
 export async function startPreparation(runId:string,projectId:string,raw:unknown={}){
  const input=z.object({revisionIds:z.array(z.string()).min(1).optional(),maxRounds:z.number().int().min(1).max(5).default(3),mode:z.enum(['retry','all']).default('retry')}).parse(raw);
  const run=store().getRun(runId,projectId);if(['running','executing','registered','queued'].includes(run.status))throw new LedgerError(409,'workflow_active');
  if(['cancelled','paused','interrupted'].includes(run.status))throw new LedgerError(409,'run_requires_explicit_resume');
+ await assertExecutorAvailable(runId,projectId);
  const cases=reviewRevisions(runId,projectId).filter(c=>c.approval?.decision==='approved');const selected=input.revisionIds?input.revisionIds.map(id=>{const c=cases.find(c=>c.revision.id===id);if(!c)throw new LedgerError(409,'case_revision_not_approved');return c;}):cases;
  // 执行顺序：P0 → P1 → P2（生命周期主链 × 影响资金 × 高频使用，见 casegen/priority.ts），同一档里前提少的先跑。
  const ranks=priorities(runId,projectId,selected.map(c=>c.content));

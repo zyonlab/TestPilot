@@ -1,4 +1,6 @@
 import { unavailableLifecycle } from '@testpilot/harness-testing';
+import { executorPreflight } from "./modelPreflight.js";
+import { snapshotExecutor } from "./modelSnapshots.js";
 import { executionObserver, readExecutionObservation, type ExecutionAttempt } from '@testpilot/harness-core/execution-observation';
 import type { Preparation } from '@testpilot/harness-testing';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
@@ -173,6 +175,10 @@ async function perform(row: ExecutionRow) {
   const cancelled = () => (ledger().db.prepare("SELECT status FROM workflow_executions WHERE id=?").get(row.id) as { status: string }).status === "cancelled";
   try {
     const bundle = validatedBundle();
+    // 开跑前探一次执行模型（docs/v3/15 阶段 5.1）：别再跑到一半、甚至收尾补偿时才撞上额度。
+    let executorModel; try { executorModel = snapshotExecutor(row.runId, row.projectId); } catch { executorModel = undefined; }
+    const preflight = executorModel ? await executorPreflight(executorModel) : { ok: true as const };
+    if (!preflight.ok) throw new LedgerError(503, "executor_model_unavailable", `The executor model refused a test call (HTTP ${preflight.status}): ${preflight.message}`);
     const chosen = env.caseIds ? bundle.cases.filter((c: { id: string }) => env.caseIds.includes(c.id)) : bundle.cases;
     for (const kase of chosen) {
       if (cancelled()) { status = "cancelled"; break; }
@@ -284,7 +290,7 @@ async function perform(row: ExecutionRow) {
       if (result.status === "unobservable") status = status === "failed" ? status : "unobservable";
       else if (result.status === "failed") status = "failed";
     }
-  } catch (error) { observer.issue(cancelled()?"cancelled":"failed",{attribution:"infra",retryable:false}); if (active.has(row.id)) usageComplete = false; status = cancelled() ? "cancelled" : controller.signal.aborted || /BUDGET_EXHAUSTED/.test(String(error)) ? "budget_exhausted" : "infra_error"; results.push({ error: error instanceof LedgerError ? error.code : /ENV_RESET_FAILED/.test(String(error)) ? "ENV_RESET_FAILED" : "execution_unavailable" }); }
+  } catch (error) { observer.issue(cancelled()?"cancelled":"failed",{attribution:"infra",retryable:false}); if (active.has(row.id)) usageComplete = false; status = cancelled() ? "cancelled" : controller.signal.aborted || /BUDGET_EXHAUSTED/.test(String(error)) ? "budget_exhausted" : "infra_error"; results.push({ error: error instanceof LedgerError ? error.code : /ENV_RESET_FAILED/.test(String(error)) ? "ENV_RESET_FAILED" : "execution_unavailable", ...(error instanceof LedgerError && error.hint ? { hint: error.hint } : {}) }); }
   finally { observer.end(); clearTimeout(timer); active.delete(row.id); controllers.delete(row.id); }
   /**
    * **提前中断时，没跑到的用例要留下记录。**

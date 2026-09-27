@@ -296,3 +296,8 @@ it('reads a guide on demand, records the read, and attaches a fix to a rejection
  await expect(step(b.batchId,{action:'guide'})).rejects.toMatchObject({code:'preparation_guide_required',hint:expect.stringMatching(/guide=<name>/)});
  await expect(step(b.batchId,{action:'resolve',caseId:'c1',reason:'no status'})).rejects.toMatchObject({code:'preparation_resolution_required',hint:expect.stringMatching(/blocked \| needs_review \| product_defect/)});
 });
+it('refuses to start when the executor model says its quota is gone, and says why (docs/v3/15 阶段 5.1)',async()=>{
+ const spy=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({error:{message:'You have used this campaign allowance.'}}),{status:429}));
+ try{await expect(start()).rejects.toMatchObject({code:'executor_model_unavailable',hint:expect.stringMatching(/campaign allowance/)});}
+ finally{spy.mockRestore();}
+});

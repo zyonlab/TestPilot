@@ -114,6 +114,7 @@ export const ERROR_FIXES: Record<string, string> = {
   prepared_case_changed: "The prepared case no longer matches the verified plan. Re-run preparation for this case.",
   case_revision_not_approved: "Only human-approved case revisions can be prepared; ask the reviewer to approve it first.",
   approved_cases_required: "Select at least one human-approved case revision.",
+  executor_model_unavailable: "The executor model refused a test call (quota, key or payment). Switch the run's executor model or wait for the quota, then start again.",
   workflow_active: "The run is busy with another stage. Wait for it to finish, or ask the user.",
   run_requires_explicit_resume: "The run is paused or interrupted; only the user can resume it. Stop.",
 };

@@ -15,3 +15,4 @@ export * from "./apiOracle.js";
 export * from "./preparationChecks.js";
 
 export * from './lifecycle.js';
+export * from "./browserRegistry.js";
