@@ -82,9 +82,12 @@ it('records unknown preparation without inventing business action or cache evide
  expect(r.observation?.stages).toContainEqual(expect.objectContaining({stage:'preparation',status:'unknown'}));
  expect(r.observation?.stages.some(s=>s.stage==='actions')).toBe(false);expect(r.observation?.cache.midscene).toBe('unknown');
 });
-it('keeps session launch failure usage unavailable and handles cancellation before launch',async()=>{
+// 会话没起来时 agent 还没建（它在 launchSession 最后才建），一次模型都调不了：用量是确定的 0，不是未知。
+// 报未知会让执行层不重试可重试的导航超时、整批停下（2026-09-27 exec-0a875a6c / exec-232e93ac，见 eab0674）。
+// 观测里这一段的用量来源仍记「不可得」——那记的是没拿到代理的计数，不是花了多少不知道。
+it('reports zero usage when the session never launched and handles cancellation before launch',async()=>{
  f.launchFail=true;const r=await executeRun('https://example.test/',[], '',{executorModel:model});
- expect(r.modelRequests).toBeUndefined();expect(r.observation?.stages[0]).toMatchObject({stage:'session-navigation',status:'failed',model:{forwarded:null,source:'unavailable'}});
+ expect(r.modelRequests).toEqual([]);expect(r.observation?.stages[0]).toMatchObject({stage:'session-navigation',status:'failed',model:{forwarded:null,source:'unavailable'}});
  const controller=new AbortController();controller.abort();const cancelled=await executeRun('https://example.test/',[], '',{executorModel:model,signal:controller.signal});
  expect(cancelled.observation?.stages[0].status).toBe('cancelled');
 });
