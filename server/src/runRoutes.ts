@@ -67,7 +67,9 @@ export function runRouter() {
     const run = runLedger().getRun(req.params.runId, req.params.projectId);
     if (["running", "queued", "registered", "executing"].includes(run.status)) throw new LedgerError(409, "workflow_active");
     const change = rebindRunExecutor(req.params.runId, req.params.projectId);
-    runLedger().putRevision({ runId: req.params.runId, projectId: req.params.projectId, name: "report/model-rebind", kind: "report",
+    // 同一个运行可能换过不止一次：接在上一条换模型记录后面，否则账本报 revision_version_conflict。
+    const prior = runLedger().listRevisions(req.params.projectId, req.params.runId).filter((r) => r.name === "report/model-rebind").at(-1);
+    runLedger().putRevision({ runId: req.params.runId, projectId: req.params.projectId, name: "report/model-rebind", kind: "report", parentRevision: prior?.id ?? null,
       content: { role: "executor", at: new Date().toISOString(), before: change.before, after: change.after } }, actor);
     res.json(change);
   }));
