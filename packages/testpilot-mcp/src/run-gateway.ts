@@ -14,7 +14,8 @@ export class RunGateway {
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(60_000) });
     const value = await res.json() as Record<string, any>;
-    if (!res.ok) throw new Error(`run_gateway:${String(value.code ?? res.status)}`);
+    // 服务端给了修法就一起带回（docs/v3/15 阶段 3）：宿主看得见该怎么改，而不只是一个错误码。
+    if (!res.ok) throw new Error(`run_gateway:${String(value.code ?? res.status)}${typeof value.hint === "string" ? ` — ${value.hint}` : ""}`);
     return value;
   }
   async register(projectId: string, input: Record<string, unknown>) {

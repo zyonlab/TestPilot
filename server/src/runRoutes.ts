@@ -37,7 +37,7 @@ export function runRouter() {
        */
       const code = (error as { code?: string }).code;
       if (typeof code === "string" && code.startsWith("GUARD_")) return res.status(403).json({ code, message: (error as Error).message });
-      const e = error instanceof LedgerError ? error : new LedgerError(400, "run_request_invalid"); res.status(e.status).json({ code: e.code });
+      const e = error instanceof LedgerError ? error : new LedgerError(400, "run_request_invalid"); res.status(e.status).json({ code: e.code, ...(e.hint ? { hint: e.hint } : {}) });
     }
   };
   router.get("/", wrap((req, res) => res.json({ runs: runLedger().listRuns(req.params.projectId) })));

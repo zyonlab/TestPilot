@@ -287,3 +287,12 @@ it('stops the whole batch when a run leaves an uncleaned resource behind',{timeo
  expect(prep.preparationStatus(run,project)?.units[0].status).toBe('needs_review');
  await prep.cancelPreparation(run,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
 });
+it('reads a guide on demand, records the read, and attaches a fix to a rejection (docs/v3/15 阶段 3)',async()=>{
+ const b=await start();
+ const g:any=await step(b.batchId,{action:'guide',guide:'recipe'});
+ expect(g).toMatchObject({status:'guide',name:'recipe'});expect(g.text).toMatch(/compensation/);
+ const events=svc.runLedger().db.prepare("SELECT json FROM workflow_events WHERE runId=? AND node='g2'").all(run) as {json:string}[];
+ expect(events.some(e=>JSON.parse(e.json).message==='说明 · recipe')).toBe(true);
+ await expect(step(b.batchId,{action:'guide'})).rejects.toMatchObject({code:'preparation_guide_required',hint:expect.stringMatching(/guide=<name>/)});
+ await expect(step(b.batchId,{action:'resolve',caseId:'c1',reason:'no status'})).rejects.toMatchObject({code:'preparation_resolution_required',hint:expect.stringMatching(/blocked \| needs_review \| product_defect/)});
+});
