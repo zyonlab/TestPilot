@@ -1008,7 +1008,12 @@ export async function executeRun(
     }
     observer.end();
     modelRequests.push(...(requestSource?.slice(requestOffset) ?? []));
-    if (result) { result.durationMs = Date.now() - t0; if (!requestSource) delete result.modelRequests; }
+    /**
+     * 用量「未知」只在会话已经起来、却拿不到它的请求计数时成立。会话根本没建起来（打开页面就超时）时一次模型都没调，
+     * 用量是确定的 0——报成未知，执行层就把这次当成「花了多少不知道」，连可重试的超时也不重试，整批停下。
+     * 2026-09-27 exec-0a875a6c / exec-232e93ac：新浏览器打开交易页 45 秒超时，两次都这样停批。
+     */
+    if (result) { result.durationMs = Date.now() - t0; if (!requestSource && session) delete result.modelRequests; }
   }
 }
 
