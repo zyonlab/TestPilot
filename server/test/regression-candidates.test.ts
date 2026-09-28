@@ -22,7 +22,7 @@ beforeAll(async () => {
   execution = await import("../src/workflowExecution.js"); regression = await import("../src/regressionCandidates.js");
   projectId = db.createProject("Regression fixture", "http://127.0.0.1:9876").id;
   runId = service.registerHostRun(projectId, { runtime: "codex", externalId: "regression", idempotencyKey: "regression",
-    materials: [{ name: "counter.md", text: "Counter begins at 0. Increment changes it to 1. Reset changes it back to 0." }] }).runId;
+    materials: [{ name: "counter.md", text: "Counter begins at 0. Increment changes it to 1. Reset changes it back to 0. The page shows Count: 0, Count: 1, Count: 2." }] }).runId;
   const stage = await import("../src/runStages.js"), approvals = await import("../src/approvedRuns.js");
   stage.loadRunInstructions(runId, projectId);
   const ref = stage.retrieveRunSpec(runId, projectId, { query: "Increment", budgetTokens: 2000 }).chunks[0].id;

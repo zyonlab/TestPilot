@@ -283,6 +283,22 @@ export function writeRunStage(runId: string, projectId: string, stage: "stories"
       ...(modulePlan.length ? { modulePlan } : {}), ...(acceptance.length ? { acceptance } : {}) };
   })();
 }
+/**
+ * 账本路径的门禁参数：`gate` 与 `finalize` 必须用同一份，后者要逐字节复算前者。
+ * 这个产品特有的动作词与易变读数名来自这次运行绑定的规则包；`knownText` 是这次运行能引用的界面事实原文
+ * （领域参考 + 绑定的检索材料 + 规则包），`literal-unsourced` 拿它核对用例里的界面字面值。两样都没有就不查。
+ */
+function gateOptions(runId: string, projectId: string, minNegativeRatio: number) {
+  const pack = boundRulePack(runId, projectId);
+  const materials = ready(runId, projectId).binding.materialRevisions.map((id) => {
+    const content = store().readRevision(id, projectId).content;
+    return typeof content === "string" ? content : canonicalJSON(content);
+  });
+  const reference = boundDomainReference(runId, projectId);
+  const knownText = reference || materials.some(Boolean) ? [reference, ...materials, pack ? canonicalJSON(pack) : ""].join("\n") : undefined;
+  return { minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings,
+    businessTransitions: pack?.businessTransitions, persistedSettings: pack?.persistedSettings, knownText };
+}
 export function gateRun(runId: string, projectId: string) {
   requireStageStarted(runId,projectId,"gate");
   return store().db.transaction(() => {
@@ -293,8 +309,7 @@ export function gateRun(runId: string, projectId: string) {
     const pinnedPolicy = (current(runId, projectId, "instructions").content as { policy: typeof policy }).policy;
     // 账本路径：故事已编号、acRefs 是契约的一部分，所以准则覆盖进分数（见 GateOptions.acceptanceInScore）。
     // 这个产品特有的动作词与易变读数名，来自这次运行绑定的规则包；没有就只用通用规则。
-    const pack = boundRulePack(runId, projectId);
-    const report = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings, businessTransitions: pack?.businessTransitions, persistedSettings: pack?.persistedSettings });
+    const report = runGate(verdict.data, gateOptions(runId, projectId, pinnedPolicy.minNegativeRatio));
     const passed = report.score >= pinnedPolicy.minGateScore;
     const executionReadiness = verdict.data.cases.map(c=>({caseId:c.id,blockers:executionBlockers(c)}));
     const executionAdmission = {ready:executionReadiness.filter(c=>!c.blockers.length).length,total:executionReadiness.length,cases:executionReadiness};
@@ -337,8 +352,7 @@ export function finalizeRun(runId: string, projectId: string) {
      */
     const previous = receipt(runId, "finalize");
     if (previous) return { ...(current(runId, projectId, "finalize").content as object), revisionId: previous.revisionId };
-    const pack = boundRulePack(runId, projectId);
-    const fresh = runGate(verdict.data, { minNegativeRatio: pinnedPolicy.minNegativeRatio, acceptanceInScore: true, actionVocabulary: pack?.actionVocabulary, volatileReadings: pack?.volatileReadings, businessTransitions: pack?.businessTransitions, persistedSettings: pack?.persistedSettings });
+    const fresh = runGate(verdict.data, gateOptions(runId, projectId, pinnedPolicy.minNegativeRatio));
     if (!passed || fresh.score < pinnedPolicy.minGateScore || canonicalJSON(fresh) !== canonicalJSON(report)) throw new LedgerError(409, "gate_not_passed");
     const summary = { runId, projectId, status: "waiting_review", stories: verdict.data.stories.length, cases: verdict.data.cases.length,
       gateScore: report.score, binding: run.binding, storiesRevision: stories.revision.id, casesRevision: cases.revision.id, gateRevision: gate.revision.id,

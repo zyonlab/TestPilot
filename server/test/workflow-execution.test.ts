@@ -17,7 +17,7 @@ beforeAll(async () => {
   vi.stubEnv("MIDSCENE_MODEL_NAME", "fixture-executor"); vi.stubEnv("MIDSCENE_MODEL_BASE_URL", "https://executor.test/v1"); vi.stubEnv("MIDSCENE_MODEL_API_KEY", "fixture-key");
   db = await import("../src/db.js"); service = await import("../src/runService.js"); execution = await import("../src/workflowExecution.js");
   projectId = db.createProject("Execution fixture", "http://127.0.0.1:9876").id;
-  runId = service.registerHostRun(projectId, { runtime: "codex", externalId: "fixture", idempotencyKey: "fixture", materials: [{ name: "counter.md", text: "Counter begins at 0. Increment changes it to 1." }] }).runId;
+  runId = service.registerHostRun(projectId, { runtime: "codex", externalId: "fixture", idempotencyKey: "fixture", materials: [{ name: "counter.md", text: "Counter begins at 0. Increment changes it to 1. The page shows Count: 1." }] }).runId;
   const stage = await import("../src/runStages.js"), approvals = await import("../src/approvedRuns.js");
   stage.loadRunInstructions(runId, projectId); const ref = stage.retrieveRunSpec(runId, projectId, { query: "Increment", budgetTokens: 2000 }).chunks[0].id;
   const stories = [{ id: "s1", title: "Count", acceptance: [] }];
