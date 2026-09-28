@@ -118,6 +118,21 @@ it("只有人能批准；批准后进项目回归集，驳回的不再冒出来"
   expect(pending("defect")).toEqual([]);
 });
 
+it("批准过的驳回理由冻结进下一次运行的说明；本运行、clean 与 held-out 运行拿不到（docs/v3/15 阶段 6）", async () => {
+  const stages = await import("../src/runStages.js");
+  // 反例来自 runId 本身：这个运行拿不到自己的反例。
+  expect(regression.selectCounterexamples(projectId, runId).entries).toEqual([]);
+  const next = (key: string, parameters: Record<string, unknown> = {}) => service.registerHostRun(projectId, { runtime: "codex", externalId: key, idempotencyKey: key,
+    materials: [{ name: "counter.md", text: "Counter begins at 0. Increment changes it to 1. Reset changes it back to 0. The page shows Count: 0, Count: 1, Count: 2." }], parameters } as never).runId;
+  const fresh = next("counterexamples-next");
+  const loaded = stages.loadRunInstructions(fresh, projectId) as { counterexamples: { enabled: boolean; entries: Array<{ caseId: string; reason: string; title: string }> } };
+  expect(loaded.counterexamples.entries).toEqual([expect.objectContaining({ caseId: "c3", title: "Increment twice", reason: expect.stringContaining("点两次") })]);
+  // 冻结：之后再批准的反例不会改变这次运行已经下发的那份。
+  expect(stages.loadRunInstructions(fresh, projectId)).toMatchObject({ counterexamples: loaded.counterexamples });
+  expect(regression.selectCounterexamples(projectId, next("counterexamples-clean", { reuseExperience: false }))).toMatchObject({ enabled: false, entries: [] });
+  expect(regression.selectCounterexamples(projectId, next("counterexamples-heldout", { evaluationSplit: "held-out" }))).toMatchObject({ enabled: false, entries: [] });
+});
+
 it("没有执行就说清楚", () => {
   expect(() => regression.proposeFromExecution(runId, projectId, { executionId: "nope" })).toThrow("execution_not_found");
 });

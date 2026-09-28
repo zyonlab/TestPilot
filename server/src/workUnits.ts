@@ -771,6 +771,8 @@ export function unitContract(
            */
           "What happens when the case runs — true for every case, whatever the product:",
           ...EXECUTION_SEMANTICS.map((rule) => "  - " + rule),
+          // 反例回流（docs/v3/15 阶段 6）：人批准过的驳回理由在 load_run_instructions 里一次下发、随运行冻结。
+          "load_run_instructions returned counterexamples.entries: cases human reviewers rejected in this project, each with the reason. Before writing a case, check it against them; a case that repeats a listed reason will be rejected again. They are review decisions, not product requirements.",
           /**
            * **两个 `sourceRefs`，同名不同义。**
            *

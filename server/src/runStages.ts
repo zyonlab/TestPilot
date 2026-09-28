@@ -14,6 +14,7 @@ import { runLedger, skillBinding } from "./runService.js";
 import { contentHash, LedgerError } from "./runLedger.js";
 import { getProject } from './db.js';
 import { selectRunMemory } from './runMemory.js';
+import { selectCounterexamples } from './regressionCandidates.js';
 import { assertWholeWriteAllowed, reopenUnitsFromGate } from './workUnits.js';
 import { frozenModules } from './moduleStage.js';
 import { checkModulePlan } from "@testpilot/harness-testing/domain";
@@ -162,7 +163,8 @@ export function loadRunInstructions(runId: string, projectId: string) {
       *
       * 它们挂在这里：这个工具幂等（第二次调用返回同一份回执），天然只发一次。
       */
-    const content = { files, loadedDigest, memory, writingGuidelines: ARTIFACT_WRITING_GUIDELINES, runScope: runScopeMaterials(runId, projectId), skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
+    const counterexamples = selectCounterexamples(projectId, runId);
+    const content = { files, loadedDigest, memory, counterexamples, writingGuidelines: ARTIFACT_WRITING_GUIDELINES, runScope: runScopeMaterials(runId, projectId), skillVersion: run.binding.skillVersion, policy, evidence: "server-delivered" };
     const r = save(runId, projectId, "instructions", content, memory.entries.map(e => e.sourceRevision));
     store().db.prepare("UPDATE wf_run_registrations SET bindingJson=? WHERE runId=?").run(canonicalJSON({ ...run.binding, loadedDigest, memoryDigest: memory.digest }), runId);
     return { ...content, revisionId: r.revisionId };
