@@ -688,6 +688,36 @@
   {
    "source": "index.ts",
    "method": "POST",
+   "path": "/api/projects/:id/standard-evaluations/:evaluationId",
+   "uiOnly": "换项目执行模型是人的决定（human_review_required），规划宿主不能换自己的执行器"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/standard-evaluations",
+   "uiOnly": "评估会在被测环境真跑、花执行额度，由人发起"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/standard-sets/:setId/freeze",
+   "uiOnly": "标准集只能由人冻结（和 Gold 同一条红线）"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/standard-sets",
+   "uiOnly": "标准集与评估只服务于人决定：冻结与换执行模型是人的决定（docs/v3/15 阶段 8～9）"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/standard-sets",
+   "uiOnly": "起草标准集要操作员身份，服务于随后人的冻结"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
    "path": "/api/projects/:id/suite",
    "host": "tp_export.suite"
   },

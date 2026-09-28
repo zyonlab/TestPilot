@@ -3,6 +3,8 @@ import {askExplorationPlanner} from "./explorationPlanner.js";
 import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
 import { listFactCandidates, decideFactCandidate, mineRunFacts } from "./factCandidates.js";
+import { draftStandardSet, listStandardSets, freezeStandardSet } from "./standardSets.js";
+import { startEvaluation, decideEvaluation, listEvaluations } from "./standardEvaluation.js";
 import {listExamples} from "./examples.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
@@ -800,6 +802,15 @@ app.post("/api/projects/:id/fact-candidates/:candidateId", (req, res) => {
   try { res.json(decideFactCandidate(req.params.id, req.params.candidateId, req.body, reviewerPrincipal(req))); }
   catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) }); }
 });
+/**
+ * 标准测试集与在它上面比执行模型（docs/v3/15 阶段 8～9）。起草是自动的；冻结、发起评估（会真跑、花额度）、换模型都要人。
+ */
+const sendError = (res: express.Response, e: unknown) => res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) });
+app.get("/api/projects/:id/standard-sets", (req, res) => { try { res.json({ sets: listStandardSets(req.params.id), evaluations: listEvaluations(req.params.id) }); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-sets", (req, res) => { try { reviewerPrincipal(req); res.json(draftStandardSet(req.params.id, req.body)); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-sets/:setId/freeze", (req, res) => { try { res.json(freezeStandardSet(req.params.id, req.params.setId, req.body, reviewerPrincipal(req))); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-evaluations", (req, res) => { try { res.status(202).json(startEvaluation(req.params.id, req.body, reviewerPrincipal(req))); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-evaluations/:evaluationId", (req, res) => { try { res.json(decideEvaluation(req.params.id, req.params.evaluationId, req.body, reviewerPrincipal(req))); } catch (e) { sendError(res, e); } });
 app.get("/api/projects/:id/domain-references", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   res.json({ references: listDomainReferences(req.params.id) });
