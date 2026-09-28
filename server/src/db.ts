@@ -646,6 +646,8 @@ export interface LoginFlow {
   apiLogin?: ApiLoginConfig; // API-style login config (alternative to UI steps)
   session?: StorageState | null; // captured login state — when present, injected + login SKIPPED
   capturedAt?: string; // when the session was captured (for staleness display)
+  /** 常驻、可关闭、会挡住操作的面板（公告、引导浮层……）：执行器登录后关掉，某步被挡住时关掉重试。见 exec/overlays.ts。 */
+  overlays?: import("@testpilot/harness-testing/domain").DismissibleOverlay[];
 }
 export interface Environment {
   id: string;
@@ -725,7 +727,7 @@ export interface RunRecord {
   healed?: boolean; // passed only after a self-heal retry → a flake signal
   infraError?: boolean; // model/network failure — not a real test failure; excluded from flake/MTTR
   failCode?: string; // wire code, e.g. EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT
-  failKind?: "infra" | "locate" | "assert"; // which bucket the statistics should count it in
+  failKind?: "infra" | "precondition" | "locate" | "assert"; // which bucket the statistics should count it in
   /**
    * Which project this execution belongs to.
    *

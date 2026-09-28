@@ -11,7 +11,8 @@ export function executionBlockers(c: TextCase): string[] {
   for (const r of c.readiness?.requirements ?? []) if (r.status !== 'verified' || !r.evidenceRefs.length) issues.push(`unverified_requirement:${r.kind}:${r.id}`);
   const assertions = c.assertions?.length ? c.assertions : [{ id: 'expected', statement: c.expected, oracle: c.oracle }];
   for (const a of assertions) {
-    const numericFormula = /Σ|×|÷|Qmin|Qold|Qclose|Qremaining|\b[A-Za-z]\s*[+*/]\s*[A-Za-z]\b|十进制|显示区间/.test(a.statement);
+    // 「N/A」是屏幕上的占位文字，不是 N 除以 A（2026-09-25：三条「仍显示 N/A」的用例被当成算式，逼着上 decimal-equation）。
+    const numericFormula = /Σ|×|÷|Qmin|Qold|Qclose|Qremaining|\b[A-Za-z]\s*[+*/]\s*[A-Za-z]\b|十进制|显示区间/.test(a.statement.replace(/\bN\/A\b/gi, 'NA'));
     // A top-level oracle only describes the primary expectation, not every extra assertion.
     const oracle = a.oracle ?? (a.statement === c.expected ? c.oracle : undefined);
     if (numericFormula && (!oracle || ['text','noText','none','judge'].includes(oracle.kind))) issues.push(`missing_numeric_calculation:${a.id}`);

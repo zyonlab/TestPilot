@@ -13,3 +13,4 @@ export {InjectedSessionCheckSchema,verifyInjectedSession,type InjectedSessionChe
 export * from "./explorationEvidence.js";
 
 export * from './businessLifecycle.js';
+export { DismissibleOverlaySchema, DismissibleOverlaysSchema, type DismissibleOverlay } from "../exec/overlays.js";

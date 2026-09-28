@@ -1,4 +1,4 @@
-import { SessionChecksSchema, InjectedSessionCheckSchema } from "@testpilot/harness-testing/domain";
+import { SessionChecksSchema, InjectedSessionCheckSchema, DismissibleOverlaysSchema } from "@testpilot/harness-testing/domain";
 /**
  * 一次环境保存请求里，**这次真的说了**哪些字段。
  *
@@ -21,6 +21,7 @@ export function environmentPatch(body: EnvironmentBody) {
     SessionChecksSchema.parse((login as {sessionChecks:unknown}).sessionChecks);
   }
   if (login && typeof login === 'object' && 'injectedSessionCheck' in login) InjectedSessionCheckSchema.parse((login as {injectedSessionCheck:unknown}).injectedSessionCheck);
+  if (login && typeof login === 'object' && 'overlays' in login) DismissibleOverlaysSchema.parse((login as {overlays:unknown}).overlays);
   /*
    * 视口曾经一直被丢掉：界面发了 `viewport`，`upsertEnvironment` 也收，而路由的解构没有它。
    * 只收合法的数：一个 `{}` 或字符串会让 `viewportJson` 看起来像配过了，而它什么都没说。

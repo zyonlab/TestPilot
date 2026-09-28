@@ -39,7 +39,7 @@ describe('transition coverage across stories', () => {
 });
 
 describe('gate and readiness', () => {
-  const bundle = (requiresStates?: Array<{ state: string; provided: 'steps' | 'preparation' }>, acRefs = ['S1/AC-1']) => ({
+  const bundle = (requiresStates?: Array<{ state: string; provided: 'steps' | 'preparation' | 'environment' }>, acRefs = ['S1/AC-1']) => ({
     stories: [{ id: 'S1', title: 'close', acceptance: ['When I close it, it is gone', 'When none exists, the close control is absent'], businessTransitions: [{ transitionId: 'T-close', preconditions: ['p'], acceptanceIndexes: [0], failureAcceptanceIndexes: [1] }] }],
     cases: [readOnly({ id: 'C1', storyId: 'S1', title: 'close', designMethod: 'state-transition', steps: ['Click Close'], postSteps: [], expected: 'gone', tier: 3, key: 'k', covers: [], sourceRefs: ['spec#1'], acRefs, ...(requiresStates ? { requiresStates } : {}) })],
     flows: [],
@@ -58,6 +58,11 @@ describe('gate and readiness', () => {
     const c = (bundle([{ state: 'holding.open', provided: 'preparation' }]) as { cases: never[] }).cases[0];
     expect(executionBlockers(c)).toContain('requires_state:holding.open');
   });
+  it('a session state the environment provides needs no recipe and does not block admission', () => {
+    const c = (bundle([{ state: 'holding.open', provided: 'environment' }]) as { cases: never[] }).cases[0];
+    expect(executionBlockers(c).some((b: string) => b.startsWith('requires_state'))).toBe(false);
+    expect(runGate(bundle([{ state: 'holding.open', provided: 'environment' }]), opts).findings.some(x => x.rule === 'requires-state')).toBe(false);
+  });
 });
 
 describe('controlled recipes', () => {
@@ -70,5 +75,42 @@ describe('controlled recipes', () => {
   it('a ui-only recipe cannot smuggle state or compensation', () => {
     expect(SetupRecipeSchema.safeParse({ ...base, sideEffects: 'ui-only', provides: ['holding.open'] }).success).toBe(false);
     expect(SetupRecipeSchema.safeParse({ ...base, sideEffects: 'ui-only' }).success).toBe(true);
+  });
+});
+
+describe('persisted settings', () => {
+  const kase = (steps: string[], settings: unknown[] = []) => {
+    const c = readOnly({ id: 'C1', storyId: 'S1', title: 'switch mode', designMethod: 'state-transition', steps, postSteps: [], expected: 'Price field shown', tier: 3, key: 'k', covers: [], sourceRefs: ['spec#1'], acRefs: ['S1/AC-1'] }) as unknown as { lifecycle: Record<string, unknown> };
+    return { stories: [{ id: 'S1', title: 'mode', acceptance: ['a'] }], cases: [{ ...c, lifecycle: { ...c.lifecycle, settings } }], flows: [] } as never;
+  };
+  const opts = { persistedSettings: ['^Click (the )?Advanced tab'] };
+  it('a step that changes a remembered choice must be declared as a setting', () => {
+    const f = runGate(kase(['Open the panel', 'Click the Advanced tab']), opts).findings.find(x => x.rule === 'setting-undeclared');
+    expect(f).toMatchObject({ severity: 'warn', caseId: 'C1', args: { steps: '2' } });
+    const declared = [{ id: 'mode', sourceRef: 'spec#1', name: 'mode', original: 'Basic', changedAfterStep: 2, observed: { statement: 'Basic', checks: [] } }];
+    expect(runGate(kase(['Open the panel', 'Click the Advanced tab'], declared), opts).findings.some(x => x.rule === 'setting-undeclared')).toBe(false);
+  });
+  it('a setting committed by a later confirm step covers the selecting step', () => {
+    const declared = [{ id: 'mode', sourceRef: 'spec#1', name: 'mode', original: 'Basic', changedAfterStep: 3, observed: { statement: 'Basic', checks: [] } }];
+    expect(runGate(kase(['Open the panel', 'Click the Advanced tab', 'Click Confirm'], declared), opts).findings.some(x => x.rule === 'setting-undeclared')).toBe(false);
+  });
+  it('without rule pack data there is no such rule', () => {
+    expect(runGate(kase(['Click the Advanced tab'])).findings.some(x => x.rule === 'setting-undeclared')).toBe(false);
+  });
+});
+
+describe('one UI action per step', () => {
+  const kase = (steps: string[], postSteps: string[] = []) => ({ stories: [{ id: 'S1', title: 's', acceptance: ['a'] }], cases: [readOnly({ id: 'C1', storyId: 'S1', title: 't', designMethod: 'equivalence', steps, postSteps, expected: 'Price field shown', tier: 3, key: 'k', covers: [], sourceRefs: ['spec#1'], acRefs: ['S1/AC-1'] })], flows: [] }) as never;
+  const rule = (b: never) => runGate(b).findings.find(x => x.rule === 'step-compound');
+  it('flags chained actions, including in postSteps, and conditional clicks', () => {
+    expect(rule(kase(['点击币对名→在 Search 输入 BTC→点击 BTC-USDC']))?.args).toEqual({ steps: '1' });
+    expect(rule(kase(['在杠杆框输入 41 并点击确认']))).toBeDefined();
+    expect(rule(kase(['点击「Place Order」提交限价买单，出现确认框时点确认']))).toBeDefined();
+    expect(rule(kase(['Click Place Order', 'If a confirmation dialog appears, click Confirm']))?.args).toEqual({ steps: '2' });
+    expect(rule(kase(['Click Close'], ['Click Market Close and then click Confirm']))?.args).toEqual({ steps: 'post 1' });
+  });
+  it('leaves single actions alone', () => {
+    expect(rule(kase(['按 Escape 键关闭划转界面，不点任何确认按钮', '点击弹窗右上角的关闭按钮，不点「Confirm」']))).toBeUndefined();
+    expect(rule(kase(['Click the Buy / Long tab', '在 Size 输入 0.01', '点击 Place Order', 'waitFor: the order row shows up, then read it']))).toBeUndefined();
   });
 });

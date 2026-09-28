@@ -106,7 +106,7 @@ export const ExecOutcomeSchema = z.object({
   caseId: z.string(),
   status: z.enum(["passed", "failed", "unobservable"]),
   /** Which bucket the failure belongs in: infra / locate / assert. */
-  failKind: z.enum(["infra", "locate", "assert"]).optional(),
+  failKind: z.enum(["infra", "precondition", "locate", "assert"]).optional(),
   failCode: z.string().optional(),
   message: z.string().optional(),
   ms: z.number().default(0),

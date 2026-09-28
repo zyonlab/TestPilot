@@ -46,6 +46,20 @@ interface Live {
   outDir: string;
 }
 const live = new Map<string, Live>();
+/** 宿主因用量额度被拒时记下的重置时刻（毫秒）。进程退出后 live 条目可能没了，这里留着给续起的看门狗看。 */
+const rateLimitResets = new Map<string, number>();
+/** 这个运行的宿主最近一次撞额度时，额度什么时候恢复；没撞过或已过期返回 undefined。 */
+export function hostRateLimitResetAt(runId: string, now = Date.now()): number | undefined {
+  const at = rateLimitResets.get(runId);
+  if (at === undefined) return undefined;
+  if (at <= now) { rateLimitResets.delete(runId); return undefined; }
+  return at;
+}
+/** stream 里一行额度事件的重置时刻（毫秒）；不是「被拒」就返回 undefined。 */
+export function rateLimitResetOf(line: unknown): number | undefined {
+  const rl = line as { type?: string; rate_limit_info?: { status?: string; resetsAt?: number } };
+  return rl?.type === "rate_limit_event" && rl.rate_limit_info?.status === "rejected" && rl.rate_limit_info.resetsAt ? rl.rate_limit_info.resetsAt * 1000 : undefined;
+}
 
 /** stream-json 的一行。只认这里用到的字段，别的原样保留。 */
 export interface StreamLine {
@@ -204,6 +218,8 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
            */
           const stop = hostStopReasonOf(line);
           if (stop) entry.stopReason = stop;
+          const resetAt = rateLimitResetOf(line);
+          if (resetAt) rateLimitResets.set(runId, resetAt);
           if (line.type === "result" && line.usage && entry.sessionId && input.scopeProjectId) recordHostSummary(runId, "claude-code", entry.sessionId, line.usage as Record<string, unknown>, nativeModel, line.total_cost_usd);
           if (sid && !settled) {
             settled = true;

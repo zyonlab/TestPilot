@@ -9,10 +9,12 @@ import { proposeFromExecution, proposeFromRejections, listRegressionCandidates, 
 import { revisionLineage, revisionDiff, approvalHistory } from "./artifactViews.js";
 import { Router } from "express";
 import { LedgerError } from "./runLedger.js";
+import { rebindRunExecutor } from "./modelSnapshots.js";
 import { assertProject, authorizeRun, registerHostRun, runLedger } from "./runService.js";
 import type { ArtifactRevision } from "@testpilot/harness-core/run-contracts";
 import { loadRunInstructions, retrieveRunSpec, writeRunStage, gateRun, finalizeRun, registeredStageProducts } from "./runStages.js";
 import { claimUnit, mergeUnits, unitStatus, writeUnit } from "./workUnits.js";
+import { reviewAdmission } from "./preparationAdmission.js";
 import { reviewRevisions, compiledReadiness, reviseReviewedCase, decideRevisions, generateApprovedCode } from "./approvedRuns.js";
 import { reviewerPrincipal } from "./reviewPrincipal.js";
 import { flushDecisionDelivery } from "./decisionDelivery.js";
@@ -59,10 +61,22 @@ export function runRouter() {
       events:[...events.map(e=>JSON.parse(e.json)), ...run.revisions.filter(r=>r.name.startsWith(`units/${node}/`)).map(r=>({id:r.id,at:r.createdAt,phase:'done',artifactName:r.name}))].sort((a,b)=>a.at.localeCompare(b.at)).slice(-100), error:run.detail.error});
   }));
   router.get("/:runId/checkpoint", wrap((req, res) => res.json(workflowCheckpoint(req.params.runId, req.params.projectId))));
+  // 暂停中的运行换执行模型：只有人能做，运行不能在跑；换前换后写进账本（不含密钥）。见 modelSnapshots.rebindRunExecutor。
+  router.post("/:runId/models/executor/rebind", wrap((req, res) => {
+    const actor = reviewerPrincipal(req);
+    const run = runLedger().getRun(req.params.runId, req.params.projectId);
+    if (["running", "queued", "registered", "executing"].includes(run.status)) throw new LedgerError(409, "workflow_active");
+    const change = rebindRunExecutor(req.params.runId, req.params.projectId);
+    // 同一个运行可能换过不止一次：接在上一条换模型记录后面，否则账本报 revision_version_conflict。
+    const prior = runLedger().listRevisions(req.params.projectId, req.params.runId).filter((r) => r.name === "report/model-rebind").at(-1);
+    runLedger().putRevision({ runId: req.params.runId, projectId: req.params.projectId, name: "report/model-rebind", kind: "report", parentRevision: prior?.id ?? null,
+      content: { role: "executor", at: new Date().toISOString(), before: change.before, after: change.after } }, actor);
+    res.json(change);
+  }));
   router.post("/:runId/cancel", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await cancelProjectWorkflow(req.params.runId, req.params.projectId)); }));
   router.post("/:runId/rerun", wrap(async (req,res) => { reviewerPrincipal(req); res.status(202).json(await rerunProjectNode(req.params.runId,req.params.projectId,req.body)); }));
   router.post("/:runId/resume", wrap(async (req, res) => { reviewerPrincipal(req); res.json(await resumeProjectWorkflow(req.params.runId, req.params.projectId, req.body?.mode === 'next-node')); }));
-  router.get("/:runId/review", wrap((req, res) => res.json({ cases: reviewRevisions(req.params.runId, req.params.projectId), compiled: compiledReadiness(req.params.runId,req.params.projectId) })));
+  router.get("/:runId/review", wrap(async (req, res) => res.json({ cases: await reviewAdmission(req.params.runId, req.params.projectId, reviewRevisions(req.params.runId, req.params.projectId)), compiled: compiledReadiness(req.params.runId,req.params.projectId) })));
   router.post('/:runId/preparation/start', wrap(async (req,res)=>{reviewerPrincipal(req);res.status(202).json(await startPreparation(req.params.runId,req.params.projectId,req.body));}));
   router.post('/:runId/preparation/step', wrap(async (req,res)=>{authorizeRun(req.params.runId,req.headers.authorization?.replace(/^Bearer /,''));res.json(await preparationStep(req.params.runId,req.params.projectId,req.body));}));
   router.get("/:runId/executions", wrap((req, res) => res.json({ executions: listWorkflowExecutions(req.params.runId, req.params.projectId) })));

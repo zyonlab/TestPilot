@@ -41,3 +41,9 @@ it('validates visible session evidence configuration without treating it as a se
  const sessionChecks=[{capability:'session',checks:[{kind:'connected',label:'Signed in'}]}];
  expect(environmentPatch({login:{sessionChecks}}).login).toEqual({sessionChecks});
 });
+
+it('accepts declared dismissible overlays and rejects malformed ones',()=>{
+ const overlays=[{id:'notice',present:'Announcements',close:'Click the close button on the announcements panel'}];
+ expect(environmentPatch({login:{overlays}}).login).toEqual({overlays});
+ expect(()=>environmentPatch({login:{overlays:[{id:'x',present:'',close:'y'}]}})).toThrow();
+});

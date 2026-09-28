@@ -157,6 +157,7 @@ it("cancels a normal execution while page navigation is pending and closes the b
   const result = await pending;
   expect(result.status).toBe("failed"); expect(result.infraError).toBe(true); expect(result.failureReason).toBe("EXEC_CANCELLED");
   expect(result.observation?.stages[0]).toMatchObject({stage:'session-navigation',status:'cancelled',model:{source:'unavailable',forwarded:null}});
-  expect(result.modelRequests).toBeUndefined();
+  // 导航中被取消时 agent 还没建，用量是确定的 0（eab0674）；观测里的来源仍记「不可得」。
+  expect(result.modelRequests).toEqual([]);
   expect(await rpc.cancel("cancel-navigate")).toBe(false);
 }, 45_000);

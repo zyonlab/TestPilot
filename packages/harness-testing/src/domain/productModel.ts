@@ -50,6 +50,8 @@ export const ProductModelSchema = z
           targetIds: z.array(z.string()),
           stateIds: z.array(z.string()),
           claimIds: z.array(z.string()),
+          /** 规则包给的使用频度，执行优先级用（casegen/priority.ts）。 */
+          usage: z.enum(["high", "medium", "low"]).optional(),
         })
         .strict(),
     ),
@@ -341,6 +343,7 @@ export function buildProductModel(input: { pack: ProductRulePack; report: Explor
       targetIds: found.map((t) => t.stableId),
       stateIds: [...new Set([...found.map((t) => t.stateId), ...attempted.flatMap((o) => (o.stateAfter ? [o.stateAfter] : []))])],
       claimIds: [...claims.filter((c) => c.featureId === f.id && c.ruleId).map((c) => c.id), ...observedClaims],
+      ...(f.usage ? { usage: f.usage } : {}),
     };
   });
 

@@ -13,7 +13,7 @@ rule e2ff0801  "exploratory": the evidence is a charter and what was observed un
 rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
-rule 65239af8  For tier 1 and tier 2 you MUST also give `oracle`, the same
+rule 03eea4fb  For tier 1 and tier 2 you MUST also give `oracle`, the same
 rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
@@ -103,7 +103,7 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 - **tier 1 和 tier 2 必须同时给 `oracle`**——同一个结果，写成程序不用看图就能核对的形式。
   基本形式见 `REFERENCE.md`，同屏数值计算的扩展形式见下文。结果没法写成其中任何一种，那它就是 tier 3——
   就说它是 3，并且不写 `oracle`。**声称 tier 1 却不给 oracle，是唯一一件让这个标签彻底作废的事。**
-  同屏数值关系可用 `decimal-equation`：`scope.start/end` 唯一限定可见区域，`inputs` 至少两个输入，每项声明 id、精确 label、unit、decimals、rounding（exact/nearest/truncate）；`actual` 指向结果输入，`formula` 使用后缀表达式与 +、-、*、/，不能引用结果本身，`maxAgeMs` 限制快照新鲜度。仅使用已观察的标签和有依据的舍入方式；缺少证据应阻止执行。
+  同屏数值关系可用 `decimal-equation`：`scope.start/end` 唯一限定可见区域，`inputs` 列出屏幕上的读数（和常数比较时一个就够），每项声明 id、精确 label、unit、decimals、rounding（exact/nearest/truncate）；`actual` 指向结果输入，`formula` 使用后缀表达式，可含输入 id、十进制常数（如 `0`）与 +、-、*、/，不能引用结果本身；`compare` 取 eq（默认）/gt/gte/lt/lte，比如「读数大于 0」写 formula `["0"]`、compare `gt`，显示精度内分不清的算「没量到」；`maxAgeMs` 限制快照新鲜度。仅使用已观察的标签和有依据的舍入方式；缺少证据应阻止执行。
 
 - **`oracle` 这个对象永远在**：tier 3 写 `{"kind":"none"}`——**除非**结果是每次都不一样的生成内容（一张图、一段摘要、一句配文、一段译文）。那就写
   `{"kind":"judge","criteria":["<一句对着屏幕能答是或否的话>", ...],"samples":3,"minPass":2}`：
@@ -180,7 +180,7 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
    **不要**写「重新连接」的 postStep。可以仍是只读。
 3. **持久设置**（刷新后还在的偏好或配置：某种模式、档位、产品会保存的默认值）：`mode:"controlled"`，
    `settings:[{id,sourceRef,name,original,changedAfterStep,observed}]`。`original` 是执行前屏幕上的原值，
-   `observed` 的判据值包含 original；一条 `cleanup{id,settingId,postStep,verified}`，postStep 把它设回**原样的 original**，
+   `observed` 的判据值包含 original（它在第 changedAfterStep 步之前核对，可以依赖前面步骤打开的界面）；一条 `cleanup{id,settingId,postStep,verified}`，postStep 把它设回**原样的 original**，
    verified 的判据值包含 original。
 4. **本次创建的业务资源**：`mode:"controlled"`，`resources:[{id,sourceRef,identityKind,identity,establishAfterStep,established,ownership,vacant?}]`，
    每个资源一条 `cleanup{id,resourceId,postStep,verified}`。`identityKind` 三选一：
@@ -191,6 +191,8 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
      `vacant` 是证明该格位执行前为空的同屏判据（清理后也会再核一次）。
    `establishAfterStep`（从 1 起）那一步和清理 postStep 都要**原样包含 identity**。generated/attribute 的
    established、ownership、cleanup verified 三处判据都要包含 identity；ownership 同时写出项目提供的账户/上下文。
+   被测动作本身就会拿掉它（删除、取消这个资源）时，写 `releasedByStep` = 那一步（这一步也要原样包含 identity）：
+   那一步跑完核对它确实不在，收尾不再动它；没跑到那一步时清理 postStep 照常补偿。
 5. **不可逆副作用**（手续费、消耗的额度）：列进 `sideEffects`，判据不能要求它们还原。
 
 总是要有：`mode`、`rationale`、`sourceRefs`（本用例真实来源）、`supports`（`$expected` 或断言 id）；
@@ -200,7 +202,7 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 不得用模型声明代替执行回执，不调用被测接口。清理在失败时也作为补偿执行。
 用例需要但**不由它自己建立**的状态（比如关闭或修改某个已有资源之前，要先有这个资源）是前提，不是资源：保留用例，readiness 标 blocked 并写明缺什么前提。
 单元材料里的转换列了 `requiresStates` 时，认领该转换**成功条件**的用例要写 `requiresStates:[{state, provided}]`：
-`provided:"steps"` 是自己的步骤建立它（lifecycle 声明为资源或设置并清理），`provided:"preparation"` 是由执行准备的配方提供（准备好之前不能执行）。
+`provided:"steps"` 是自己的步骤建立它（lifecycle 声明为资源或设置并清理），`provided:"preparation"` 是由执行准备的配方提供（准备好之前不能执行），`provided:"environment"` 是会话类状态（登录、钱包已连接）由执行环境的登录提供，不写配方也不进 lifecycle。
 需要这个状态**不存在**的失败路径用例不写。
 前置、基线、身份、归属和清理依据来自项目材料。准备器不能删改已审核义务或移动其步骤绑定。
 低影响 recipe 仍只允许 none/ui-only；旧产物缺契约为 unknown，不自动补成 verified。

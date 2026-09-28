@@ -1,6 +1,6 @@
 import {beforeEach,expect,it,vi} from 'vitest';
-const f=vi.hoisted(()=>({text:'Ready',calls:[] as string[],fail:'',closed:false,cleanupFails:false,abort:undefined as AbortController|undefined}));
-vi.mock('../src/exec/session.js',()=>({launchSession:async()=>({page:{url:()=> 'https://example.test/',isClosed:()=>f.closed,screenshot:async()=>Buffer.from('png'),evaluate:async(fn:Function)=>fn.toString().includes('.split(')?['Ready']:f.text},agent:{aiAction:async(t:string)=>{f.calls.push(t);if(t.startsWith('Create'))f.text+='\n'+t.slice(7)+' owner-A';if(t==='Close browser'){f.closed=true;throw new Error('Target closed');}if(t==='Cancel'){f.abort!.abort();throw new Error('EXEC_CANCELLED');}if(t.startsWith('Delete')){if(f.cleanupFails)throw new Error('cleanup failed');f.text='Ready';}if(t===f.fail)throw new Error('cannot find target');},aiAssert:async()=>{}},cleanup:async()=>{f.closed=true;},modelRequests:[]}),reopenPage:vi.fn()}));
+const f=vi.hoisted(()=>({text:'Ready',calls:[] as string[],fail:'',closed:false,cleanupFails:false,launchFails:false,abort:undefined as AbortController|undefined}));
+vi.mock('../src/exec/session.js',()=>({launchSession:async()=>{if(f.launchFails)throw new Error('Navigation timeout of 45000 ms exceeded');return {page:{url:()=> 'https://example.test/',isClosed:()=>f.closed,screenshot:async()=>Buffer.from('png'),evaluate:async(fn:Function)=>fn.toString().includes('.split(')?['Ready']:f.text},agent:{aiAction:async(t:string)=>{f.calls.push(t);if(t.startsWith('Create'))f.text+='\n'+t.slice(7)+' owner-A';if(t==='Close browser'){f.closed=true;throw new Error('Target closed');}if(t==='Cancel'){f.abort!.abort();throw new Error('EXEC_CANCELLED');}if(t.startsWith('Delete')){if(f.cleanupFails)throw new Error('cleanup failed');f.text='Ready';}if(t===f.fail)throw new Error('cannot find target');},aiAssert:async()=>{}},cleanup:async()=>{f.closed=true;},modelRequests:[]};},reopenPage:vi.fn()}));
 vi.mock('../src/exec/pageReady.js',()=>({settleOn:async()=>({settled:true,controls:1,textLen:5,ms:0})}));
 vi.mock('../src/baselines/perf.js',()=>({capturePerf:async()=>({})}));
 import {executeRun} from '../src/exec/run.js';
@@ -8,8 +8,8 @@ import {LifecycleSchema,lifecycleIssues} from '../src/exec/lifecycle.js';
 const identity='test-${env.TP_LIFECYCLE_ID}';
 const check=(value:string,kind:'text'|'noText'='text')=>({statement:value,checks:[{kind:'screen' as const,statement:value,oracle:{kind,value}}]});
 const lifecycle=()=>LifecycleSchema.parse({version:1,mode:'controlled',rationale:'Creates an isolated resource',sourceRefs:['spec#1'],supports:['$expected'],baseline:[check('Ready')],resources:[{id:'new',sourceRef:'spec#1',identity,establishAfterStep:1,established:check(identity),ownership:check(identity+' owner-A')}],cleanup:[{id:'delete',resourceId:'new',postStep:1,verified:check(identity,'noText')}]});
-const opts=()=>({executorModel:{baseUrl:'https://fixture.test',apiKey:'fixture',model:'fixture'} as never,lifecycle:lifecycle(),sourceRefs:['spec#1'],postSteps:['Delete '+identity],oracle:{kind:'text' as const,value:'Ready'}});
-beforeEach(()=>{f.text='Ready';f.calls=[];f.fail='';f.closed=false;f.cleanupFails=false;f.abort=undefined;});
+const opts=()=>({settleIntervalMs:0,executorModel:{baseUrl:'https://fixture.test',apiKey:'fixture',model:'fixture'} as never,lifecycle:lifecycle(),sourceRefs:['spec#1'],postSteps:['Delete '+identity],oracle:{kind:'text' as const,value:'Ready'}});
+beforeEach(()=>{f.text='Ready';f.calls=[];f.fail='';f.closed=false;f.cleanupFails=false;f.launchFails=false;f.abort=undefined;});
 it('compensates after an action throws, preserves the original failure and records independent screen proof',async()=>{
  f.fail='Fail';const result=await executeRun('https://example.test',['Create '+identity,'Fail'],'Ready',opts());
  expect(result.status).toBe('failed');expect(result.failureReason).toBe('cannot find target');expect(result.failure?.attribution).toBe('locate');
@@ -70,4 +70,31 @@ it('accepts complete short read-only cases without minimum, average or maximum s
   const gate=runGate({origin:'fixture',stories:[{id:'s',title:'Read',acceptance:[]}],flows:[],cases:[{...c,steps}]},{minSteps:10,maxSteps:1});
   expect(gate.findings.filter(f=>f.rule==='granularity'||f.rule==='lifecycle')).toEqual([]);
  }
+});
+const v2=(over:Record<string,unknown>)=>LifecycleSchema.parse({version:2,mode:'controlled',rationale:'Creates then removes its own resource',sourceRefs:['spec#1'],supports:['$expected'],baseline:[check('Ready')],session:'unchanged',resources:[],settings:[],cleanup:[],sideEffects:[],...over});
+const released=()=>v2({resources:[{id:'new',sourceRef:'spec#1',identityKind:'generated',identity,establishAfterStep:1,releasedByStep:2,established:check(identity),ownership:check(identity+' owner-A')}],cleanup:[{id:'delete',resourceId:'new',postStep:1,verified:check(identity,'noText')}]});
+it('a resource the case removes itself is verified gone and not cleaned again',async()=>{
+ const result=await executeRun('https://example.test',['Create '+identity,'Delete '+identity],'Ready',{...opts(),lifecycle:released()});
+ expect(f.calls.filter(s=>s.startsWith('Delete'))).toHaveLength(1);
+ expect(result.lifecycle?.cleanup[0]).toMatchObject({status:'pass',detail:expect.stringMatching(/Released by step 2/)});
+ expect(result.lifecycle?.pendingResources).toEqual([]);expect(result.status).toBe('passed');
+});
+it('when the removing step never runs, cleanup still compensates',async()=>{
+ f.fail='Fail';const result=await executeRun('https://example.test',['Create '+identity,'Fail','Delete '+identity],'Ready',{...opts(),lifecycle:v2({...released(),resources:[{...released().resources[0]!,releasedByStep:3}]})});
+ expect(f.calls.at(-1)).toMatch(/^Delete test-/);expect(result.lifecycle?.cleanup[0].status).toBe('pass');expect(result.lifecycle?.pendingResources).toEqual([]);
+});
+it('checks a setting original right before the step that changes it, not on the entry page',async()=>{
+ const setting=v2({settings:[{id:'mode',sourceRef:'spec#1',name:'mode',original:'Mode-A',changedAfterStep:2,observed:check('Mode-A')}],cleanup:[{id:'restore',settingId:'mode',postStep:1,verified:check('Mode-A','noText')}]});
+ const result=await executeRun('https://example.test',['Create Mode-A','Switch mode'],'Ready',{...opts(),lifecycle:setting,postSteps:['Delete Mode-A']});
+ expect(result.lifecycle?.checks).toContainEqual(expect.objectContaining({id:'mode',phase:'baseline',status:'pass'}));
+ expect(f.calls).toEqual(['Create Mode-A','Switch mode','Delete Mode-A']);
+ expect(lifecycleIssues({lifecycle:released(),steps:['Create '+identity,'Delete '+identity],postSteps:['Delete '+identity],sourceRefs:['spec#1']})).toEqual([]);
+ expect(lifecycleIssues({lifecycle:released(),steps:['Create '+identity,'Delete something'],postSteps:['Delete '+identity],sourceRefs:['spec#1']})).toContain('lifecycle_release_unbound:new');
+});
+
+it('reports zero model usage, not unknown, when the page never opened, so the timeout stays retryable',async()=>{
+ // 2026-09-27：新浏览器打开交易页 45 秒超时，用量被报成未知，执行层因此不重试、整批停下。
+ f.launchFails=true;const result=await executeRun('https://example.test',['Create '+identity],'Ready',opts());
+ expect(result.infraError).toBe(true);expect(result.failure).toMatchObject({code:'EXEC_TIMEOUT',retryable:true});
+ expect(result.modelRequests).toEqual([]);expect(result.lifecycle?.safeToRetry).toBe(true);
 });

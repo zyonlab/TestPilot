@@ -124,7 +124,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const selected = input.caseIds ? bundle.cases.filter((c) => input.caseIds!.includes(c.id)) : bundle.cases;
   const blocked = ((bundle as {compilation?:string}).compilation === 'host-prepared-v1' ? [] : selected).map(c => ({ id: c.id, reasons: executionBlockers(c) })).filter(c => c.reasons.length);
   if (blocked.length) throw new LedgerError(409, `execution_not_ready:${JSON.stringify(blocked)}`);
-  const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
+  const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, overlays: env?.login?.overlays ?? [], authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
     query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
@@ -191,7 +191,7 @@ async function perform(row: ExecutionRow) {
         steps: kase.steps, expected: kase.expected, artifactDir: ARTIFACT_DIR,
         opts: { preparation: (bundle as {preparation?:Record<string,Preparation>}).preparation?.[kase.id], modelBudget: { maxCalls: budget.executorCalls - calls, deadlineAt }, oracle: kase.oracle, assertions: kase.assertions, postSteps: kase.postSteps,lifecycle:kase.lifecycle,sourceRefs:kase.sourceRefs,precondition:kase.precondition,
           // 前提明写「未登录」的用例不先登录（caseEntry.ts 的 caseStartsLoggedOut）：2026-09-15 Vikunja 5 条因此恒红。
-          ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState, authentication: env.authentication }),
+          ...(caseStartsLoggedOut(kase.precondition) ? { login: [], storageState: null } : { login: env.login, storageState: env.storageState, authentication: env.authentication }), overlays: env.overlays,
           resolve: env.context, extraHeaders: env.headers, query: env.query, viewport: env.viewport, locatorContext: env.locatorContexts?.[kase.id],locatorRuntimeScope:{projectId:row.projectId,runId:row.runId,entryUrl:caseEntryUrl(kase.precondition,env.url),environmentHash:env.locatorEnvironmentHash,pageVersion:env.locatorPageVersion,materialsHash:env.locatorMaterialsHash,loggedOut:caseStartsLoggedOut(kase.precondition)},
           /**
            * **带钱包探索出来的用例，执行时也要带钱包。**
@@ -219,7 +219,9 @@ async function perform(row: ExecutionRow) {
         } catch (error) {
           observer.issue(cancelled()?'cancelled':'failed',{attribution:'infra',retryable:false});
           attempts.push({attempt:attempts.length+1,status:cancelled()?'cancelled':'unknown',durationMs:performance.now()-start,observation:null});
-          results.push({caseId:kase.id,lifecycle:unavailableLifecycle(kase.lifecycle,kase.postSteps),status:cancelled()?'cancelled':'unobservable',infraError:true,attempts});
+          // 派发失败的原文要留下：2026-09-27 exec-3533eaef 第一条 47ms 就失败，结果里只有 execution_unavailable，查不出是谁抛的。
+          const reason=String(error instanceof Error?error.message:error).replace(/\b(sk|key|token)[-_][A-Za-z0-9_-]{8,}/gi,'[redacted]').slice(0,300);
+          results.push({caseId:kase.id,lifecycle:unavailableLifecycle(kase.lifecycle,kase.postSteps),status:cancelled()?'cancelled':'unobservable',infraError:true,failureReason:reason,attempts});
           throw error;
         } finally { observer.end(); }
       };

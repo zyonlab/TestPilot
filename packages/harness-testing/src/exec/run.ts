@@ -1,5 +1,6 @@
 import { lifecycleExecution, lifecycleIssues, LifecycleSchema, type Lifecycle, type LifecycleReceipt } from './lifecycle.js';
 import { executionObserver, type ExecutionObservation } from '@testpilot/harness-core/execution-observation';
+import { dismissOverlays, blockedByOverlay, type DismissibleOverlay } from "./overlays.js";
 import { checkPrerequisite, type Preparation, type EnvironmentFact, type PrerequisiteReceipt } from './preparationChecks.js';
 import {authenticationState,shouldRunLogin,type AuthenticationChecks} from './authentication.js';
 import {settleOn} from './pageReady.js';
@@ -85,6 +86,14 @@ export interface RunResult {
  * thing it can honestly refer to is what a person would read on the screen. No selectors
  * get invented here, and none leak into stage-one artifacts.
  */
+/**
+ * 断言里只有「应当出现」的文字值得再看：晚一点出现仍是正面证据。「不应出现」不重看——
+ * 成功提示几秒后自己消失，重看就会把「下单其实成功了」判成「没有成功提示」。
+ * 生命周期核对（释放、收尾、基线）看的是状态，不是提示，两种都重看。
+ */
+const SETTLING_KINDS = new Set(["text"]);
+const SETTLE_RETRIES = 4, SETTLE_INTERVAL_MS = 1000;
+
 async function snapshotPage(page: { evaluate: (fn: () => unknown) => Promise<unknown>; url: () => string }): Promise<PageSnapshot> {
   const capturedAt = Date.now();
   const text = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")) as string;
@@ -116,8 +125,12 @@ export async function executeRun(
      * 谁给的 key 谁负责 `releaseRunSession(key)`——批次结束时。
      */
     sessionKey?: string;
+    /** 屏幕判据不成立时隔多久再看一次（默认 1000ms，共再看四次）；测试给 0。 */
+    settleIntervalMs?: number;
     authentication?: AuthenticationChecks;
     login?: string[]; // login-flow step templates (登录态), run before case steps
+    /** 环境声明的常驻可关闭浮层：登录后、重开入口页后关掉；某步定位失败时若它还在，关掉重试一次。见 overlays.ts。 */
+    overlays?: DismissibleOverlay[];
     postSteps?: string[]; // teardown/cleanup step templates, run after the assert
     resolve?: ResolveContext; // ${env.*}/${secret.*} resolution context
     rowLabel?: string; // data-driven row label, logged for forensics
@@ -182,12 +195,22 @@ export async function executeRun(
 ): Promise<RunResult> {
   const observer = executionObserver();
   observer.begin("session-navigation");
-  const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
   const auxiliaryChecks: NonNullable<RunResult["auxiliaryChecks"]> = [];
   const injected = !!opts.injected;
   const wallet = !injected && !!opts.wallet;
   const ctx: ResolveContext = { env: {...opts.resolve?.env, TP_LIFECYCLE_ID: randomUUID()}, secrets: opts.resolve?.secrets ?? {} };
   const secretVals = Object.values(ctx.secrets);
+  /**
+   * 判据里的 ${env.*} 在判之前换成这次执行的值。2026-09-25 以前从没换过：text 判据找字面的「${env.X}」必挂，
+   * noText 判据则永远过——一条「挂单已撤掉」的用例没撤也会过。只换 env，不换 secret（判据细节会进日志与报告）；
+   * api 判据有自己的解析（observeApi），不动。
+   */
+  const envOnly: ResolveContext = { env: ctx.env, secrets: {} };
+  const resolveDeep = (v: unknown): unknown => typeof v === "string" ? resolveText(v, envOnly) : Array.isArray(v) ? v.map(resolveDeep) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, resolveDeep(x)])) : v;
+  const withEnv = <T extends MachineOracle | undefined>(o: T): T => (o && o.kind !== "api" ? resolveDeep(o) as T : o);
+  opts = { ...opts, oracle: withEnv(opts.oracle), assertions: opts.assertions?.map((a) => ({ ...a, oracle: withEnv(a.oracle) })),
+    ...(opts.preparation ? { preparation: { ...opts.preparation, auxiliaryAssertions: opts.preparation.auxiliaryAssertions?.map((a) => ({ ...a, oracle: withEnv(a.oracle) })) } } : {}) };
+  const auxiliaryAssertions = opts.preparation?.auxiliaryAssertions ?? [];
   const rlog = (s: string) => logs.push(redact(s, secretVals));
   const startedAt = new Date().toISOString();
   const sinceMs = Date.now();
@@ -226,18 +249,29 @@ export async function executeRun(
   let reused = false;
   let sessionClosed = false;
   let recipeStarted = false;
+  /**
+   * 界面跟上动作要时间：撤单/平仓点完，「Open Orders (1)」要过一会儿才变回「Open Orders」。
+   * 屏幕判据不成立时隔一秒再看，最多再看四次；成立就不再等。只对读屏的判据这样做——判官不重采。
+   * 2026-09-27 C-POS-04-03：平仓后立刻核对「没有 Positions (」失败，两步后同一个页面已经是「No open positions yet」。
+   */
+  const settle = async <T extends { status: string }>(read: () => Promise<T>): Promise<T> => {
+    let out = await read();
+    for (let i = 0; i < SETTLE_RETRIES && out.status === "fail"; i++) { await new Promise((r) => setTimeout(r, opts.settleIntervalMs ?? SETTLE_INTERVAL_MS)); out = await read(); }
+    return out;
+  };
   const lifecycle = lifecycleExecution(opts.lifecycle, opts.postSteps ?? [], {
-    check: check => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
+    check: check => settle(() => checkPrerequisite(check, {facts:environmentFacts, snapshot:async()=>{
       if(!session || sessionClosed || opts.signal?.aborted || session.page.isClosed?.()) throw new Error('SESSION_UNAVAILABLE');
       // A failed snapshot is unknown, never evidence of resource absence.
       const text = await session.page.evaluate(()=>document.body?.innerText ?? '');
       if(!String(text).trim())throw new Error('SCREEN_UNAVAILABLE');
       return {text:String(text),url:session.page.url(),capturedAt:Date.now()};
-    }, assert:async()=>{throw new Error('LIFECYCLE_REQUIRES_SCREEN_ORACLE');},resolve:t=>resolveText(t,ctx),redact:t=>redact(t,secretVals)}),
+    }, assert:async()=>{throw new Error('LIFECYCLE_REQUIRES_SCREEN_ORACLE');},resolve:t=>resolveText(t,ctx),redact:t=>redact(t,secretVals)})),
     resolve:t=>redact(resolveText(t,ctx),secretVals),
     redact:t=>redact(t,secretVals),
     act:async t=>{rlog(`teardown: ${t}`);await withModel(()=>act(resolveText(t,ctx)));},
     available:()=>!!session && !sessionClosed && !opts.signal?.aborted && !session.page.isClosed?.(),
+    reopen:async()=>{rlog('reopen entry page before read-only baseline re-check');const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);await session!.page.goto(entry.toString(),{waitUntil:'domcontentloaded',timeout:45000});await settleOn(session!.page,{minMs:600,maxMs:12_000}).catch(()=>{});if(opts.overlays?.length)await closeOverlays('reopened entry page');},
   });
   const checkCancelled = () => { if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED"); };
   const abortSession = () => { if (poolKey) void evictSession(poolKey).catch(() => {}); else void session?.cleanup().catch(() => {}); };
@@ -273,6 +307,23 @@ export async function executeRun(
       return false;
     }
   };
+  // leased=false：调用方（act 里的重试）已经持有一次模型租约，再申请会在并发闸门上自锁。
+  const closeOverlays = (reason: string, leased = true) => dismissOverlays(opts.overlays ?? [], {
+    text: () => session!.page.evaluate(() => document.body?.innerText ?? ""),
+    act: async (instruction) => { if (leased) await withModel(() => session!.agent.aiAction(instruction)); else await session!.agent.aiAction(instruction); },
+    settle: async () => { await settleOn(session!.page, { minMs: 400, maxMs: 6_000 }).catch(() => {}); },
+    clickSelector: (selector, present) => session!.page.evaluate(([sel, text]) => {
+      const hits = [...document.querySelectorAll(sel)];
+      if (hits.length !== 1) return false;
+      const el = hits[0] as HTMLElement;
+      let block: HTMLElement | null = el;
+      while (block && !(block.innerText ?? "").includes(text)) block = block.parentElement;
+      if (!block || block === document.body) return false;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      return true;
+    }, [selector, present] as const) as Promise<boolean>,
+    log: rlog,
+  }, reason).then(n => n > 0);
   const act = async (t: string) => {
     checkCancelled();
     if (t.startsWith("waitFor:")) return session!.agent.aiWaitFor(t.slice("waitFor:".length).trim(), { timeoutMs: 30_000 });
@@ -282,11 +333,40 @@ export async function executeRun(
       rlog(`  直接跳转（纯导航步骤，不交给模型）：${navTo}`);
       await session!.page.goto(navTo, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(navTo, { waitUntil: "domcontentloaded", timeout: 45000 }));
       await settleOn(session!.page, { minMs: 600, maxMs: 12_000 });
+      if (opts.overlays?.length) await closeOverlays('after navigation', false);
       return;
     }
     if (await byLocator(t)) return;
     try {
-      await session!.agent.aiAction(t);
+      try {
+        await session!.agent.aiAction(t);
+      } catch (e) {
+        /**
+         * 同名控件：弹窗里的选项和背后页面上的按钮同名（2026-09-25 J02-03「Isolated」，locate 找到 2 个）。
+         * 限定到最上层的弹窗/对话框再做一次；不是这种错误就走下面的浮层处理。
+         */
+        if (/multiple elements found/i.test(String((e as Error)?.message ?? e))) {
+          rlog('  ambiguous target; retrying inside the topmost dialog');
+          await session!.agent.aiAction(`${t}（只在当前最上层打开的弹窗或对话框内操作；背后页面上同名的元素不算）`);
+          return;
+        }
+        /**
+         * 上一步留下了一个还开着的对话框（2026-09-26：保证金模式弹窗「点选项即生效」、没有 Confirm、也不自己关，
+         * 下一步「点 Market」在截图里只看得到弹窗）。按一次 Escape——等于取消，不确认任何东西——关上后重试这一步。
+         */
+        // 很多产品的弹窗不带 role=dialog / aria-modal（Hyperliquid 就不带），所以不去认它：被挡住类的失败先按一次 Escape 再重试一次。
+        let failure: unknown = e;
+        if (blockedByOverlay(failure)) {
+          rlog('  step blocked; pressing Escape (closes a dialog left open, confirms nothing) and retrying the step once');
+          await Promise.resolve(session!.page.keyboard?.press('Escape')).catch(() => {});
+          await settleOn(session!.page, { minMs: 400, maxMs: 4_000 }).catch(() => {});
+          try { await session!.agent.aiAction(t); return; } catch (again) { failure = again; }
+        }
+        // 被常驻浮层挡住：关掉再做这一步一次。关不掉或本来就没有浮层，原样抛出。
+        if (!opts.overlays?.length || !blockedByOverlay(failure) || !(await closeOverlays('step failed: ' + t.slice(0, 60), false))) throw failure;
+        rlog('  retrying step after closing overlay');
+        await session!.agent.aiAction(t);
+      }
     } catch (e) {
       /**
        * Midscene 0.30.10 回放 bug（06 §6.1）：缓存的 yaml 流程里 locate 失效、模型重定位并写回缓存之后，
@@ -317,7 +397,7 @@ export async function executeRun(
     logs.push(`navigate → ${url}${injected ? " (injected wallet)" : wallet ? " (with MetaMask)" : ""}`);
     const dataOpts = {
       signal: opts.signal, modelBudget: opts.modelBudget,
-      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],lifecycle:opts.lifecycle??null,login:opts.login??[],resolve:ctx,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
+      cacheContext: cacheDigest({url,steps,expected,oracle:opts.oracle??null,postSteps:opts.postSteps??[],lifecycle:opts.lifecycle??null,login:opts.login??[],overlays:opts.overlays??[],resolve:ctx,headers:opts.extraHeaders??null,query:opts.query??null,viewport:opts.viewport??null,pageVersion:opts.pageVersion??null}),
       executorModel: opts.executorModel ?? executorConnectionFromEnv(),
       extraHeaders: opts.extraHeaders,
       query: opts.query,
@@ -379,11 +459,25 @@ export async function executeRun(
     const login = shouldRunLogin(verified, restored, !!opts.login?.length) ? opts.login! : [];
     if (login.length) {
       rlog(`login flow (${login.length} steps)`);
-      for (const t of login) {
-        rlog(`  login: ${t}`);
-        const step = resolveText(t, ctx);
-        if (step.startsWith("waitFor:")) await withModel(() => session!.agent.aiWaitFor(step.slice(8), {timeoutMs:30_000}));
-        else await withModel(() => act(step));
+      const runLogin = async () => {
+        for (const t of login) {
+          rlog(`  login: ${t}`);
+          const step = resolveText(t, ctx);
+          if (step.startsWith("waitFor:")) await withModel(() => session!.agent.aiWaitFor(step.slice(8), {timeoutMs:30_000}));
+          else await withModel(() => act(step));
+        }
+      };
+      /**
+       * 登录一步失败时重开入口页、整段登录重来一次。2026-09-26 第四轮准备：新浏览器打开交易页后主区域整块黑屏，
+       * 「等 Enable Trading 出现」超时，同一条用例三次探查都死在这，被判成基础设施问题而放弃。重开一次多数就好了。
+       */
+      try { await runLogin(); }
+      catch (e) {
+        if (opts.signal?.aborted || !session || session.page.isClosed()) throw e;
+        rlog(`login failed (${String((e as Error)?.message ?? e).slice(0, 120)}); reloading the entry page and retrying login once`);
+        await session.page.goto(url, { waitUntil: "networkidle2", timeout: 45000 }).catch(() => session!.page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 }));
+        await settleOn(session.page, { minMs: 600, maxMs: 12_000 }).catch(() => {});
+        await runLogin();
       }
       await shot();
       /**
@@ -400,6 +494,7 @@ export async function executeRun(
     checkCancelled();
     if(!ready.settled&&ready.controls===0&&ready.textLen===0)throw new Error('PAGE_NOT_READY: the target page remained blank before execution');
     rlog(`page ready after ${ready.ms}ms (${ready.controls} controls, ${ready.textLen} text characters)`);
+    if (opts.overlays?.length) await closeOverlays('entry page');
     if (!opts.preparation && await verifyAuthentication() === false) throw new Error('AUTHENTICATION_NOT_VERIFIED: configured login checks failed before case execution');
     await observe(0);
     if(opts.captureObservations||opts.preparation)await shot();
@@ -427,7 +522,10 @@ export async function executeRun(
       }
     };
     if(opts.lifecycle)LifecycleSchema.parse(opts.lifecycle);
-    await lifecycle.baseline();
+    // 配方提供的状态（requiresStates provided:"preparation"）在配方跑完才存在；基线说的是
+    // 「业务步骤开始时的样子」，先查就永远不过（2026-09-25 ORD-04-02/04 两条就是这样卡住的）。
+    const baselineAfterRecipe = !!opts.preparation?.recipe?.provides?.length;
+    if(!baselineAfterRecipe)await lifecycle.baseline();
     await recipeCheck('entry');
     // Preparation checks happen in this browser, before any business test step.
     for (const [i, step] of (opts.preparation?.steps ?? []).entries()) {
@@ -438,6 +536,7 @@ export async function executeRun(
     }
     await refreshFacts();
     await recipeCheck('postcondition');
+    if(baselineAfterRecipe)await lifecycle.baseline();
     if (await verifyAuthentication() === false) throw new Error('AUTHENTICATION_NOT_VERIFIED: configured login checks failed after preparation');
     for (const check of opts.preparation?.checks ?? []) {
       // Legacy frozen packages retain their original visual-check implementation.
@@ -541,9 +640,13 @@ export async function executeRun(
         return;
       }
       if (a.oracle && a.oracle.kind !== "none") {
-        const snap = await snapshotPage(session!.page);
+        let snap = await snapshotPage(session!.page);
         if (a.oracle.kind === "judge" && !(await judgeInto(snap, a.oracle))) return;
-        const verdict = evaluateOracle(a.oracle, snap, snapBefore);
+        let verdict = evaluateOracle(a.oracle, snap, snapBefore);
+        if (SETTLING_KINDS.has(a.oracle.kind) && verdict.status === "fail") {
+          const o = a.oracle;
+          verdict = await settle(async () => { snap = await snapshotPage(session!.page); return evaluateOracle(o, snap, snapBefore); });
+        }
         const detail = redact(verdict.detail, secretVals);
         oracle.push({ assertion: a.statement, status: verdict.status, detail, decidedBy: a.oracle.kind === "judge" ? "judge" : "machine",
           ...(verdict.judge ? { judge: verdict.judge } : {}) });
@@ -580,6 +683,7 @@ export async function executeRun(
     for (const [i, step] of steps.entries()) {
       observer.begin("actions");
       rlog(`step ${i + 1}: ${step}`);
+      await lifecycle.beforeAction(i+1);
       lifecycle.beforeStep(i+1);
       await withModel(() => act(resolveText(step, ctx)));
       await lifecycle.afterStep(i+1);
@@ -821,18 +925,52 @@ export async function executeRun(
     const recipe=opts.preparation?.recipe;
     if(recipe?.sideEffects==='controlled'&&recipeStarted){
       lifecycleReceipt.safeToRetry=false;
-      const steps=[...(recipe.compensation??[])].reverse();
-      let unverified=false;
+      // 按写的顺序执行：compensation 本身就是「先撤最后建的」那张清单。2026-09-25 以前这里再倒一次，准备器按撤销顺序
+      // 写好的「撤单 → 改回 Market → 切回 HYPE」被倒成「先切回 HYPE」，回到别的市场后撤不到那张单，挂单留在账户上。
+      const steps=[...(recipe.compensation??[])];
+      let unverified=false,forgiven=false;
       for(const [i,x] of steps.entries()){
         const item:LifecycleReceipt['cleanup'][number]={id:`recipe-compensation-${i+1}`,resourceId:`recipe:${recipe.capability}`,postStep:i+1,status:'not-run',detail:''};
         lifecycleReceipt.cleanup.push(item);
         if(!session||sessionClosed||opts.signal?.aborted){item.status='unknown';item.detail='Session closed or execution cancelled';unverified=true;continue;}
+        const verify=()=>checkPrerequisite(x.verified,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
         try{
           await withModel(()=>act(resolveText(x.step,ctx)));
-          const receipt=await checkPrerequisite(x.verified,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
+          const receipt=await verify();
           item.status=receipt.status;item.detail=receipt.detail??receipt.statement;
           if(receipt.status!=='pass')unverified=true;
-        }catch(e){item.status='fail';item.detail=redact(String(e instanceof Error?e.message:e),secretVals);unverified=true;}
+        }catch(e){
+          /**
+           * 动作做不了，但核对显示已经是撤销后的样子（用例半路失败、根本没建成那笔持仓，「点平仓」自然找不到）：
+           * 以核对为准，算撤销完成。2026-09-26 第六轮 J02-03 就是这样被误判成「留下持仓」，整批停了三次。
+           */
+          const message=redact(String(e instanceof Error?e.message:e),secretVals);
+          const receipt=session&&!sessionClosed&&!opts.signal?.aborted?await verify().catch(()=>undefined):undefined;
+          if(receipt?.status==='pass'){item.status='pass';forgiven=true;item.detail=`already undone (action not needed: ${message.slice(0,120)}); ${receipt.detail??receipt.statement}`;}
+          else{item.status='fail';item.detail=message;unverified=true;}
+        }
+      }
+      /**
+       * 有补偿步骤没核实：回到入口页，把配方开始前的 entryChecks（「没有挂单」「没有持仓」……）再查一遍。
+       * 全部成立 = 账户已回到配方之前的样子，什么都没留下；这时一两步中间核对失败（去找一笔已经被用例撤掉的单）
+       * 不再让整批停下。2026-09-26 第七、八轮：POS-04-03、POS-03-01、ORD-04-02 三次误判，账户都是干净的。
+       */
+      // 靠「动作做不了但核对成立」放过的一步，也要回入口复查一次：资源可能只是在另一个标签里看不见，而不是真的没了。
+      if(forgiven&&!unverified)unverified=true;
+      if(unverified&&recipe.entryChecks?.length&&session&&!sessionClosed&&!opts.signal?.aborted){
+        try{
+          const entry=new URL(url);for(const [k,v] of Object.entries(opts.query??{}))entry.searchParams.set(k,v);
+          await session.page.goto(entry.toString(),{waitUntil:'domcontentloaded',timeout:45000});await settleOn(session.page,{minMs:600,maxMs:12_000}).catch(()=>{});
+          // 两件事都要成立才算还原：配方的后置条件（「建出来的东西在」）已经不成立，且入口检查重新成立。
+          // 只看入口检查不够——入口检查可能只是「页面打开了」，挡不住真的残留。
+          const probe=(check:typeof recipe.entryChecks[number])=>checkPrerequisite(check,{facts:environmentFacts,snapshot:()=>snapshotPage(session!.page),assert:async text=>{await withModel(()=>session!.agent.aiAssert(text));},resolve:text=>resolveText(text,ctx),redact:text=>redact(text,secretVals)});
+          let restored=true;const details:string[]=[];
+          for(const check of recipe.postconditions??[]){const receipt=await probe(check);details.push(`gone? ${receipt.statement}: ${receipt.status}`);if(receipt.status!=='fail')restored=false;}
+          if(!(recipe.postconditions??[]).length)restored=false;
+          for(const check of recipe.entryChecks){const receipt=await probe(check);details.push(`${receipt.statement}: ${receipt.status}`);if(receipt.status!=='pass')restored=false;}
+          lifecycleReceipt.cleanup.push({id:'recipe-entry-restored',resourceId:`recipe:${recipe.capability}`,postStep:steps.length+1,status:restored?'pass':'fail',detail:`entry checks after compensation: ${details.join('; ')}`});
+          if(restored)unverified=false;
+        }catch(e){rlog(`entry re-check after compensation failed: ${String((e as Error)?.message??e).slice(0,120)}`);}
       }
       if(unverified){
         lifecycleReceipt.pendingResources.push({id:`recipe:${recipe.capability}`,identity:(recipe.provides??[]).join(', '),reason:'Preparation compensation was not verified'});
@@ -870,7 +1008,12 @@ export async function executeRun(
     }
     observer.end();
     modelRequests.push(...(requestSource?.slice(requestOffset) ?? []));
-    if (result) { result.durationMs = Date.now() - t0; if (!requestSource) delete result.modelRequests; }
+    /**
+     * 用量「未知」只在会话已经起来、却拿不到它的请求计数时成立。会话根本没建起来（打开页面就超时）时一次模型都没调，
+     * 用量是确定的 0——报成未知，执行层就把这次当成「花了多少不知道」，连可重试的超时也不重试，整批停下。
+     * 2026-09-27 exec-0a875a6c / exec-232e93ac：新浏览器打开交易页 45 秒超时，两次都这样停批。
+     */
+    if (result) { result.durationMs = Date.now() - t0; if (!requestSource && session) delete result.modelRequests; }
   }
 }
 

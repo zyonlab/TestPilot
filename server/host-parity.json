@@ -1191,6 +1191,12 @@
   },
   {
    "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/models/executor/rebind",
+   "uiOnly": "运营方给暂停中的运行换执行模型（凭据属于服务端配置），规划宿主不该能换掉自己的执行器"
+  },
+  {
+   "source": "runRoutes.ts",
    "method": "GET",
    "path": "/api/projects/:projectId/workflow-runs/:runId/story-requirements",
    "status": "todo"

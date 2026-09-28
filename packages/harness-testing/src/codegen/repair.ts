@@ -112,6 +112,9 @@ export function shouldContinue(opts: {
       reason: "no-progress",
       n: opts.roundsWithoutProgress,
     };
+  if (opts.lastFailKind === "precondition")
+    // 前提不成立改代码修不好：缺的是夹具或环境状态。
+    return { go: false, because: "the case's precondition did not hold; code repair cannot supply it", reason: "infra" };
   if (opts.lastFailKind === "infra")
     // Retrying a broken environment burns the budget without ever addressing the fault,
     // and it would file an environment outage as a product defect.

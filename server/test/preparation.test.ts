@@ -23,7 +23,7 @@ const result=(status='passed')=>({status,infraError:false,durationMs:5,modelRequ
 async function start(mode:'retry'|'all'='all'){svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);return prep.startPreparation(run,project,{revisionIds:[revision],maxRounds:2,mode});}
 const step=(b:string,body:any)=>prep.preparationStep(run,project,{batchId:b,...body});
 it('accepts approved unlocated cases, repairs after failure, and bundles only runner-verified plans',async()=>{
- const b=await start();expect(fake.host).toHaveBeenCalled();expect((await step(b.batchId,{action:'next'})).status).toBe('work');
+ const b=await start();expect(fake.host).toHaveBeenCalled();const work:any=await step(b.batchId,{action:'next'});expect(work.status).toBe('work');expect(work.actionPolicy).toMatchObject({irreversibleBlocked:false});expect(work.actionPolicy.deniedHosts).toContain('app.hyperliquid.xyz');
  fake.run.mockResolvedValueOnce(result('failed'));await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'Initial trial'});
  await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('repair'));
  const next:any=await step(b.batchId,{action:'next'});expect(next.result.status).toBe('failed');
@@ -193,7 +193,8 @@ it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle an
  fake.run.mockResolvedValueOnce({...result(),prerequisiteChecks:[{statement:'Ready',status:'pass'}],lifecycle:receipt});
  // 受控用例：改措辞把身份丢了——拒；保留身份的改写（写清是哪个控件）——允许。
  await expect(call({action:'trial',content:{...reviewed.content,steps:['Click the create button']},reason:'Reword away the identity'})).rejects.toThrow('lifecycle_action_bindings_frozen');
- await call({action:'trial',content:{...reviewed.content,steps:['Click the Create button in the toolbar to make '+identity]},reason:'Reword to locate precisely, identity kept'});
+ // 漏写 lifecycle 不算改：照审核版执行（2026-09-27 C-POS-01-02）。
+ await call({action:'trial',content:{...reviewed.content,lifecycle:undefined,steps:['Click the Create button in the toolbar to make '+identity]},reason:'Reword to locate precisely, identity kept'});
  await vi.waitFor(()=>expect(prep.preparationStatus(r,p)?.summary.verified).toBe(1));
  expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toEqual(lifecycle);expect(fake.run.mock.calls.at(-1)?.[0].opts.resolve.env.TP_LIFECYCLE_ID).toBeUndefined();
  const frozen:any=await call({action:'next'});const bundle=approvals.approvedExecutionBundle(r,p,frozen.codeRevision);expect(bundle.cases[0].lifecycle).toEqual(lifecycle);
@@ -226,5 +227,63 @@ it('a case that needs a state from preparation runs only with a controlled recip
  fake.run.mockResolvedValueOnce(result());
  await call({action:'trial',caseId:'c1',content:reviewed[0].content,prerequisiteChecks:checks,reason:'no recipe'});
  await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].reason??'').toContain('required_state_not_prepared:counter.nonzero'));
+ const receipt=svc.runLedger().listRevisions(project,r).filter(v=>v.name.endsWith('/error-observation')).at(-1)!;
+ expect(svc.runLedger().readRevision(receipt.id,project).content).toMatchObject({error:{code:'required_state_not_prepared',message:expect.stringContaining('counter.nonzero')}});
  await prep.cancelPreparation(r,project);
+});
+
+it('re-scoping a batch keeps cases already verified at the same revision and approval; mode all re-verifies them',async()=>{
+ const stage=await import('../src/runStages.js');
+ const r=svc.registerHostRun(project,{runtime:'codex',externalId:'carry-verified',idempotencyKey:'carry-verified',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
+ stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
+ const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
+ stage.writeRunStage(r,project,'cases',{stories,cases:['c1','c2'].map(id=>({...original,id,key:id,precondition:[],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref)}))});stage.gateRun(r,project);stage.finalizeRun(r,project);
+ const reviewed=approvals.reviewRevisions(r,project);approvals.decideRevisions(r,project,{items:reviewed.map(c=>({caseId:c.caseId,revisionId:c.revision.id,decision:'approved'}))},{kind:'human',id:'TEST_FIXTURE'});
+ const c1=reviewed.find(c=>c.caseId==='c1')!;
+ const first=await prep.startPreparation(r,project,{revisionIds:[c1.revision.id]});
+ const call=(b:string,body:any)=>prep.preparationStep(r,project,{batchId:b,caseId:'c1',...body});
+ fake.run.mockResolvedValueOnce(result());await call(first.batchId,{action:'probe',setupSteps:[],reason:'look'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].status).toBe('planning'));
+ fake.run.mockResolvedValueOnce(result());await call(first.batchId,{action:'trial',content:c1.content,reason:'trial'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].status).toBe('verified'));
+ await prep.cancelPreparation(r,project);
+ await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(r);
+ const second=await prep.startPreparation(r,project,{});
+ expect(second.batchId).not.toBe(first.batchId);
+ const units=prep.preparationStatus(r,project)!.units;
+ expect(units.find(u=>u.unitId==='c1')?.status).toBe('verified');expect(units.find(u=>u.unitId==='c2')?.status).not.toBe('verified');
+ await prep.cancelPreparation(r,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(r);
+ await prep.startPreparation(r,project,{mode:'all'});
+ expect(prep.preparationStatus(r,project)!.units.find(u=>u.unitId==='c1')?.status).not.toBe('verified');
+ await prep.cancelPreparation(r,project);
+});
+it('passes the environment-declared dismissible overlays to every probe and trial',async()=>{
+ const overlays=[{id:'notice',present:'Announcements',close:'Click the close button on the announcements panel'}];
+ db.upsertEnvironment({projectId:project,name:'with-overlays',baseUrl:'http://localhost:9876',isDefault:true,login:{overlays}} as never);
+ await prep.cancelPreparation(run,project).catch(()=>{});
+ const b=await start();fake.run.mockResolvedValueOnce(result());
+ await step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],reason:'look'});
+ await vi.waitFor(()=>expect(fake.run.mock.calls.at(-1)![0].opts.overlays).toEqual(overlays));
+ expect(fake.run.mock.calls.at(-1)![0].opts.sessionKey).toBe(`prep-${b.batchId}`);
+ await prep.cancelPreparation(run,project);
+});
+it('rejects question-shaped screen checks before spending a probe',async()=>{
+ await prep.cancelPreparation(run,project).catch(()=>{});
+ const b=await start();const calls=fake.run.mock.calls.length;
+ await expect(step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],probeChecks:['页面有没有最小订单价值之类的提示'],reason:'look'})).rejects.toThrow(/check_must_be_assertion/);
+ await expect(step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],probeChecks:['Is there a warning?'],reason:'look'})).rejects.toThrow(/check_must_be_assertion/);
+ expect(fake.run.mock.calls.length).toBe(calls);
+ await prep.cancelPreparation(run,project);
+});
+it('stops the whole batch when a run leaves an uncleaned resource behind',{timeout:20000},async()=>{
+ await prep.cancelPreparation(run,project).catch(()=>{});
+ const b=await start();
+ fake.run.mockReset();fake.run.mockResolvedValue({...result(),lifecycle:{version:1,status:'unknown',checks:[],cleanup:[],pendingResources:[{id:'recipe:order',identity:'order.open',reason:'Preparation compensation was not verified'}],safeToRetry:false}});
+ await step(b.batchId,{action:'probe',caseId:'c1',setupSteps:[],reason:'look'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.status).toBe('interrupted'),{timeout:8000,interval:200});
+ await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+ expect(prep.preparationStatus(run,project)?.units[0]).toMatchObject({status:'needs_review'});
+ await prep.startPreparation(run,project,{revisionIds:[revision]});
+ expect(prep.preparationStatus(run,project)?.units[0].status).toBe('needs_review');
+ await prep.cancelPreparation(run,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
 });

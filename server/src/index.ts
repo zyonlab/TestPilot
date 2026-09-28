@@ -1741,6 +1741,7 @@ function sanitizeEnv(env: Environment) {
       authRequired: env.login?.authRequired ?? false,
       steps: env.login?.steps ?? [],
       apiLogin: env.login?.apiLogin ?? null, // config only (contains placeholders, not secrets)
+      overlays: env.login?.overlays ?? [],
       capturedAt: env.login?.capturedAt,
       hasSession: !!s,
       sessionCookies: s?.cookies?.length ?? 0,

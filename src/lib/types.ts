@@ -25,6 +25,8 @@ export interface LoginFlow {
   authRequired?: boolean;
   steps?: string[];
   apiLogin?: ApiLoginConfig | null; // API-style login config (no UI driving)
+  /** 常驻可关闭的浮层：执行器登录后关掉，某步被挡住时关掉重试。 */
+  overlays?: { id: string; present: string; close: string; selector?: string }[];
   // Captured-session summary (the blob itself never leaves the server).
   capturedAt?: string;
   hasSession?: boolean;
@@ -238,7 +240,7 @@ export interface RunRecord {
   attempts?: number;
   healed?: boolean;
   failCode?: string; // EXEC_TIMEOUT / EXEC_LOCATE / EXEC_ASSERT / MODEL_UNAVAILABLE …
-  failKind?: "infra" | "locate" | "assert"; // infra failures are NOT product defects
+  failKind?: "infra" | "precondition" | "locate" | "assert"; // infra/precondition failures are NOT product defects
   /**
    * Where the execution came from — a green row means a different thing in each.
    *

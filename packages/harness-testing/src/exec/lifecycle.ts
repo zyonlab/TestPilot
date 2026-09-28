@@ -40,9 +40,15 @@ const ResourceV2Schema = z.object({
   established: evidence,
   ownership: evidence,
   vacant: evidence.optional(),
+  /**
+   * 用例自己的哪一步把它拿掉（撤单、平仓就是被测动作的那种）。那一步跑完核对它确实不在了，收尾就不再动它；
+   * 没跑到那一步，照常补偿。2026-09-25：「下单→撤单」用例收尾前先找挂单，找不到就当「归属未核实」，永远过不了。
+   */
+  releasedByStep: z.number().int().positive().optional(),
 }).strict().superRefine((r, ctx) => {
   if (r.identityKind === 'generated' && !r.identity.includes('${env.TP_LIFECYCLE_ID}')) ctx.addIssue({ code: 'custom', path: ['identity'], message: 'generated identity must contain ${env.TP_LIFECYCLE_ID}' });
   if (r.identityKind === 'attribute' && !/\$\{env\.[A-Z0-9_]+\}/.test(r.identity)) ctx.addIssue({ code: 'custom', path: ['identity'], message: 'attribute identity must contain a ${env.*} value bound by preparation' });
+  if (r.releasedByStep !== undefined && r.releasedByStep <= r.establishAfterStep) ctx.addIssue({ code: 'custom', path: ['releasedByStep'], message: 'releasedByStep must come after establishAfterStep' });
   if (r.identityKind === 'slot' && !r.vacant) ctx.addIssue({ code: 'custom', path: ['vacant'], message: 'slot resources must prove the slot is vacant' });
 });
 const SettingV2Schema = z.object({
@@ -113,6 +119,7 @@ export const LIFECYCLE_ISSUE_HINTS: Record<string, string> = {
   lifecycle_readonly_mutation: 'read-only cases have empty postSteps, resources, settings and cleanup; UI-only state (tabs, panels, typed input) needs no undo because every case starts on a fresh page, and session changes are declared with session:"changed" instead of a postStep; if the case really changes a persisted setting or creates something, use mode controlled',
   lifecycle_resources_missing: 'a controlled case declares at least one resource or setting it changes',
   lifecycle_establish_unbound: 'the step at establishAfterStep must contain the resource identity text exactly',
+  lifecycle_release_unbound: 'releasedByStep must be a real step after establishment that contains the resource identity text exactly',
   lifecycle_compensation_missing: 'every resource and every setting needs a cleanup entry whose postStep undoes it',
   lifecycle_ownership_unbound: 'for generated/attribute identities the ownership screen check oracle must contain the identity text',
   lifecycle_establish_evidence_unbound: 'for generated/attribute identities the established screen check oracle must contain the identity text',
@@ -138,6 +145,7 @@ export function lifecycleIssues(c: {lifecycle?: Lifecycle; steps: string[]; post
   for(const r of l.resources){
     const bound=r.identityKind!=='slot';
     if(r.establishAfterStep>c.steps.length||!c.steps[r.establishAfterStep-1]?.includes(r.identity))issues.push('lifecycle_establish_unbound:'+r.id);
+    if(r.releasedByStep!==undefined&&(r.releasedByStep>c.steps.length||!c.steps[r.releasedByStep-1]?.includes(r.identity)))issues.push('lifecycle_release_unbound:'+r.id);
     if(!l.cleanup.some(x=>x.resourceId===r.id))issues.push('lifecycle_compensation_missing:'+r.id);
     // Ownership may include project account details, but must also name this execution's resource.
     if(bound&&!names(r.ownership,r.identity))issues.push('lifecycle_ownership_unbound:'+r.id);
@@ -164,10 +172,12 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
   redact: (text:string)=>string;
   act: (text:string)=>Promise<void>;
   available: ()=>boolean;
+  /** 重新打开入口页（读回持久状态、丢掉界面临时状态）；没有就在当前页复核。 */
+  reopen?: ()=>Promise<void>;
 }) {
   const contract=raw?normalizeLifecycle(raw):undefined;
   const receipt:LifecycleReceipt={version:1,status:'unknown',checks:[],cleanup:[],pendingResources:[],safeToRetry:true};
-  const armed=new Set<string>(); let started=false,preparationStarted=false;
+  const armed=new Set<string>(),released=new Set<string>(); let started=false,preparationStarted=false;
   const verify=async(id:string,phase:LifecycleReceipt['checks'][number]['phase'],check:z.infer<typeof PrerequisiteCheckSchema>,resourceId?:string)=>{
     let out:PrerequisiteReceipt;
     try{out=await io.check(check);}catch(e){out={statement:check.statement,status:'unknown',detail:io.redact(String(e instanceof Error?e.message:e))};}
@@ -186,8 +196,14 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
         if(r.identityKind==='slot'){if((await verify(r.id,'baseline',r.vacant!,r.id)).status!=='pass')throw new Error('LIFECYCLE_SLOT_OCCUPIED');}
         else if((await verify(r.id,'baseline',identityCheck(r.identity,true),r.id)).status!=='pass')throw new Error('LIFECYCLE_RESOURCE_ALREADY_EXISTS');
       }
-      for(const s of contract?.settings??[])if((await verify(s.id,'baseline',s.observed,s.id)).status!=='pass')throw new Error('LIFECYCLE_SETTING_BASELINE_NOT_VERIFIED');
       if(contract)receipt.status='pass';
+    },
+    /**
+     * 设置的原值在**改它的那一步之前**核对，不在入口页一次查完（2026-09-25：某市场的保证金模式在另一个市场的入口页上
+     * 根本不显示，先切市场再改模式的用例在基线就失败）。核对不过就不做这一步，也不会去还原一个没改过的设置。
+     */
+    async beforeAction(step:number){
+      for(const s of contract?.settings??[])if(s.changedAfterStep===step&&(await verify(s.id,'baseline',s.observed,s.id)).status!=='pass')throw new Error('LIFECYCLE_SETTING_BASELINE_NOT_VERIFIED');
     },
     beforePreparation(){preparationStarted=true;receipt.safeToRetry=false;},
     beforeStep(step:number){started=true;receipt.safeToRetry=contract?.mode==='read-only';
@@ -196,6 +212,11 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
     async afterStep(step:number){
       for(const r of contract?.resources??[])if(r.establishAfterStep===step){
         if((await verify(r.id,'establish',r.established,r.id)).status!=='pass')throw new Error('LIFECYCLE_ESTABLISH_NOT_VERIFIED');
+      }
+      // 用例自己拿掉了它：核对确实不在了才算释放；不在的证据不成立就留给收尾照常补偿。
+      for(const r of contract?.resources??[])if(r.releasedByStep===step&&armed.has(r.id)){
+        const gone=r.identityKind==='slot'?r.vacant!:identityCheck(r.identity,true);
+        if((await verify(r.id,'cleanup',gone,r.id)).status==='pass')released.add(r.id);
       }
     },
     async finish(){
@@ -211,8 +232,16 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
         if(started&&postSteps.length)receipt.pendingResources.push({id:'legacy-unknown',identity:'unknown',reason:'Legacy cleanup outcome cannot be verified'});
         return receipt;
       }
-      if(contract.mode==='read-only' && started)for(const [i,check] of contract.baseline.entries())await verify(`baseline-after-${i+1}`,'cleanup',check);
-      const cleaned=new Set<string>();
+      /**
+       * 只读用例跑完复核基线，查的是「有没有改到会保存的东西」。先重新打开入口页：会保存的状态刷新后还在，
+       * 切 Tab、选订单类型这类界面临时状态不在——v2 明说后者不用还原（2026-09-25：C-ORD-01-01 切到 Limit 后
+       * 在当前页复核「处于 Market」失败，而那正是用例本身的效果）。打不开入口页就照旧在当前页复核。
+       */
+      if(contract.mode==='read-only' && started){
+        if(io.reopen && io.available()){try{await io.reopen();}catch{/* 复核照旧在当前页做；失败会记在复核结果里 */}}
+        for(const [i,check] of contract.baseline.entries())await verify(`baseline-after-${i+1}`,'cleanup',check);
+      }
+      const cleaned=new Set<string>(),statusBefore=receipt.status;
       for(const x of contract.cleanup){
         const r=x.resourceId?contract.resources.find(r=>r.id===x.resourceId):undefined;
         const s=x.settingId?contract.settings.find(s=>s.id===x.settingId):undefined;
@@ -220,6 +249,7 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
         const item:LifecycleReceipt['cleanup'][number]={id:x.id,resourceId:targetId,postStep:x.postStep,status:'not-run',detail:r?'Resource establishment was not attempted':'Setting change was not attempted'};
         receipt.cleanup.push(item);
         if(!target || !armed.has(target.id))continue;
+        if(r&&released.has(r.id)){item.status='pass';item.detail=`Released by step ${r.releasedByStep}; absence verified`;cleaned.add(x.id);continue;}
         if(!io.available()){item.detail='Session closed or execution cancelled';receipt.status=receipt.status==='fail'?'fail':'unknown';continue;}
         if(r){
           // 格位没有可在屏幕上认出的本次标识，只核对归属（账户/上下文）；其余先认出本次的资源再动手。
@@ -233,7 +263,29 @@ export function lifecycleExecution(raw: Lifecycle | undefined, postSteps: string
           const verdict=await verify(x.id,'cleanup',x.verified,target.id);
           item.status=verdict.status;item.detail=verdict.detail??verdict.statement;
           if(verdict.status==='pass')cleaned.add(x.id);
-        }catch(e){item.status=io.available()?'fail':'unknown';item.detail=io.redact(String(e instanceof Error?e.message:e));receipt.status=item.status==='fail'?'fail':receipt.status==='fail'?'fail':'unknown';}
+        }catch(e){
+          // 动作做不了但核对已成立（要撤的东西本来就不在了）：以核对为准，算清理完成。
+          const verdict=io.available()?await verify(x.id,'cleanup',x.verified,target.id).catch(()=>undefined):undefined;
+          if(verdict?.status==='pass'){item.status='pass';item.detail=`already in the restored state; ${verdict.detail??verdict.statement}`;cleaned.add(x.id);continue;}
+          item.status=io.available()?'fail':'unknown';item.detail=io.redact(String(e instanceof Error?e.message:e));receipt.status=item.status==='fail'?'fail':receipt.status==='fail'?'fail':'unknown';}
+      }
+      /**
+       * 同一个资源/设置的收尾是几步手段（切标签、开弹窗）加最后一步核对。最后一步的核对成立，就是它已经回到原样，
+       * 前面某个手段没做成（要平的仓早被用例平掉了，表里没有那一行可点）不再算残留——失败原文留在 detail。
+       * 2026-09-27 C-POS-04-03：用例自己平了仓，收尾「点 Market 平仓」找不到行而失败，
+       * 最后一步「Positions 标签不带数量」成立，却被记成留下持仓、整批停下。
+       */
+      let superseded=false;
+      for(const id of new Set(receipt.cleanup.map(c=>c.resourceId).filter((v):v is string=>!!v))){
+        const items=receipt.cleanup.filter(c=>c.resourceId===id),last=items[items.length-1]!;
+        if(!cleaned.has(last.id))continue;
+        for(const c of items.slice(0,-1))if(!cleaned.has(c.id)&&(c.status==='fail'||c.status==='unknown')){
+          c.detail=`superseded: final cleanup check ${last.id} held; this step: ${c.detail??c.status}`;c.status='pass';cleaned.add(c.id);superseded=true;
+        }
+      }
+      if(superseded){
+        const open=receipt.cleanup.filter(c=>c.status==='fail'||c.status==='unknown');
+        receipt.status=statusBefore==='fail'||open.some(c=>c.status==='fail')?'fail':statusBefore!=='pass'||open.length?'unknown':'pass';
       }
       for(const r of contract.resources)if(armed.has(r.id)&&contract.cleanup.some(x=>x.resourceId===r.id&&!cleaned.has(x.id)))receipt.pendingResources.push({id:r.id,identity:io.resolve(r.identity),reason:'Required cleanup was not verified'});
       for(const s of contract.settings)if(armed.has(s.id)&&contract.cleanup.some(x=>x.settingId===s.id&&!cleaned.has(x.id)))receipt.pendingResources.push({id:s.id,identity:`${s.name} = ${io.resolve(s.original)}`,reason:'Setting was not verified as restored'});

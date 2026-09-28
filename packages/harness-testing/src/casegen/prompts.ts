@@ -102,7 +102,7 @@ export const CASES_STABLE = [
   '    {"kind":"url","value":"<part of the address>"}',
   '    {"kind":"count","value":"<a literal>","op":"eq|gte|lte","n":<number>}',
   '    {"kind":"delta","value":"<the label a number sits beside>","direction":"increased|decreased|unchanged","by":<number, optional>}   ← this one is tier 2',
-  '    {"kind":"decimal-equation","scope":{"start":"<unique visible section start>","end":"<unique visible section end>"},"inputs":[{"id":"a","label":"<exact visible label>","unit":"<exact unit>","decimals":2,"rounding":"exact|nearest|truncate"}],"actual":"<result input id>","formula":["a","b","*"],"maxAgeMs":5000} — include at least two inputs; postfix formula uses +,-,*,/ and must not reference the result. Only use observed labels and documented rounding; missing evidence blocks execution.',
+  '    {"kind":"decimal-equation","scope":{"start":"<unique visible section start>","end":"<unique visible section end>"},"inputs":[{"id":"a","label":"<exact visible label>","unit":"<exact unit>","decimals":2,"rounding":"exact|nearest|truncate"}],"actual":"<result input id>","formula":["a","b","*"],"compare":"eq","maxAgeMs":5000} — inputs name the visible readings (one is enough when comparing to a constant); postfix formula uses input ids, decimal constants (e.g. "0") and +,-,*,/ and must not reference the result; compare is eq (default), gt, gte, lt or lte between the result reading and the formula (e.g. a reading is greater than 0: formula ["0"], compare "gt"); values that the display precision cannot separate are unobservable, not a pass. Only use observed labels and documented rounding; missing evidence blocks execution.',
   "  Quote the literal EXACTLY as the specification writes it. If the outcome cannot be put",
   "  in any of these forms, then it is tier 3 — say so and leave `oracle` out. Claiming",
   "  tier 1 without an oracle is the one thing that makes the label worthless.",
@@ -508,6 +508,7 @@ export const CASES_SCHEMA = {
               inputs: { type: "array", items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, unit: { type: "string" }, decimals: { type: "integer" }, rounding: { type: "string", enum: ["exact", "nearest", "truncate"] } }, required: ["id", "label", "unit", "decimals", "rounding"], additionalProperties: false } },
               actual: { type: "string" },
               formula: { type: "array", items: { type: "string" } },
+              compare: { type: "string", enum: ["eq", "gt", "gte", "lt", "lte"] },
               maxAgeMs: { type: "integer" },
               value: { type: "string" },
               op: { type: "string", enum: ["eq", "neq", "gte", "lte", "exists", "absent", "increased", "decreased", "unchanged"] },
@@ -550,7 +551,7 @@ export const CASES_SCHEMA = {
            */
           priority: { type: "string", enum: ["P0", "P1", "P2"] },
           lifecycle: LIFECYCLE_JSON_SCHEMA,
-          requiresStates: { type: "array", items: { type: "object", additionalProperties: false, properties: { state: { type: "string" }, provided: { type: "string", enum: ["steps", "preparation"] } }, required: ["state", "provided"] } },
+          requiresStates: { type: "array", items: { type: "object", additionalProperties: false, properties: { state: { type: "string" }, provided: { type: "string", enum: ["steps", "preparation", "environment"] } }, required: ["state", "provided"] } },
           postSteps: { type: "array", items: { type: "string", minLength: 1 } },
         },
         /**

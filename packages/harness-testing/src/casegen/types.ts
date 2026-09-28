@@ -372,8 +372,10 @@ export const TextCaseSchema = z.object({
   /**
    * 这条用例依赖的业务状态（规则包 states 的 id）。steps：它自己的步骤建立（lifecycle 声明资源/设置）；
    * preparation：执行准备用配方提供，准备好之前 readiness 保持 blocked。
+   * environment：会话类状态（登录、注入钱包）由执行环境的登录与画像提供，不需要配方——
+   * 2026-09-25 以前只有前两种，「钱包已连接」只能写成 preparation，准备就要一个根本写不出来的「连接钱包」配方。
    */
-  requiresStates: z.array(z.object({ state: z.string().min(1), provided: z.enum(['steps', 'preparation']) }).strict()).max(10).optional(),
+  requiresStates: z.array(z.object({ state: z.string().min(1), provided: z.enum(['steps', 'preparation', 'environment']) }).strict()).max(10).optional(),
   /** 它覆盖哪几个测试条件（先有条件与覆盖项，再有用例）。 */
   conditionRefs: z.array(z.string().min(1)).optional(),
   /** 场景类型，和设计方法分开。见 `ScenarioType`。 */

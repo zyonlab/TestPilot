@@ -1,7 +1,7 @@
 {
   "schemaVersion": "product-rule-pack.v1",
   "id": "hyperliquid-testnet-example",
-  "version": "2026-09-24.3",
+  "version": "2026-09-26.1",
   "domain": "perpetual-trading",
   "product": "Hyperliquid Testnet 内置示例",
   "network": "testnet",
@@ -18,6 +18,20 @@
       "kind": "domain-reference",
       "locator": "examples/hyperliquid-testnet/domain-knowledge.md",
       "note": "示例设计假设，不是实测证据"
+    },
+    {
+      "id": "user-2026-09-25",
+      "kind": "domain-reference",
+      "locator": "examples/hyperliquid-testnet/domain-knowledge.md",
+      "fragment": "杠杆与保证金",
+      "note": "用户 2026-09-25 提供的领域规则：有持仓时可能不能切换保证金模式；待实测"
+    },
+    {
+      "id": "user-2026-09-26",
+      "kind": "domain-reference",
+      "locator": "examples/hyperliquid-testnet/domain-knowledge.md",
+      "fragment": "执行优先级",
+      "note": "用户 2026-09-26 确认：生命周期主链、影响资金、高频使用决定 P0/P1/P2；高频=选市场、下单、看持仓、撤单、平仓；中=杠杆/保证金/追加保证金/历史；低=充值提现划转入口、水龙头、隐藏小额余额、市场列表筛选"
     }
   ],
   "modules": [
@@ -55,7 +69,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "medium"
     },
     {
       "id": "market.inspect",
@@ -64,7 +79,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "medium"
     },
     {
       "id": "orders.inspect",
@@ -73,7 +89,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "positions.inspect",
@@ -82,7 +99,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "margin.inspect",
@@ -91,7 +109,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "medium"
     },
     {
       "id": "account.ready",
@@ -100,7 +119,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "market.select",
@@ -109,7 +129,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "orders.submit",
@@ -118,7 +139,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "orders.cancel",
@@ -127,7 +149,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "orders.history",
@@ -136,7 +159,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "medium"
     },
     {
       "id": "positions.open",
@@ -145,7 +169,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "positions.close",
@@ -154,7 +179,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "high"
     },
     {
       "id": "margin.add",
@@ -163,7 +189,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "medium"
     },
     {
       "id": "margin.configure",
@@ -172,7 +199,8 @@
       "applicability": "unresolved",
       "applicabilitySourceRefs": [
         "example"
-      ]
+      ],
+      "usage": "medium"
     }
   ],
   "rules": [
@@ -249,6 +277,21 @@
       "verification": {
         "kind": "open-question",
         "question": "当前页面支持哪些杠杆、保证金与风险状态？缺少哪些前提？"
+      }
+    },
+    {
+      "id": "R-margin-mode-position",
+      "featureIds": [
+        "margin.configure"
+      ],
+      "claimType": "hypothesis",
+      "statement": "某市场存在持仓时，该市场的保证金模式（Cross / Isolated）可能不能切换；切换模式的用例须先证明该市场无持仓，涉及持仓的用例须先平仓再还原保证金模式",
+      "sourceRefs": [
+        "user-2026-09-25"
+      ],
+      "verification": {
+        "kind": "open-question",
+        "question": "有持仓时切换保证金模式，产品是禁用切换、提交后拒绝（文案是什么），还是允许？"
       }
     }
   ],
@@ -379,7 +422,96 @@
     }
   ],
   "roles": [],
-  "lifecycle": [],
+  "lifecycle": [
+    {
+      "id": "life.account.ready",
+      "name": "账户准备",
+      "order": 1,
+      "featureIds": [
+        "account.ready"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.market.select",
+      "name": "选择市场",
+      "order": 2,
+      "featureIds": [
+        "market.select"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.margin.configure",
+      "name": "配置杠杆与保证金模式",
+      "order": 3,
+      "featureIds": [
+        "margin.configure"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.orders.submit",
+      "name": "下单",
+      "order": 4,
+      "featureIds": [
+        "orders.submit"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.positions.open",
+      "name": "开仓",
+      "order": 5,
+      "featureIds": [
+        "positions.open"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.margin.add",
+      "name": "调整保证金",
+      "order": 6,
+      "featureIds": [
+        "margin.add"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.orders.cancel",
+      "name": "撤单",
+      "order": 7,
+      "featureIds": [
+        "orders.cancel"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    },
+    {
+      "id": "life.positions.close",
+      "name": "平仓",
+      "order": 8,
+      "featureIds": [
+        "positions.close"
+      ],
+      "sourceRefs": [
+        "user-2026-09-26"
+      ]
+    }
+  ],
   "externalCapabilities": [],
   "forbidLabels": [
     "^Place Order$",
@@ -591,16 +723,19 @@
       "name": "配置杠杆与保证金模式",
       "claimType": "hypothesis",
       "sourceRefs": [
-        "example"
+        "example",
+        "user-2026-09-25"
       ],
       "preconditions": [
         "已选择市场",
-        "已区分空仓、持仓和挂单状态"
+        "已区分空仓、持仓和挂单状态",
+        "切换保证金模式时该市场没有持仓（有持仓时可能不允许切换）"
       ],
       "action": "检查并调整杠杆或保证金模式",
       "outcome": "明确适用范围、允许变更条件与结果",
       "failureModes": [
-        "已有持仓或挂单限制变更",
+        "该市场已有持仓时切换保证金模式被禁止或拒绝",
+        "已有挂单限制变更",
         "超出允许范围"
       ],
       "preparation": "先查看模式与限制；实际变更需要授权及恢复方案",
@@ -649,5 +784,10 @@
       "kind": "setting",
       "description": "刷新后仍保留的账户设置；改动后须还原为执行前屏幕显示的原值"
     }
+  ],
+  "persistedSettings": [
+    "(?:点击?|单击|click|tap|选择?|select|切(?:换)?到|switch to)[^,，;；→]{0,20}\\b(?:Limit|Market)\\b(?!\\s*(?:Close|Price|单平|平仓))",
+    "(?:点击?|单击|click|tap|选择?|select|切(?:换)?到|switch to)[^,，;；→]{0,20}\\b(?:Cross|Isolated)\\b",
+    "(?:杠杆|leverage)[^,，;；→]{0,30}(?:输入|设为|改为|拖|enter|set|drag|type)|(?:输入|设为|改为|enter|set|type)[^,，;；→]{0,30}(?:杠杆|leverage)"
   ]
 }

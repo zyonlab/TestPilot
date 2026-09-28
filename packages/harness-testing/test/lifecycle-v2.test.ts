@@ -87,3 +87,45 @@ describe('runtime', () => {
     expect(lifecycleExecution(undefined, [], io({ text: '' }, [])).sessionChanged).toBe(false);
   });
 });
+
+it('re-checks a read-only baseline on a reopened entry page, so UI-only changes do not count as mutations', async () => {
+  const screen = { text: 'Ready Market Slippage' };
+  const lc = (reopen?: () => Promise<void>) => lifecycleExecution(LifecycleSchema.parse({ version: 2, mode: 'read-only', ...common, baseline: [check('Slippage')] }), [], {
+    check: async (c: { statement: string; checks: unknown[] }) => { const o = (c.checks[0] as { oracle: { value: string } }).oracle; return { statement: c.statement, status: screen.text.includes(o.value) ? 'pass' as const : 'fail' as const }; },
+    resolve: (t: string) => t, redact: (t: string) => t, available: () => true, act: async () => {}, ...(reopen ? { reopen } : {}),
+  });
+  const withReopen = lc(async () => { screen.text = 'Ready Market Slippage'; });
+  await withReopen.baseline(); withReopen.beforeStep(1); screen.text = 'Ready Limit Price (USDC)';
+  expect((await withReopen.finish()).status).toBe('pass');
+  screen.text = 'Ready Market Slippage';
+  const without = lc(); await without.baseline(); without.beforeStep(1); screen.text = 'Ready Limit Price (USDC)';
+  expect((await without.finish()).status).toBe('fail');
+});
+
+it('a failed means-step does not leave a resource pending when its final cleanup check holds', async () => {
+  // 2026-09-27 C-POS-04-03：用例已平仓，收尾「点平仓按钮」找不到行；最后一步「没有持仓」成立就不算残留。
+  const slot = LifecycleSchema.parse({ version: 2, mode: 'controlled', ...common,
+    resources: [{ id: 'pos', sourceRef: 'spec#1', identityKind: 'slot', identity: 'market A', establishAfterStep: 1, established: check('Close'), ownership: check('0xabc'), vacant: check('No open positions') }],
+    cleanup: [
+      { id: 'open-close', resourceId: 'pos', postStep: 1, verified: check('Close dialog') },
+      { id: 'closed', resourceId: 'pos', postStep: 2, verified: check('No open positions') },
+    ] });
+  const run = async (goneAfterSteps: boolean) => {
+    const screen = { text: 'Ready No open positions 0xabc' };
+    const lc = lifecycleExecution(slot, ['Click the row close button', 'Confirm close'], {
+      check: async (c: { statement: string; checks: unknown[] }) => { const o = (c.checks[0] as { oracle: { value: string } }).oracle; return { statement: c.statement, status: screen.text.includes(o.value) ? 'pass' as const : 'fail' as const }; },
+      resolve: (t: string) => t, redact: (t: string) => t, available: () => true,
+      act: async (t: string) => { if (t.startsWith('Click the row')) throw new Error('no row to click'); },
+    });
+    await lc.baseline(); lc.beforeStep(1); screen.text = 'Ready market A Close 0xabc'; await lc.afterStep(1);
+    screen.text = goneAfterSteps ? 'Ready No open positions 0xabc' : 'Ready market A Close 0xabc';
+    return lc.finish();
+  };
+  const gone = await run(true);
+  expect(gone.pendingResources).toEqual([]);
+  expect(gone.status).toBe('pass');
+  expect(gone.cleanup[0]).toMatchObject({ status: 'pass', detail: expect.stringMatching(/^superseded: final cleanup check closed held; this step: no row to click/) });
+  const stuck = await run(false);
+  expect(stuck.pendingResources.map((p) => p.id)).toEqual(['pos']);
+  expect(stuck.status).toBe('fail');
+});
