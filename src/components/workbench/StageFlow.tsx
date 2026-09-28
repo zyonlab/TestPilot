@@ -1,4 +1,4 @@
-import {nodeStatusKey} from './nodeStatus';
+import {nodeStatusKey,displayNodePhase} from './nodeStatus';
 import { memo, useId, useMemo, useState } from 'react';
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import { AlertCircle, CheckCircle2, Circle, FileText, Loader2, ChevronDown, Pause, Plus } from 'lucide-react';
@@ -29,7 +29,7 @@ const StageNode = memo(function StageNode({ data }: NodeProps<Node<StageData>>) 
   const [artifactsOpen, setArtifactsOpen] = useState(true);
   const artifactsId = useId();
   const Icon = data.state === 'done' ? CheckCircle2 : data.state === 'stopped' ? AlertCircle : ['running','starting'].includes(data.state) ? Loader2 : Circle;
-  const artifactLabel = (r: Revision) => r.name === 'exploration/observations' ? t('exploration.graph') : r.name === 'knowledge/domain-reference' ? t('surface.domainReferences') : r.name.startsWith('knowledge/rulepack/') ? `${t('surface.rulePacks')} · ${r.name.slice('knowledge/rulepack/'.length)}` : r.kind === 'execution' ? t('surface.runs') : r.kind === 'code' ? t('workflow.kind.code') : r.name.startsWith('validated/') ? data.label : r.name;
+  const artifactLabel = (r: Revision) => r.name === 'exploration/report' ? t('artifact.explorationReport') : r.name === 'exploration/planner-call' ? t('exploration.planning.title') : r.name === 'exploration/observations' ? t('exploration.graph') : r.name === 'knowledge/domain-reference' ? t('surface.domainReferences') : r.name.startsWith('knowledge/rulepack/') ? `${t('surface.rulePacks')} · ${r.name.slice('knowledge/rulepack/'.length)}` : r.kind === 'execution' ? t('surface.runs') : r.kind === 'code' ? t('workflow.kind.code') : r.name.startsWith('validated/') ? data.label : r.name;
   return <div style={{ width: NODE_W }} className="group">
     <Handle id="tl" type="target" position={Position.Left} style={{ top: 38 }} className={hidden} isConnectable={false} />
     <Handle id="tr" type="target" position={Position.Right} style={{ top: 38 }} className={hidden} isConnectable={false} />
@@ -96,7 +96,8 @@ export function StageFlow({ run, stages, breakpoints, busy, nodeRevisions, onTog
     const nodes: Node<StageData>[] = stages.map((stage, i) => {
       const event = [...run.nodes].reverse().find((n) => n.node === stage);
       const artifacts = nodeRevisions(stage, run.revisions);
-      const phase = stage === 'source' ? (event?.phase ?? (run.binding?.inputHash ? 'done' : 'queued')) : event?.phase ?? 'queued';
+      const rawPhase = stage === 'source' ? (event?.phase ?? (run.binding?.inputHash ? 'done' : 'queued')) : event?.phase ?? 'queued';
+      const phase = event?displayNodePhase(rawPhase,run.status)!:rawPhase;
       const done = ['done', 'completed', 'passed'].includes(phase);
       const stopped = ['paused', 'blocked', 'failed', 'infra_error', 'waiting_review'].includes(phase) && !done;
       const untouched = stage !== 'review' && !event && !artifacts.length && phase === 'queued';
@@ -104,7 +105,7 @@ export function StageFlow({ run, stages, breakpoints, busy, nodeRevisions, onTog
       states.push(state);
       return {
         id: stage, type: 'stage', position: { x: slot(i).x, y: slot(i).y },
-        data: { stage, label: t(stage === 'source' ? `bench.source.${sourceKind}` : `workflow.stage.${stage}`), phase, state, message: event?.message,
+        data: { stage, label: t(stage === 'source' ? `bench.source.${sourceKind}` : `workflow.stage.${stage}`), phase, state, message: phase===rawPhase?event?.message:t(nodeStatusKey(phase)),
           artifacts, breakpoint: breakpoints.includes(stage), canBreak: untouched, busy, onToggleBreakpoint },
       };
     });

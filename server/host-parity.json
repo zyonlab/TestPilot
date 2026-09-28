@@ -598,6 +598,18 @@
   {
    "source": "index.ts",
    "method": "GET",
+   "path": "/api/projects/:id/planner-host",
+   "host": "tp_project.planner_host"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/planner-host",
+   "host": "tp_project.select_planner_host"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
    "path": "/api/projects/:id/quarantine-log",
    "host": "tp_report.quarantine_log"
   },
@@ -678,6 +690,174 @@
    "method": "PATCH",
    "path": "/api/projects/:id",
    "host": "tp_project.update"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/artifact-comparisons/:id/reviews",
+   "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/artifact-comparisons/:id",
+   "host": "tp_eval.read_artifact_comparison"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/artifact-comparisons",
+   "host": "tp_eval.artifact_comparisons"
+  },
+  {
+   "source": "artifactComparisons.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/artifact-comparisons",
+   "host": "tp_eval.compare_artifacts"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/candidates",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/compare",
+   "status": "todo"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/comparisons",
+   "host": "tp_assets.comparisons"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/comparisons",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/discoveries/:id/decision",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/discoveries/collect",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/discoveries",
+   "host": "tp_assets.discoveries"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/impact/:id",
+   "host": "tp_assets.impact"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/plans/:id/start",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/plans/:id",
+   "host": "tp_assets.plan"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/plans",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/snapshots/:id",
+   "host": "tp_assets.snapshot"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/snapshots",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/tasks/:id/decision",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/tasks/:id/follow-ups",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/tasks/:id/run",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/tasks",
+   "host": "tp_assets.tasks"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/tasks",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/assets/versions/:id/decision",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets/versions/:id",
+   "host": "tp_assets.version"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/assets",
+   "host": "tp_assets.list"
+  },
+  {
+   "source": "knowledgeLibrary.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/knowledge-library/:kind/:id",
+   "host": "tp_project.knowledge_library_entry"
+  },
+  {
+   "source": "knowledgeLibrary.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/knowledge-library/:kind",
+   "host": "tp_project.knowledge_library"
+  },
+  {
+   "source": "knowledgeLibrary.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/knowledge-library/:kind",
+   "host": "tp_project.save_knowledge_library"
   },
   {
    "source": "modelProfilesRoutes.ts",
@@ -898,6 +1078,12 @@
   {
    "source": "runRoutes.ts",
    "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/stages/discoveries/report",
+   "host": "tp_stage.discovery"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/execute",
    "host": "tp_stage.execute"
   },
@@ -978,6 +1164,18 @@
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/stages/units/write",
    "host": "tp_unit.write"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/story-requirements/approve",
+   "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "GET",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/story-requirements",
+   "status": "todo"
   },
   {
    "source": "runRoutes.ts",
@@ -1227,8 +1425,8 @@
   }
  ],
  "baseline": {
-  "covered": 188,
-  "reachable": 192,
-  "rate": 0.9792
+  "covered": 205,
+  "reachable": 211,
+  "rate": 0.9716
  }
 }

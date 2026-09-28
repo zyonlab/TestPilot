@@ -7,7 +7,7 @@ import { generationMessage, prepareSkillLaunch } from './runtime/skill-launch.js
 import { configuredRunBudget } from './runBudget.js';
 import { REPO_ROOT, defaultWorkspace, newRunId, readRun, writeDecisions, watchRun as sharedWatchRun, type StartRunInput, type StartedRun } from './penguin.js';
 export { readRun, writeDecisions };
-const live = new Map<string, { child: ChildProcess; state: 'running' | 'idle' | 'gone'; wallMs: number; stopReason?: string }>();
+const live = new Map<string, { child: ChildProcess; state: 'running' | 'idle' | 'gone'; wallMs: number; stopReason?: string; finalMessage?:string }>();
 export const codexBin = () => process.env.TP_CODEX_BIN || 'codex';
 export function codexSessionId(line: Record<string, unknown>) { return line.type === 'thread.started' && typeof line.thread_id === 'string' ? line.thread_id : undefined; }
 // Values become individual argv entries, never shell source. Only credential file paths are passed.
@@ -49,6 +49,7 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
         const raw = buffer.slice(0, newline); buffer = buffer.slice(newline + 1); if (!raw.trim()) continue;
         appendFileSync(tracePath, raw + '\n', { mode: 0o600 });
         try { const event = JSON.parse(raw), id = codexSessionId(event);
+          if(event.type==='item.completed'&&event.item?.type==='agent_message'&&typeof event.item.text==='string')item.finalMessage=event.item.text.slice(0,3500);
           if (event.type === 'turn.completed' && event.usage && nativeSessionId && input.scopeProjectId) recordHostSummary(runId, 'codex', `${nativeSessionId}:${++turn}`, event.usage);
           if (id && !ready) { nativeSessionId = id; ready = true; clearTimeout(startup); writeFileSync(join(outDir, 'host-identity.json'), JSON.stringify({ runtime: 'codex', sessionId: id, plannerSource: 'host', model: null, modelIdentityEvidence: 'not_reported_in_exec_events', budget: { wallMs: budget.wallMs, nativePlannerCallLimit: 'host_controlled' } })); resolve(id); }
         } catch { /* Preserve original event for inspection. */ }
@@ -69,5 +70,5 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   return { sessionId, workspace, runId, outDir };
 }
 export function watchRun(opts: Parameters<typeof sharedWatchRun>[0]) {
-  sharedWatchRun({ ...opts, timeoutMs: live.get(opts.runId)?.wallMs ?? opts.timeoutMs, errorOf: () => live.get(opts.runId)?.stopReason, stateOf: () => live.get(opts.runId)?.state ?? 'gone', onDone: result => { if (result.status !== 'done') cancelRun(opts.runId); opts.onDone(result); } });
+  sharedWatchRun({ ...opts, timeoutMs: live.get(opts.runId)?.wallMs ?? opts.timeoutMs, errorOf: () => live.get(opts.runId)?.stopReason ?? (live.get(opts.runId)?.finalMessage ? '宿主已结束，但当前节点尚未提交完成回执。宿主说明：\n'+live.get(opts.runId)!.finalMessage : undefined), stateOf: () => live.get(opts.runId)?.state ?? 'gone', onDone: result => { if (result.status !== 'done') cancelRun(opts.runId); opts.onDone(result); } });
 }

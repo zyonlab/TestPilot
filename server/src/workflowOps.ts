@@ -1,3 +1,6 @@
+import {guardStoryResume,pauseForStoryReview,inheritStoryApproval} from './storyReview.js';
+import {requireHost} from "./plannerHost.js";
+import {readKnowledgeLibrary} from "./knowledgeLibrary.js";
 import {explorationEnvironment,explorationInputFingerprint} from './explorationReuse.js';
 import { evaluateExplorationResult } from "./explorationResults.js";
 import { ExplorationAttemptSchema, explorationExecId, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
@@ -30,9 +33,9 @@ import { loadRunInstructions, registeredStageProducts } from "./runStages.js";
 import { StoryBundleSchema } from "@testpilot/harness-testing/casegen";
 import { buildProductModel, charterFromRulePack, describeProductModel, validateRulePack, ContextManifestSchema, ExplorationReportSchema, ProductModelSchema, type ContextManifest, type ExplorationCharter, type ProductRulePack } from "@testpilot/harness-testing/domain";
 
-export async function createWebWorkflow(projectId: string, raw: unknown, prepared?: {runId:string;node:string}) {
+export async function createWebWorkflow(projectId: string, raw: unknown, prepared?: {runId:string;node:string;fresh?:boolean}) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
-  const input = z.object({idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
+  const input = z.object({projectPlanId:z.string().optional(),projectRunMode:z.enum(['incremental','clean','rebuild']).optional(),projectLineageId:z.string().optional(),reuseExperience:z.boolean().optional(),knowledgeSelection:z.string().nullable().optional(),rulePackSelection:z.string().nullable().optional(),idempotencyKey:z.string().min(1).max(160),sourceKind:z.enum(['spec','explore']).default('spec'),outputLanguage:z.enum(['zh','en','ja']).default('zh'),maxScreens:z.number().int().min(0).max(50).default(getProject(projectId)?.explorationMaxScreens ?? 8),explorationScope:z.enum(["current-url","rules"]).default(getProject(projectId)?.explorationScope ?? "rules"),sourceUrl:z.string().url().optional(),pageVersion:z.string().trim().min(1).max(160).optional(),exploreActions:z.enum(['observe','interact']).default('observe'),exploreWallet:z.boolean().optional(),materials:z.array(material).max(20).default([]),knowledge:z.array(material.extend({roles:z.array(z.enum(['source','stories','cases','gate'])).default(['stories','cases'])})).max(20).default([]),rulePacks:z.array(z.unknown()).max(5).default([]),workUnits:z.boolean().default(false),importProductModel:z.unknown().optional(),importStories:z.unknown().optional(),limit:z.number().int().min(1).max(50).default(12),envRef:z.string().optional(),planner:z.enum(['claude-code','codex','penguin','connected']).optional()}).parse(raw);
   /**
    * 禁止名单上的地址什么都不跑（`config.guard.denyHosts`，运营方配置）。环境与运行参数都放不开它。
    * 探索不带钱包、不点会改状态的东西也不行：观察本身会带着登录态与会话去访问那个地址。
@@ -53,7 +56,9 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 以前不给就是没有：同一个项目连着跑两次，一次贴了包一次忘了，产出的东西完全不是
    * 一回事，而界面上看不出差别。规则包属于项目，运行只是引用它。
    */
-  if(!prepared&&!input.rulePacks.length){const current=currentRulePack(projectId);if(current)input.rulePacks=[current];}
+  if(input.knowledgeSelection){const entry=readKnowledgeLibrary(projectId,'domainKnowledge',input.knowledgeSelection);input.knowledge.push({name:'domain-knowledge.md',text:entry.value,roles:['source','stories','cases','gate']});}
+  if(input.rulePackSelection)input.rulePacks=[readKnowledgeLibrary(projectId,'rulePack',input.rulePackSelection).value];
+  if(!prepared&&input.rulePackSelection===undefined&&!input.rulePacks.length){const current=currentRulePack(projectId);if(current)input.rulePacks=[current];}
   const packs=input.rulePacks.map(raw=>{const v=validateRulePack(raw);if(!v.ok)throw new LedgerError(400,`invalid_rule_pack:${v.errors.slice(0,3).map(e=>`${e.code}@${e.jsonPointer}`).join(';')}`);return v;});
   if(new Set(packs.map(p=>p.pack.id)).size!==packs.length)throw new LedgerError(400,'duplicate_rule_pack_id');
   /**
@@ -85,7 +90,7 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 规划由谁跑，在创建这一刻定下并记进运行：续跑必须用同一个运行时，否则模型绑定对不上。
    * 起不来的（本机没有 `claude`、没装 Penguin）当场拒掉，而不是探索跑完几分钟之后才失败。
    */
-  const plannerRuntime=input.planner??defaultRuntimeName();
+  const plannerRuntime=input.planner==='connected'?await requireHost(projectId):input.planner??defaultRuntimeName();
   if(plannerRuntime!=='claude-code'&&plannerRuntime!=='codex'&&plannerRuntime!=='penguin')throw new LedgerError(400,`web_planner_runtime_unsupported:${plannerRuntime}`);
   if(!plannerRuntimeAvailable(plannerRuntime))throw new LedgerError(400,`planner_runtime_unavailable:${plannerRuntime}`);
   const runId = prepared?.runId ?? `run-${randomUUID()}`;
@@ -99,13 +104,13 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 漏了它们，重跑出来的就是另一种探索——而没有人会知道这一次和上一次的差别在哪。
    * 它们同时也是这次运行**被授权做过什么**的凭证：谁允许探索去点会改状态的东西，记在这里。
    */
-  const params={pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
+  const params={projectPlanId:input.projectPlanId,projectRunMode:input.projectRunMode,projectLineageId:input.projectLineageId,reuseExperience:input.reuseExperience,knowledgeSelection:input.knowledgeSelection,rulePackSelection:input.rulePackSelection,pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
   registerWebRun(runId,projectId,models.binding,params);
   for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
   // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。
-  if(!prepared)for(const {pack,hash} of packs) bindRulePack(runId,projectId,pack,hash,{kind:'system',id:'web'});
+  if(!prepared||prepared.fresh)for(const {pack,hash} of packs) bindRulePack(runId,projectId,pack,hash,{kind:'system',id:'web'});
   // 领域参考：项目当前那一版冻结绑定进这次运行；没有就没有（domainReferences.ts）。
-  if(!prepared)bindDomainReference(runId,projectId);
+  if(!prepared&&!input.projectRunMode)bindDomainReference(runId,projectId);
   if(imported)ledger.putRevision({projectId,runId,name:'product/model-candidate',kind:'report',content:imported},{kind:'system',id:'web'});
   if(importedStories)ledger.putRevision({projectId,runId,name:'validated/stories',kind:'stories',content:importedStories},{kind:'system',id:'stage-validator'});
   // Acknowledge creation immediately; the source node owns exploration and its failures.
@@ -145,7 +150,7 @@ export function readPartialObservation(expected:ExplorationAttempt) {
   }catch{return undefined;}
 }
 
-async function launchSource(runId:string,projectId:string,directory:string,params:{sourceKind:string;sourceUrl?:string;limit:number;stageControlVersion:number;outputLanguage?:string;maxScreens?:number;explorationScope?:"current-url"|"rules";envRef?:string;exploreActions?:string;exploreWallet?:boolean},envRef?:string){
+export async function launchSource(runId:string,projectId:string,directory:string,params:{sourceKind:string;sourceUrl?:string;limit:number;stageControlVersion:number;outputLanguage?:string;maxScreens?:number;explorationScope?:"current-url"|"rules";envRef?:string;exploreActions?:string;exploreWallet?:boolean},envRef?:string){
   const ledger=runLedger();
   const putSourceRevision: typeof ledger.putRevision = (input, actor) => {
     const previous = ledger.listRevisions(projectId, runId).filter(r => r.name === input.name && r.kind === input.kind).sort((a,b) => b.revision - a.revision)[0];
@@ -194,7 +199,7 @@ async function launchSource(runId:string,projectId:string,directory:string,param
       if(!result.notes?.trim())throw new Error('exploration_returned_no_observations');
       const observation=putSourceRevision({runId,projectId,name:'exploration/observations',kind:'report',content:{...result,sourceCharter:bound.charter},sourceRefs:[attemptRevision.id,manifestRevision.id]},{kind:'system',id:'explorer'});
       let productText='';
-      const reportRevision=result.report?putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:result.report,sourceRefs:[observation.id,manifestRevision.id]},{kind:'system',id:'explorer'}):undefined;
+      const reportRevision=result.report?putSourceRevision({runId,projectId,name:'exploration/report',kind:'report',content:result.report,sourceRefs:[observation.id,manifestRevision.id,...ledger.listRevisions(projectId,runId).filter(r=>r.name==='exploration/planner-call').map(r=>r.id)]},{kind:'system',id:'explorer'}):undefined;
       if(bound.charter && reportRevision && ExplorationReportSchema.safeParse(result.report).success){
         // 无结构化回执的半成品只保存 unknown 摘要，不推导产品模型。
         const report=ExplorationReportSchema.parse(result.report);
@@ -292,6 +297,7 @@ export async function resumeProjectWorkflow(runId: string, projectId: string, ne
     void launchSource(runId,projectId,dataPath(`uploads/${runId}`),params).catch(()=>{});
     return {status:'running'};
   }
+  guardStoryResume(runId,projectId);
   const checkpoint = workflowCheckpoint(runId, projectId);
   const row = ledger.getRun(runId, projectId);
   /**
@@ -369,6 +375,8 @@ export async function rerunProjectNode(runId:string,projectId:string,raw:unknown
         stageEvent(nextId,projectId,node,'done','沿用上游产物，来源 '+runId);
       }
     }
+    if(before.includes('stories'))inheritStoryApproval(runId,nextId,projectId);
+    if(before.includes('stories')&&pauseForStoryReview(nextId,projectId)){stageEvent(nextId,projectId,input.node,'blocked','等待本次运行的候选故事审核；当前节点尚未启动。');return created;}
     configureNextNode(nextId,projectId,input.node);
     const nextParams=l.requireRun(nextId,projectId).input.parameters;
     stageEvent(nextId,projectId,input.node,'queued','正在启动：等待执行器会话就绪');

@@ -38,3 +38,10 @@ it('partial without a graph keeps unknown evidence instead of inventing an empty
  expect(result.assessment).toMatchObject({status:'unknown',progress:null,stop:{kind:'failed'}});
  expect(result.assessment?.targets[0].reason).toBe('evidence_not_collected');
 });
+it('preserves host planning across server reassessment and renders hypotheses separately from evidence',()=>{
+ lang='zh';const planning=[{state:'entry',business:'交易表单',decisions:[{label:'Limit',selector:'#limit',feature:'限价单',reason:'标签与订单表单',expected:'价格字段',risk:'ui-only',status:'unexplored'}]}];
+ const result=evaluateExplorationResult({url:charter.scope.entryUrl,graph,report:{...report(),planning},stopped:{kind:'screenCap',n:8}},charter);
+ expect((result.report as any).planning).toEqual(planning);
+ const html=renderToStaticMarkup(<RevisionContent kind="report" content={result.report}/>);
+ expect(html).toContain('限价单');expect(html).toContain('尚未探索');expect(html).toContain('尚未核验变化是否符合预期');
+});

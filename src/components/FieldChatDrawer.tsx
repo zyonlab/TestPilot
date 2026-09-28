@@ -1,3 +1,4 @@
+import {PlannerHost} from "./PlannerHost";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessagesSquare } from "lucide-react";
 import { Drawer } from "@/components/overlay";
@@ -40,8 +41,12 @@ export function FieldChatDrawer({
   runId: fixedRunId,
   onApply,
   onClose,
+  initialValue,
+  applyLabel,
 }: {
   field: "rulePack" | "domainKnowledge" | "domainReference";
+  initialValue?: unknown;
+  applyLabel?: string;
   /** 抽屉标题里那个字段名。给了就用给的——页面比这里更清楚它把这个字段叫什么。 */
   title?: string;
   projectId: string;
@@ -55,7 +60,9 @@ export function FieldChatDrawer({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hostReady,setHostReady]=useState(false);
   const [runs, setRuns] = useState<RunRow[]>([]);
+  const [sourcesState, setSourcesState] = useState<"loading" | "ready" | "error">("loading");
   const [runId, setRunId] = useState(fixedRunId ?? "");
   const [draft, setDraft] = useState<Draft>();
   const [applyError, setApplyError] = useState("");
@@ -64,15 +71,20 @@ export function FieldChatDrawer({
   useEffect(() => {
     if (fixedRunId) return;
     const c = new AbortController();
+    setSourcesState("loading");
+    setRuns([]);
+    setRunId("");
     void fetch(`${API_BASE}/api/chat/fields?projectId=${encodeURIComponent(projectId)}`, { signal: c.signal })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d: { runs?: RunRow[] }) => {
-        const rows = d.runs ?? [];
+        if (c.signal.aborted) return;
+        const rows = (d.runs ?? []).filter(r => r.materials > 0);
+        setSourcesState("ready");
         setRuns(rows);
         // 默认选**手里有材料的最近一次**——最近一次运行未必采到过东西。
         setRunId((cur) => cur || rows.find((r) => r.materials > 0)?.runId || "");
       })
-      .catch(() => {});
+      .catch(() => { if (!c.signal.aborted) setSourcesState("error"); });
     return () => c.abort();
   }, [projectId, fixedRunId]);
 
@@ -85,7 +97,7 @@ export function FieldChatDrawer({
   const send = useCallback(
     async (text: string) => {
       const said = text.trim();
-      if (!said || busy) return;
+      if (!said || busy || !hostReady) return;
       const next = [...turns, { role: "you" as const, text: said }];
       setTurns(next);
       setInput("");
@@ -97,12 +109,13 @@ export function FieldChatDrawer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             intent: "field",
+            useHost: true,
             field,
             projectId,
             // 材料由网关自己去账本里读。页面不替模型准备证据——它准备得了的只有它正在显示的那点。
             ...(runId ? { context: { kind: "run", wfRunId: runId } } : {}),
             // 上一版原样带回去：这一轮是改它。不带的话，实测是改一个枚举值顺手丢掉三个功能。
-            ...(draft ? { previous: draft.value } : {}),
+            ...(draft || initialValue !== undefined ? { previous: draft ? draft.value : initialValue } : {}),
             messages: next
               .filter((m) => m.role !== "sys")
               .map((m) => ({ role: m.role === "you" ? "user" : "assistant", text: m.text })),
@@ -119,7 +132,7 @@ export function FieldChatDrawer({
         setBusy(false);
       }
     },
-    [busy, draft, field, projectId, runId, turns],
+    [busy, draft, field, projectId, runId, turns, initialValue,hostReady],
   );
 
   /**
@@ -144,6 +157,7 @@ export function FieldChatDrawer({
     }
   };
 
+  const examplePrompt = `${t("field.exampleBase")}\n\n${t(field === "rulePack" ? "field.exampleRules" : field === "domainReference" ? "field.exampleReference" : "field.exampleKnowledge")}`;
   const chosen = runs.find((r) => r.runId === runId);
 
   return (
@@ -160,10 +174,11 @@ export function FieldChatDrawer({
       }
     >
       <p className="border-b border-border px-4 py-2 text-[0.75rem] leading-relaxed text-muted-foreground">
-        {t("field.rule")}
+        {t(applyLabel ? "library.chatHint" : "field.rule")}
       </p>
 
-      {!fixedRunId && (
+      <div className="px-3 py-2"><PlannerHost projectId={projectId} onReady={setHostReady}/></div>
+      {!fixedRunId && sourcesState === "ready" && runs.length > 0 && (
         <label className="flex flex-col gap-1 border-b border-border px-4 py-2 text-[0.75rem]">
           <span className="text-muted-foreground">{t("field.evidence")}</span>
           <select
@@ -185,7 +200,19 @@ export function FieldChatDrawer({
         </label>
       )}
 
+      {!fixedRunId && (sourcesState !== "ready" || runs.length === 0) && (
+        <p role="status" className="border-b border-border px-4 py-2 text-xs leading-relaxed text-muted-foreground">
+          {t(sourcesState === "loading" ? "field.sourcesLoading" : sourcesState === "error" ? "field.sourcesError" : "field.sourcesEmpty")}
+        </p>
+      )}
+
       <div className="min-h-0 flex-1 overflow-auto p-3">
+        <details className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
+          <summary className="cursor-pointer text-sm font-medium">{t("field.exampleTitle")}</summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t("field.exampleHint")}</p>
+          <p className="my-3 whitespace-pre-wrap text-sm leading-relaxed">{examplePrompt}</p>
+          <Button type="button" size="sm" disabled={busy} onClick={() => setInput(current => current.trim() ? `${current}\n\n${examplePrompt}` : examplePrompt)}>{t("field.exampleUse")}</Button>
+        </details>
         {turns.length === 0 && (
           <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">{t(`field.hint.${field}`)}</p>
         )}
@@ -249,6 +276,7 @@ export function FieldChatDrawer({
         <div className="flex items-end gap-2">
           <textarea
             className="h-16 min-w-0 flex-1 resize-none rounded-md border border-border bg-background px-2 py-1 text-[0.8125rem]"
+            aria-label={t("field.placeholder")}
             value={input}
             placeholder={t("field.placeholder")}
             onChange={(e) => setInput(e.target.value)}
@@ -257,11 +285,11 @@ export function FieldChatDrawer({
             }}
           />
           <div className="flex flex-col gap-1">
-            <Button variant="primary" disabled={busy || !input.trim()} onClick={() => void send(input)}>
+            <Button variant="primary" disabled={busy || !hostReady || !input.trim()} onClick={() => void send(input)}>
               {t("wf.chatSend")}
             </Button>
             <Button disabled={busy || !draft?.valid} onClick={() => void apply()}>
-              {t("field.apply")}
+              {applyLabel ?? t("field.apply")}
             </Button>
           </div>
         </div>

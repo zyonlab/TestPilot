@@ -1,7 +1,7 @@
 import { projectHref } from './projectContext';
 import { API_BASE } from './base';
 export interface Revision { id: string; runId: string; name: string; kind: string; revision: number; contentHash: string; sourceRefs: string[]; parentRevision: string | null; createdAt: string; createdBy: { kind: string; id: string } }
-export interface WorkflowRun { id: string; status: string; detail?: { parameters?: { sourceKind?: string; sourceUrl?: string; limit?: number } }; provenance: string; startedAt?: string; binding: { models: { entry: string; runtime: string; planner: { model?: string | null; source: string }; executor: { model?: string | null } }; skillVersion: string | null; inputHash: string | null } | null; nodes: { node: string; phase: string; at: string; message?: string }[]; revisions: Revision[] }
+export interface WorkflowRun { id: string; status: string; detail?: { parameters?: { projectLineageId?:string; sourceKind?: string; sourceUrl?: string; limit?: number } }; provenance: string; startedAt?: string; binding: { models: { entry: string; runtime: string; planner: { model?: string | null; source: string }; executor: { model?: string | null } }; skillVersion: string | null; inputHash: string | null } | null; nodes: { node: string; phase: string; at: string; message?: string }[]; revisions: Revision[] }
 export interface ReviewCase { caseId: string; revision: Revision; content: { id: string; title: string; steps: string[]; expected: string; oracle?: unknown; sourceRefs?: string[]; [key: string]: unknown }; approval: { decision: string; principal: { id: string }; at: string } | null }
 export interface Execution { id: string; status: string; resultRevision: string | null; startedAt: string }
 export function runOrigin(run:WorkflowRun) {

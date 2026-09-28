@@ -80,6 +80,7 @@ export class CharterTracker {
         const t: InteractionTarget = {
           stableId, targetSpecId: spec.id, featureId: spec.featureId, stateId, route,
           role: c.role, label: c.label, display: c.display, selector: c.selector,
+          observedState:c.state, ...(c.scopes?{scopeEvidence:c.scopes}:{}),
           availability: /disabled/.test(c.state) ? "disabled" : "enabled", foundAtRound: round,
         };
         this.targets.push(t);

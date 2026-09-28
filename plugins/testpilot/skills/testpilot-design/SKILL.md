@@ -1,6 +1,6 @@
 ---
 name: testpilot-design
-description: Designs text-level test cases for the user stories in runs/<runId>/stories.json, each anchored to the specification sections retrieved for that story, and writes them as runs/<runId>/cases.json. Use it as the second step of a TestPilot generation run in skill mode, after the stories exist and before the gate runs. Not needed for extracting stories from the material (testpilot-stories), for auditing cases already written (testpilot-scanner), or when the run is in pipeline mode (testpilot-generate).
+description: Designs text-level test cases for the user stories in runs/RUN_ID/stories.json, each anchored to the specification sections retrieved for that story, and writes them as runs/RUN_ID/cases.json. Use it as the second step of a TestPilot generation run in skill mode, after the stories exist and before the gate runs. Not needed for extracting stories from the material (testpilot-stories), for auditing cases already written (testpilot-scanner), or when the run is in pipeline mode (testpilot-generate).
 ---
 
 <!-- drift-check source=casegen/prompts.ts#CASES_STABLE
@@ -186,3 +186,12 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 目前仅支持本次执行建立的资源；需要修改共享既有 fixture 而没有隔离身份时，readiness 明确 blocked，不能虚构归属。
 前置、基线、身份、归属和清理依据来自项目材料。准备器不能删改已审核义务或移动其步骤绑定。
 低影响 recipe 仍只允许 none/ui-only；旧产物缺契约为 unknown，不自动补成 verified。
+
+
+## 状态条件与证据边界
+
+从绑定领域材料辨认业务实体、当前状态、动作前置条件、预期状态转移和结果证据。规则陈述产品应有行为；观察只陈述本轮看到什么。各项保留来源 revision 或 observation ID，缺失状态明确 unknown。
+
+同一组件的动态计数可用于识别空/非空分支，不能把计数当固定业务规则。控件当前标签可能因模式不同而变化；先识别当前模式，再规划适用操作，不为匹配旧标签擅自改变账户或数据。一个列表为空不能推导其他列表也为空。
+
+将功能可见、动作执行、结果可观察、业务断言成立分开记录。只有证据支持的结论能成为 observed；没有结果证据保留缺口及下一步，不从覆盖分母移除，也不以通过率反推证据。领域专属实体和具体判据从规则包取得，不凭模型常识补写为产品事实。

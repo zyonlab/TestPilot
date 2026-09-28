@@ -26,6 +26,7 @@ describe("penguinRun.startRun 把 ablate 交给运行时", () => {
     const missing = 'session 已经停了，而产物目录里没有 gate.json——agent 中途停下了（看 trace）';
     expect(completionDiagnostics('waiting_review', missing)).toEqual({error:undefined,adapterDiagnostic:missing});
     expect(completionDiagnostics('failed', missing).error).toBe(missing);
+    expect(completionDiagnostics('waiting_review', '宿主已结束，但当前节点尚未提交完成回执。宿主说明：待审核').error).toBeUndefined();
     expect(completionDiagnostics('waiting_review', 'process exited with code 1').error).toBe('process exited with code 1');
   });
   it("body.ablate → rt.startRun({ ablate })", async () => {

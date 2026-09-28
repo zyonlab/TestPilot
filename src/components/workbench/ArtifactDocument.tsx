@@ -51,6 +51,9 @@ export function ExplorationDocument({data}:{data:DocumentData}) {
   return <article className="space-y-6">
     <header><h3 className="text-xl font-semibold">{t('artifact.explorationReport')}</h3><p className="mt-2 font-medium">{text(collected?a.status:'unknown')}</p><p className="mt-2 text-sm text-muted-foreground">{t('exploration.evidence.boundary')}</p></header>
     {!collected&&<p role="status">{t('exploration.evidence.legacy')}</p>}
+    <section className="space-y-3"><h4 className="font-semibold">{t('exploration.planning.title')}</h4><p className="text-sm text-muted-foreground">{t('exploration.planning.hint')}</p>
+      {!rows(data.planning).length ? <p>{t('exploration.planning.missing')}</p> : rows(data.planning).map((plan,index)=><details key={index} className="rounded border border-border p-3" open={index===0}><summary>{t('exploration.planning.round')} {index+1} · {String(plan.business||plan.error||'—')}</summary><div className="mt-3 space-y-3">{rows(plan.decisions).map((d,i)=><div key={i} className="border-l-2 border-border pl-3 text-sm"><p className="font-medium">{String(d.label)} → {String(d.feature)}</p><p>{t(`exploration.planning.${String(d.status)}`)} · {String(d.risk)}</p><p>{String(d.reason)}</p><p className="text-muted-foreground">{t('exploration.planning.expected')}: {String(d.expected)}</p></div>)}</div></details>)}
+    </section>
     <section className="space-y-2 text-sm"><h4 className="font-semibold">{t('exploration.scope')}</h4><p className="break-all">{String(scope.entryUrl??data.entryUrl??data.url??'—')}</p>
       <p>{[...list(scope.routes),...list(scope.urlPatterns)].join(' · ')}</p>
       <p>{t('exploration.evidence.denominator')}: {collected&&scope.denominator!=null?String(scope.denominator):t('exploration.evidence.unknown')}</p>
@@ -62,6 +65,8 @@ export function ExplorationDocument({data}:{data:DocumentData}) {
       <section className="space-y-3"><h4 className="font-semibold">{t('exploration.evidence.targets')}</h4>{targets.map((target,i)=><details key={i} className="rounded border border-border p-3"><summary className="cursor-pointer text-sm"><span className="font-mono">{String(target.targetSpecId)}</span> · {text(target.reason)}</summary><div className="mt-3 space-y-3 text-sm"><p>{t('exploration.evidence.assertionsPassed')}: {text(target.assertion)}</p>
         <p>{t('artifact.references')}: {[...list(target.observationIds),...list(target.evidenceRefs)].join(' · ')||t('exploration.evidence.not_collected')}</p>
         {list(target.invalidRefs).length>0&&<p>{t('exploration.evidence.invalid_evidence')}: {list(target.invalidRefs).join(' · ')}</p>}
+        <p className="font-medium">{t('exploration.observedControls')}</p>
+        <DocumentFields data={rows(data.targets).filter(o=>o.targetSpecId===target.targetSpecId).map(o=>({label:o.label,state:o.observedState??t('compare.unknown'),scope:o.scopeEvidence??[]}))}/>
         <DocumentFields data={rows(data.observations).filter(o=>list(target.observationIds).includes(String(o.id)))}/>
       </div></details>)}</section>
       {list(a.unvisited).length>0&&<section><h4 className="font-semibold">{t('exploration.evidence.unvisited')}</h4><ul className="list-disc pl-5 text-sm">{list(a.unvisited).map(url=><li key={url} className="break-all">{url}</li>)}</ul></section>}

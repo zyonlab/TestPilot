@@ -678,10 +678,12 @@ export function watchRun(opts: {
      */
     const diedQuietly = state === "idle" && !done && (managed !== undefined || sawRunning || Date.now() - started > 90_000);
 
-    if ((done && state !== "running") || timedOut || state === "gone" || diedQuietly) {
+    const expectedPause=registered.protected && !registered.finalized && registered.paused && state==="idle";
+    if (expectedPause || (done && state !== "running") || timedOut || state === "gone" || diedQuietly) {
       finished = true;
       if (timedOut) { cancelManagedRun(opts.runId); cancelNativeRun(opts.runId); }
       stopWatching(opts.runId);
+      if(registered.protected && !registered.finalized && registered.paused && !timedOut && state==="idle")return opts.onDone({status:"done"});
       if (done && !timedOut && state !== "gone") {
         try {
           const products = registered.protected && registered.finalized ? registered.products : readRun(opts.workspace, opts.runId);
@@ -695,9 +697,9 @@ export function watchRun(opts: {
         }
       }
       const why = opts.errorOf?.() ?? (timedOut
-        ? `超过 ${Math.round(timeoutMs / 60000)} 分钟还没有 gate.json`
+        ? `超过 ${Math.round(timeoutMs / 60000)} 分钟，当前流程仍未提交完成回执`
         : diedQuietly
-          ? `session ${opts.sessionId} 已经停了，而 ${opts.outDir} 里没有 gate.json——agent 中途停下了（看 trace）`
+          ? `session ${opts.sessionId} 已结束，但当前节点尚未提交完成回执；请查看宿主说明及 trace`
           : "session 不在了，而产物没写完");
       emit({ runId: opts.runId, node: "gate", phase: "error", at: new Date().toISOString(), error: why });
       return opts.onDone({ status: "failed", error: why });

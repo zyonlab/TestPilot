@@ -58,6 +58,11 @@ const project: DomainSpec = {
     },
     update: { summary: "改项目（名字、目标地址）", method: "PATCH", path: "/api/projects/:id", params: ["id"], mutates: true, body: json },
     remove: { summary: "删项目。不可撤销，动手前先跟人确认", method: "DELETE", path: "/api/projects/:id", params: ["id"], mutates: true },
+    planner_host: {summary:"检查本机 Codex / Claude Code 登录与项目选择；不代表连接当前聊天会话",method:"GET",path:"/api/projects/:id/planner-host",params:["id"]},
+    select_planner_host: {summary:"选择 Web 独立任务使用的已登录宿主（runtime: codex 或 claude-code）",method:"POST",path:"/api/projects/:id/planner-host",params:["id"],mutates:true,body:json},
+    knowledge_library: {summary:"列出项目领域知识或规则包及只读内置示例",method:"GET",path:"/api/projects/:projectId/knowledge-library/:kind",params:["projectId","kind"]},
+    knowledge_library_entry: {summary:"读取知识库版本，kind 为 domainKnowledge 或 rulePack",method:"GET",path:"/api/projects/:projectId/knowledge-library/:kind/:id",params:["projectId","kind","id"]},
+    save_knowledge_library: {summary:"保存项目知识的新版本，body={title?,value}，返回 id 供新建运行的 knowledgeSelection/rulePackSelection 选择；不覆盖内置示例",method:"POST",path:"/api/projects/:projectId/knowledge-library/:kind",params:["projectId","kind"],mutates:true,body:json},
     rule_packs: { summary: "列出项目绑定的规则包", method: "GET", path: "/api/projects/:id/rule-packs", params: ["id"] },
     rule_pack: { summary: "读一份规则包的全文", method: "GET", path: "/api/projects/:id/rule-packs/:hash", params: ["id", "hash"] },
     add_rule_pack: {
@@ -123,6 +128,8 @@ const stage: DomainSpec = {
     "按顺序跑流水线的每个节点。每步之前先 begin，返回 paused/cancelled/failed 就停下别硬闯。" +
     "冻结模块树与复核用例是**人做的决定**——把内容摆给人看，人点头了再调。",
   actions: {
+  discovery:{summary:'上报当前运行系统回执支持的新发现（非批准的业务事实）',method:'POST',path:'/api/projects/:projectId/workflow-runs/:runId/stages/discoveries/report',params:['projectId','runId'],needsRunGrant:true,mutates:true,body:json},
+
     begin: { summary: "开始一个节点（node: source|modules|instructions|stories|cases|gate|finalize|g2|execution）", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/begin-stage", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     instructions: { summary: "载入这次运行冻结版本的 skill 与领域参考", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/instructions", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
     retrieve: { summary: "检索材料段落，返回的 chunk id 才能写进 sourceRefs", method: "POST", path: "/api/projects/:projectId/workflow-runs/:runId/stages/retrieve", params: ["projectId", "runId"], mutates: true, body: json, needsRunGrant: true },
@@ -307,6 +314,10 @@ const evaluation: DomainSpec = {
     scoreboard: { summary: "读记分板：各能力的当前得分与翻转次数", method: "GET", path: "/api/scoreboard" },
     paired_scoreboard: { summary: "读配对评测的记分板", method: "POST", path: "/api/scoreboard/paired", mutates: true, body: json },
     gold: { summary: "读某个能力的 gold（冻结，只读）", method: "GET", path: "/api/gold/:capability", params: ["capability"] },
+    artifact_comparisons: {summary:"列出项目的节点产物比较（不要求 Gold）",method:"GET",path:"/api/projects/:projectId/artifact-comparisons",params:["projectId"]},
+    compare_artifacts: {summary:"固定两侧产物版本并诊断比较，不自动评分或批准",method:"POST",path:"/api/projects/:projectId/artifact-comparisons",params:["projectId"],mutates:true,body:json},
+    read_artifact_comparison: {summary:"读取固定的节点输入输出差异和人工评价",method:"GET",path:"/api/projects/:projectId/artifact-comparisons/:id",params:["projectId","id"]},
+    review_artifact_comparison: {operatorOnly:true,summary:"记录操作者的产物评价和证据，不提升基线",method:"POST",path:"/api/projects/:projectId/artifact-comparisons/:id/reviews",params:["projectId","id"],mutates:true,body:json},
     compare_registered: { summary: "比较同项目已定稿的两次宿主运行；要求人工冻结 Gold，仅读开发项", method: "POST", path: "/api/evals/registered", mutates: true, body: json },
     evidence_studies: { summary: "列出导出器对照实验及有边界的提升证据", method: "GET", path: "/api/evidence-studies" },
     start_evidence_study: { summary: "按固定协议启动真实模型生成与浏览器缺陷检出实验；不自动发布", method: "POST", path: "/api/evidence-studies", mutates: true, body: json },
@@ -428,7 +439,20 @@ const system: DomainSpec = {
   },
 };
 
-export const DOMAINS: readonly DomainSpec[] = [project, run, stage, unit, artifact, review, execution,
+const assets: DomainSpec = {
+ tool:'tp_assets',title:'项目资产与增量任务',description:'读取固定版本、快照、发现和任务状态；审查、启动及采纳由 Web 操作者完成。',actions:{
+  list:{summary:'列出项目资产版本和快照',method:'GET',path:'/api/projects/:projectId/assets',params:['projectId']},
+  version:{summary:'读取不可变资产内容',method:'GET',path:'/api/projects/:projectId/assets/versions/:id',params:['projectId','id']},
+  snapshot:{summary:'读取不可变项目快照',method:'GET',path:'/api/projects/:projectId/assets/snapshots/:id',params:['projectId','id']},
+  plan:{summary:'读取固定运行计划',method:'GET',path:'/api/projects/:projectId/assets/plans/:id',params:['projectId','id']},
+  discoveries:{summary:'读取有回执的候选发现',method:'GET',path:'/api/projects/:projectId/assets/discoveries',params:['projectId']},
+  tasks:{summary:'读取项目任务 DAG 与租约状态',method:'GET',path:'/api/projects/:projectId/assets/tasks',params:['projectId']},
+  impact:{summary:'读取资产依赖影响范围',method:'GET',path:'/api/projects/:projectId/assets/impact/:id',params:['projectId','id']},
+  comparisons:{summary:'读取人工版本质量评测记录',method:'GET',path:'/api/projects/:projectId/assets/comparisons',params:['projectId']},
+ }
+};
+
+export const DOMAINS: readonly DomainSpec[] = [assets, project, run, stage, unit, artifact, review, execution,
   kase, report, exportProject, settings, evaluation, queue, graph, wf, audit, system];
 
 /** `<domain>.<action>` → 规格。`check-host-parity` 与工具注册都从这里取。 */

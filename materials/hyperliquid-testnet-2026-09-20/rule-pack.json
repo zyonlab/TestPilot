@@ -1,11 +1,11 @@
 {
   "schemaVersion": "product-rule-pack.v1",
   "id": "hyperliquid-testnet-trade-lifecycle",
-  "version": "2026-09-20.1",
+  "version": "2026-09-23.1",
   "domain": "crypto-linear-perpetuals",
   "product": "Hyperliquid Testnet Trading SPA",
   "network": "Hyperliquid testnet; wallet transport uses local configured test network",
-  "accountMode": "Observed logged-out default Unified; test Cross/Isolated separately; Manual and Portfolio Margin are explicit conditional branches",
+  "accountMode": "Observe the current account mode; Manual and Unified are alternative entry labels. Cross/Isolated and Portfolio Margin remain conditional business branches; opening the mode menu does not verify switching or margin behavior.",
   "appliesTo": {
     "urlPatterns": [
       "^https://app\\.hyperliquid-testnet\\.xyz/trade(?:/[^?#]*)?(?:[?#].*)?$"
@@ -1326,7 +1326,7 @@
       ],
       "match": {
         "label": [
-          "^Unified$"
+          "^(?:Manual|Unified)$"
         ],
         "route": "^/trade(?:/|$)"
       },
@@ -1347,7 +1347,11 @@
         "label": [
           "^Market$"
         ],
-        "route": "^/trade(?:/|$)"
+        "route": "^/trade(?:/|$)",
+        "near": [
+          "Buy\\s*/\\s*Long",
+          "Sell\\s*/\\s*Short"
+        ]
       },
       "action": "activate",
       "requires": [],
@@ -1363,7 +1367,11 @@
         "label": [
           "^Limit$"
         ],
-        "route": "^/trade(?:/|$)"
+        "route": "^/trade(?:/|$)",
+        "near": [
+          "Buy\\s*/\\s*Long",
+          "Sell\\s*/\\s*Short"
+        ]
       },
       "action": "activate",
       "requires": [],
@@ -1415,7 +1423,8 @@
         "label": [
           "^Balances$"
         ],
-        "route": "^/trade(?:/|$)"
+        "route": "^/trade(?:/|$)",
+        "ignoreCountSuffix": true
       },
       "action": "activate",
       "requires": [],

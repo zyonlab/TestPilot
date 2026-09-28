@@ -1,3 +1,4 @@
+import {BusinessTransitionSchema} from './businessLifecycle.js';
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
@@ -105,6 +106,10 @@ export const ExplorationTargetSpecSchema = z
       .object({
         /** 正则源串，不区分大小写，任一命中即可。对控件的可见文案匹配。 */
         label: z.array(z.string()).min(1),
+        /** Opt-in identity normalization; the original label/count remains evidence. */
+        ignoreCountSuffix: z.boolean().optional(),
+        /** All anchors must coexist in one bounded ancestor; not the whole page. */
+        near: z.array(z.string()).max(8).optional(),
         /** 允许的标签或 ARIA 角色（`button` / `tab` / `checkbox` / `input` …）。空 = 不限。 */
         roles: z.array(z.string()).default([]),
         route: z.string().optional(),
@@ -221,6 +226,7 @@ export const ProductRulePackSchema = z
      * 要么这里声明它来自外部。两样都没有 = 那个目标永远点不动，而这在实测里
      * 表现为四行看起来很正常的 `blocked`。见下面 `target_requires_unprovidable`。
      */
+    businessTransitions: z.array(BusinessTransitionSchema).default([]),
     externalCapabilities: z.array(z.string()).default([]),
     /**
      * 这个产品特有的**禁点文案**，接在通用默认后面。
@@ -293,6 +299,11 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
   const sources = uniq(pack.sources, "/sources", errors);
   const modules = uniq(pack.modules, "/modules", errors);
   const features = uniq(pack.features, "/features", errors);
+  uniq(pack.businessTransitions, '/businessTransitions', errors);
+  pack.businessTransitions.forEach((t,i)=>{
+    if(!features.has(t.featureId))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/featureId`,message:`feature ${t.featureId} missing`});
+    t.sourceRefs.forEach((id,j)=>{if(!sources.has(id))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/sourceRefs/${j}`,message:`source ${id} missing`});});
+  });
   const rules = uniq(pack.rules, "/rules", errors);
   uniq(pack.targets, "/targets", errors);
   /**
@@ -429,6 +440,7 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
     t.ruleRefs.forEach((r, j) => {
       if (!rules.has(r)) errors.push({ code: "dangling_ref", jsonPointer: `/targets/${i}/ruleRefs/${j}`, message: `rule ${r} missing` });
     });
+    (t.match.near??[]).forEach((re,j)=>{try{new RegExp(re,'i');}catch{errors.push({code:'bad_regex',jsonPointer:`/targets/${i}/match/near/${j}`,message:re});}});
     t.match.label.forEach((re, j) => {
       try { new RegExp(re, "i"); } catch { errors.push({ code: "bad_regex", jsonPointer: `/targets/${i}/match/label/${j}`, message: re }); }
     });
@@ -438,5 +450,8 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
   return { ok: true, pack, hash: rulePackHash(pack) };
 }
 
-export const rulePackHash = (pack: ProductRulePack): string =>
-  createHash("sha256").update(canonicalJSON(pack)).digest("hex");
+export const rulePackHash = (pack: ProductRulePack): string => {
+  // Empty optional lifecycle declarations must not change pre-upgrade immutable hashes.
+  const {businessTransitions,...legacy}=pack;
+  return createHash("sha256").update(canonicalJSON(businessTransitions?.length?pack:legacy)).digest("hex");
+};

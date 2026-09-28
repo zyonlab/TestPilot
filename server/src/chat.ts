@@ -1,3 +1,4 @@
+import {requireHost,nativeHostChat} from "./plannerHost.js";
 import {
   CapabilityRecipeSchema,
   describeDiff,
@@ -384,6 +385,7 @@ export interface ChatContext {
 }
 
 export interface ChatInput {
+  useHost?: boolean;
   projectId?: string;
   messages: ChatTurn[];
   intent: ChatIntent;
@@ -675,7 +677,10 @@ async function fieldContextLines(spec: FieldSpec, projectId?: string, runId?: st
 export async function chat(input: ChatInput): Promise<ChatResult> {
   const run = input.context?.wfRunId ? outputStore.getRun(input.context.wfRunId) : undefined;
   const runProject = (run?.detail as { target?: { projectId?: string } } | undefined)?.target?.projectId;
-  const model = projectPlannerModel(runProject ?? input.projectId, "chat.draft");
+  const projectId=runProject??input.projectId;
+  if(input.useHost&&!projectId)throw new Error("project_required_for_host");
+  const host=input.useHost?await requireHost(projectId!):undefined;
+  const model=host?{chat:(request:Parameters<typeof nativeHostChat>[1])=>nativeHostChat(host,request)}:projectPlannerModel(projectId,"chat.draft");
   const intent = input.intent;
 
   const context: string[] = await contextLines(input.context);

@@ -1,6 +1,6 @@
 ---
 name: testpilot-stories
-description: Extracts user stories from the specification material in the workspace and writes them as runs/<runId>/stories.json. Use it as the first step of a TestPilot generation run in skill mode, before any test case is designed. Not needed for designing cases from stories that already exist (testpilot-design), for turning an exploration into material (testpilot-explore), or when the run is in pipeline mode (testpilot-generate).
+description: Extracts user stories from the specification material in the workspace and writes them as runs/RUN_ID/stories.json. Use it as the first step of a TestPilot generation run in skill mode, before any test case is designed. Not needed for designing cases from stories that already exist (testpilot-design), for turning an exploration into material (testpilot-explore), or when the run is in pipeline mode (testpilot-generate).
 ---
 
 <!-- drift-check source=casegen/prompts.ts#STORIES_STABLE
@@ -112,3 +112,12 @@ rule bf648e58  When the budget of stories is smaller than the material, spr
 
 
 逐验收条件检查提供的 observations（动作、controlsAfter、effect、前后状态）。已有记录支持条件的一部分时引用对应 ID 并标 partial；只有完整支持结果才标 observed。记录尝试过但不能证实结果时可引用并标 unobserved/insufficient_evidence，不能一律留空或标 not_attempted。仅同功能但不支持该条件的记录属于相关候选，不冒充条件证据。nextSteps 描述从已到达状态到缺失结果还差的具体操作，不统一填“按验收执行”。
+
+
+## 状态条件与证据边界
+
+从绑定领域材料辨认业务实体、当前状态、动作前置条件、预期状态转移和结果证据。规则陈述产品应有行为；观察只陈述本轮看到什么。各项保留来源 revision 或 observation ID，缺失状态明确 unknown。
+
+同一组件的动态计数可用于识别空/非空分支，不能把计数当固定业务规则。控件当前标签可能因模式不同而变化；先识别当前模式，再规划适用操作，不为匹配旧标签擅自改变账户或数据。一个列表为空不能推导其他列表也为空。
+
+将功能可见、动作执行、结果可观察、业务断言成立分开记录。只有证据支持的结论能成为 observed；没有结果证据保留缺口及下一步，不从覆盖分母移除，也不以通过率反推证据。领域专属实体和具体判据从规则包取得，不凭模型常识补写为产品事实。

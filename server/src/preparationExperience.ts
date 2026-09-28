@@ -14,7 +14,7 @@ type Entry = {
 };
 export function experienceScope(ledger:RunLedger,runId:string,projectId:string,configuration:unknown):ExperienceScope {
   const run=ledger.requireRun(runId,projectId);
-  return {projectId,runId,enabled:run.input.parameters?.evaluationSplit!=='held-out' && !!run.binding.materialsHash,
+  return {projectId,runId,enabled:run.input.parameters?.reuseExperience!==false && run.input.parameters?.evaluationSplit!=='held-out' && !!run.binding.materialsHash,
     hash:contentHash(canonicalJSON({policy,projectId,materials:run.binding.materialsHash,environment:run.binding.environmentHash,configuration}))};
 }
 function table(ledger:RunLedger){ledger.db.exec(`CREATE TABLE IF NOT EXISTS preparation_recipes (

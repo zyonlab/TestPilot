@@ -1,3 +1,4 @@
+import {ProjectDiscoveries} from './projectDiscoveries.js';
 import Database from "better-sqlite3";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, linkSync, rmSync } from "node:fs";
@@ -172,6 +173,7 @@ export class RunLedger {
           if (contentHash(readFileSync(path)) !== hash) throw new LedgerError(409, "revision_content_changed"); }
       } finally { rmSync(temporary, { force: true }); }
       this.db.prepare("INSERT INTO artifact_revisions VALUES (?,?,?,?,?,?)").run(revision.id, input.projectId, input.runId, artifactId, revision.revision, canonicalJSON(revision));
+      new ProjectDiscoveries(this).capture(revision,input.content);
       return revision;
     })();
   }

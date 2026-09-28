@@ -98,6 +98,7 @@ const child = startChild({
               String(
                 await child.parent.askModel({
                   projectId: spec.projectId,
+                  runId: spec.sourceAttempt?.runId,
                   prompt: req.prompt,
                   imageDataUrl: req.imageDataUrl,
                   schema: req.schema,

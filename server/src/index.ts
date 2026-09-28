@@ -1,3 +1,8 @@
+import {projectAssetRouter} from './projectAssetRoutes.js';
+import {askExplorationPlanner} from "./explorationPlanner.js";
+import {hostStatus,selectHost} from "./plannerHost.js";
+import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
+import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
 import { ExplorationAttemptSchema, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
 import { LedgerError } from './runLedger.js';
@@ -272,6 +277,7 @@ app.use("/api/projects/:id/workflow-runs", express.json({ limit: "48mb" }));
 app.use(express.json({ limit: "16mb" }));
 app.use("/api", intentPolicy);
 app.use("/api/projects/:projectId/workflow-runs", runRouter());
+app.use("/api/projects/:projectId/artifact-comparisons", artifactComparisonRouter());
 // 项目回归集：人批准过的回归候选（regressionCandidates.ts）。defect 是要一直跑的用例，rejection 是给生成器的反例评测项。
 app.get("/api/projects/:id/regression-suite", async (req, res) => {
   const { regressionSuite } = await import("./regressionCandidates.js");
@@ -747,6 +753,10 @@ app.patch("/api/projects/:id", (req, res) => {
  * 却是唯一没有列表、没有版本、没有复用的那一个——同一个项目的两次运行可以用着不同的包
  * 而没人拦得住。这四条路由把它变成项目的东西：列出来、看得见、传新版、删没用过的。
  */
+app.get("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await hostStatus(req.params.id));}catch(e){res.status(400).json({error:(e as Error).message});}});
+app.post("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await selectHost(req.params.id,req.body?.runtime));}catch(e){res.status(400).json({error:(e as Error).message});}});
+app.use("/api/projects/:projectId/assets", projectAssetRouter());
+app.use("/api/projects/:projectId/knowledge-library", knowledgeLibraryRouter());
 app.get("/api/projects/:id/rule-packs", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   res.json({ packs: listRulePacks(req.params.id) });
@@ -1566,21 +1576,10 @@ function observeLaunch(projectId: string, envRef?: string): {
  *
  * 放在网关而不是 runner，有两条硬理由：runner 没有 `ModelClient`，
  * 而且它的 `OPENAI_BASE_URL` 被改写成了 Midscene 的 no-think 代理；
- * 另外这里走 `traced()`，这次调用在 Langfuse 上看得见——
- * 用 Midscene 自己的 `ai*` 问，成本和效果都量不出来。
+ * 已登记运行按冻结的宿主调用并保存 planner-call 回执；独立观察仍走项目模型。
+ * 不让规划请求借用 Midscene 的执行模型。
  */
-setChildAsk(async (input) => {
-  const req = (input ?? {}) as { prompt?: string; imageDataUrl?: string; schema?: unknown; maxTokens?: number; projectId?: string };
-  const r = await projectPlannerModel(req.projectId, "explore.scenario").chat({
-    stable: "你是一名资深测试分析师。你要做的是**判断**，不是编造事实：只能引用给你的编号。",
-    variable: String(req.prompt ?? ""),
-    ...(req.imageDataUrl ? { images: [req.imageDataUrl] } : {}),
-    ...(req.schema ? { schema: req.schema as Record<string, unknown> } : {}),
-    maxTokens: req.maxTokens ?? 2400,
-    label: "explore.scenario",
-  });
-  return r.text;
-});
+setChildAsk(askExplorationPlanner);
 
 /*
  * 血缘保留：还没跑完的那些运行，事件一行都不删。
@@ -3358,6 +3357,7 @@ app.post("/api/capabilities", (req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
     const body = (req.body ?? {}) as {
+      useHost?: boolean;
       messages?: Array<{ role: "user" | "assistant"; text: string }>;
       intent?: ChatIntent;
       graphId?: string;
@@ -3372,6 +3372,7 @@ app.post("/api/chat", async (req, res) => {
     if (!body.messages?.length) return res.status(400).json({ error: "messages is required" });
     res.json(
       await chat({
+        useHost: body.useHost,
         messages: body.messages,
         intent: body.intent ?? "ask",
         graphId: body.graphId,

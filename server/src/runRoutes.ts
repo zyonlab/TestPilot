@@ -1,3 +1,5 @@
+import {ProjectDiscoveries} from './projectDiscoveries.js';
+import {storyReviewState,approveStoryRequirements} from './storyReview.js';
 import { startPreparation, preparationStep, preparationStatus } from './preparation.js';
 import { controls, setControls, beginStage, stageEvent } from './workflowControls.js';
 import { runRoleSpend } from './roleSpend.js';
@@ -84,6 +86,7 @@ export function runRouter() {
   router.post("/:runId/regression-candidates/:candidateId", wrap((req, res) => res.json(decideRegressionCandidate(req.params.projectId, req.params.candidateId, req.body, reviewerPrincipal(req)))));
   router.patch("/:runId/review", wrap((req, res) => res.json(reviseReviewedCase(req.params.runId, req.params.projectId, req.body, reviewerPrincipal(req)))));
   const stageActions: Record<string, (runId: string, projectId: string, body: any) => unknown> = {
+    'discoveries/report':(id,project,body)=>new ProjectDiscoveries(runLedger()).record(project,{...body,runId:id},{kind:'agent',id:'planner'}),
     instructions: loadRunInstructions, retrieve: retrieveRunSpec,
     // 模块树：模型提议 → 服务端机检；冻结那一步在下面单独一条路由，因为它必须是人。
     modules: (id, project, body) => writeModulePlan(id, project, body?.content ?? body),
@@ -126,6 +129,8 @@ export function runRouter() {
     res.json(runLedger().appendEvent(req.body, req.params.projectId));
   }));
   // Imported output is untrusted content. Only the stage service may validate/finalize it.
+  router.get('/:runId/story-requirements',wrap((req,res)=>res.json(storyReviewState(req.params.runId,req.params.projectId))));
+  router.post('/:runId/story-requirements/approve',wrap((req,res)=>res.json(approveStoryRequirements(req.params.runId,req.params.projectId,req.body?.revisionId,reviewerPrincipal(req)))));
   router.post("/:runId/artifacts", wrap((req, res) => {
     authorizeRun(req.params.runId, req.headers.authorization?.replace(/^Bearer /, ""));
     const { name, kind, content, mediaType, sourceRefs, parentRevision } = req.body;
@@ -141,7 +146,7 @@ export function runRouter() {
      * `validated/` 与 `units/` 两个前缀只能由服务端的 stage 服务写。规划器要留探针，
      * 换个名字就行。
      */
-    if (typeof name === "string" && /^(validated|units|regression-candidate|preparation|g2|retrieval)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
+    if (typeof name === "string" && /^(review|validated|units|regression-candidate|preparation|g2|retrieval|implementation|comparison|comparison-review)\//.test(name)) throw new LedgerError(403, "reserved_artifact_name");
     res.json(runLedger().putRevision({ projectId: req.params.projectId, runId: req.params.runId, name,
       kind: kind as ArtifactRevision["kind"], content, mediaType, sourceRefs, parentRevision }, { kind: "agent", id: "host-import" }));
   }));

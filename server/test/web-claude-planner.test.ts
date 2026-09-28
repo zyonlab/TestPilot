@@ -124,3 +124,22 @@ it("reruns cases with frozen upstream receipts and fresh instruction binding",as
  expect(c.controls(result.wfRunId,projectId).breakpoints).toContain("gate");
  expect(startWebRun.mock.calls.find(([i])=>i.wfRunId===result.wfRunId)?.[0]).toMatchObject({resumeStage:"cases"});
 });
+
+it('freezes chosen library versions and honors an explicit empty rule selection',async()=>{
+ const lib=await import('../src/knowledgeLibrary.js');
+ const first=lib.saveKnowledgeLibrary(projectId,'domainKnowledge',{value:'First selected knowledge'});
+ const example=lib.listKnowledgeLibrary(projectId,'rulePack')[0]!;
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec('library-selected',{planner:'codex',knowledgeSelection:first.id,rulePackSelection:example.id}));
+ await new Promise(r=>setTimeout(r,30));
+ lib.saveKnowledgeLibrary(projectId,'domainKnowledge',{value:'Later knowledge must not replace the first'});
+ const ledger=service.runLedger(),revs=ledger.listRevisions(projectId,wfRunId);
+ const content=ledger.readRevision(revs.find(r=>r.name==='knowledge/domain-knowledge.md')!.id,projectId).content as any;
+ expect(content.text).toBe('First selected knowledge');expect(content.roles).toContain('source');
+ expect(revs.some(r=>r.name.startsWith('knowledge/rulepack/'))).toBe(true);
+ expect(ledger.requireRun(wfRunId,projectId).input.parameters.knowledgeSelection).toBe(first.id);
+ lib.saveKnowledgeLibrary(projectId,'rulePack',{value:lib.readKnowledgeLibrary(projectId,'rulePack',example.id).value});
+ const empty=await ops.createWebWorkflow(projectId,spec('library-none',{planner:'codex',knowledgeSelection:null,rulePackSelection:null}));
+ await new Promise(r=>setTimeout(r,30));
+ expect(ledger.listRevisions(projectId,empty.wfRunId).some(r=>r.name.startsWith('knowledge/rulepack/'))).toBe(false);
+ await expect(ops.createWebWorkflow(projectId,spec('library-missing',{planner:'codex',knowledgeSelection:'missing'}))).rejects.toThrow('domain_knowledge_not_found');
+});

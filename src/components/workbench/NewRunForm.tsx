@@ -1,15 +1,15 @@
+import {PlannerHost} from "@/components/PlannerHost";
 import { ExplorationSettings } from '@/components/ExplorationSettings';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { API_BASE } from '@/lib/base';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useT } from '@/lib/prefs';
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui';
-import { FieldChatDrawer } from '@/components/FieldChatDrawer';
-import { workflowBase, workflowRequest, workflowRequestId } from '@/lib/workflowRuns';
+import { KnowledgeSelect } from './KnowledgeSelect';
+import { workflowRequest } from '@/lib/workflowRuns';
 const field='w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary';
 export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCreated:(id:string)=>void;onClose:()=>void}) {
   const t=useT(),project=useStore(s=>s.projects.find(p=>p.id===projectId));
-  const [outputLanguage,setOutputLanguage]=useState('zh'),[maxScreens,setMaxScreens]=useState(project?.explorationMaxScreens??8),[explorationScope,setExplorationScope]=useState<"current-url"|"rules">(project?.explorationScope??"rules"),[sourceKind,setSourceKind]=useState<'spec'|'explore'>('explore'),[sourceUrl,setSourceUrl]=useState(project?.targetUrl??''),[pageVersion,setPageVersion]=useState(''),[text,setText]=useState(''),[materials,setMaterials]=useState<{name:string;text:string}[]>([]),[knowledge,setKnowledge]=useState(''),[rulePack,setRulePack]=useState(''),[limit,setLimit]=useState(6),[busy,setBusy]=useState(false),[error,setError]=useState(''),
+  const [outputLanguage,setOutputLanguage]=useState('zh'),[maxScreens,setMaxScreens]=useState(project?.explorationMaxScreens??8),[explorationScope,setExplorationScope]=useState<"current-url"|"rules">(project?.explorationScope??"rules"),[sourceKind,setSourceKind]=useState<'spec'|'explore'>('explore'),[sourceUrl,setSourceUrl]=useState(project?.targetUrl??''),[pageVersion,setPageVersion]=useState(''),[text,setText]=useState(''),[materials,setMaterials]=useState<{name:string;text:string}[]>([]),[knowledgeSelection,setKnowledgeSelection]=useState<string|null>(null),[rulePackSelection,setRulePackSelection]=useState<string|null>(null),[limit,setLimit]=useState(6),[busy,setBusy]=useState(false),[error,setError]=useState(''),
     /**
      * 探索要不要带钱包、要不要允许点会改状态的东西。
      *
@@ -18,14 +18,6 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
      * 对着界面工作的人等于没有。
      */
     [exploreWallet,setExploreWallet]=useState(false),[exploreInteract,setExploreInteract]=useState(false),
-    /**
-     * 项目里已经存着的规则包版本。
-     *
-     * 以前这里只有一个「粘贴 JSON」的框——每跑一次贴一遍，同一个项目两次运行用着不同的包
-     * 而没人看得出来。现在默认用项目当前那一版（留空即可，服务端会取），
-     * 要用别的版本就在这里选，要临时试一份新的仍然可以贴。
-     */
-    [projectPacks,setProjectPacks]=useState<Array<{hash:string;packId:string;version:string}>>([]),[packHash,setPackHash]=useState(''),
     /**
      * 按模块拆成工作单元。
      *
@@ -36,44 +28,25 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
      */
     [workUnits,setWorkUnits]=useState(true),
     /** 规划由谁跑：留空用服务端默认（`TP_AGENT_RUNTIME`，不设时是 Claude Code）。 */
-    [planner,setPlanner]=useState<''|'claude-code'|'codex'|'penguin'>(''),
-    /**
-     * 正在聊哪个字段。
-     *
-     * 领域知识和规则包是这张表单里仅有的两个「要自己写一大段」的框，也是最常空着的两个。
-     * 空着不报错，只是下游少了一整层领域约束——所以入口就摆在那个框的标签旁边，
-     * 点开的抽屉产出什么就填回哪个框，人还能接着改。
-     */
-    [drafting,setDrafting]=useState<null|'rulePack'|'domainKnowledge'>(null);
-  const intent=useRef<{hash:string;key:string}>();
-  useEffect(()=>{const c=new AbortController();
-    void fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}/rule-packs`,{signal:c.signal})
-      .then(r=>r.json()).then((d:{packs?:Array<{hash:string;packId:string;version:string}>})=>setProjectPacks(d.packs??[])).catch(()=>{});
-    return()=>c.abort();},[projectId]);
-  // 规则包在前端只做 JSON 语法检查；引用、来源、P0 依据由服务端 validateRulePack 拒绝。
-  const parsedPack=(()=>{if(!rulePack.trim())return undefined;try{return JSON.parse(rulePack) as unknown;}catch{return null;}})();
-  const packError=parsedPack===null;
-  async function start(e:FormEvent) {e.preventDefault();setBusy(true);setError('');const chosen=packHash?await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}/rule-packs/${packHash}`).then(r=>r.json()).then((d:{pack?:unknown})=>d.pack):undefined;
-    const payload={pageVersion:pageVersion.trim()||undefined,sourceKind,outputLanguage,maxScreens,explorationScope,...(planner?{planner}:{}),sourceUrl:sourceKind==='explore'?sourceUrl:undefined,
-      ...(sourceKind==='explore'?{exploreWallet,exploreActions:exploreInteract?'interact':'observe'}:{}),materials:[...materials,...(text.trim()?[{name:'requirements.md',text}]:[])],knowledge:knowledge.trim()?[{name:'domain-knowledge.md',text:knowledge,roles:['source','stories','cases','gate']}]:[],rulePacks:chosen?[chosen]:parsedPack?[parsedPack]:[],workUnits,limit};const hash=JSON.stringify(payload);if(intent.current?.hash!==hash)intent.current={hash,key:workflowRequestId()};try{const run=await workflowRequest<{wfRunId:string}>(workflowBase(projectId),{...payload,idempotencyKey:intent.current.key});onCreated(run.wfRunId);}catch(e){setError(e instanceof Error?e.message:'request_failed');}finally{setBusy(false);}}
+    [hostReady,setHostReady]=useState(false);
+  const [knowledgeReady,setKnowledgeReady]=useState(false),[rulesReady,setRulesReady]=useState(false);
+  const [runMode,setRunMode]=useState('clean'),[snapshotId,setSnapshotId]=useState(''),[snapshots,setSnapshots]=useState<Array<{id:string;label:string}>>([]),[preview,setPreview]=useState<{id:string;hash:string;mode:string;inputDigest:string}>();
+  useEffect(()=>{let live=true;workflowRequest<{snapshots:Array<{id:string;label:string}>}>(`projects/${projectId}/assets`).then(x=>{if(live)setSnapshots(x.snapshots);}).catch(e=>setError(String(e)));return()=>{live=false;};},[projectId]);
+  const exampleDefault=(()=>{try{return new URL(project?.targetUrl??'').hostname==='app.hyperliquid-testnet.xyz';}catch{return false;}})();
+  async function start(e:FormEvent) {e.preventDefault();if(!hostReady||!knowledgeReady||!rulesReady||busy)return;setBusy(true);setError('');
+    const payload={pageVersion:pageVersion.trim()||undefined,sourceKind,outputLanguage,maxScreens,explorationScope,planner:'connected',sourceUrl:sourceKind==='explore'?sourceUrl:undefined,
+      ...(sourceKind==='explore'?{exploreWallet,exploreActions:exploreInteract?'interact':'observe'}:{}),materials:[...materials,...(text.trim()?[{name:'requirements.md',text}]:[])],knowledgeSelection,rulePackSelection,workUnits,limit};const hash=JSON.stringify({payload,runMode,snapshotId});try{if(!preview||preview.hash!==hash){const plan=await workflowRequest<{id:string;mode:string;inputDigest:string}>(`projects/${projectId}/assets/plans`,{mode:runMode,label:new Date().toISOString(),...(runMode==='incremental'?{snapshotId}:{}),configuration:payload});setPreview({...plan,hash});return;}const run=await workflowRequest<{wfRunId:string}>(`projects/${projectId}/assets/plans/${preview.id}/start`,{});onCreated(run.wfRunId);}catch(e){setError(e instanceof Error?e.message:'request_failed');}finally{setBusy(false);}}
   return <form onSubmit={e=>void start(e)} className="mx-auto w-full max-w-2xl space-y-5 p-6" aria-label={t('workflow.new')}><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">{t('workflow.new')}</h2><Button type="button" onClick={onClose}>{t('bench.close')}</Button></div>
+    <p className="text-sm leading-relaxed text-muted-foreground">{t("bench.newHint")}</p>
+    <PlannerHost projectId={projectId} onReady={setHostReady}/>
     <div className="grid grid-cols-3 gap-2">{(['spec','explore','code'] as const).map(k=><button key={k} type="button" disabled={k==='code'||busy} aria-pressed={sourceKind===k} className={`rounded-md border p-3 text-sm disabled:opacity-40 ${sourceKind===k?'border-primary bg-primary/10 text-primary':'border-border'}`} onClick={()=>k!=='code'&&setSourceKind(k)}>{t(`bench.source.${k}`)}</button>)}</div>
     {sourceKind==='explore'?<><label key="source-url" className="block space-y-2 text-sm"><span>{t('bench.target')}</span><input type="url" required className={field} value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} /></label><label key="page-version" className="block space-y-2 text-sm"><span>{t('reuse.pageVersion')}</span><input className={field} maxLength={160} value={pageVersion} onChange={e=>setPageVersion(e.target.value)}/><p className="text-xs text-muted-foreground">{t('reuse.versionHelp')}</p></label></>:<><label key="requirements" className="block space-y-2 text-sm"><span>{t('workflow.requirements')}</span><textarea rows={6} className={field} required={!materials.length} value={text} onChange={e=>setText(e.target.value)}/></label><label key="material-upload" className="block space-y-2 text-sm"><span>{t('bench.upload')}</span><input type="file" multiple accept=".md,.txt" onChange={e=>{const files=[...e.target.files??[]];if(files.length>20){setError(t('bench.tooManyFiles'));return;}void Promise.all(files.map(async f=>{if(!/\.(md|txt)$/i.test(f.name))throw new Error(t('bench.textOnly'));if(f.size>2_000_000)throw new Error(t('bench.fileTooLarge'));return {name:f.name,text:await f.text()};})).then(setMaterials).catch(e=>setError(String(e.message)));}}/></label><ul className="text-xs text-muted-foreground">{materials.map((f,i)=><li key={i}>{f.name} · {f.text.length} chars</li>)}</ul></>}
-    <label className="block space-y-2 text-sm"><span className="flex items-center gap-2">{t('bench.knowledge')}<Button type="button" size="sm" onClick={()=>setDrafting('domainKnowledge')}>{t('field.chat')}</Button></span><textarea className={field} rows={3} value={knowledge} onChange={e=>setKnowledge(e.target.value)} placeholder={t('bench.knowledgeHint')}/></label>
-    {sourceKind==='explore'&&projectPacks.length>0&&<label className="block space-y-2 text-sm"><span>{t('bench.rulePackVersion')}</span>
-      <select className={field} value={packHash} onChange={e=>setPackHash(e.target.value)}>
-        <option value="">{t('bench.rulePackLatest')}</option>
-        {projectPacks.map(p=><option key={p.hash} value={p.hash}>{p.packId} · v{p.version} · {p.hash.slice(0,8)}</option>)}
-      </select><span className="block text-xs text-muted-foreground">{t('bench.rulePackVersionHint')}</span></label>}
-    {sourceKind==='explore'&&<label className="block space-y-2 text-sm"><span className="flex items-center gap-2">{t('bench.rulePack')}<Button type="button" size="sm" onClick={()=>setDrafting('rulePack')}>{t('field.chat')}</Button></span><textarea className={field} rows={3} value={rulePack} onChange={e=>setRulePack(e.target.value)} placeholder={t('bench.rulePackHint')} aria-invalid={packError}/><input type="file" accept=".json" onChange={e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>2_000_000){setError(t('bench.fileTooLarge'));return;}void f.text().then(setRulePack).catch(err=>setError(String(err.message)));}}/>{packError&&<span className="text-xs text-bad">{t('bench.rulePackInvalid')}</span>}</label>}
+    <label className="block text-sm">{t('plans.mode')}<select className={field} value={runMode} onChange={e=>{setRunMode(e.target.value);setPreview(undefined);}}>{['clean','incremental','rebuild'].map(m=><option key={m} value={m}>{t(`plans.${m}`)}</option>)}</select></label>
+    {runMode==='incremental'&&<select aria-label={t('plans.snapshot')} className={field} value={snapshotId} onChange={e=>{setSnapshotId(e.target.value);setPreview(undefined);}} required><option value="">{t('plans.snapshot')}</option>{snapshots.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select>}
+    {preview&&<div className="rounded border border-border p-3 text-sm"><p>{t('plans.preview')} · {t(`plans.${preview.mode}`)}</p><p>{t(preview.mode==='incremental'?'plans.inherit':'plans.isolated')}</p><p className="break-all text-xs">{preview.inputDigest}</p><p>{t('plans.noReset')}</p></div>}
+    <KnowledgeSelect key={`${projectId}:knowledge`} projectId={projectId} kind="domainKnowledge" value={knowledgeSelection} onChange={setKnowledgeSelection} onReady={setKnowledgeReady} exampleDefault={exampleDefault}/>
+    <KnowledgeSelect key={`${projectId}:rules`} projectId={projectId} kind="rulePack" value={rulePackSelection} onChange={setRulePackSelection} onReady={setRulesReady} exampleDefault={exampleDefault}/>
     <div className="flex flex-wrap gap-4"><label className="flex items-center gap-3 text-sm">{t('bench.outputLanguage')}<select className={field} value={outputLanguage} onChange={e=>setOutputLanguage(e.target.value)}><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option></select></label>{sourceKind==='explore'&&<ExplorationSettings maxScreens={maxScreens} scope={explorationScope} onChange={(n,s)=>{setMaxScreens(n);setExplorationScope(s);}}/>}</div>
-    <label className="block space-y-2 text-sm"><span>{t('bench.planner')}</span>
-      <select className={field} value={planner} onChange={e=>setPlanner(e.target.value as ''|'claude-code'|'codex'|'penguin')}>
-        <option value="">{t('bench.plannerDefault')}</option>
-        <option value="claude-code">{t('bench.plannerClaude')}</option>
-        <option value="codex">Codex</option>
-        <option value="penguin">{t('bench.plannerPenguin')}</option>
-      </select><span className="block text-xs text-muted-foreground">{t('bench.plannerHint')}</span></label>
     <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={workUnits} onChange={e=>setWorkUnits(e.target.checked)}/>
       <span><span className="font-medium">{t('bench.workUnits')}</span><span className="mt-1 block text-xs text-muted-foreground">{t('bench.workUnitsHint')}</span></span></label>
     {sourceKind==='explore'&&<fieldset className="space-y-3 rounded-md border border-border p-4 text-sm">
@@ -85,10 +58,6 @@ export function NewRunForm({projectId,onCreated,onClose}:{projectId:string;onCre
       {exploreInteract&&<p className="text-xs text-warn">{t('bench.exploreInteractWarn')}</p>}
     </fieldset>}
     <label className="flex items-center gap-3 text-sm">{t('workflow.limit')}<input className={`${field} max-w-24`} type="number" min={1} max={50} value={limit} onChange={e=>setLimit(Number(e.target.value))}/></label>
-    {error&&<p role="alert" className="text-sm text-bad">{error}</p>}<div className="flex justify-end"><Button type="submit" variant="primary" disabled={busy||packError}>{t(busy?'workflow.starting':'workflow.start')}</Button></div>
-    {/* 填回框里，不直接提交：这张表单的每一栏最后都要由按下开始的那个人过目。 */}
-    {drafting&&<FieldChatDrawer field={drafting} title={t(drafting==='rulePack'?'bench.rulePack':'bench.knowledge')} projectId={projectId}
-      onApply={v=>{if(drafting==='rulePack')setRulePack(JSON.stringify(v,null,2));else setKnowledge(String(v));}}
-      onClose={()=>setDrafting(null)}/>}
+    {error&&<p role="alert" className="text-sm text-bad">{error}</p>}<div className="flex justify-end"><Button type="submit" variant="primary" disabled={busy||!hostReady||!knowledgeReady||!rulesReady}>{t(busy?'workflow.starting':preview?'workflow.start':'plans.preview')}</Button></div>
   </form>;
 }

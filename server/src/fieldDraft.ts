@@ -124,7 +124,7 @@ export const RULE_PACK_EXAMPLE = {
 };
 
 const ruleClaimNote =
-  "Every rule you draft MUST use claimType \"observed\": you are reading what the product " +
+  "Every rule grounded in actual observations uses claimType \"observed\": you are reading what the product " +
   "was seen to do, not a specification of what it must do. A rule that says the product " +
   "SHOULD behave a certain way needs a product-level source, and only a person can supply " +
   "that — say so in the reply instead of inventing one.";
@@ -138,6 +138,7 @@ export const FIELDS: Record<FieldId, FieldSpec> = {
       "A rule pack is the domain's invariants written as data: what the product requires,",
       "what it was observed doing, and what is only a guess — each with where it came from.",
       ruleClaimNote,
+      "Built-in examples and previous drafts are NOT observation evidence. Preserve unsupported example rules as claimType hypothesis with open-question verification. Never upgrade them to observed without actual evidence.",
       "Name every source you cite in `sources` and reference it from the rule's `sourceRefs`;",
       "a rule citing a source you did not declare is rejected, and so is a fabricated one.",
       "Keep it small and true: ten rules a reader can check beat forty a reader must trust.",

@@ -1,3 +1,5 @@
+import {BusinessLifecycleInputs} from './BusinessLifecycleInputs';
+import {StoryRequirementsReview} from './StoryRequirementsReview';
 import {RetrievalHistory} from './RetrievalHistory';
 import {nodeStatusKey} from './nodeStatus';
 import { nodeKnowledge } from './nodeKnowledge';
@@ -29,7 +31,7 @@ export function NodeDetail({run,node,projectId,onRunDetails,refresh}:{run:Workfl
    }})
    .catch(()=>{if(!c.signal.aborted)setContext({files:[],knowledge:[],used:[],sources:{},recorded:false,error:t('workflow.artifactFailed')});});return()=>c.abort();
  },[projectId,run.id,contextKey,t]);
- const refs=run.revisions.filter(r=>r.name===`validated/${node}`||(!run.revisions.some(v=>v.name===`validated/${node}`)&&r.name.startsWith(`units/${node}/`))||node==='source'&&(r.kind==='material'||r.name==='exploration/observations')||node==='g2'&&(r.kind==='code'||r.name.startsWith('preparation/')||r.name.startsWith('compilation-observation/'))||node==='execution'&&r.kind==='execution');
+ const refs=run.revisions.filter(r=>r.name===`validated/${node}`||(!run.revisions.some(v=>v.name===`validated/${node}`)&&r.name.startsWith(`units/${node}/`))||node==='source'&&(r.kind==='material'||['exploration/observations','exploration/report','exploration/planner-call'].includes(r.name))||node==='g2'&&(r.kind==='code'||r.name.startsWith('preparation/')||r.name.startsWith('compilation-observation/'))||node==='execution'&&r.kind==='execution');
  const usesExecutor=node==='execution'||node==='source'&&run.detail?.parameters?.sourceKind==='explore';
  const model=usesExecutor?run.binding?.models.executor.model:['modules','stories','cases','instructions','g2'].includes(node)?run.binding?.models.planner.model??run.binding?.models.runtime:'—';
  const [documentPath,setDocumentPath]=useState<string|null>(null);
@@ -60,6 +62,8 @@ export function NodeDetail({run,node,projectId,onRunDetails,refresh}:{run:Workfl
   try{await workflowRequest(`${workflowBase(projectId)}/${run.id}/modules/freeze`,{});setFreezing('');refresh();}
   catch(e){setFreezing(e instanceof Error?e.message:'request_failed');}}
  return <section className="space-y-5">
+  {(node==='source'||node==='modules')&&<BusinessLifecycleInputs projectId={projectId} runId={run.id} status={run.status}/>}
+  {node==='stories'&&<StoryRequirementsReview projectId={projectId} runId={run.id} status={run.status} refresh={refresh}/>}
   <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm space-y-3">
     <p className="font-medium">{t(`bench.guide.${node}.summary`)}</p>
     <dl className="space-y-3">{['input','outcome'].map(part=><div key={part}><dt className="text-xs text-muted-foreground">{t(`bench.guide.${part}`)}</dt><dd className="mt-1 leading-relaxed">{t(`bench.guide.${node}.${part}`)}</dd></div>)}</dl>

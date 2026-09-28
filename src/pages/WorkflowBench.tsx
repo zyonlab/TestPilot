@@ -21,7 +21,7 @@ import { Drawer } from '@/components/overlay';
  * 冻结只能在这里做。画布上没有它的时候，那一步在产品里就等于不存在。
  */
 const stages=['source','modules','stories','cases','gate','review','g2','execution'];
-function nodeRevisions(stage:string,revisions:Revision[]) {return revisions.filter(r=>stage==='source'?r.kind==='material'||r.name==='exploration/observations'||r.name.startsWith('knowledge/')&&revisions.filter(m=>m.name==='context/source').some(m=>m.sourceRefs.includes(r.id)):stage==='g2'?r.kind==='code':stage==='execution'?r.name.startsWith('execution/'):r.name===`validated/${stage}`);}
+function nodeRevisions(stage:string,revisions:Revision[]) {return revisions.filter(r=>stage==='source'?r.kind==='material'||['exploration/observations','exploration/report','exploration/planner-call'].includes(r.name)||r.name.startsWith('knowledge/')&&revisions.filter(m=>m.name==='context/source').some(m=>m.sourceRefs.includes(r.id)):stage==='g2'?r.kind==='code':stage==='execution'?r.name.startsWith('execution/'):r.name===`validated/${stage}`);}
 export function WorkflowBench(){const projectId=useStore(s=>s.activeProjectId);return projectId?<Bench key={projectId} projectId={projectId}/>:<NeedProject/>;}
 function Bench({projectId}:{projectId:string}) {
   const t=useT(),{runs,loaded,error,refresh}=useProjectRuns(projectId),[ctx,setCtx]=useState(readProjectContext),[creating,setCreating]=useState(false),[details,setDetails]=useState(false),[busy,setBusy]=useState(false),[stopping,setStopping]=useState(false),[resuming,setResuming]=useState(false),[actionError,setActionError]=useState(''),[breakpoints,setBreakpoints]=useState<string[]>([]);

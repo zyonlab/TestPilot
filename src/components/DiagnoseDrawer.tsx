@@ -1,3 +1,4 @@
+import {PlannerHost} from "./PlannerHost";
 import { useEffect, useRef, useState } from "react";
 import { Stethoscope } from "lucide-react";
 import { Drawer } from "@/components/overlay";
@@ -43,6 +44,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hostReady,setHostReady]=useState(false);
   const end = useRef<HTMLDivElement>(null);
 
   // 换一个对象就是换一个问题：把上一个对象的对话留着，会让追问带上不属于它的上文。
@@ -51,7 +53,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
 
   const ask = async (text: string) => {
     const said = text.trim();
-    if (!said || busy) return;
+    if (!said || busy || !hostReady) return;
     const next = [...turns, { role: "you" as const, text: said }];
     setTurns(next);
     setInput("");
@@ -62,6 +64,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           intent: "ask",
+          useHost: true,
           projectId: projectId ?? undefined,
           messages: next
             .filter((m) => m.role !== "sys")
@@ -106,6 +109,7 @@ export function DiagnoseDrawer({ scope, onClose }: { scope: DiagnoseScope; onClo
         {t("wf.diagnoseRule")}
       </p>
 
+      {projectId&&<div className="p-3"><PlannerHost projectId={projectId} onReady={setHostReady}/></div>}
       <div className="min-h-0 flex-1 overflow-auto p-3">
         {turns.length === 0 && (
           <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">{t("wf.diagnoseHint")}</p>

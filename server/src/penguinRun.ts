@@ -40,7 +40,7 @@ import { getRuntime, defaultRuntimeName, type RuntimeName } from "./runtimes.js"
 import { captureHostWebModels, captureWebModels } from "./modelSnapshots.js";
 import { dataPath } from "./datadir.js";
 import { cancelManagedRun } from "./runtime/managed-penguin.js";
-import { unitGenerationMessage } from "./runtime/skill-launch.js";
+import { generationMessage, unitGenerationMessage } from "./runtime/skill-launch.js";
 import { unitRunBudget } from "./runBudget.js";
 import { registerWebRun, freezeRunMaterials, runLedger } from "./runService.js";
 import { registeredStageProducts } from "./runStages.js";
@@ -338,11 +338,11 @@ export async function startRun(
      * 所以：开了单元的运行，续跑时把单元循环的话术接在前面，再说「从哪一步接上」。
      */
     ...(input.resumeStage ? { message: [
-      ...(workUnits && materialsDir ? [unitGenerationMessage({ materialsDir, outDir: join(workspace, "runs", runId), ...(limit !== undefined ? { limit } : {}) })] : []),
+      ...(materialsDir ? [generationMessage({ materialsDir, outDir: join(workspace, "runs", runId), generationMode: "skill", workUnits, ...(limit !== undefined ? { limit } : {}) })] : []),
       `Continue registered TestPilot run ${runId} from ${input.resumeStage}. Before planning each missing stage call begin_stage; stop immediately if paused/cancelled/failed. Call get_project_run for project ${scopeProjectId}, and read_run_artifact for required upstream revisions (validated/stories or validated/cases). Preserve those upstream contents exactly. Read load_run_instructions, retrieve_spec as needed.`,
       workUnits
-        ? "Stages already done stay done: do not rewrite them. For each missing stage use the unit loop above (claim_unit → write_unit); write_stories and write_cases are refused in this mode. Then gate_run and finalize_run. Finish at waiting_review. The host remains the planner."
-        : "Complete only missing stages with write_stories/write_cases/gate_run/finalize_run. Finish at waiting_review. The host remains the planner.",
+        ? "Stages already done stay done: do not rewrite them. For each missing stage use the unit loop above (claim_unit → write_unit); write_stories and write_cases are refused in this mode. Stop at requiresHumanReview before cases; otherwise continue to gate_run and finalize_run. Finish at waiting_review. The host remains the planner."
+        : "Complete only missing stages with write_stories/write_cases/gate_run/finalize_run, stopping at requiresHumanReview before cases. Finish at waiting_review. The host remains the planner.",
     ].join("\n") } : {}),
     generationMode: input.generationMode ?? "skill",
     ...(managed ? { models: models as ReturnType<typeof captureWebModels> } : {}),
@@ -430,7 +430,7 @@ export async function startRun(
  */
 export function completionDiagnostics(status: string, error?: string) {
   // The file adapter expects final artifacts even when the ledger intentionally waits for a human.
-  if (status === 'waiting_review' && error?.includes('没有 gate.json')) {
+  if (status === 'waiting_review' && error && (error.includes('没有 gate.json') || error.startsWith('宿主已结束，但当前节点尚未提交完成回执') || /^session .*已结束，但当前节点尚未提交完成回执/.test(error))) {
     return { error: undefined, adapterDiagnostic: error };
   }
   return { error };
@@ -479,7 +479,7 @@ async function finish(
 
   if (target.projectId && ['failed','paused','cancelled'].includes(status)) {
     for (const node of runLedger().nodeStates(wfRunId)) {
-      if (node.phase === 'running') stageEvent(wfRunId, target.projectId, node.node,
+      if (['running','queued'].includes(node.phase)) stageEvent(wfRunId, target.projectId, node.node,
         status === 'cancelled' ? 'cancelled' : status === 'paused' ? 'blocked' : 'failed', r.error ?? `Run stopped: ${status}`);
     }
   }

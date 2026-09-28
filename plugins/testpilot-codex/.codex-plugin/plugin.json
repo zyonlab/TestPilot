@@ -1,6 +1,6 @@
 {
   "name": "testpilot-codex",
-  "version": "2026.9.10+skill.1",
+  "version": "2026.9.23+skill.1",
   "description": "Versioned test design, human review and Midscene execution using the host planner.",
   "author": {
     "name": "TestPilot"

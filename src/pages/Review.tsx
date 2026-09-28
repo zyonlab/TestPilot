@@ -2704,6 +2704,8 @@ export function ReviewPage({ focusRun }: { focusRun?: string } = {}) {
             body: JSON.stringify({
               messages: [{ role: "user", text: q }],
               intent: "ask",
+              useHost: true,
+              projectId: batch.projectId,
               // 作用域跟着条目走：服务端据此把这一条的步骤、判据和 finding 装进去。
               context: { kind: "case", caseId: item.caseId, wfRunId: batch.wfRunId },
             }),
