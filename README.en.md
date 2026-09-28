@@ -70,7 +70,7 @@ flowchart TD
   RP --> RG{{"Human decides regression candidates"}}
 ```
 
-The pipeline stops for a human in exactly three places: **freezing the module tree, reviewing cases, and deciding regression candidates.** Everything else is driven stage by stage by the server, and every stage's output is recorded in the run ledger as an immutable revision.
+The pipeline stops for a human at **freezing the module tree, reviewing cases, and deciding regression candidates**; when a story's rules carry an unconfirmed hypothesis, the candidate stories wait for a person first too. Everything else is driven stage by stage by the server, and every stage's output is recorded in the run ledger as an immutable revision.
 
 The workbench is that line: eight stages with their state and artifacts — green is done, red is failed or waiting.
 
@@ -78,7 +78,7 @@ The workbench is that line: eight stages with their state and artifacts — gree
 
 ### 1. Start a run: give it documents, or let it look for itself
 
-Choose spec or explore, set the target URL, domain knowledge, rule pack and output language, and pick who plans (the local Claude Code by default). Once the run is registered, the materials, rule pack, domain reference and planner runtime are frozen to it.
+Choose spec or explore, set the target URL, domain knowledge, rule pack and output language, and the planning is done by the project's chosen local, signed-in host (Claude Code or Codex, chosen once per project). Once the run is registered, the materials, rule pack, domain reference and planner runtime are frozen to it.
 
 ![New run form](docs/assets/workflow/02-new-run.png)
 
@@ -281,7 +281,7 @@ All three use the same API server (`http://127.0.0.1:5301` by default, override 
 
 The flow, and what each step looks like, is [walked through above](#what-a-run-looks-like). Two things come first:
 
-1. Create a project, set the target URL and configure the environment profile (login flow, viewport, wallet injection…).
+1. Create a project, set the target URL, configure the environment profile (login flow, viewport, wallet injection…) and choose the planner host (a signed-in local Claude Code or Codex).
 2. Add domain knowledge where you need it, in "rule packs" and "domain references", or by talking it out in the chat drawer.
 
 Then start a run from the workbench. Local review needs no sign-in; the origin and version of every action are recorded.
@@ -294,8 +294,8 @@ Describe your goal in the session, for example "use TestPilot to generate tests 
 
 ### Experimental runtimes
 
-- **Codex**: `pnpm build:codex-plugin` generates `plugins/testpilot-codex/`, or install per project with `install --entry codex`.
-- **Penguin**: needs Node 24 and a running Penguin service; install with `install --entry penguin --agent-id <id>`, and set `TP_AGENT_RUNTIME=penguin` to have it plan Web-started runs.
+- **Codex**: can be the planner host for Web-started runs; as a host entry, `pnpm build:codex-plugin` generates `plugins/testpilot-codex/`, or install per project with `install --entry codex`.
+- **Penguin**: needs Node 24 and a running Penguin service; install with `install --entry penguin --agent-id <id>`, the Web form cannot select it; it plans only runs created directly through the API with `TP_AGENT_RUNTIME=penguin`.
 
 Neither is covered by this release's acceptance.
 
@@ -304,7 +304,7 @@ Neither is covered by this release's acceptance.
 | Variable | Purpose | Default |
 |---|---|---|
 | `MIDSCENE_MODEL_BASE_URL` / `MIDSCENE_MODEL_API_KEY` / `MIDSCENE_MODEL_NAME` | Executor model | required |
-| `TP_AGENT_RUNTIME` | Who plans Web-started runs: `claude-code` or `penguin` | `claude-code` |
+| `TP_AGENT_RUNTIME` | Default planner for runs created directly through the API: `claude-code` or `penguin` (the Web form uses the project's chosen host) | `claude-code` |
 | `TP_CLAUDE_BIN` | Path to the `claude` executable | `claude` on PATH |
 | `TP_PLANNER_*` | Planner model; only for Penguin or the internal pipeline mode | — |
 | `TP_EXECUTOR_MAX_CALLS` / `TP_RUN_MAX_MS` | Per-run model-call and wall-time budget | see `.env.example` |
@@ -372,6 +372,8 @@ The documentation is mostly in Chinese. Start at [docs/README.md](docs/README.md
 - [Goals and handoff guide](docs/v3/09-执行目标与接手指南.md): goals, scope, status, next steps, recent changes
 - [Installation and diagnostics](docs/v3/10-安装与诊断.md)
 - [Claude Code and Codex integration](docs/v3/14-Claude-Code与Codex接入实操.md)
+- [User stories](docs/v3/03-用户故事.md) (Chinese): epics and stories derived from the code, each with its code location
+- [Layered implementation](docs/v3/04-分层功能实现.md) (Chinese): what each of the seven layers does, in which functions, and one run traced through them
 - [Node prompts, domain knowledge and the learning loop](docs/v3/15-节点提示词与领域知识重构实施.md) (Chinese)
 
 ## Contributing
@@ -380,7 +382,7 @@ Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING
 
 ## Roadmap and known limitations
 
-- This release covers the Web UI and Claude Code; Codex and Penguin are experimental.
+- This release covers the Web UI and Claude Code; Codex can be the Web planner host and a host entry, Penguin is experimental.
 - The first version of the learning loop only evolves the executor model; planner-side candidates (prompts, preparation guidance) are not evaluated yet, since they need the planner to regenerate and prepare cases.
 - Parallel sub-agents, scoreboards and the research track are frozen and not part of this release.
 - The defect regression suite is a list for now; executions do not pick it up automatically, and new cases are not generated from failures (rejection reasons are already handed to generation as counterexamples).

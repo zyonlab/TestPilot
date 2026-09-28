@@ -1,22 +1,21 @@
 # 归档
 
-这里放的是**写在当时是对的、现在不再描述这个系统**的文档。
+这里放的是**写在当时是对的、现在不再描述这个系统**的文档。现状看 `docs/v3/`。
 
-留着不删，是因为它们记的是判断的来路——「为什么当初选了这条路」在后面每一次
-推翻决定时都还要用到。但它们从仓库根目录移进来了：摆在根目录上，新来的人会
-把它们当成现状读，而它们不是。
+2026-09-28 清理过一轮：只留下还被代码、测试、脚本或评测数据按路径引用的文件，其余删掉了
+（要追溯去 git 历史里找）。留下的每一份都有人在读：
 
-**判断标准**：一份文档如果说的是「系统现在长什么样」而说错了，它就该被改（比如
-`docs/spec/03-UI交互规格.md` 就是改的，因为它同时是自举时喂给 harness 的语料，
-错的语料会让自测对着错的靶子打分）。如果它说的是「当时我们调研到了什么」，
-那它没有过期，只是变成了历史——历史归到这里。
+| 文档 | 谁在引用它 | 为什么还留着 |
+|---|---|---|
+| [`refactor/`](refactor/)（重构手册，整目录） | `scripts/check-doc-refs.mjs`、`scripts/fix-doc-refs.mjs` 整目录扫描；`11`、`16`、`18` 另被代码注释引用 | 手册里的 `file:line` 由这两个脚本核对 |
+| [`spec/00-文档地图.md`](spec/00-文档地图.md) | `server/scripts/probe-endpoint.mjs`、`src/components/CoverageMatrix.tsx` 注释 | 设计来由 |
+| [`spec/01-设计依据与实测数据.md`](spec/01-设计依据与实测数据.md) | `fixtures/sample-spec/gold-checklist.json` | 黄金清单的边界说明 |
+| [`spec/02-业务规格与用户故事.md`](spec/02-业务规格与用户故事.md) | `benchmark/casegen/`（gold、statement、README）、`evals/runtime-compare.json`、`scripts/build-prototype-refinement.py` | 自举评测的语料，改它等于改考题 |
+| [`spec/03-UI交互规格.md`](spec/03-UI交互规格.md) | `benchmark/casegen/`（gold、replay 夹具）、`scripts/build-prototype-refinement.py` | 同上 |
+| [`spec/06-通讯协议.md`](spec/06-通讯协议.md) | `harness-core` 事件信封、`exec/run.ts`、`server/src/db.ts`、`src/lib/ws.ts` 注释 | 事件协议的设计来由 |
+| [`spec/09-prototype-workspace.html`](spec/09-prototype-workspace.html) | `scripts/build-prototype-refinement.py` | 原型构建的底稿 |
+| [`spec/13-重新规划.md`](spec/13-重新规划.md) | `harness-core/src/model/openai.ts`、`codegen/gate.ts` 注释 | 设计来由 |
+| [`spec/17-整体UI重构-任务与进度.md`](spec/17-整体UI重构-任务与进度.md) | `scripts/plan.mjs`（默认台账）、两处测试注释 | `plan.mjs` 不给参数时读它 |
 
-| 文档 | 日期 | 它当时回答什么 | 现在去哪看 |
-|---|---|---|---|
-| [部门级自动化平台 · 规划文档](TestPilot-部门级自动化平台-规划文档.md) | 2026-07-03 | 从「AI 执行内核 POC」到能托管一个 QA 部门，还差哪圈 QA 工程学 | `docs/spec/13-重新规划.md`（现在卡在哪）与 `08-分阶段路线与验收.md`（分几步走）。**注意它有三条失效链接**（`MVP应用文档-…`、`深度调研-…`、`testpilot/server/README.md`），那三份文件在这个仓库里不存在 |
-| [流程调研 · 套件 vs 运行](TestPilot-流程调研-套件vs运行.md) | 2026-07-04 | 套件和运行是不是重复了 | 结论（**不重复，职责不同**）仍然成立，并且已经落进产品：它们现在是「套件批次」这一组导航项下的两个 tab。它列出的 3 个断点里，第 1 条（Runs 不按项目作用域）已修——`surfaces.tsx` 里 `runs` 带 `needsProject: true` |
-| [dapp E2E · 调研与集成设计](TestPilot-dapp-E2E-调研与集成设计.md) | 2026-07-05 | 不绕过 UI 的 dapp E2E 怎么做、钱包弹窗怎么办 | 已落地为「链上测试」：`src/pages/ChainConfig.tsx` 与 `server/.wallets/metamask` |
-| [数据绑定与登录态 · 调研与设计](TestPilot-数据绑定与登录态-调研与设计.md) | 2026-07-05 | 批量导入测试数据、注入固定参数、配置登录态 | 已落地为「测试数据」与被测对象面板：`src/pages/Datasets.tsx`、`src/components/SutPanel.tsx` |
-| [阶段一 review 指南](REVIEW.md) | 2026-08-20 | 某一轮做完之后，回来 review 的人该跑什么、看什么 | 它是一次交接的快照，不是长期文档。**里面的链接现在都打不开**：地址机制已经统一成一个地址加 `?open=`，`#/canvas`、`#/processes`、`#/review` 这种路径式链接会一律落到复核队列。当前的入口见 `docs/spec/03-UI交互规格.md` §1 |
-
-要跑起来看当前的样子，读 `docs/spec/00-文档地图.md`。
+注意：`benchmark/casegen/gold.json` 与 replay 夹具里写的是旧路径 `docs/spec/…`，指的就是这里的
+`spec/02`、`spec/03`；gold 冻结，不改。
