@@ -1,0 +1,676 @@
+{
+  "C-ORD-03-03": {
+    "baseRevision": "rev-e546b6d8-77ea-4d7a-9097-881080f3a4d4",
+    "content": {
+      "acRefs": [
+        "S-ORD-03/AC-3"
+      ],
+      "assertions": [
+        {
+          "id": "A-ORD-03-03-1",
+          "ruleRefs": [],
+          "afterStep": 5,
+          "statement": "填入超额数量后，下单面板底部按钮显示「Not Enough Margin」",
+          "oracle": {
+            "kind": "text",
+            "value": "Not Enough Margin"
+          }
+        },
+        {
+          "id": "A-ORD-03-03-2",
+          "oracle": {
+            "kind": "text",
+            "value": "No open positions yet"
+          },
+          "ruleRefs": [],
+          "statement": "「Positions」仍显示「No open positions yet」"
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "所需保证金相对可交易额",
+        "partitionId": "exceeds-available",
+        "predicate": "订单所需保证金大于 Available to Trade",
+        "representative": "${env.TP_OVERSIZE}",
+        "technique": "equivalence",
+        "validity": "invalid"
+      },
+      "designMethod": "negative",
+      "expected": "填入超过可交易额的数量后，下单面板底部按钮变成禁用的「Not Enough Margin」，这笔订单提交不出去",
+      "featureRefs": [
+        "orders.submit"
+      ],
+      "id": "C-ORD-03-03",
+      "key": "place-order|margin-exceeds-available|rejected-insufficient",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Available to Trade"
+                },
+                "statement": "下单面板显示可交易额度标签"
+              }
+            ],
+            "statement": "账户具备交易权限"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "noText",
+                  "value": "Open Orders ("
+                },
+                "statement": "账户面板的 Open Orders 标签没有带数量"
+              }
+            ],
+            "statement": "账户没有挂单"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "No open positions yet"
+                },
+                "statement": "持仓表显示空状态"
+              }
+            ],
+            "statement": "账户没有持仓"
+          }
+        ],
+        "cleanup": [
+          {
+            "id": "CL-ORD-03-03-OT",
+            "postStep": 1,
+            "settingId": "SET-ORD-03-03-OT",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Market"
+                  },
+                  "statement": "订单类型行显示 Market"
+                },
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Slippage"
+                  },
+                  "statement": "下单面板有 Slippage"
+                }
+              ],
+              "statement": "订单类型恢复为 Market"
+            }
+          },
+          {
+            "id": "CL-ORD-03-03-MKT",
+            "postStep": 2,
+            "settingId": "SET-ORD-03-03-MKT",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "HYPE-USDC"
+                  },
+                  "statement": "市场头部显示 HYPE-USDC"
+                }
+              ],
+              "statement": "市场头部恢复为 HYPE-USDC"
+            }
+          }
+        ],
+        "mode": "controlled",
+        "rationale": "切到 BTC-USDC 与把订单类型切到 Limit 都会被产品记住，结束时切回 Market 并回到 HYPE-USDC；预期产品拒绝，被拒绝的提交不留下订单或持仓",
+        "resources": [],
+        "session": "unchanged",
+        "settings": [
+          {
+            "changedAfterStep": 1,
+            "id": "SET-ORD-03-03-MKT",
+            "name": "当前交易市场",
+            "observed": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "HYPE-USDC"
+                  },
+                  "statement": "市场头部显示 HYPE-USDC"
+                }
+              ],
+              "statement": "执行前市场头部显示 HYPE-USDC"
+            },
+            "original": "HYPE",
+            "sourceRef": "materials/exploration.md#19"
+          },
+          {
+            "changedAfterStep": 2,
+            "id": "SET-ORD-03-03-OT",
+            "name": "下单面板订单类型",
+            "observed": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Market"
+                  },
+                  "statement": "订单类型行显示 Market"
+                },
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Slippage"
+                  },
+                  "statement": "下单面板有 Slippage"
+                }
+              ],
+              "statement": "执行前下单面板订单类型为 Market"
+            },
+            "original": "Market",
+            "sourceRef": "materials/exploration.md#19"
+          }
+        ],
+        "sideEffects": [
+          "被拒绝的提交可能在 Order History 留下一条拒绝记录"
+        ],
+        "sourceRefs": [
+          "materials/exploration.md#19",
+          "materials/exploration.md#11"
+        ],
+        "supports": [
+          "$expected",
+          "A-ORD-03-03-1",
+          "A-ORD-03-03-2"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "kind": "text",
+        "value": "Not Enough Margin"
+      },
+      "postSteps": [
+        "点击下单面板订单类型行里的「Market」",
+        "打开 /trade/HYPE"
+      ],
+      "precondition": [
+        "账户具备交易权限",
+        "账户没有挂单",
+        "账户没有持仓"
+      ],
+      "priority": "P1",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 正式执行 exec-b9f4a74e 实测：超额时产品不等点击，下单面板底部按钮直接变成禁用的「Not Enough Margin」（run-muki183y-1136）；原来的第 6、7 步（点 Place Order、点确认框）走不通，删掉，改断言按钮上的字。余额不足的拒绝文案没有实测，暂用 judge 判据（tier 3），实测后可改成 text；TP_OVERSIZE=100000 在 42000 限价下远超可交易额；拒绝发生在点 Place Order 时（前端校验、不弹确认框）还是在 Confirm Order 确认之后没有实测，第 7 步按确认框会出现来写；钱包由环境登录提供",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-WALLET",
+            "kind": "session",
+            "status": "unverified"
+          },
+          {
+            "evidenceRefs": [
+              "run-muki183y-1136"
+            ],
+            "id": "REQ-REJECT-TEXT",
+            "kind": "locator",
+            "status": "verified"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "超额订单若被部分接受，交易者的敞口会超出其资金",
+        "ruleRefs": []
+      },
+      "ruleRefs": [],
+      "scenarioType": "negative",
+      "sourceRefs": [
+        "materials/exploration.md#19",
+        "materials/exploration.md#11"
+      ],
+      "steps": [
+        "打开 /trade/BTC",
+        "点击下单面板订单类型行里的「Limit」",
+        "点击下单面板里的「Buy / Long」",
+        "在下单面板「Price (USDC)」输入框输入 ${env.TP_BTC_ORDER_PRICE}",
+        "在下单面板「Size」输入框输入 ${env.TP_OVERSIZE}",
+        "点击页面下半部账户面板标签行里的「Positions」"
+      ],
+      "storyId": "S-ORD-03",
+      "tier": 1,
+      "title": "所需保证金超过可交易额时被拒绝并说明余额不足"
+    }
+  },
+  "C-ACC-04-02": {
+    "baseRevision": "rev-0881725d-fdc0-410d-8c78-626bfedee79f",
+    "content": {
+      "acRefs": [
+        "S-ACC-04/AC-2"
+      ],
+      "assertions": [
+        {
+          "id": "A-ACC-04-02-1",
+          "ruleRefs": [],
+          "afterStep": 5,
+          "statement": "填入超额数量后，下单面板底部按钮显示「Not Enough Margin」",
+          "oracle": {
+            "kind": "text",
+            "value": "Not Enough Margin"
+          }
+        },
+        {
+          "id": "A-ACC-04-02-2",
+          "oracle": {
+            "kind": "text",
+            "value": "No open orders yet"
+          },
+          "ruleRefs": [],
+          "statement": "「Open Orders」列表仍为空"
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "订单所需保证金相对可用资产",
+        "partitionId": "exceeds-available",
+        "predicate": "订单所需保证金大于「Available to Trade」",
+        "representative": "${env.TP_OVERSIZE}",
+        "technique": "equivalence",
+        "validity": "invalid"
+      },
+      "designMethod": "negative",
+      "expected": "填入超过可交易额的数量后，下单面板底部按钮变成禁用的「Not Enough Margin」，这笔订单提交不出去",
+      "featureRefs": [
+        "account.ready"
+      ],
+      "id": "C-ACC-04-02",
+      "key": "place-order|size-exceeds-available|rejected-insufficient-funds",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Available to Trade"
+                },
+                "statement": "下单面板显示可交易额度标签"
+              }
+            ],
+            "statement": "钱包已连接；网络与账户身份已确认"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "noText",
+                  "value": "Open Orders ("
+                },
+                "statement": "账户面板的 Open Orders 标签没有带数量"
+              }
+            ],
+            "statement": "账户没有挂单"
+          }
+        ],
+        "cleanup": [
+          {
+            "id": "CL-ACC-04-02-OT",
+            "postStep": 1,
+            "settingId": "SET-ACC-04-02-OT",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Market"
+                  },
+                  "statement": "订单类型行显示 Market"
+                },
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Slippage"
+                  },
+                  "statement": "下单面板有 Slippage"
+                }
+              ],
+              "statement": "订单类型恢复为 Market"
+            }
+          },
+          {
+            "id": "CL-ACC-04-02-MKT",
+            "postStep": 2,
+            "settingId": "SET-ACC-04-02-MKT",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "HYPE-USDC"
+                  },
+                  "statement": "市场头部显示 HYPE-USDC"
+                }
+              ],
+              "statement": "市场头部恢复为 HYPE-USDC"
+            }
+          }
+        ],
+        "mode": "controlled",
+        "rationale": "切到 BTC-USDC 与把订单类型切到 Limit 都会被产品记住，结束时切回 Market 并回到 HYPE-USDC；预期产品拒绝这笔订单，被拒绝的提交不留下挂单或持仓",
+        "resources": [],
+        "session": "unchanged",
+        "settings": [
+          {
+            "changedAfterStep": 1,
+            "id": "SET-ACC-04-02-MKT",
+            "name": "当前交易市场",
+            "observed": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "HYPE-USDC"
+                  },
+                  "statement": "市场头部显示 HYPE-USDC"
+                }
+              ],
+              "statement": "执行前市场头部显示 HYPE-USDC"
+            },
+            "original": "HYPE",
+            "sourceRef": "materials/exploration.md#19"
+          },
+          {
+            "changedAfterStep": 2,
+            "id": "SET-ACC-04-02-OT",
+            "name": "下单面板订单类型",
+            "observed": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Market"
+                  },
+                  "statement": "订单类型行显示 Market"
+                },
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Slippage"
+                  },
+                  "statement": "下单面板有 Slippage"
+                }
+              ],
+              "statement": "执行前下单面板订单类型为 Market"
+            },
+            "original": "Market",
+            "sourceRef": "materials/exploration.md#19"
+          }
+        ],
+        "sideEffects": [
+          "被拒绝的提交可能在 Order History 留下一条拒绝记录"
+        ],
+        "sourceRefs": [
+          "materials/exploration.md#19"
+        ],
+        "supports": [
+          "$expected",
+          "A-ACC-04-02-1",
+          "A-ACC-04-02-2"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "kind": "text",
+        "value": "Not Enough Margin"
+      },
+      "postSteps": [
+        "点击下单面板订单类型行里的「Market」",
+        "打开 /trade/HYPE"
+      ],
+      "precondition": [
+        "钱包已连接；网络与账户身份已确认",
+        "账户没有挂单"
+      ],
+      "priority": "P1",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 正式执行 exec-b9f4a74e 实测：超额时产品不等点击，下单面板底部按钮直接变成禁用的「Not Enough Margin」（run-mukheljz-1133）；原来的第 6、7 步（点 Place Order、点确认框）走不通，删掉，改断言按钮上的字。资金不足提示的确切文案没有实测，暂用 judge 判据（tier 3），实测后可改成 text；拒绝发生在点 Place Order 时（前端校验、不弹确认框）还是在 Confirm Order 确认之后没有实测，第 7 步按确认框会出现来写；钱包由环境登录提供",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-WALLET",
+            "kind": "session",
+            "status": "unverified"
+          },
+          {
+            "evidenceRefs": [
+              "run-mukheljz-1133"
+            ],
+            "id": "REQ-REJECT-TEXT",
+            "kind": "locator",
+            "status": "verified"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "余额不足的订单若被接受或静默失败，交易者会误判自己的敞口",
+        "ruleRefs": []
+      },
+      "ruleRefs": [],
+      "scenarioType": "negative",
+      "sourceRefs": [
+        "materials/exploration.md#19",
+        "materials/exploration.md#1"
+      ],
+      "steps": [
+        "打开 /trade/BTC",
+        "点击下单面板订单类型行里的「Limit」",
+        "点击下单面板里的「Buy / Long」",
+        "在下单面板「Price (USDC)」输入框输入 ${env.TP_BTC_ORDER_PRICE}",
+        "在下单面板「Size」输入框输入 ${env.TP_OVERSIZE}",
+        "点击页面下半部账户面板标签行里的「Open Orders」"
+      ],
+      "storyId": "S-ACC-04",
+      "tier": 1,
+      "title": "下单数量超出可用资产时点 Place Order 被拒绝并说明资金不足"
+    }
+  },
+  "C-POS-05-03": {
+    "baseRevision": "rev-0b54d7fa-ffa7-4c88-93fd-3ca02a74beab",
+    "content": {
+      "acRefs": [
+        "S-POS-05/AC-3"
+      ],
+      "assertions": [
+        {
+          "afterStep": 3,
+          "id": "A-POS-05-03-1",
+          "oracle": {
+            "kind": "text",
+            "value": "Reduce Only Too Large"
+          },
+          "ruleRefs": [],
+          "statement": "输入超过持仓的数量后，下单面板底部按钮显示「Reduce Only Too Large」"
+        },
+        {
+          "id": "A-POS-05-03-2",
+          "oracle": {
+            "criteria": [
+              "「Positions」表里没有 BTC-USDC 的空头持仓行（方向为 Short 或 Size 为负数）",
+              "「Positions」表里如果还有 BTC-USDC 持仓行，它的方向仍是多头（Long 或 Size 为正数）"
+            ],
+            "kind": "judge",
+            "samples": 3
+          },
+          "ruleRefs": [],
+          "statement": "「Positions」中不出现 BTC-USDC 空头持仓"
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "Reduce Only 数量相对持仓",
+        "partitionId": "exceeds-position",
+        "predicate": "Reduce Only 卖出数量大于持仓",
+        "representative": "${env.TP_OVER_POSITION_SIZE}",
+        "technique": "equivalence",
+        "validity": "invalid"
+      },
+      "designMethod": "negative",
+      "expected": "产品拒绝数量超过持仓的 Reduce Only 卖单：下单面板底部按钮变成禁用的「Reduce Only Too Large」，「Positions」中不出现空头持仓",
+      "featureRefs": [
+        "positions.close"
+      ],
+      "id": "C-POS-05-03",
+      "key": "reduce-only-market-sell|size-exceeds-position|no-short-opened",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "BTC-USDC"
+                },
+                "statement": "市场头部显示 BTC-USDC"
+              }
+            ],
+            "statement": "当前市场为 BTC-USDC"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Slippage"
+                },
+                "statement": "下单面板有 Slippage"
+              },
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "noText",
+                  "value": "Price (USDC)"
+                },
+                "statement": "下单面板没有 Price (USDC)"
+              }
+            ],
+            "statement": "下单面板订单类型为 Market"
+          }
+        ],
+        "cleanup": [],
+        "mode": "read-only",
+        "rationale": "产品在提交前就拦下超量的 Reduce Only 卖单，不建立新持仓、不改持久设置（Reduce Only 勾选不会保存）；准备好的持仓由准备配方的补偿平仓",
+        "resources": [],
+        "session": "unchanged",
+        "settings": [],
+        "sideEffects": [],
+        "sourceRefs": [
+          "materials/exploration.md#19"
+        ],
+        "supports": [
+          "$expected",
+          "A-POS-05-03-1",
+          "A-POS-05-03-2"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "kind": "text",
+        "value": "Reduce Only Too Large"
+      },
+      "postSteps": [],
+      "precondition": [
+        "当前市场为 BTC-USDC",
+        "下单面板订单类型为 Market"
+      ],
+      "priority": "P1",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 正式执行 exec-b9f4a74e 实测：超额时产品不等点击，下单面板底部按钮直接变成禁用的「Reduce Only Too Large」（run-mukhw90d-1135）；原来的第 4、5 步（点 Place Order、点确认框）走不通，删掉，改断言按钮上的字；持仓不会被消耗。position.open 由准备配方在 BTC-USDC 建立（打开 /trade/BTC、市价买入 ${env.TP_BTC_ORDER_SIZE}、确认），补偿平仓（若仍在）后切回 Market 并打开 /trade/HYPE；配方尚未提供。TP_OVER_POSITION_SIZE（0.05）大于配方的持仓量 TP_BTC_ORDER_SIZE（0.001），配方改数量时要一起核。超量 Reduce Only 是被拒绝还是被截断没有规格，拒绝文案与持仓方向的显示未实测，判据用 judge；若拒绝发生在点 Place Order 时，第 5 步的确认框不会出现。「存在本账户非零持仓」由准备配方的 postconditions 证明（本用例会消耗这个持仓，所以它不进只读基线——跑完复查时它本来就不该成立）。",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-POSITION",
+            "kind": "fixture",
+            "status": "missing"
+          },
+          {
+            "evidenceRefs": [],
+            "id": "REQ-OVER-SIZE",
+            "kind": "calculation",
+            "status": "unverified"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        },
+        {
+          "provided": "preparation",
+          "state": "position.open"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "超量 Reduce Only 若反手开空，交易者会在不知情时建立反向敞口",
+        "ruleRefs": []
+      },
+      "ruleRefs": [],
+      "scenarioType": "negative",
+      "sourceRefs": [
+        "materials/exploration.md#19"
+      ],
+      "steps": [
+        "点击下单面板里的「Sell / Short」",
+        "勾选下单面板里的「Reduce Only」",
+        "在下单面板「Size」输入框输入 ${env.TP_OVER_POSITION_SIZE}",
+        "点击页面下半部账户面板标签行里的「Positions」"
+      ],
+      "storyId": "S-POS-05",
+      "tier": 1,
+      "title": "数量超过持仓的 Reduce Only 卖单不会反向建立空头"
+    }
+  }
+}

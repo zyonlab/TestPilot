@@ -1,4 +1,5 @@
 import {storageForOrigin} from "./authentication.js";
+import { trackBrowser } from "./browserRegistry.js";
 import { sameExplorationPage } from "./explorationScope.js";
 import { STRUCTURE_PROBE, cacheDigest, scopedCacheId, structureOf } from './cache.js';
 import { visibleContextTree } from './visibleContext.js';
@@ -339,7 +340,7 @@ export async function launchSession(
   opts.signal?.addEventListener("abort", cancel, { once: true });
   try {
     if (opts.signal?.aborted) throw new Error("EXEC_CANCELLED");
-    const session = await launchBrowserSession(url, { ...opts, executorModel: proxy.connection }, launched => { browser = launched; if (opts.signal?.aborted) { cancel(); throw new Error("EXEC_CANCELLED"); } });
+    const session = await launchBrowserSession(url, { ...opts, executorModel: proxy.connection }, launched => { browser = launched; trackBrowser(launched); if (opts.signal?.aborted) { cancel(); throw new Error("EXEC_CANCELLED"); } });
     return { ...session, executorModel: proxy.connection, modelRequests: proxy.records, cleanup: async () => {
       try { await session.cleanup(); } finally { opts.signal?.removeEventListener("abort", cancel); await proxy.close(); }
     } };

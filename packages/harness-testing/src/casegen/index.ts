@@ -1,6 +1,7 @@
 export * from "./types.js";
 export * from "./attribute.js";
 export * from "./prompts.js";
+export * from "./executionSemantics.js";
 export * from "./gate.js";
 export * from "./provenance.js";
 export * from "./nodes.js";

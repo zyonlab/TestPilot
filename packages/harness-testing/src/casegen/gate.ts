@@ -1,5 +1,5 @@
 import { lifecycleIssues, lifecycleIssueHint } from '../exec/lifecycle.js';
-import { tierOf } from "../exec/oracle.js";
+import { tierOf, type MachineOracle } from "../exec/oracle.js";
 import type { CaseBundle, FindingField, GateFinding, GateReport, TextCase } from "./types.js";
 import { isOpenQuestion } from "../exec/stepSemantics.js";
 
@@ -46,6 +46,11 @@ export interface GateOptions {
   businessTransitions?: Array<{ id: string; requiresStates?: string[] }>;
   /** 规则包 `persistedSettings`：会被产品记住的选择（正则）。命中的步骤没登记成 lifecycle 设置就报 setting-undeclared。 */
   persistedSettings?: string[];
+  /**
+   * 这次运行能引用的界面事实原文：冻结绑定的领域参考 + 检索材料（探索记录、规格）。
+   * 给了才查 `literal-unsourced`；不给（进程内节点、离线回放）就没有这一条。
+   */
+  knownText?: string;
 }
 
 /** 一串字面词拼成一个正则；空表返回 undefined——没有数据就没有这一条，不回落到任何内置词。 */
@@ -54,7 +59,7 @@ function wordsPattern(words: readonly string[] | undefined): RegExp | undefined 
   return list.length ? new RegExp(list.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "i") : undefined;
 }
 
-const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, actionVocabulary: [], volatileReadings: [], businessTransitions: [], persistedSettings: [],
+const DEFAULTS: Required<GateOptions> = { acceptanceInScore: false, knownText: '', actionVocabulary: [], volatileReadings: [], businessTransitions: [], persistedSettings: [],
   minNegativeRatio: 0.3,
   maxSteps: 8,
   minSteps: 1,
@@ -125,6 +130,8 @@ const ACCEPTANCE_ACTION =
 const STEP_SEPARATOR = /→|->|=>|；|;|，|,|然后|随后|接着|之后再|并且?(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|再(?=\s*(?:点|单击|输入|选|勾|切|确认|提交))|\band then\b|\bthen\b|\band (?=click|tap|type|fill|enter|select|press|confirm|submit)/i;
 /** 「按 Escape 关闭，不点任何确认按钮」的后半句是在说**别做**什么，不是第二个动作。 */
 const NEGATED_PART = /^\s*(?:不要?|别|勿|无需|不用|切勿|do not|don't|without|never)/i;
+/** 撤掉 / 关闭 / 删除一类动作（领域中立的动词）。 */
+const REMOVAL_STEP = /\b(?:cancel|close|delete|remove|clear|dismiss)\b|撤|关闭|删除|移除|清空|取消/i;
 const CONDITIONAL_STEP = /(?:如果|若|如|一旦)(?:弹出|出现|显示|有)|(?:出现|弹出)[^，,。；;]{0,12}时|(?:\bif\b|\bwhen\b|\bin case\b)[^.]{0,60}\b(?:appears?|shows?|shown|pops? up|displayed|visible)\b/i;
 const NAV_STEP = /^\s*(打开|访问|导航|前往|进入|open|navigate|go to)/i;
 function whenClause(text: string): string {
@@ -173,11 +180,37 @@ const VOLATILE_ORACLE =
 const CONCRETE =
   /[「『"'“”].+[」』"'“”]|\d|等于|大于|小于|不再|不显示|出现|消失|跳转|变成|恢复|保持|停留|为空|包含|清空|残留|shown|displayed|visible|disappears?|contains?|equals?|redirect|is empty|are empty|not present|no longer|remains? on|does not contain/i;
 
+/** 比较界面字面值时的归一：大小写、空白、弯引号。 */
+function normalizeLiteral(text: string): string {
+  return text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, ' ').trim();
+}
+const QUOTED = /「([^」]{2,60})」|“([^”]{2,60})”|"([^"\n]{2,60})"/g;
+
+/**
+ * 一条用例引用了哪些界面字面值：机器判据里要在屏幕上找的字（text / noText / count / delta 的 value、
+ * decimal-equation 的标签与取数范围），以及步骤里加了引号的控件名。含占位符 `${…}` 的与纯数字不算——它们是变量或读数。
+ */
+export function caseUiLiterals(c: Pick<TextCase, 'steps' | 'oracle' | 'assertions'>): string[] {
+  const out = new Set<string>();
+  const take = (v: string | undefined) => { const t = v?.trim(); if (t && t.length >= 2 && !t.includes('${') && !/^[\d\s.,:%$+-]+$/.test(t)) out.add(t); };
+  const fromOracle = (o: MachineOracle | undefined) => {
+    if (!o) return;
+    if (o.kind === 'text' || o.kind === 'noText' || o.kind === 'count' || o.kind === 'delta') take(o.value);
+    if (o.kind === 'decimal-equation') { take(o.scope.start); take(o.scope.end); for (const i of o.inputs) { take(i.label); take(i.row?.keyColumn); } }
+    if (o.kind === 'reading') { take(o.input.label); take(o.input.row?.keyColumn); if (o.scope) { take(o.scope.start); take(o.scope.end); } }
+  };
+  fromOracle(c.oracle);
+  for (const a of c.assertions ?? []) fromOracle(a.oracle);
+  for (const step of c.steps) for (const m of step.matchAll(QUOTED)) take(m[1] ?? m[2] ?? m[3]);
+  return [...out];
+}
+
 export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport {
   const cfg = { ...DEFAULTS, ...opts };
   const extraAction = wordsPattern(cfg.actionVocabulary);
   const isAction = (text: string) => ACCEPTANCE_ACTION.test(text) || !!extraAction?.test(text);
   const volatileNames = wordsPattern(cfg.volatileReadings);
+  const knownCorpus = cfg.knownText ? normalizeLiteral(cfg.knownText) : '';
   const persisted = (cfg.persistedSettings ?? []).flatMap((re) => { try { return [new RegExp(re, "i")]; } catch { return []; } });
   const findings: GateFinding[] = [];
   const storyIds = new Set(bundle.stories.map((s) => s.id));
@@ -239,6 +272,42 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
     const packed = (step: string) => !step.startsWith('waitFor:') && (CONDITIONAL_STEP.test(step) || step.split(STEP_SEPARATOR).filter((part) => isAction(part) && !NEGATED_PART.test(part)).length >= 2);
     const compound = [...c.steps.flatMap((step, i) => (packed(step) ? [String(i + 1)] : [])), ...(c.postSteps ?? []).flatMap((step, i) => (packed(step) ? [`post ${i + 1}`] : []))];
     if (compound.length) add('step-compound', `step_not_single_action: step ${compound.join(', ')} packs several UI actions or a conditional action into one step — write one UI action per step (a confirmation dialog is its own step); the executor performs exactly one action per step`, c.id, 'warn', { field: 'steps', args: { steps: compound.join(', ') } });
+    /**
+     * 执行语义（docs/v3/15 阶段 2）：在「撤掉 / 关闭 / 删除」的同一步就用 noText 断言它没了，界面还没刷新就判失败。
+     * 2026-09-27 C-POS-04-03：关闭后当步核对「标签不带数量」失败，两步后同一页面已是空表。断言里的 noText 执行器不重看
+     * （成功提示几秒就消失，重看会误判），所以这条只能在设计时拦。
+     */
+    const early = (c.assertions ?? []).filter((a) => a.afterStep && a.oracle?.kind === 'noText' && REMOVAL_STEP.test(c.steps[a.afterStep - 1] ?? ''));
+    if (early.length) add('absence-same-step', `absence_asserted_on_removal_step: ${early.map((a) => a.id).join(', ')} assert with noText right after a step that removes or closes something — the screen needs time to catch up; assert after the next step, or read a label that stays visible everywhere`, c.id, 'warn', { field: 'steps', args: { assertions: early.map((a) => a.id).join(', ') } });
+    /**
+     * 界面字面值要有出处（docs/v3/15 2.4b）：领域参考与检索材料里都找不到的字，多半是凭印象写的——
+     * 2026-09-27 保证金弹窗「按 Escape 关」就是这样进了用例，实测要点 Confirm。只在拿到材料时查。
+     */
+    if (knownCorpus) {
+      // 逃生口：执行语义允许「非写不可就在 readiness.reason 里说明它未经核实」——说了就交给复核的人，不再点名。
+      const admitted = normalizeLiteral(c.readiness?.reason ?? '');
+      const unsourced = caseUiLiterals(c).filter((lit) => !knownCorpus.includes(normalizeLiteral(lit)) && !admitted.includes(normalizeLiteral(lit)));
+      if (unsourced.length) add('literal-unsourced', `ui_literal_unsourced: ${unsourced.map((l) => `"${l}"`).join(', ')} appear in neither the domain reference nor the retrieved materials — copy the label exactly as the materials show it (retrieve_spec with the label), or read something the materials do record; if the label is right but unrecorded, name it in readiness.reason as unverified`, c.id, 'warn', { field: 'steps', args: { literals: unsourced.join(', ') } });
+    }
+    /**
+     * 跨步骤读数（docs/v3/15 阶段 4）：`reading` 要在某一步之后记，且有后面的 decimal-equation 用它；
+     * decimal-equation 的 `recorded` 要在它之前的步骤记过。顺序不对，执行时只会是「没量到」。
+     */
+    {
+      const at = (a: { afterStep?: number }) => a.afterStep ?? c.steps.length + 1;
+      const all = [...(c.assertions ?? []).map((a) => ({ id: a.id, step: at(a), oracle: a.oracle })), ...(c.oracle ? [{ id: 'oracle', step: c.steps.length + 1, oracle: c.oracle }] : [])];
+      const recordedAt = new Map<string, number>();
+      for (const a of all) if (a.oracle?.kind === 'reading') recordedAt.set(a.oracle.input.id, Math.min(a.step, recordedAt.get(a.oracle.input.id) ?? Infinity));
+      const problems: string[] = [];
+      for (const a of all) if (a.oracle?.kind === 'decimal-equation') for (const id of a.oracle.recorded ?? []) {
+        const step = recordedAt.get(id);
+        if (step === undefined) problems.push(`${a.id} uses ${id}, which no reading records`);
+        else if (step >= a.step) problems.push(`${a.id} uses ${id}, recorded at or after the step it is checked on`);
+      }
+      const used = new Set(all.flatMap((a) => (a.oracle?.kind === 'decimal-equation' ? a.oracle.recorded ?? [] : [])));
+      for (const a of all) if (a.oracle?.kind === 'reading' && !used.has(a.oracle.input.id)) problems.push(`${a.id} records ${a.oracle.input.id} but no decimal-equation uses it`);
+      if (problems.length) add('reading-order', `reading_order: ${problems.join('; ')} — record a reading with {kind:"reading"} in an assertion with afterStep BEFORE the step that changes it, and list its id in the later decimal-equation's recorded`, c.id, 'warn', { field: 'steps', args: { problems: problems.join('; ') } });
+    }
     if (!c.expected.trim())
       add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
     if (cfg.gradeOracles && VAGUE.test(c.expected))

@@ -165,9 +165,11 @@ function specForCase(
   const checks = (tc.assertions ?? []).map(a => a.oracle?.kind === "none" ? {...a, oracle: undefined} : a);
   const bound = (a: NonNullable<TextCase["assertions"]>[number]) => a.afterStep !== undefined && a.afterStep >= 1 && a.afterStep <= tc.steps.length && a.oracle?.kind !== "api";
   const finalMachine = !!tc.oracle || checks.some(a => a.oracle && !bound(a));
+  // 跨步骤读数（docs/v3/15 阶段 4）：记读数与引用读数的判据共用一份 readings。
+  const usesReadings = [tc.oracle, ...checks.map(a => a.oracle)].some(o => o?.kind === "reading" || (o?.kind === "decimal-equation" && !!o.recorded?.length));
   const checkSource = (a: NonNullable<TextCase["assertions"]>[number], i: number) => a.oracle?.kind === "judge"
     ? `  await checkJudge(page, judgeAgent, ${JSON.stringify(a.oracle)});`
-    : a.oracle ? `  await checkOracle(page, ${JSON.stringify(a.oracle)}, assertionBefore${i});`
+    : a.oracle ? `  await checkOracle(page, ${JSON.stringify(a.oracle)}, assertionBefore${i}${usesReadings ? ", readings" : ""});`
     : `  await aiAssert(${T(a.statement)});`;
   // Preserve step positions: a shared flow must not swallow an intermediate assertion.
   const plan = checks.length ? undefined : layers?.plan.get(tc.id);
@@ -213,7 +215,7 @@ function specForCase(
   const assert = judged
     ? `  await checkJudge(page, judgeAgent, ${JSON.stringify(tc.oracle)});` + (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
     : tc.oracle
-    ? `  await checkOracle(page, ${JSON.stringify(tc.oracle)}${tc.oracle.kind === "delta" || relationalApi ? ", before" : ""});` +
+    ? `  await checkOracle(page, ${JSON.stringify(tc.oracle)}${tc.oracle.kind === "delta" || relationalApi ? ", before" : usesReadings ? ", undefined" : ""}${usesReadings ? ", readings" : ""});` +
       (tc.expected ? `\n  // 断言原文：${tc.expected.replace(/\r?\n/g, " ")}` : "")
     : finalMachine && !topNone ? "" : tc.expected
       ? `  await aiAssert(${T(tc.expected)});`
@@ -240,7 +242,7 @@ function specForCase(
 ${post ? 'test.describe.configure({ retries: 0 });\n' : ''}${oracleImports.size ? `import { ${[...oracleImports].join(", ")} } from "${up}oracle";\n` : ""}${layerImports ? layerImports + "\n" : ""}`;
   // targetUrl 已经是**这条用例自己的入口**（首步的裸导航被提到了这里，见 liftEntryNavigation）。
   const body = `  await page.goto(process.env.BASE_URL || ${JSON.stringify(targetUrl)});
-${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${checks.map((a, i) => a.oracle ? `  const assertionBefore${i} = await readBefore(page, ${JSON.stringify(a.oracle)});\n` : "").join("")}${post ? "  let businessError: unknown; let businessFailed = false; const cleanupErrors: unknown[] = []; const cleanupReceipts: unknown[] = [];\n  try {\n" : ""}${steps}
+${usesReadings ? "  const readings = new Map();\n" : ""}${needsBefore ? `  // 关系需要两次观察：先读一次，动作之后再读一次。\n  const before = await readBefore(page, ${JSON.stringify(tc.oracle)});\n` : ""}${checks.map((a, i) => a.oracle ? `  const assertionBefore${i} = await readBefore(page, ${JSON.stringify(a.oracle)});\n` : "").join("")}${post ? "  let businessError: unknown; let businessFailed = false; const cleanupErrors: unknown[] = []; const cleanupReceipts: unknown[] = [];\n  try {\n" : ""}${steps}
 ${assert}
 ${checks.flatMap((a,i) => bound(a) ? [] : [checkSource(a,i)]).join("\n")}${post ? '\n  } catch (error) { businessFailed = true; businessError = error; } finally {' + post + '\n    try { await test.info().attach("cleanup-receipts", {body:JSON.stringify(cleanupReceipts),contentType:"application/json"}); } catch (error) { cleanupErrors.push(error); }\n  }\n  if (businessFailed) throw businessError;\n  if (cleanupErrors.length) throw new AggregateError(cleanupErrors, "ENV_TEARDOWN_FAILED");' : ""}`;
   const title = `[${tags}] ${tc.title}`;

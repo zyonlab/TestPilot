@@ -1,4 +1,6 @@
 import { unavailableLifecycle } from '@testpilot/harness-testing';
+import { executorPreflight } from "./modelPreflight.js";
+import { snapshotExecutor } from "./modelSnapshots.js";
 import { executionObserver, readExecutionObservation, type ExecutionAttempt } from '@testpilot/harness-core/execution-observation';
 import type { Preparation } from '@testpilot/harness-testing';
 import { executionBlockers } from "@testpilot/harness-testing/casegen";
@@ -18,9 +20,11 @@ import { encryptSecret, decryptSecret } from "./vault.js";
 import { execOnRunner, cancelExecution } from "./exec.js";
 import { recordWorkflowCaseRun } from "./workflowRunRecord.js";
 import {selectExplorationContext,dispatchedEnvironment} from "./explorationReuse.js";
-import { runEnvReset, guardRun } from "./executionPolicy.js";
+import { runEnvReset, verifyCleanEnvironment, guardRun } from "./executionPolicy.js";
 import { LedgerError, contentHash } from "./runLedger.js";
 import { captureExecutionMemory } from './runMemory.js';
+import { recordFactCandidates } from './factCandidates.js';
+import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
 
 interface ExecutionRow { id: string; runId: string; projectId: string; codeRevision: string; status: string; requestHash: string; environmentHash: string; environmentEnc: string; resultRevision: string | null; startedAt: string }
 const active = new Map<string, string>();
@@ -73,7 +77,11 @@ export function missingPlaceholders(texts: string[], context: { env: Record<stri
   return [...missing].sort();
 }
 
-export function startWorkflowExecution(runId: string, projectId: string, raw: unknown) {
+/**
+ * `internal` 只给服务端自己的调用方（标准集评估，docs/v3/15 阶段 9），HTTP 请求体进不来：
+ * 换执行模型只在这一次执行里生效，连同凭据加密存进执行快照，运行绑定的模型不动；`evaluation` 原样写进产物。
+ */
+export function startWorkflowExecution(runId: string, projectId: string, raw: unknown, internal?: { executorOverride?: RoleModelConnection; evaluation?: Record<string, unknown> }) {
   /**
    * **可以只跑一部分。**
    *
@@ -87,7 +95,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
    */
   const input = z.object({ codeRevision: z.string(), idempotencyKey: z.string().min(1).max(160), envRef: z.string().optional(),
     caseIds: z.array(z.string().min(1)).min(1).optional() }).parse(raw);
-  const requestHash = contentHash(canonicalJSON(input));
+  const requestHash = contentHash(canonicalJSON({ ...input, ...(internal?.executorOverride ? { executorOverride: { endpoint: internal.executorOverride.endpoint, model: internal.executorOverride.model } } : {}) }));
   const prior = ledger().db.prepare("SELECT * FROM workflow_executions WHERE runId=? AND idempotencyKey=?").get(runId, input.idempotencyKey) as ExecutionRow | undefined;
   if (prior) { if (prior.requestHash !== requestHash || prior.projectId !== projectId) throw new LedgerError(409, "execution_request_conflict"); return { executionId: prior.id, created: false, status: prior.status }; }
   const bundle = approvedExecutionBundle(runId, projectId, input.codeRevision);
@@ -127,7 +135,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, overlays: env?.login?.overlays ?? [], authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
-    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
+    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, verifyClean: env?.vars?.TP_VERIFY_CLEAN_CMD, ...(internal?.executorOverride ? { executorOverride: internal.executorOverride } : {}), ...(internal?.evaluation ? { evaluation: internal.evaluation } : {}), locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
   // 不可逆步骤默认放行；额外词来自这次运行绑定的规则包，只有整机打开 GUARD_STRICT 时才生效。
   /**
    * **占位符没解析就不要跑。**
@@ -144,7 +152,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   guardRun(url, [...login, ...preparationSteps, ...selected.flatMap(c => [...c.steps, ...c.postSteps])], { sideEffectLabels: boundRulePack(runId, projectId)?.sideEffectLabels });
   const row: ExecutionRow = { id: `exec-${randomUUID()}`, runId, projectId, codeRevision: input.codeRevision, requestHash, status: "running",
     // 选择集不进 environmentHash：跑哪几条不改变「在什么环境里跑」。它在 requestHash 里，也写进产物。
-    environmentHash: contentHash(canonicalJSON({ ...snapshot, budget: undefined, caseIds: undefined })), environmentEnc: encryptSecret(JSON.stringify(snapshot)), resultRevision: null, startedAt: new Date().toISOString() };
+    environmentHash: contentHash(canonicalJSON({ ...snapshot, budget: undefined, caseIds: undefined, executorOverride: undefined, evaluation: undefined })), environmentEnc: encryptSecret(JSON.stringify(snapshot)), resultRevision: null, startedAt: new Date().toISOString() };
   ledger().db.transaction(() => {
     ledger().db.prepare("INSERT INTO workflow_executions VALUES (?,?,?,?,?,?,?,?,?,?,?)").run(row.id, runId, projectId, input.idempotencyKey, row.codeRevision, row.status,
       row.requestHash, row.environmentHash, row.environmentEnc, null, row.startedAt);
@@ -173,6 +181,10 @@ async function perform(row: ExecutionRow) {
   const cancelled = () => (ledger().db.prepare("SELECT status FROM workflow_executions WHERE id=?").get(row.id) as { status: string }).status === "cancelled";
   try {
     const bundle = validatedBundle();
+    // 开跑前探一次执行模型（docs/v3/15 阶段 5.1）：别再跑到一半、甚至收尾补偿时才撞上额度。
+    let executorModel; try { executorModel = env.executorOverride ?? snapshotExecutor(row.runId, row.projectId); } catch { executorModel = undefined; }
+    const preflight = executorModel ? await executorPreflight(executorModel) : { ok: true as const };
+    if (!preflight.ok) throw new LedgerError(503, "executor_model_unavailable", `The executor model refused a test call (HTTP ${preflight.status}): ${preflight.message}`);
     const chosen = env.caseIds ? bundle.cases.filter((c: { id: string }) => env.caseIds.includes(c.id)) : bundle.cases;
     for (const kase of chosen) {
       if (cancelled()) { status = "cancelled"; break; }
@@ -206,7 +218,7 @@ async function perform(row: ExecutionRow) {
            * 签名本地完成、不弹窗。
            */
           ...(env.injectedWallet ? { injected: true } : {}),
-          cacheId: `${row.codeRevision}-${kase.id}` } }, { signal: controller.signal });
+          cacheId: `${row.codeRevision}-${kase.id}` } }, { signal: controller.signal, ...(env.executorOverride ? { executorOverride: env.executorOverride } : {}) });
           observer.source(()=>result.modelRequests);
           if(cancelled()) observer.issue("cancelled");
           attempts.push({attempt:attempts.length+1,status:cancelled()?'cancelled':result.status,durationMs:performance.now()-start,observation:readExecutionObservation(result.observation)});
@@ -261,6 +273,8 @@ async function perform(row: ExecutionRow) {
       result = { ...result, modelRequests: caseUsageComplete ? attemptRequests : undefined };
       active.delete(row.id);
       results.push({ caseId: kase.id, entryUrl: caseEntryUrl(kase.precondition,env.url), ...result, ...(cancelled()?{status:"cancelled"}:{}), attempts });
+      // 经验沉淀（docs/v3/15 阶段 7）：失败原因里说到、领域数据里没有的界面字面值记成候选。
+      recordFactCandidates({ projectId: row.projectId, runId: row.runId, caseId: kase.id, receipt: row.id, result: result as never, caseText: JSON.stringify([kase.steps, kase.postSteps, kase.oracle, kase.assertions]) });
       /**
        * 落一条运行记录，顺带立/比视觉与性能基线。
        *
@@ -279,12 +293,18 @@ async function perform(row: ExecutionRow) {
       if (!usageComplete) throw new LedgerError(409, "executor_usage_unavailable");
       validatedBundle();
       if (controller.signal.aborted || result.modelRequests?.some(r => r.error === "BUDGET_EXHAUSTED")) { status = "budget_exhausted"; break; }
-      if(result.lifecycle?.pendingResources.length){status='infra_error';break;}
+      if(result.lifecycle?.pendingResources.length){
+        // 停批之前先让环境的只读核对命令复核一次：确认账户里没有这些资源，就只是收尾核对写得不对，不停批。
+        const check=verifyCleanEnvironment(env.verifyClean,result.lifecycle.pendingResources,Object.values(env.context?.secrets??{}).map(String));
+        if(check) (results[results.length-1] as Record<string,unknown>).residueCheck=check;
+        if(check?.status!=='clean'){status='infra_error';break;}
+        phase(row,"running",undefined,`${kase.id} 收尾没核实，环境复核确认没有留下资源，继续`);
+      }
       if (result.infraError) { status = "infra_error"; break; }
       if (result.status === "unobservable") status = status === "failed" ? status : "unobservable";
       else if (result.status === "failed") status = "failed";
     }
-  } catch (error) { observer.issue(cancelled()?"cancelled":"failed",{attribution:"infra",retryable:false}); if (active.has(row.id)) usageComplete = false; status = cancelled() ? "cancelled" : controller.signal.aborted || /BUDGET_EXHAUSTED/.test(String(error)) ? "budget_exhausted" : "infra_error"; results.push({ error: error instanceof LedgerError ? error.code : /ENV_RESET_FAILED/.test(String(error)) ? "ENV_RESET_FAILED" : "execution_unavailable" }); }
+  } catch (error) { observer.issue(cancelled()?"cancelled":"failed",{attribution:"infra",retryable:false}); if (active.has(row.id)) usageComplete = false; status = cancelled() ? "cancelled" : controller.signal.aborted || /BUDGET_EXHAUSTED/.test(String(error)) ? "budget_exhausted" : "infra_error"; results.push({ error: error instanceof LedgerError ? error.code : /ENV_RESET_FAILED/.test(String(error)) ? "ENV_RESET_FAILED" : "execution_unavailable", ...(error instanceof LedgerError && error.hint ? { hint: error.hint } : {}) }); }
   finally { observer.end(); clearTimeout(timer); active.delete(row.id); controllers.delete(row.id); }
   /**
    * **提前中断时，没跑到的用例要留下记录。**
@@ -313,6 +333,7 @@ async function perform(row: ExecutionRow) {
   const artifact = ledger().putRevision({ runId: row.runId, projectId: row.projectId, name: `execution/${row.id}`, kind: "execution",
     content: { observation: observer.data, executionId: row.id, codeRevision: row.codeRevision, environmentHash: row.environmentHash, budget, forwardedExecutorCalls: usageComplete ? calls : null, usageComplete, status,
       ...(env.caseIds ? { selection: { caseIds: env.caseIds, ran: env.caseIds.length, of: validatedBundle().cases.length } } : {}),
+      ...(env.evaluation ? { evaluation: { ...env.evaluation, executor: env.executorOverride ? { endpoint: env.executorOverride.endpoint, model: env.executorOverride.model } : null } } : {}),
       results, startedAt: row.startedAt, finishedAt: new Date().toISOString() },
     sourceRefs: [row.codeRevision] }, system);
   phase(row, status, artifact.id);

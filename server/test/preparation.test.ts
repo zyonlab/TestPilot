@@ -12,7 +12,7 @@ let svc:typeof import('../src/runService.js'),db:typeof import('../src/db.js'),p
 beforeAll(async()=>{
  dir=mkdtempSync(join(tmpdir(),'tp-preparation-'));vi.stubEnv('TP_DATA_DIR',dir);vi.stubEnv('MIDSCENE_MODEL_NAME','fixture');vi.stubEnv('MIDSCENE_MODEL_BASE_URL','https://executor.test/v1');vi.stubEnv('MIDSCENE_MODEL_API_KEY','fixture');
  db=await import('../src/db.js');svc=await import('../src/runService.js');prep=await import('../src/preparation.js');approvals=await import('../src/approvedRuns.js');const stage=await import('../src/runStages.js');
- project=db.createProject('Preparation','http://localhost:9876').id;run=svc.registerHostRun(project,{runtime:'codex',externalId:'fixture',idempotencyKey:'fixture',materials:[{name:'counter.md',text:'Click increment raises counter to one.'}]}).runId;
+ project=db.createProject('Preparation','http://localhost:9876').id;run=svc.registerHostRun(project,{runtime:'codex',externalId:'fixture',idempotencyKey:'fixture',materials:[{name:'counter.md',text:'Click increment raises counter to one. The page then shows Count: 1.'}]}).runId;
  stage.loadRunInstructions(run,project);const ref=stage.retrieveRunSpec(run,project,{query:'increment',budgetTokens:2000}).chunks[0].id;
  const stories=[{id:'s1',title:'Count',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Increment',designMethod:'boundary',steps:['Click Increment'],expected:'Counter is one',tier:1,readiness:{design:'candidate',execution:'blocked',reason:'Control not located'},key:'increment',sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref),oracle:{kind:'text',value:'Count: 1'},assertions:[{id:'a1',statement:'Counter is one',ruleRefs:[],oracle:{kind:'text',value:'Count: 1'}}]}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
  const c=approvals.reviewRevisions(run,project)[0];revision=c.revision.id;original=c.content;approvals.decideRevisions(run,project,{items:[{caseId:'c1',revisionId:revision,decision:'approved'}]},{kind:'human',id:'fixture'});
@@ -121,7 +121,7 @@ it('does not classify an auxiliary diagnostic failure as a product defect',async
 });
 it('delivers a candidate across cases, revalidates it, promotes only from separate trials and freezes delivered context',async()=>{
  const stage=await import('../src/runStages.js');
- const r=svc.registerHostRun(project,{runtime:'codex',externalId:'recipe-loop',idempotencyKey:'recipe-loop',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
+ const r=svc.registerHostRun(project,{runtime:'codex',externalId:'recipe-loop',idempotencyKey:'recipe-loop',materials:[{name:'panel.md',text:'Open counter panel and increment counter. The page shows Count: 1.'}]}).runId;
  stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
  const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
  stage.writeRunStage(r,project,'cases',{stories,cases:['c1','c2'].map(id=>({...original,id,key:id,precondition:['Counter panel ready'],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref,['Counter panel ready'])}))});stage.gateRun(r,project);stage.finalizeRun(r,project);
@@ -176,7 +176,7 @@ it('retains a cancelled generation receipt and spend when resume wins the race',
 it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle and formal dispatch; freezes obligations',async()=>{
  const stage=await import('../src/runStages.js');
  const p=db.createProject('Lifecycle service boundary','http://localhost:9876').id;
- const r=svc.registerHostRun(p,{runtime:'codex',externalId:'lifecycle',idempotencyKey:'lifecycle',materials:[{name:'resource.md',text:'Create an isolated resource and delete it after verification. Ready screen.'}]}).runId;
+ const r=svc.registerHostRun(p,{runtime:'codex',externalId:'lifecycle',idempotencyKey:'lifecycle',materials:[{name:'resource.md',text:'Create an isolated resource and delete it after verification. Resource list. Ready screen.'}]}).runId;
  stage.loadRunInstructions(r,p);const ref=stage.retrieveRunSpec(r,p,{query:'resource',budgetTokens:2000}).chunks[0].id;
  const identity='owned-${env.TP_LIFECYCLE_ID}',check=(value:string,kind='text')=>({statement:value,checks:[{kind:'screen',statement:value,oracle:{kind,value}}]});
  const lifecycle={version:1,mode:'controlled',rationale:'Own isolated resource',sourceRefs:[ref],supports:['$expected'],baseline:[check('Ready')],resources:[{id:'r',sourceRef:ref,identity,establishAfterStep:1,established:check(identity),ownership:check(identity)}],cleanup:[{id:'clean',resourceId:'r',postStep:1,verified:check(identity,'noText')}]};
@@ -208,7 +208,7 @@ it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle an
 
 it('a case that needs a state from preparation runs only with a controlled recipe that provides exactly that state',async()=>{
  const stage=await import('../src/runStages.js');
- const r=svc.registerHostRun(project,{runtime:'codex',externalId:'state-recipe',idempotencyKey:'state-recipe',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
+ const r=svc.registerHostRun(project,{runtime:'codex',externalId:'state-recipe',idempotencyKey:'state-recipe',materials:[{name:'panel.md',text:'Open counter panel and increment counter. The page shows Count: 1.'}]}).runId;
  stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
  const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
  stage.writeRunStage(r,project,'cases',{stories,cases:[{...original,id:'c1',key:'c1',precondition:['Counter panel ready'],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref,['Counter panel ready']),requiresStates:[{state:'counter.nonzero',provided:'preparation'}]}]});stage.gateRun(r,project);stage.finalizeRun(r,project);
@@ -234,7 +234,7 @@ it('a case that needs a state from preparation runs only with a controlled recip
 
 it('re-scoping a batch keeps cases already verified at the same revision and approval; mode all re-verifies them',async()=>{
  const stage=await import('../src/runStages.js');
- const r=svc.registerHostRun(project,{runtime:'codex',externalId:'carry-verified',idempotencyKey:'carry-verified',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
+ const r=svc.registerHostRun(project,{runtime:'codex',externalId:'carry-verified',idempotencyKey:'carry-verified',materials:[{name:'panel.md',text:'Open counter panel and increment counter. The page shows Count: 1.'}]}).runId;
  stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
  const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
  stage.writeRunStage(r,project,'cases',{stories,cases:['c1','c2'].map(id=>({...original,id,key:id,precondition:[],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref)}))});stage.gateRun(r,project);stage.finalizeRun(r,project);
@@ -286,4 +286,34 @@ it('stops the whole batch when a run leaves an uncleaned resource behind',{timeo
  await prep.startPreparation(run,project,{revisionIds:[revision]});
  expect(prep.preparationStatus(run,project)?.units[0].status).toBe('needs_review');
  await prep.cancelPreparation(run,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+});
+it('does not stop or isolate when the environment verify command confirms nothing was left (docs/v3/15 5.4)',{timeout:20000},async()=>{
+ await prep.cancelPreparation(run,project).catch(()=>{});await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+ db.upsertEnvironment({projectId:project,name:'verify-clean',baseUrl:'http://localhost:9876',isDefault:true,vars:{TP_VERIFY_CLEAN_CMD:'exit 0'}} as never);
+ try{
+  const b=await prep.startPreparation(run,project,{revisionIds:[revision],maxRounds:2,mode:'all'});
+  fake.run.mockReset();fake.run.mockResolvedValue({...result(),lifecycle:{version:1,status:'fail',checks:[],cleanup:[],pendingResources:[{id:'case:r',identity:'row-1',reason:'Cleanup check never held'}],safeToRetry:false}});
+  await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'trial'});
+  await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('repair'),{timeout:8000,interval:200});
+  expect(prep.preparationStatus(run,project)?.status).toBe('running');
+  expect(prep.preparationStatus(run,project)?.units[0].leftResources).toBeUndefined();
+ }finally{
+  db.upsertEnvironment({projectId:project,name:'verify-clean',baseUrl:'http://localhost:9876',isDefault:false,vars:{}} as never);
+  await prep.cancelPreparation(run,project).catch(()=>{});await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+  fake.run.mockReset();fake.run.mockResolvedValue(result());
+ }
+});
+it('reads a guide on demand, records the read, and attaches a fix to a rejection (docs/v3/15 阶段 3)',async()=>{
+ const b=await start();
+ const g:any=await step(b.batchId,{action:'guide',guide:'recipe'});
+ expect(g).toMatchObject({status:'guide',name:'recipe'});expect(g.text).toMatch(/compensation/);
+ const events=svc.runLedger().db.prepare("SELECT json FROM workflow_events WHERE runId=? AND node='g2'").all(run) as {json:string}[];
+ expect(events.some(e=>JSON.parse(e.json).message==='说明 · recipe')).toBe(true);
+ await expect(step(b.batchId,{action:'guide'})).rejects.toMatchObject({code:'preparation_guide_required',hint:expect.stringMatching(/guide=<name>/)});
+ await expect(step(b.batchId,{action:'resolve',caseId:'c1',reason:'no status'})).rejects.toMatchObject({code:'preparation_resolution_required',hint:expect.stringMatching(/blocked \| needs_review \| product_defect/)});
+});
+it('refuses to start when the executor model says its quota is gone, and says why (docs/v3/15 阶段 5.1)',async()=>{
+ const spy=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({error:{message:'You have used this campaign allowance.'}}),{status:429}));
+ try{await expect(start()).rejects.toMatchObject({code:'executor_model_unavailable',hint:expect.stringMatching(/campaign allowance/)});}
+ finally{spy.mockRestore();}
 });

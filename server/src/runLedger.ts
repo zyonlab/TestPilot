@@ -8,7 +8,13 @@ import { ArtifactRevisionSchema, RunBindingSchema, RunEventSchema, RunRegistrati
   type ArtifactRevision, type Principal, type RunEvent, type RunRegistration } from "@testpilot/harness-core/run-contracts";
 
 export class LedgerError extends Error {
-  constructor(readonly status: number, readonly code: string) { super(code); }
+  /**
+   * 拒绝时告诉调用方怎么改（docs/v3/15 阶段 3）。只有 code 的拒绝，宿主模型只能猜：
+   * 2026-09-25～27 准备器被 prerequisite_evidence_frozen 拒 14 次、recipe_* 拒 28 次，
+   * 有一次被拒两次后干脆丢了整个 lifecycle。路由把它放进响应，MCP 网关拼进错误信息。
+   */
+  hint?: string;
+  constructor(readonly status: number, readonly code: string, hint?: string) { super(code); if (hint) this.hint = hint; }
 }
 export const contentHash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 type RegistrationRow = { runId: string; projectId: string; requestHash: string; bindingJson: string; inputJson: string };

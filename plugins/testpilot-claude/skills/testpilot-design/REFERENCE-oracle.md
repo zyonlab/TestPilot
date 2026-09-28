@@ -92,3 +92,31 @@ tier 1 和 tier 2 **必须**同时给 `oracle`——同一个结果，写成程�
 三位以上小数的百分比、千分位大数），但**源头在写断言的这一刻**。
 
 一条必然失败的用例比没有这条用例更糟，因为它会把真实的失败淹掉。
+
+## 判据能力表：各能判什么、不能判什么
+
+| 判据 | 能判 | 不能判 |
+|---|---|---|
+| `text` / `noText` | 这一步之后屏幕上有没有某段字面值 | 比较两个数；看另一个标签页里的内容 |
+| `count` | 某段字面值出现几次（同标签的多行） | 数值大小 |
+| `delta` | 紧挨着某个标签的数，这一步前后的变化 | 表头离数值很远的表格单元格 |
+| `decimal-equation` | 这一屏上几个读数之间的算术关系（逆波兰公式，可写常数，`compare` 支持 eq/gt/gte/lt/lte，`sign` 只比正负）；输入带 `row` 时按表格读一格；`recorded` 引用前面步骤记下的读数 | 这一步屏幕上没有的值 |
+| `reading` | 在它的 `afterStep` 记下一个读数（形状与 decimal-equation 的一项输入相同），给后面的 decimal-equation 用 | 自己不判对错：读到就记下，读不到是没量到 |
+| `judge` | 模型看屏幕回答若干是非题，多次采样 | 稳定性差；只留给没有别的办法判的生成内容 |
+
+**读不了这一步屏幕上没有的值。** 检查需要另一个屏幕上的值时，在 `readiness.reason` 里写明缺什么，不要硬塞一个 judge。
+
+### 跨步骤读数：前后比较、均值
+
+「改完之后某个数比改之前大 / 小 / 不变」「两次操作之后的某个数等于前两次读数的均值」这类检查，要拿前一步的读数和后一步比。
+做法是两条断言：先在改动之前的那一步用 `reading` 记下读数，再在改动之后用 decimal-equation 引用它。
+
+```json
+{"id":"A1","afterStep":2,"statement":"记下改动前那一行的读数","oracle":{"kind":"reading","input":{"id":"before","label":"<列头>","unit":"<单位>","decimals":0,"rounding":"exact","row":{"key":"<那一行第一格的开头>","keyColumn":"<第一列的列头>"}}}}
+{"id":"A2","afterStep":5,"statement":"改动后同一行的读数更小","oracle":{"kind":"decimal-equation","scope":{"start":"<范围起点>","end":"<范围终点>"},"inputs":[{"id":"after","label":"<列头>","unit":"<单位>","decimals":0,"rounding":"exact","row":{"key":"<同上>","keyColumn":"<同上>"}}],"recorded":["before"],"actual":"after","formula":["before"],"compare":"lt","maxAgeMs":5000}}
+```
+
+- `row`：表格里一格一格离表头很远，`label: 值` 的读法读不到。`key` 是那一行第一格的开头，`keyColumn` 是第一列的表头，`label` 是要读那一列的表头——三样都照材料里的原文抄。同一个 `key` 出现两行就是没量到。
+- 记读数的那一步必须在改动之前，引用它的断言在改动之后；顺序不对门禁报 `reading-order`。
+- 读不到（占位符、那一行还没出现）不是失败，是没量到；后面引用它的判据也跟着没量到。
+- 同一行几列不一定是同一时刻算出来的：一列由另两列算出来时，用 eq 核对大小会偶尔对不上。只要求正负一致时用 `compare:"sign"`，不要用 eq。

@@ -208,3 +208,23 @@ export function regressionSuite(projectId: string, kind?: CandidateKind) {
   const rows = ledger().db.prepare("SELECT json FROM regression_suite WHERE projectId=? ORDER BY addedAt").all(projectId) as Array<{ json: string }>;
   return rows.map((r) => JSON.parse(r.json) as Record<string, unknown>).filter((e) => !kind || e.kind === kind);
 }
+
+/**
+ * 反例回流（docs/v3/15 阶段 6，2026-09-28 用户解冻）：人批准过的驳回理由，在运行开始时冻结进这次运行的说明，
+ * 用例节点照着避开。和执行记忆同一个口径：只挑这个项目的、最近的、有上限；clean / held-out 运行不给；
+ * 标明是「复核人拒过的写法」，不是产品需求。冻结在 instructions 修订里，同一个运行重放拿到的永远是同一份。
+ */
+export function selectCounterexamples(projectId: string, runId: string) {
+  const run = runLedger().requireRun(runId, projectId);
+  const enabled = run.input.parameters?.reuseExperience !== false && run.input.parameters?.evaluationSplit !== "held-out";
+  const clip = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+  const entries = !enabled ? [] : regressionSuite(projectId, "rejection").filter((e) => e.runId !== runId).slice(-20).reverse().map((e) => {
+    const kase = (e.case ?? {}) as { title?: string; steps?: string[]; expected?: string };
+    return { id: String(e.id), sourceRunId: String(e.runId), caseId: String(e.caseId), title: clip(e.title ?? kase.title, 160),
+      steps: (kase.steps ?? []).slice(0, 8).map((s) => clip(s, 160)), expected: clip(kase.expected, 240),
+      reason: clip((e.evidence as { reason?: unknown } | undefined)?.reason, 600), approvedAt: String(e.approvedAt) };
+  });
+  const context = { enabled, entries,
+    notice: "Cases human reviewers rejected in this project, with their reasons. Do not write a case that repeats a listed reason. These are review decisions, not product requirements." };
+  return { ...context, digest: contentHash(canonicalJSON(context)) };
+}
