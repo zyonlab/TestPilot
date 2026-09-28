@@ -143,8 +143,10 @@ css += """
 task_tools = '<div class="task-tools"><input type="search" id="task-search" aria-label="搜索实施任务" placeholder="搜索任务、代码文件或验收条件"><select id="task-state" aria-label="筛选任务状态"><option value="all">全部状态</option>' + ''.join('<option value="'+k+'">'+v+'</option>' for k,v in STATUS_LABELS.items()) + '</select><button id="task-expand" type="button">展开匹配任务</button><button id="task-collapse" type="button">收起任务</button><span id="task-count" role="status"></span></div>'
 parts = []
 for ident, title, name in DOCS:
-    src = ROOT / 'docs/v3' / name
-    parts.append('<section class="chapter" id="' + ident + '"><div class="eyebrow">' + ident.upper() + '</div><h2>' + title + '</h2><p class="caption">对应接手文档：<a href="../v3/' + name + '">' + name + '</a></p>' + (task_tools if ident=='tasks' else '') + render(src, ident) + '</section>')
+    # 这些报告章节 2026-09-16 起移进了 docs/v3/history/（旧路径只作兜底）。
+    src = ROOT / 'docs/v3/history' / name
+    if not src.exists(): src = ROOT / 'docs/v3' / name
+    parts.append('<section class="chapter" id="' + ident + '"><div class="eyebrow">' + ident.upper() + '</div><h2>' + title + '</h2><p class="caption">对应接手文档：<a href="../' + src.relative_to(ROOT / 'docs').as_posix() + '">' + name + '</a></p>' + (task_tools if ident=='tasks' else '') + render(src, ident) + '</section>')
 nav = '<a href="#overview">实施概览</a><a href="#walkthrough">当前 UI 路径</a><a href="#architecture">代码分层</a>' + ''.join('<a href="#' + ident + '">' + title + '</a>' for ident,title,_ in DOCS)
 script = """
 const taskCards=[...document.querySelectorAll('details.task')], taskSearch=document.getElementById('task-search'), taskState=document.getElementById('task-state');

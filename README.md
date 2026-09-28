@@ -70,7 +70,7 @@ flowchart TD
   RP --> RG{{"👤 人决定回归候选去留"}}
 ```
 
-整条流程停在三个地方等人：**冻结模块树、复核用例、决定回归候选**。其余部分服务端强制按阶段推进，每个阶段的产物都以不可变版本记进运行账本。
+整条流程停下来等人的地方：**冻结模块树、复核用例、决定回归候选**；故事的规则里带未确认假设时，候选故事也要人先审。其余部分服务端强制按阶段推进，每个阶段的产物都以不可变版本记进运行账本。
 
 工作台就是这条线本身——八个阶段、各自的状态与产物，绿色是完成，红色是失败或等待：
 
@@ -78,7 +78,7 @@ flowchart TD
 
 ### ① 新建运行：给它材料，或让它自己看
 
-选规格文档或探索界面，填目标地址、领域知识、规则包和产物语言，再选谁来规划（默认本机 Claude Code）。运行一旦登记，材料、规则包、领域参考和规划运行时就被冻结绑定，之后不再变。
+选规格文档或探索界面，填目标地址、领域知识、规则包和产物语言，规划由项目选定的本机已登录宿主来做（Claude Code 或 Codex，在项目里选一次）。运行一旦登记，材料、规则包、领域参考和规划运行时就被冻结绑定，之后不再变。
 
 ![新建工作流](docs/assets/workflow/02-new-run.png)
 
@@ -281,7 +281,7 @@ node scripts/testpilot-setup.mjs uninstall --workspace <你的工作目录>   # 
 
 流程与每一步的样子见[上面的走一遍](#一次运行长什么样)。开始之前要先做两件事：
 
-1. 新建项目，填被测地址，配置环境画像（登录流程、视口、是否注入钱包等）。
+1. 新建项目，填被测地址，配置环境画像（登录流程、视口、是否注入钱包等），并选定规划宿主（本机已登录的 Claude Code 或 Codex）。
 2. 按需在「产品规则包」「领域参考」里补充领域知识，也可以在对话抽屉里聊出来。
 
 然后在「工作台」发起运行即可。本地复核不需要登录，每次操作的来源和版本都会留痕。
@@ -294,8 +294,8 @@ node scripts/testpilot-setup.mjs uninstall --workspace <你的工作目录>   # 
 
 ### 实验性运行时
 
-- **Codex**：`pnpm build:codex-plugin` 生成 `plugins/testpilot-codex/`，或者用 `install --entry codex` 做项目级安装。
-- **Penguin**：需要 Node 24 和 Penguin 服务，用 `install --entry penguin --agent-id <id>` 安装；Web 发起的生成改由它规划时，设置 `TP_AGENT_RUNTIME=penguin`。
+- **Codex**：Web 发起的运行可以选它做规划宿主；宿主入口用 `pnpm build:codex-plugin` 生成 `plugins/testpilot-codex/`，或者用 `install --entry codex` 做项目级安装。
+- **Penguin**：需要 Node 24 和 Penguin 服务，用 `install --entry penguin --agent-id <id>` 安装；Web 表单选不了它，只有经 API 直接建运行、且 `TP_AGENT_RUNTIME=penguin` 时由它规划。
 
 这两个运行时不在当前版本的验收范围内。
 
@@ -304,7 +304,7 @@ node scripts/testpilot-setup.mjs uninstall --workspace <你的工作目录>   # 
 | 变量 | 作用 | 默认 |
 |---|---|---|
 | `MIDSCENE_MODEL_BASE_URL` / `MIDSCENE_MODEL_API_KEY` / `MIDSCENE_MODEL_NAME` | 执行模型 | 必填 |
-| `TP_AGENT_RUNTIME` | Web 发起的生成由谁规划：`claude-code` 或 `penguin` | `claude-code` |
+| `TP_AGENT_RUNTIME` | 经 API 直接建运行时的默认规划运行时：`claude-code` 或 `penguin`（Web 表单用项目选定的宿主，不看它） | `claude-code` |
 | `TP_CLAUDE_BIN` | `claude` 可执行文件路径 | PATH 里的 `claude` |
 | `TP_PLANNER_*` | 规划模型，只有 Penguin 或内部流水线模式需要 | — |
 | `TP_EXECUTOR_MAX_CALLS` / `TP_RUN_MAX_MS` | 单次运行的模型调用与时长预算 | 见 `.env.example` |
@@ -372,6 +372,8 @@ CI 目前是手动关闭的（原因写在 `.github/workflows/ci.yml` 里），�
 - [执行目标与接手指南](docs/v3/09-执行目标与接手指南.md)：目标、范围、现状、下一步、最近变更
 - [安装与诊断](docs/v3/10-安装与诊断.md)
 - [Claude Code 与 Codex 接入实操](docs/v3/14-Claude-Code与Codex接入实操.md)
+- [用户故事](docs/v3/03-用户故事.md)：按代码梳理的史诗与故事，每条带代码落点
+- [分层功能实现](docs/v3/04-分层功能实现.md)：七层各自的功能、实现函数与红线，一条运行怎样穿过各层
 - [节点提示词、领域知识与学习回路实施](docs/v3/15-节点提示词与领域知识重构实施.md)：执行语义、准备说明、跨步骤判据、反例 / 事实 / 标准集 / 执行模型评估
 
 ## 参与贡献
@@ -380,7 +382,7 @@ CI 目前是手动关闭的（原因写在 `.github/workflows/ci.yml` 里），�
 
 ## 路线图与已知限制
 
-- 当前版本的入口是 Web 和 Claude Code；Codex、Penguin 为实验性。
+- 当前版本的入口是 Web 和 Claude Code；Codex 可作 Web 的规划宿主和宿主入口，Penguin 为实验性。
 - 学习回路的第一版只进化执行模型；提示词、准备说明这类规划侧的候选还没接进评估（要规划器重新生成与准备，成本高）。
 - 子 agent 并行、记分板、论文研究线已冻结，不在当前版本里。
 - 缺陷类回归集还只是一份清单，不会被执行自动带上；由失败原因生成新用例还没做（驳回理由已作为反例交给生成）。

@@ -1,5 +1,7 @@
 # Claude Code 与 Codex 接入实操
 
+> 2026-09-28 按代码（`packages/testpilot-mcp/src/server.ts`、`host/registry.ts`、`scripts/build-*-plugin.mjs`、`scripts/testpilot-setup.mjs`、`server/src/plannerHost.ts`）重新核对。
+
 本文讲宿主接入：怎么把 TestPilot 接进 Claude Code（主路径），以及实验性的 Codex / Penguin。依赖安装、`server/.env`、doctor、守卫与卸载细节见 [安装与诊断](10-安装与诊断.md)。
 
 ## 1. 两个目录、两种模型
@@ -17,7 +19,7 @@
 
 ### 2.1 从 Web 发起
 
-什么都不用装：新建运行时规划运行时默认就是 Claude Code（`TP_AGENT_RUNTIME` 不设即 `claude-code`）。服务会为每次运行建一个独立工作区（数据目录下的 `host-workspaces/<runId>`），写入带本次运行凭证的 `.mcp.json`，再以非交互方式起 `claude`（`TP_CLAUDE_BIN` 可覆盖）。若 `plugins/testpilot-claude/` 已由 `pnpm build:claude-plugin` 生成，会话会带上 `--plugin-dir`，门禁 hook 随之生效；没生成就只有服务端门禁。
+什么都不用装，只要本机 Claude Code 已登录：新建运行表单顶部的「规划宿主」会探本机 Claude Code 与 Codex 的登录态（`claude auth status --json` / `codex login status`），只有一个已登录就自动选它，两个都登录时选一次、按项目记住。宿主工具里对应的是 `tp_project.planner_host` / `select_planner_host`。服务会为每次运行建一个独立工作区（数据目录下的 `host-workspaces/<runId>`），写入带本次运行凭证的 `.mcp.json`，再以非交互方式起 `claude`（`TP_CLAUDE_BIN` 可覆盖）。若 `plugins/testpilot-claude/` 已由 `pnpm build:claude-plugin` 生成，会话会带上 `--plugin-dir`，门禁 hook 随之生效；没生成就只有服务端门禁。
 
 ### 2.2 装成插件（推荐）或只在本次会话加载
 
@@ -30,7 +32,7 @@ claude plugin install testpilot@testpilot
 claude --plugin-dir plugins/testpilot-claude
 ```
 
-插件目录由真源 `plugins/testpilot/` 生成，内容有三样：
+插件目录由真源 `plugins/testpilot/` 生成（插件清单在 `.claude-plugin/plugin.json`，版本跟 `plugins/testpilot/plugin.json` 走），内容有三样：
 - 十个 skill；
 - `hooks/hooks.json`：写 stories/cases/memory 前做校验，停止前要求门禁；
 - `.mcp.json`：以 stdio 方式启动 `packages/testpilot-mcp`。
@@ -76,16 +78,17 @@ TestPilot 项目 ID 是 <项目ID>，被测地址是 <测试环境URL>。
 `testpilot-run-c` 规定的工具顺序：
 
 1. `register_run`（无 runId 时；重试保持参数完全一致）→ `load_run_instructions` → `retrieve_spec`（chunk ID 逐字引用）。
-2. 项目带产品模型时：`begin_stage`（`node:"modules"`）→ `plan_modules` 提议至少两层的模块树 → **停下，由人冻结**（`module_plan_state` 读状态，未冻结时 `claim_unit` 会被拒）。注意：宿主工具里有 `tp_stage.freeze_modules`，调用时不带运行令牌，服务端会把它当作本地操作员，所以模型在技术上可以自己冻结。目前只靠工具说明约束，见 [02 §10-1](02-工作流-横向与纵向.md#10-已知缺口2026-09-17-核对)。
+2. 项目带产品模型时：`begin_stage`（`node:"modules"`）→ `plan_modules` 提议至少两层的模块树 → **停下，由人冻结**（`module_plan_state` 读状态，未冻结时 `claim_unit` 会被拒）。冻结、复核决定、回归候选决定、立基线这类人的动作在 `host/registry.ts` 里标了 `operatorOnly`，MCP 注册时就过滤掉了，宿主里看不到；服务端起的宿主进程里用 node/curl 直接发 HTTP 会被 `x-testpilot-actor` 头拦下，但刻意去掉请求头仍能冒充，见 [02 §10-1](02-工作流-横向与纵向.md)。
+   故事里有候选业务预期（`requirementDraft`）时，写完故事后 `begin_stage` 会返回 paused（`story_requirements_need_review`），要人在 Web 的故事节点批准或驳回后再续。
 3. `write_stories` → `write_cases` → `gate_run`（分数由服务端算，被拦就改用例再跑）→ `finalize_run`，状态变为 `waiting_review`。
 
-输入 schema 以 MCP `tools/list` 为准，不要手拼旧 payload。除阶段工具外还有 `tp_project` / `tp_run` / `tp_review` / `tp_execution` 等按域分组的工具，Web 上的大部分操作都能在宿主里做；不知道 runId 时用 `tp_run.list` 找。
+输入 schema 以 MCP `tools/list` 为准，不要手拼旧 payload。阶段工具有 `register_run`、`load_run_instructions`、`retrieve_spec`、`begin_stage`、`plan_modules`、`module_plan_state`、`claim_unit` / `write_unit` / `unit_status` / `merge_units`、`write_stories`、`write_cases`、`gate_run`、`finalize_run`、`generate_execution`、`execute_approved`、`preparation_step`、`get_project_run`、`read_run_artifact`、`import_run_artifact`、`read_decisions` 等；另有 17 个按域分组的宿主工具（`tp_project`、`tp_run`、`tp_stage`、`tp_unit`、`tp_artifact`、`tp_review`、`tp_execution`、`tp_case`、`tp_report`、`tp_export`、`tp_settings`、`tp_eval`、`tp_queue`、`tp_graph`、`tp_wf`、`tp_audit`、`tp_system`），Web 上除人的决定以外的大部分操作都能在宿主里做；不知道 runId 时用 `tp_run.list` 找。
 
-**成功的标志：** 宿主能看到 `register_run` / `finalize_run`；运行出现在 Web 同一项目下；故事与用例有不可变版本；finalize 后是 `waiting_review`。之后由人在 Web 复核来源与预期并批准（本地免登录，记录为 `local-operator`），再 `generate_execution` / `execute_approved`。带 `Authorization` 头的代理请求不能做审批。doctor ready、MCP 在线都代替不了这几条。
+**成功的标志：** 宿主能看到 `register_run` / `finalize_run`；运行出现在 Web 同一项目下；故事与用例有不可变版本；finalize 后是 `waiting_review`。之后由人在 Web 复核来源与预期并批准（本地免登录，记录为 `local-operator`），再在 Web 上点「开始 / 继续逐条准备与验证」起执行准备（起批次只认人；宿主在准备里用 `preparation_step` 逐条做），准备产出的代码修订用 `execute_approved` 执行。`generate_execution` 走的是不经试跑的静态编译旧路（`stages/g2`），Web 已不用它。带 `Authorization` 头的代理请求不能做审批。doctor ready、MCP 在线都代替不了这几条。
 
 ## 4. 实验性：Codex
 
-不在初步交付的验收范围内，Web 也不能用 Codex 发起规划（服务端拒绝为 `web_planner_runtime_unsupported:codex`），只能从宿主侧用。
+不在初步交付的验收范围内。Web 可以用它规划：本机 Codex 已登录时，在新建运行表单的「规划宿主」里选 Codex（服务端以 `codex exec` 起会话，`server/src/codex.ts`）。下面是从宿主侧接入。
 
 ```sh
 node scripts/testpilot-setup.mjs install --entry codex \
@@ -120,7 +123,8 @@ node scripts/testpilot-setup.mjs doctor --entry penguin
 | 表现 | 检查 |
 |---|---|
 | Web 项目为空、Failed to fetch | 5301 上是不是当前 checkout 的服务；旧进程会让新前端 API 对不上。health 200 不能证明版本一致 |
-| 建运行报 `planner_runtime_unavailable:claude-code` | 服务进程能否执行 `claude --version`（PATH 或 `TP_CLAUDE_BIN`）；只查可执行，不查登录态 |
+| 建运行报 `planner_runtime_unavailable:<runtime>` | 服务进程能否执行 `claude --version` / `codex --version`（PATH 或 `TP_CLAUDE_BIN` / `TP_CODEX_BIN`） |
+| 建运行报 `planner_host_selection_required` / `planner_host_not_ready` | 表单顶部没选规划宿主，或选中的宿主没登录（`claude auth status --json`、`codex login status`）；doctor 与就绪检查不查这一项 |
 | Web 发起的 Claude Code 会话里 hook 报错 | 是否跑过 `pnpm build:claude-plugin`（`tp-config.json` 是本机生成的） |
 | 宿主里看不到 MCP | workspace 是否正确、项目 MCP 是否已启用/受信任、shim 与 `--model-env` 指向的文件是否还在 |
 | doctor ready 但运行失败 | doctor 不测真实模型、MCP 会话、登录态和被测应用，看运行日志 |
