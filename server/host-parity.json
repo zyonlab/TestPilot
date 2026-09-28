@@ -369,6 +369,12 @@
   },
   {
    "source": "index.ts",
+   "method": "GET",
+   "path": "/api/examples",
+   "host": "tp_system.examples"
+  },
+  {
+   "source": "index.ts",
    "method": "POST",
    "path": "/api/generate-code",
    "host": "tp_case.generate_batch"
@@ -808,6 +814,12 @@
   {
    "source": "projectAssetRoutes.ts",
    "method": "POST",
+   "path": "/api/projects/:projectId/assets/tasks/:id/rebaseline",
+   "uiOnly": "把 blocked 任务按当前资产版本重新基线是人的决定（记审计）；规划模型不能自行改任务的输入快照"
+  },
+  {
+   "source": "projectAssetRoutes.ts",
+   "method": "POST",
    "path": "/api/projects/:projectId/assets/tasks/:id/run",
    "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
   },
@@ -857,7 +869,7 @@
    "source": "knowledgeLibrary.ts",
    "method": "POST",
    "path": "/api/projects/:projectId/knowledge-library/:kind",
-   "host": "tp_project.save_knowledge_library"
+   "uiOnly": "知识库是项目数据，存新版是人的决定：服务端按 reviewerPrincipal 拦宿主请求，宿主工具不注册 save_knowledge_library（operatorOnly）"
   },
   {
    "source": "modelProfilesRoutes.ts",
@@ -1170,6 +1182,12 @@
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/story-requirements/approve",
    "uiOnly": "Web 操作者决定项目输入、执行任务及审查采纳；规划模型不能自行作出人工决定"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/story-requirements/reject",
+   "uiOnly": "人工驳回候选故事是人把关的决定；规划模型不能自行驳回"
   },
   {
    "source": "runRoutes.ts",

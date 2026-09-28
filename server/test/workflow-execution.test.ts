@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 const runner = vi.hoisted(() => ({ run: vi.fn(), cancel: vi.fn().mockResolvedValue(true) }));
 vi.mock("../src/exec.js", () => ({ execOnRunner: runner.run, cancelExecution: runner.cancel }));
 /**
@@ -21,7 +22,7 @@ beforeAll(async () => {
   stage.loadRunInstructions(runId, projectId); const ref = stage.retrieveRunSpec(runId, projectId, { query: "Increment", budgetTokens: 2000 }).chunks[0].id;
   const stories = [{ id: "s1", title: "Count", acceptance: [] }];
   stage.writeRunStage(runId, projectId, "stories", { stories });
-  stage.writeRunStage(runId, projectId, "cases", { stories, cases: [{ id: "c1", storyId: "s1", title: "Count at zero", designMethod: "boundary", steps: ["Click Increment"], expected: "Count equals 1", tier: 1, readiness: {design:"candidate",execution:"ready"}, key: "zero-one", sourceRefs: [ref], oracle: { kind: "count", value: "Count: 1", op: "eq", n: 1 },
+  stage.writeRunStage(runId, projectId, "cases", { stories, cases: [{ id: "c1", storyId: "s1", title: "Count at zero", designMethod: "boundary", steps: ["Click Increment"], expected: "Count equals 1", tier: 1, readiness: {design:"candidate",execution:"ready"}, key: "zero-one", sourceRefs: [ref], lifecycle: readOnlyLifecycle(ref), oracle: { kind: "count", value: "Count: 1", op: "eq", n: 1 },
     assertions: [{ id: "A-1", statement: "The counter reads 1", ruleRefs: [], oracle: { kind: "text", value: "Count: 1" } }] }] });
   stage.gateRun(runId, projectId); stage.finalizeRun(runId, projectId);
   const review = approvals.reviewRevisions(runId, projectId);

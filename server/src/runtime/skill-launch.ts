@@ -39,6 +39,8 @@ export function unitGenerationMessage(input: GenerationMessageInput): string {
     "  3. Call retrieve_spec({runId, query, budgetTokens}) with a query built from THIS unit's feature names and rule statements. Cite the returned chunk ids in sourceRefs.",
     "  4. Reason only about this unit, then call write_unit({runId, unitId, content}) with just that unit's stories or cases.",
     "  5. A blocked result lists errors with jsonPointer and repairScope: fix only that unit and call write_unit again. Never widen the scope to make an error go away.",
+    // 2026-09-24：门禁被拦后宿主直接去 finalize，卡在 gate_not_passed——话术只写了 cases → gate_run → finalize_run，没说被拦之后回哪里。
+    "After gate_run: if it returns status blocked with repair.reopened, the server has reopened those case units. Go back to claim_unit({runId, node:\"cases\"}); each reopened unit carries a REPAIR ROUND listing caseId · rule · what to change. Rewrite that unit with write_unit, merge, then call gate_run again. Only call finalize_run after gate_run passes. If it is blocked and nothing was reopened, stop and report the findings — finalize_run would be refused.",
     "Rules that hold for every unit: keep ids stable and globally unique; never invent a feature or rule id that is not in the unit materials; a rule with riskFloor P0 forces priority P0 even when a fixture is missing; expected results must distinguish normative rules from explicitly unapproved proposals, never infer correctness from what the page happened to show.",
     STORY_PLANNING_CONTRACT,
     ...(input.limit ? [`Aim for at most ${input.limit} stories per module unit.`] : []),

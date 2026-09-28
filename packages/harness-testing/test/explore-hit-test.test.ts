@@ -1,9 +1,10 @@
 import {it,expect,vi,afterEach} from 'vitest';
 import {activateScopedControl,availableControlSelectors} from '../src/exec/controlScope.js';
 afterEach(()=>vi.unstubAllGlobals());
-function fixture(occluded:boolean){
- const click=vi.fn(),el={innerText:'Limit',getBoundingClientRect:()=>({width:100,height:30,left:0,top:0}),matches:()=>false,getAttribute:()=>null,scrollIntoView:vi.fn(),contains:()=>false,click};
- vi.stubGlobal('getComputedStyle',()=>({visibility:'visible',display:'block'}));
+function fixture(occluded:boolean,top=0,hidden=false){
+ vi.stubGlobal('window',{innerWidth:1024,innerHeight:768});
+ const click=vi.fn(),el={innerText:'Limit',getBoundingClientRect:()=>({width:100,height:30,left:0,top}),matches:()=>false,getAttribute:()=>null,scrollIntoView:vi.fn(),contains:()=>false,click};
+ vi.stubGlobal('getComputedStyle',()=>({visibility:hidden?'hidden':'visible',display:'block'}));
  vi.stubGlobal('document',{querySelector:()=>el,querySelectorAll:()=>[el],elementFromPoint:()=>occluded?{}:el});return click;
 }
 it('does not programmatically click a background component covered by a popup',()=>{
@@ -23,4 +24,9 @@ it('excludes occluded controls before planning without consuming background targ
  fixture(false);expect(availableControlSelectors(['#limit'])).toEqual(['#limit']);
  const evaluate=new Function(`return (${availableControlSelectors.toString()})`)();
  expect(evaluate(['#limit'])).toEqual(['#limit']);
+});
+
+it('keeps a rendered control below the fold instead of reporting it missing; hidden stays excluded',()=>{
+ fixture(true,2400);expect(availableControlSelectors(['#limit'])).toEqual(['#limit']);
+ fixture(true,2400,true);expect(availableControlSelectors(['#limit'])).toEqual([]);
 });

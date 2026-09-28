@@ -9,6 +9,14 @@ export function explorationEnvironment(projectId:string,envRef?:string,injected=
   const environment=resolveEnvironment(projectId,envRef);
   return dispatchedEnvironment(environment,getSecretValues(projectId),injected);
 }
+/**
+ * 这次运行面对的环境画像（配置 + 密钥摘要），创建运行时冻结进参数。
+ * 和 `explorationEnvironment` 不同：注入钱包的环境这里也有值——那边为 null 是因为会话每次不同，
+ * 而这里只回答「环境配置变没变」。故事审批沿用靠它判断环境是否一致（2026-09-24 审查：原先两边都是 null，等于没比）。
+ */
+export function environmentProfileHash(projectId:string,envRef?:string):string{
+  return contentHash(canonicalJSON({environment:resolveEnvironment(projectId,envRef)??null,secrets:contentHash(canonicalJSON(getSecretValues(projectId)))}));
+}
 export function dispatchedEnvironment(environment:ReturnType<typeof resolveEnvironment>,secrets:Record<string,string>,injected=false):string|null{
   if(injected||environment?.injectWallet)return null;
   return contentHash(canonicalJSON({environment:environment??null,secrets}));

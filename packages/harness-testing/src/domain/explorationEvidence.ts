@@ -40,7 +40,7 @@ export function explorationProgress(graph: StateFlowGraph): NonNullable<Explorat
   const actions = new Set<string>();
   let repeatedActions = 0, invalidTransitions = 0;
   for (const edge of graph.transitions) {
-    if (edge.walked !== true) continue;
+    if (edge.walked !== true || edge.action.kind === 'restore') continue;
     if (!states.has(edge.from) || (edge.ok && (!edge.to || !states.has(edge.to)))) { invalidTransitions++; continue; }
     const actionKey = JSON.stringify([edge.from, edge.to ?? null, edge.ok, edge.action.kind, edge.action.target.replace(/\d+/g, '#'), edge.action.input]);
     if (actions.has(actionKey)) repeatedActions++;
@@ -89,7 +89,8 @@ export function assessExploration(input: {
       return e && e.walked === true && e.from === o.stateBefore && o.action && e.action.kind === o.action.kind && e.action.target === o.action.target && e.action.selector === o.action.selector ? [e] : [];
     });
     const attempted = valid.some(o => ['attempted','failed'].includes(o.status) && edgeFor(o).length > 0);
-    const completed = valid.filter(o => o.status === 'attempted' && o.stateAfter && states.has(o.stateAfter) && edgeFor(o).some(e => e.ok && e.to === o.stateAfter));
+    // 点了但屏幕上什么都没变（no_effect），不算「有后态」：2026-09-24 实测一次无效点击被判成 evidence_complete 并流进产品模型。
+    const completed = valid.filter(o => o.status === 'attempted' && o.reason !== 'no_effect' && o.stateAfter && states.has(o.stateAfter) && edgeFor(o).some(e => e.ok && e.to === o.stateAfter));
     const seen = matches.length > 0;
     const observationCompleted = spec.action === 'observe-only' && valid.some(o => o.status === 'observed_only' && o.evidenceRefs.includes(`sfg:state:${o.stateBefore}`) && matches.some(t=>t.stableId===o.targetId && visible(t,o.stateBefore)));
     const interactionCompleted = spec.action !== 'observe-only' && completed.length > 0;
@@ -116,4 +117,16 @@ export function assessExploration(input: {
     counts:{seen:targets.filter(t=>t.seen).length, attempted:targets.filter(t=>t.attempted).length, interactionCompleted:targets.filter(t=>t.interactionCompleted).length, observationCompleted:targets.filter(t=>t.observationCompleted).length, assertionsPassed:null},
     targets, progress, unvisited:graph?.unvisited ?? [],
   });
+}
+
+/**
+ * 宿主规划失败或计划没走完，探索不能说完成（2026-09-24）。服务端重算报告时也要套这一条——
+ * 采集端的判断不直接落库（explorationResults.ts），只在采集端降级等于没降。
+ */
+export function applyPlanningGaps(assessment: ExplorationAssessment, planning: Array<{ error?: string; decisions?: Array<{ status?: string }> }> | undefined): ExplorationAssessment {
+  if (!planning?.length) return assessment;
+  const failed = planning.filter(p => p.error === 'planner_unavailable_or_invalid').length;
+  const gaps = planning.flatMap(p => p.decisions ?? []).filter(d => d.status === 'unexplored').length;
+  const reasons = [...assessment.reasons, ...(failed ? ['planner_unavailable'] : []), ...(gaps ? ['plan_incomplete'] : [])];
+  return { ...assessment, reasons: [...new Set(reasons)], status: assessment.status === 'complete' && (failed || gaps) ? 'partial' : assessment.status };
 }

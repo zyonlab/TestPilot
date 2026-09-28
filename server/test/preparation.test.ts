@@ -2,6 +2,7 @@ import {afterAll,beforeAll,it,expect,vi} from 'vitest';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 const fake=vi.hoisted(()=>({run:vi.fn(),host:vi.fn().mockResolvedValue({sessionId:'fixture'}),cancel:vi.fn()}));
 vi.mock('../src/exec.js',()=>({execOnRunner:fake.run,cancelExecution:fake.cancel}));
 vi.mock('../src/runtimes.js',()=>({getRuntime:()=>({startRun:fake.host})}));
@@ -13,11 +14,12 @@ beforeAll(async()=>{
  db=await import('../src/db.js');svc=await import('../src/runService.js');prep=await import('../src/preparation.js');approvals=await import('../src/approvedRuns.js');const stage=await import('../src/runStages.js');
  project=db.createProject('Preparation','http://localhost:9876').id;run=svc.registerHostRun(project,{runtime:'codex',externalId:'fixture',idempotencyKey:'fixture',materials:[{name:'counter.md',text:'Click increment raises counter to one.'}]}).runId;
  stage.loadRunInstructions(run,project);const ref=stage.retrieveRunSpec(run,project,{query:'increment',budgetTokens:2000}).chunks[0].id;
- const stories=[{id:'s1',title:'Count',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Increment',designMethod:'boundary',steps:['Click Increment'],expected:'Counter is one',tier:1,readiness:{design:'candidate',execution:'blocked',reason:'Control not located'},key:'increment',sourceRefs:[ref],oracle:{kind:'text',value:'Count: 1'},assertions:[{id:'a1',statement:'Counter is one',ruleRefs:[],oracle:{kind:'text',value:'Count: 1'}}]}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
+ const stories=[{id:'s1',title:'Count',acceptance:[]}];stage.writeRunStage(run,project,'stories',{stories});stage.writeRunStage(run,project,'cases',{stories,cases:[{id:'c1',storyId:'s1',title:'Increment',designMethod:'boundary',steps:['Click Increment'],expected:'Counter is one',tier:1,readiness:{design:'candidate',execution:'blocked',reason:'Control not located'},key:'increment',sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref),oracle:{kind:'text',value:'Count: 1'},assertions:[{id:'a1',statement:'Counter is one',ruleRefs:[],oracle:{kind:'text',value:'Count: 1'}}]}]});stage.gateRun(run,project);stage.finalizeRun(run,project);
  const c=approvals.reviewRevisions(run,project)[0];revision=c.revision.id;original=c.content;approvals.decideRevisions(run,project,{items:[{caseId:'c1',revisionId:revision,decision:'approved'}]},{kind:'human',id:'fixture'});
 });
 afterAll(async()=>{await new Promise(r=>setTimeout(r,3100));svc.runLedger().close();db.db.close();vi.unstubAllEnvs();rmSync(dir,{recursive:true,force:true});});
-const result=(status='passed')=>({status,infraError:false,durationMs:5,modelRequests:[],pngPaths:[],logs:['fixture result'],oracle:[{status:status==='passed'?'pass':'fail',decidedBy:'machine'}]});
+// 真 runner 每次都回一份 lifecycle 回执；带 lifecycle 的用例没有「通过的回执」就不算 verified。
+const result=(status='passed')=>({status,infraError:false,durationMs:5,modelRequests:[],pngPaths:[],logs:['fixture result'],oracle:[{status:status==='passed'?'pass':'fail',decidedBy:'machine'}],lifecycle:{version:1,status:'pass',checks:[],cleanup:[],pendingResources:[],safeToRetry:true}});
 async function start(mode:'retry'|'all'='all'){svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);return prep.startPreparation(run,project,{revisionIds:[revision],maxRounds:2,mode});}
 const step=(b:string,body:any)=>prep.preparationStep(run,project,{batchId:b,...body});
 it('accepts approved unlocated cases, repairs after failure, and bundles only runner-verified plans',async()=>{
@@ -122,7 +124,7 @@ it('delivers a candidate across cases, revalidates it, promotes only from separa
  const r=svc.registerHostRun(project,{runtime:'codex',externalId:'recipe-loop',idempotencyKey:'recipe-loop',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
  stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
  const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
- stage.writeRunStage(r,project,'cases',{stories,cases:['c1','c2'].map(id=>({...original,id,key:id,precondition:['Counter panel ready'],sourceRefs:[ref]}))});stage.gateRun(r,project);stage.finalizeRun(r,project);
+ stage.writeRunStage(r,project,'cases',{stories,cases:['c1','c2'].map(id=>({...original,id,key:id,precondition:['Counter panel ready'],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref,['Counter panel ready'])}))});stage.gateRun(r,project);stage.finalizeRun(r,project);
  const reviewed=approvals.reviewRevisions(r,project);approvals.decideRevisions(r,project,{items:reviewed.map(c=>({caseId:c.caseId,revisionId:c.revision.id,decision:'approved'}))},{kind:'human',id:'TEST_FIXTURE'});
  const b=await prep.startPreparation(r,project,{mode:'all'});
  const call=(body:any)=>prep.preparationStep(r,project,{batchId:b.batchId,...body});
@@ -189,7 +191,9 @@ it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle an
  expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toBeUndefined();expect(fake.run.mock.calls.at(-1)?.[0].steps).toEqual([]);
  const receipt={version:1,status:'pass',checks:[],cleanup:[{id:'clean',resourceId:'r',postStep:1,status:'pass',detail:'Absent'}],pendingResources:[],safeToRetry:false};
  fake.run.mockResolvedValueOnce({...result(),prerequisiteChecks:[{statement:'Ready',status:'pass'}],lifecycle:receipt});
- await call({action:'trial',content:reviewed.content,reason:'Trial exact reviewed lifecycle'});
+ // 受控用例：改措辞把身份丢了——拒；保留身份的改写（写清是哪个控件）——允许。
+ await expect(call({action:'trial',content:{...reviewed.content,steps:['Click the create button']},reason:'Reword away the identity'})).rejects.toThrow('lifecycle_action_bindings_frozen');
+ await call({action:'trial',content:{...reviewed.content,steps:['Click the Create button in the toolbar to make '+identity]},reason:'Reword to locate precisely, identity kept'});
  await vi.waitFor(()=>expect(prep.preparationStatus(r,p)?.summary.verified).toBe(1));
  expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toEqual(lifecycle);expect(fake.run.mock.calls.at(-1)?.[0].opts.resolve.env.TP_LIFECYCLE_ID).toBeUndefined();
  const frozen:any=await call({action:'next'});const bundle=approvals.approvedExecutionBundle(r,p,frozen.codeRevision);expect(bundle.cases[0].lifecycle).toEqual(lifecycle);
@@ -199,4 +203,28 @@ it('carries a reviewed lifecycle through probe, trial, frozen prepared bundle an
  expect(fake.run.mock.calls.at(-1)?.[0].opts.lifecycle).toEqual(lifecycle);expect(fake.run.mock.calls.at(-1)?.[0].opts.sourceRefs).toEqual([ref]);
  const b2=await prep.startPreparation(r,p,{revisionIds:[reviewed.revision.id],mode:'all'});
  expect((await prep.preparationStep(r,p,{batchId:b2.batchId,caseId:'c1',action:'trial',content:{...reviewed.content,lifecycle:{...lifecycle,cleanup:[]}},reason:'Cannot drop cleanup'})).status).toBe('needs_review');
+});
+
+it('a case that needs a state from preparation runs only with a controlled recipe that provides exactly that state',async()=>{
+ const stage=await import('../src/runStages.js');
+ const r=svc.registerHostRun(project,{runtime:'codex',externalId:'state-recipe',idempotencyKey:'state-recipe',materials:[{name:'panel.md',text:'Open counter panel and increment counter.'}]}).runId;
+ stage.loadRunInstructions(r,project);const ref=stage.retrieveRunSpec(r,project,{query:'counter',budgetTokens:1000}).chunks[0].id;
+ const stories=[{id:'s1',title:'Counter panel',acceptance:[]}];stage.writeRunStage(r,project,'stories',{stories});
+ stage.writeRunStage(r,project,'cases',{stories,cases:[{...original,id:'c1',key:'c1',precondition:['Counter panel ready'],sourceRefs:[ref],lifecycle:readOnlyLifecycle(ref,['Counter panel ready']),requiresStates:[{state:'counter.nonzero',provided:'preparation'}]}]});stage.gateRun(r,project);stage.finalizeRun(r,project);
+ const reviewed=approvals.reviewRevisions(r,project);approvals.decideRevisions(r,project,{items:reviewed.map(c=>({caseId:c.caseId,revisionId:c.revision.id,decision:'approved'}))},{kind:'human',id:'TEST_FIXTURE'});
+ const b=await prep.startPreparation(r,project,{mode:'all'});
+ const call=(body:any)=>prep.preparationStep(r,project,{batchId:b.batchId,...body});
+ const checks=[{statement:'Counter panel ready',checks:[{kind:'screen',statement:'Counter panel ready',oracle:{kind:'text',value:'Counter'}}]}];
+ const base={capability:'counter.nonzero',requires:['Counter panel ready'],entryChecks:checks,steps:['Click Increment once'],postconditions:checks,cleanup:[]};
+ await call({action:'next'});
+ await expect(call({action:'probe',caseId:'c1',setupSteps:base.steps,reason:'state',recipe:{...base,sideEffects:'controlled',provides:['something.else'],compensation:[{step:'Click Reset',verified:checks[0]}]}})).rejects.toThrow('recipe_provides_undeclared_state');
+ // 探查只是看：没有配方也允许。
+ fake.run.mockResolvedValueOnce({...result(),prerequisiteChecks:[{statement:'Counter panel ready',status:'pass'}]});
+ await call({action:'probe',caseId:'c1',setupSteps:[],reason:'look first',prerequisiteChecks:checks});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].status).toBe('planning'));
+ await vi.waitFor(async()=>expect((await call({action:'next'})).phase??'').not.toBe('probing'));
+ fake.run.mockResolvedValueOnce(result());
+ await call({action:'trial',caseId:'c1',content:reviewed[0].content,prerequisiteChecks:checks,reason:'no recipe'});
+ await vi.waitFor(()=>expect(prep.preparationStatus(r,project)?.units[0].reason??'').toContain('required_state_not_prepared:counter.nonzero'));
+ await prep.cancelPreparation(r,project);
 });

@@ -5,6 +5,8 @@ import type { TextCase } from './types.js';
 export function executionBlockers(c: TextCase): string[] {
   const issues: string[] = c.lifecycle ? lifecycleIssues(c) : [];
   if (c.readiness?.execution !== 'ready') issues.push(c.readiness?.reason || `readiness:${c.readiness?.execution ?? 'not-assessed'}`);
+  // 要由准备提供的状态，设计阶段一定还没有；执行准备（g2）配方验证通过后，准备好的产物走 host-prepared 路径。
+  for (const r of c.requiresStates ?? []) if (r.provided === 'preparation') issues.push(`requires_state:${r.state}`);
   if (c.readiness?.execution === 'ready' && /(?:缺少?|尚未验证|尚未核实|未具备|待确认|missing\s|unverified|not yet verified)/i.test(c.readiness.reason ?? '')) issues.push('ready_conflicts_with_missing_prerequisite');
   for (const r of c.readiness?.requirements ?? []) if (r.status !== 'verified' || !r.evidenceRefs.length) issues.push(`unverified_requirement:${r.kind}:${r.id}`);
   const assertions = c.assertions?.length ? c.assertions : [{ id: 'expected', statement: c.expected, oracle: c.oracle }];

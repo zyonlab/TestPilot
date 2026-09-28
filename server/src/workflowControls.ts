@@ -35,7 +35,7 @@ const STORY_CONTRACT=[
   STORY_PLANNING_CONTRACT,
   'ONE CRITERION PER INDEPENDENTLY CHECKABLE RESULT — the count comes from the story, not from a quota. A set of stories whose acceptance counts are all identical was filled to a number rather than derived; some stories carry one criterion and some carry five.',
   'A CONTRADICTION MUST SURVIVE RE-READING BOTH SECTIONS: before labelling one, quote what each section actually says. If the observation does contain what you were about to call missing, it is not a contradiction — drop it. A wrong contradiction costs more than a missing one, because someone will go check it.',
-  'SWEEP THE DOMAIN MATERIAL BEFORE YOU FINISH: walk the domain document section by section and ask of each one — does the observed UI contradict it, or leave a question it raises unanswerable? Each contradiction becomes a 【待确认：与领域知识冲突】 criterion naming both sections. Reporting zero contradictions across an entire domain document claims the product is perfectly consistent with it; claim that only if you actually walked every section.',
+  'SWEEP THE DOMAIN MATERIAL BEFORE YOU FINISH: walk the domain document section by section and ask of each one — does the observed UI contradict it, or leave a question it raises unanswerable? Each contradiction becomes a requirementDraft question naming both sections (the story then waits for human review); keep the acceptance criterion as the behavior the requirement states — do not write the conflict into acceptance. Reporting zero contradictions across an entire domain document claims the product is perfectly consistent with it; claim that only if you actually walked every section.',
   /**
    * 角色和优先级此前根本不在契约里，于是：26 条故事的 role 全是同一个词（模型现编的），
    * 优先级字段压根不存在。两样都不该靠模型发挥——包里已经把角色和主链写成事实了。

@@ -2,6 +2,7 @@ import {projectAssetRouter} from './projectAssetRoutes.js';
 import {askExplorationPlanner} from "./explorationPlanner.js";
 import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
+import {listExamples} from "./examples.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
 import { ExplorationAttemptSchema, sameExplorationAttempt, type ExplorationAttempt } from "@testpilot/harness-testing/domain";
@@ -757,6 +758,8 @@ app.get("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await h
 app.post("/api/projects/:id/planner-host", async (req,res)=>{try{res.json(await selectHost(req.params.id,req.body?.runtime));}catch(e){res.status(400).json({error:(e as Error).message});}});
 app.use("/api/projects/:projectId/assets", projectAssetRouter());
 app.use("/api/projects/:projectId/knowledge-library", knowledgeLibraryRouter());
+/** 内置示例清单（`examples/<id>/example.json`）：新建项目的示例按钮、「是否示例项目」、起草抽屉的示例提示都从这里读。 */
+app.get("/api/examples", (_req, res) => { res.json({ examples: listExamples() }); });
 app.get("/api/projects/:id/rule-packs", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   res.json({ packs: listRulePacks(req.params.id) });
@@ -767,7 +770,9 @@ app.get("/api/projects/:id/rule-packs/:hash", (req, res) => {
 });
 app.post("/api/projects/:id/rule-packs", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
-  try { res.json(saveRulePack(req.params.id, req.body?.pack ?? req.body)); }
+  // 作者记下来：带宿主标记或令牌的是规划器起草的候选，不会被未指定规则包的运行静默用上（rulePacks.currentRulePack）。
+  const author = req.headers.authorization !== undefined || req.headers["x-testpilot-actor"] !== undefined ? { kind: "agent" as const, id: String(req.headers["x-testpilot-actor"] ?? "host") } : { kind: "human" as const, id: "local-operator" };
+  try { res.json(saveRulePack(req.params.id, req.body?.pack ?? req.body, author)); }
   catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message) }); }
 });
 app.delete("/api/projects/:id/rule-packs/:hash", (req, res) => {

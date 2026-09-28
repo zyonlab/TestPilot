@@ -45,6 +45,7 @@ import type { RunModels } from "@testpilot/harness-core/model-profiles";
 import { launchManagedPenguin, managedRunState, cancelManagedRun, type ManagedModels } from "./runtime/managed-penguin.js";
 export { cancelManagedRun } from "./runtime/managed-penguin.js";
 import { bus } from "./procs.js";
+import { hostActorEnv } from "./runtime/hostActorTag.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** 仓库根：`server/src/penguin.ts` → `server/` → 仓库根。 */
@@ -483,7 +484,7 @@ export async function startRun(input: StartRunInput = {}): Promise<StartedRun> {
   const sessionId = await new Promise<string>((ok, fail) => {
     const child = spawn(penguinBin(), args, {
       cwd: workspace,
-      env: penguinEnv(),
+      env: { ...penguinEnv(), ...hostActorEnv(process.env.TP_SERVER_URL ?? `http://127.0.0.1:${process.env.PORT ?? 5301}`) },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "testpilot-example.v1",
+  "id": "hyperliquid-testnet",
+  "title": {
+    "zh": "Hyperliquid Testnet",
+    "en": "Hyperliquid Testnet",
+    "ja": "Hyperliquid Testnet"
+  },
+  "label": {
+    "zh": "Hyperliquid Testnet · 合约交易示例",
+    "en": "Hyperliquid Testnet · Perpetual trading example",
+    "ja": "Hyperliquid Testnet · 無期限契約取引の例"
+  },
+  "projectHint": {
+    "zh": "内置示例：填入测试网名称和地址，创建后可在「新建测试运行 → 聊着填」参考合约交易示例生成自己的知识和规则。不导入历史运行、Gold 或钱包。",
+    "en": "Built-in example: fills the testnet name and URL. After creation, use New test run → Draft by chat to create knowledge and rules from the trading example. No historical runs, Gold or wallet are imported.",
+    "ja": "組み込み例：テストネットの名前と URL を入力します。作成後「新規テスト実行 → 会話で入力」で知識とルールを作成できます。過去の実行・Gold・ウォレットは取り込みません。"
+  },
+  "draftTitle": {
+    "zh": "参考内置示例：Hyperliquid Testnet 合约交易",
+    "en": "Built-in example: Hyperliquid Testnet perpetual trading",
+    "ja": "組み込み例：Hyperliquid Testnet の契約取引"
+  },
+  "project": {
+    "name": "Hyperliquid Testnet",
+    "targetUrl": "https://app.hyperliquid-testnet.xyz/trade",
+    "platform": "web",
+    "explorationScope": "current-url"
+  },
+  "domainKnowledge": "domain-knowledge.md",
+  "rulePack": "rule-pack.json",
+  "draftPrompts": {
+    "base": {
+      "zh": "请参考 Hyperliquid Testnet 内置合约交易示例，为我的项目起草一份新的内容。示例覆盖：账户模式与资产、保证金与杠杆、币对信息、下单与撤单、持仓、盈亏、风险、开仓与平仓、增加保证金。区分未连接/已连接、无订单/有订单、无持仓/有持仓；区分界面观察、我确认的业务要求和待确认假设。不得把示例当作本站已验证行为，不编造费率、风险阈值或来源。先询问我的产品地址、测试范围及缺少的业务信息，再逐步生成。",
+      "en": "Use the built-in Hyperliquid Testnet perpetual trading example to draft new content for my project. Cover account mode and assets, margin and leverage, markets, orders and cancellation, positions, P&L, risk, opening and closing positions, and adding margin. Distinguish disconnected/connected, empty/populated orders and positions, UI observations, requirements I confirm and unverified assumptions. Do not treat the example as verified site behavior or invent fees, risk thresholds or sources. First ask for my product URL, scope and missing business information, then draft iteratively.",
+      "ja": "Hyperliquid Testnet の契約取引例を参考に、私のプロジェクト用の新しい内容を作成してください。口座・資産・証拠金・レバレッジ・通貨ペア・注文と取消・ポジション・損益・リスク・新規建てと決済・証拠金追加を対象とします。接続状態、注文やポジションの有無、観測・確認済み要件・仮説を区別してください。例を検証済みの事実にせず、手数料・リスク閾値・出典を捏造しないでください。まず URL・範囲・不足情報を質問し、段階的に作成してください。"
+    },
+    "rulePack": {
+      "zh": "输出规则包：整理模块、功能、带来源的规则、可观察判据和探索目标。没有证据的项目先列为待确认问题，不虚构已观察规则；下单、撤单、平仓和增加保证金必须区分为会改变业务状态的操作。",
+      "en": "Draft a rule pack: organize modules, features, sourced rules, observable checks and exploration targets. List unsupported items as questions, never fabricated observed rules. Identify placing/cancelling orders, closing positions and adding margin as state-changing actions.",
+      "ja": "ルールパック：モジュール・機能・出典付きルール・観測可能な判定・探索対象を整理してください。証拠のない項目は質問として残し、注文・取消・決済・証拠金追加を状態変更操作として区別してください。"
+    }
+  }
+}

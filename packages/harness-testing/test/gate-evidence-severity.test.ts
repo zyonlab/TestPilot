@@ -1,6 +1,7 @@
 import { it, expect } from "vitest";
 import { runGate } from "../src/casegen/gate.js";
 import type { CaseBundle, TextCase } from "../src/casegen/types.js";
+import { readOnly } from "./helpers/lifecycle.js";
 
 /**
  * 2026-09-11 第二轮实测（docs/v3/history/23）暴露的两条门禁缺陷。
@@ -9,7 +10,7 @@ import type { CaseBundle, TextCase } from "../src/casegen/types.js";
  * 二、没有 flows 时任何 `covers` 一律记 warn，于是「带完整状态证据」和「凭空编一条边」
  *     拿同一个分数——两条臂都被打到 0，门禁失去区分能力。
  */
-const base = (over: Partial<TextCase>): TextCase => ({
+const base = (over: Partial<TextCase>): TextCase => readOnly({
   id: "TC-1", storyId: "US-1", title: "t", designMethod: "state-transition",
   precondition: [], steps: ["点击提交按钮"], postSteps: [], expected: "出现某条字面量",
   tier: 3, key: "k", covers: [], sourceRefs: [], ...over,

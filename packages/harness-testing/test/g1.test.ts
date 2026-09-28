@@ -14,6 +14,7 @@ import {
 import { g1 } from "../src/casegen/graph.js";
 import { runGate } from "../src/casegen/gate.js";
 import type { CaseBundle, GatedBundle } from "../src/casegen/types.js";
+import { readOnly } from "./helpers/lifecycle.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../fixtures/sample-spec/", import.meta.url));
 const SPEC = readFileSync(`${FIXTURES}acme-portal.md`, "utf8");
@@ -201,7 +202,7 @@ describe("gate ①", () => {
   const bundle = (cases: CaseBundle["cases"]): CaseBundle => ({ origin: "x", flows: [], stories: [{ id: "US-01", title: "story", acceptance: [] }],
     cases,
   });
-  const base = {
+  const base = readOnly({
     id: "c1",
     storyId: "US-01",
     title: "case",
@@ -214,7 +215,7 @@ describe("gate ①", () => {
     oracle: { kind: "text" as const, value: "Your dashboard is ready." },
     tier: 1 as const,
     key: "login|valid|dashboard", covers: [], sourceRefs: [], postSteps: [],
-  };
+  });
 
   it("marks an assertion that promises nothing checkable", () => {
     const g = runGate(bundle([{ ...base, expected: "页面显示正常" }]));
@@ -614,8 +615,8 @@ describe("gate ① on what a case claims to cover", () => {
 describe("covers 无从核实时要说出来", () => {
   const bundle = (covers: string[], flows: unknown[] = []) => ({
     origin: "t", stories: [{ id: "s1", title: "t", acceptance: [] }], flows,
-    cases: [{ id: "c1", storyId: "s1", title: "t", designMethod: "state-transition" as const, tier: 3 as const,
-      key: "k", steps: ["点一下"], expected: "页面显示「X」", precondition: [], postSteps: [], sourceRefs: [], covers }],
+    cases: [readOnly({ id: "c1", storyId: "s1", title: "t", designMethod: "state-transition" as const, tier: 3 as const,
+      key: "k", steps: ["点一下"], expected: "页面显示「X」", precondition: [], postSteps: [], sourceRefs: [] as string[], covers })],
   });
   it("没有流程可对照 + 填了 covers → covers-unverifiable，且计入分数", () => {
     const r = runGate(bundle(["/a --[点「X」]--> /b"]) as never);

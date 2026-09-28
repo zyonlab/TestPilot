@@ -1,6 +1,6 @@
 import {historicalRetrievalIds} from "./retrievalAudit.js";
 import { LIFECYCLE_INSTRUCTIONS } from '@testpilot/harness-testing/casegen';
-import { STORY_PLANNING_CONTRACT, storyPlanningIssues, businessTransitionIssues } from '@testpilot/harness-testing/casegen';
+import { STORY_PLANNING_CONTRACT, CASE_PLANNING_CONTRACT, storyPlanningIssues, businessTransitionIssues } from '@testpilot/harness-testing/casegen';
 import { boundDomainReference } from "./domainReferences.js";
 import { randomUUID } from "node:crypto";
 import { acceptanceIndex } from "./acceptanceIndex.js";
@@ -288,7 +288,7 @@ export function unitMaterials(runId: string, projectId: string, unit: WorkUnit) 
    * 只发和这个单元有关的那几段生命周期，加上全部角色（角色是全局的，就那么几个）。
    */
   const lifecycle = (model.lifecycle ?? []).filter((l) => !l.featureIds.length || l.featureIds.some((f) => featureIds.includes(f)));
-  return { domainReference: boundDomainReference(runId, projectId), actionVocabulary: pack?.pack.actionVocabulary ?? [], volatileReadings: pack?.pack.volatileReadings ?? [], productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, businessTransitions: (pack?.pack.businessTransitions ?? model.businessTransitions ?? []).filter(t=>featureIds.includes(t.featureId)), conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
+  return { domainReference: boundDomainReference(runId, projectId), actionVocabulary: pack?.pack.actionVocabulary ?? [], volatileReadings: pack?.pack.volatileReadings ?? [], productModelRevision: revisionId, rulePack: pack ? { id: pack.pack.id, version: pack.pack.version, hash: pack.hash, revision: pack.revisionId } : undefined, modules, features, rules, sources, observations, storyIndex, story, subsumed, roles: model.roles ?? [], lifecycle, businessTransitions: (pack?.pack.businessTransitions ?? model.businessTransitions ?? []).filter(t=>featureIds.includes(t.featureId)), businessStates: (() => { const ts=(pack?.pack.businessTransitions ?? model.businessTransitions ?? []).filter(t=>featureIds.includes(t.featureId)); const ids=new Set(ts.flatMap(t=>[...(t.requiresStates??[]),...(t.producesStates??[])])); return (pack?.pack.states ?? []).filter(st=>ids.has(st.id)); })(), conflicts: model.conflicts.filter((c) => featureIds.includes(c.featureId)) };
 }
 
 function manifestFor(runId: string, projectId: string, unit: WorkUnit, materials: ReturnType<typeof unitMaterials>, claimedBy: string): ContextManifest {
@@ -465,7 +465,10 @@ export function writeUnit(runId: string, projectId: string, raw: unknown) {
             errors.push({ code: "acceptance_cites_missing_section", jsonPointer: `/stories/${i}/acceptance/${j}`,
               message: `${s.id} 引了 ${m[0]}，而 ${m[1]} 只有 ${total} 段、检索索引也只有 ${retrievalChunks} 块` });
         }
-      if (!s.role || !s.benefit) errors.push({ code: "story_without_role_or_benefit", jsonPointer: `/stories/${i}`, message: s.id });
+      // 规格没写角色/收益时留空是诚实的回答（提示词与 skill 都这么说）；原先这里拒收空串，等于逼模型现编一个用户。
+      // 字段必须在；包里声明了角色时必须认领一个（下一条）。
+      if (typeof s.role !== "string" || typeof s.benefit !== "string") errors.push({ code: "story_without_role_or_benefit", jsonPointer: `/stories/${i}`, message: s.id });
+      if (materials.roles.length && !s.role) errors.push({ code: "story_role_not_declared", jsonPointer: `/stories/${i}/role`, message: `须认领一个声明的角色（${materials.roles.map((r) => r.name).join(" / ")}）` });
       /**
        * 角色要**认领**包里写好的那几个，不能现编（2026-09-12）。
        * 实测 26 条故事的 role 全是同一个词——那不是角色，是个口头禅。
@@ -751,7 +754,9 @@ export function unitContract(
            * 一条都过不了 schema，而它同时把 v2 的证据字段写得相当好。它不是不会写，
            * 是没被告知这些是必填的。
            */
-          STORY_PLANNING_CONTRACT,
+          CASE_PLANNING_CONTRACT,
+          // 2026-09-24：前提状态从故事传到用例。门禁规则 requires-state 按这句检查。
+          "When a transition in the unit materials lists requiresStates, every case that claims one of its SUCCESS criteria (acRefs) declares requiresStates:[{state, provided}] for each of those states (businessStates says what kind each is). provided:\"steps\" = this case's own steps create it, so lifecycle declares it as a resource/setting and cleans it; provided:\"preparation\" = a preparation recipe must provide it before the case, and readiness stays blocked until then. A failure-path case that needs the state to be ABSENT does not declare it.",
           "REQUIRED on every case, or the write is rejected: id, storyId (this story), title, designMethod, steps[], expected, tier, key, priority, scenarioType.",
           "  designMethod ∈ equivalence | boundary | state-transition | decision-table | negative | exploratory, and it must agree with design.technique.",
           "  key is a dedupe triple 'transition|parameters|assertion'. steps are short end-agnostic actions. priority takes the rule's riskFloor as its lower bound.",
@@ -829,7 +834,8 @@ export function unitContract(
           "  Nor a step that is pure looking (\"查看面板方向按钮区域\", \"observe the Size input area\"). Looking is not an operation the browser can perform; if the case only needs to know what is on screen, that belongs in the oracle and in assertions[], and the case may legitimately have just one step: the navigation.",
           "Name a control the way the page shows it AND where it sits when the label is not unique — \"click Balances in the tab row of the account panel in the lower half of the page\", not \"switch to Balances\". One observation per step; a step that asks for four things at once makes the planner give up.",
           LIFECYCLE_INSTRUCTIONS,
-          "postSteps put the product back. Any case that changes state — an order placed, a toggle flipped, a mode switched, a tab left somewhere else — MUST say how it undoes that, or its second run faces a different product than its first and nobody sees the difference. A read-only case leaves postSteps empty.",
+          // 2026-09-24：这里原先要求「切走的 Tab 也要写 postSteps 还原」，而 lifecycle 校验器把只读用例的 postSteps 判为违规——84/84 被点到。现在只认契约那一份。
+          "postSteps put the product back, and only for what lifecycle declares: a created resource or a changed persisted setting, one cleanup entry per postStep. UI-only state (tabs, panels, unsaved input) and session state get no postSteps — every case starts on a fresh page, and session changes are declared with lifecycle.session. A read-only case leaves postSteps empty.",
           "Do not lower a P0 because a fixture is missing; keep the case, mark readiness.execution and say why.",
           ...(next.repair ? ["",
             `REPAIR ROUND ${next.repair.round}. The gate read your previous write for this unit and flagged these cases. Rewrite the WHOLE unit: fix exactly these, leave the rest as they were. Fixing by weakening an assertion is not a fix — when a case cannot be settled by a program, lower its tier and say what is missing in readiness.reason.`,

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {assessExploration,buildExplorationReport,ExplorationCharterSchema,InteractionTargetSchema,ObservationSchema} from '../src/domain/index.js';
+import {applyPlanningGaps,assessExploration,buildExplorationReport,ExplorationCharterSchema,InteractionTargetSchema,ObservationSchema} from '../src/domain/index.js';
 import {StateFlowGraphSchema,abstractionOf} from '../src/exec/sfg.js';
 const charter=ExplorationCharterSchema.parse({schemaVersion:'exploration-charter.v1',id:'scope',rulePack:{id:'rules',version:'1',hash:'a'.repeat(64)},scope:{entryUrl:'https://example.test/',routes:['/'],urlPatterns:[]},featureTargets:[{id:'open',featureId:'panel',match:{label:['Open']},action:'activate',sideEffect:'ui-only'}],budgets:{maxScreens:8}});
 const action={kind:'click' as const,target:'Open',selector:'#open'};
@@ -26,6 +26,15 @@ describe('bounded exploration completion',()=>{
   const input=base();input.observations[0].status=status;
   const r=buildExplorationReport({...input,budget:{maxScreens:8,screens:2,rounds:1,maxRounds:10}});
   expect(r.completion).toBe('partial');expect(r.frontier.map(t=>t.targetSpecId)).toEqual(['open']);
+ });
+ it('a click with no visible effect is tried, not completed, even on a self-loop edge',()=>{
+  const input=base();input.graph.transitions[0].to='s1';input.observations[0].stateAfter='s1';input.observations[0].reason='no_effect';
+  const r=assessExploration(input);expect(r.status).toBe('partial');expect(r.counts).toMatchObject({attempted:1,interactionCompleted:0});
+  expect(r.targets[0].reason).toBe('missing_post_state');
+ });
+ it('closing an overlay with Escape restores state but is not a walked product transition',()=>{
+  const input=base();input.graph.transitions.push({from:'s2',to:'s1',action:{kind:'restore',selector:'',target:'Escape'},ok:true,walked:true});
+  expect(assessExploration(input).progress?.uniqueWalkedTransitions).toBe(1);
  });
  it('a real failed dispatch counts as tried, never as completed',()=>{
   const input=base();input.graph.transitions[0].ok=false;delete input.graph.transitions[0].to;input.observations[0].status='failed';delete input.observations[0].stateAfter;
@@ -70,5 +79,17 @@ describe('bounded exploration completion',()=>{
   const input=base();for(let i=0;i<100;i++)input.graph.transitions.push({...graph.transitions[0],action:{...action,target:`Open ${i}`}});
   // One original label and one normalized numbered label.
   expect(assessExploration(input).progress).toMatchObject({abstractStates:2,uniqueWalkedTransitions:2,repeatedActions:99});
+ });
+});
+
+describe('planning gaps are part of completion',()=>{
+ it('a failed host plan or an unexplored planned control keeps a complete rule-pack run partial',()=>{
+  const done=assessExploration(base());expect(done.status).toBe('complete');
+  expect(applyPlanningGaps(done,[{error:'planner_unavailable_or_invalid',decisions:[]}])).toMatchObject({status:'partial',reasons:['planner_unavailable']});
+  expect(applyPlanningGaps(done,[{decisions:[{status:'unexplored'},{status:'state_changed'}]}])).toMatchObject({status:'partial',reasons:['plan_incomplete']});
+ });
+ it('screens left unplanned only because the planning budget ran out are not counted as planner failures',()=>{
+  const done=assessExploration(base());
+  expect(applyPlanningGaps(done,[{decisions:[{status:'state_changed'}]},{error:'not_planned:planning_budget',decisions:[]}])).toMatchObject({status:'complete',reasons:[]});
  });
 });

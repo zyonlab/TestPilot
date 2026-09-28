@@ -1,5 +1,5 @@
 import {compareProjectAssets,reviewProjectComparison,projectComparisons} from './projectComparisons.js';
-import {runProjectTask,materializeFollowUps} from './projectIncremental.js';
+import {startProjectTask,materializeFollowUps} from './projectIncremental.js';
 import {ProjectTasks} from './projectTasks.js';
 import {ProjectDiscoveries} from './projectDiscoveries.js';
 import {createProjectRunPlan,readProjectRunPlan,projectPlanInputs} from './projectRunPlans.js';
@@ -20,7 +20,8 @@ export function projectAssetRouter(){
  router.get('/discoveries',wrap(req=>({discoveries:new ProjectDiscoveries(runLedger()).list(req.params.projectId)})));
  router.post('/discoveries/collect',wrap(req=>{reviewerPrincipal(req);const ledger=runLedger(),collector=new ProjectDiscoveries(ledger);for(const r of ledger.listRevisions(req.params.projectId,req.body.runId)){collector.capture(r,ledger.readRevision(r.id,req.params.projectId).content);}return {discoveries:collector.list(req.params.projectId)};}));
  router.post('/discoveries/:id/decision',wrap(req=>new ProjectDiscoveries(runLedger()).decide(req.params.projectId,req.params.id,req.body.status,req.body.reason,reviewerPrincipal(req))));
- router.post('/tasks/:id/run',(req,res)=>{try{reviewerPrincipal(req);const project=(req.params as any).projectId;new ProjectTasks(runLedger()).read(project,req.params.id);void runProjectTask(project,req.params.id).catch(()=>{});res.status(202).json({status:'queued'});}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof Error?e.message:'task_start_failed'});}});
+ router.post('/tasks/:id/run',(req,res)=>{try{reviewerPrincipal(req);const project=(req.params as any).projectId;new ProjectTasks(runLedger()).read(project,req.params.id);void startProjectTask(project,req.params.id);res.status(202).json({status:'queued'});}catch(e){res.status(e instanceof LedgerError?e.status:400).json({code:e instanceof Error?e.message:'task_start_failed'});}});
+ router.post('/tasks/:id/rebaseline',wrap(req=>new ProjectTasks(runLedger()).rebaseline(req.params.projectId,req.params.id,req.body?.reason,reviewerPrincipal(req))));
  router.post('/tasks/:id/follow-ups',wrap(req=>{reviewerPrincipal(req);return {tasks:materializeFollowUps(req.params.projectId,req.params.id)};}));
  router.get('/tasks',wrap(req=>({tasks:new ProjectTasks(runLedger()).list(req.params.projectId)})));
  router.post('/tasks',wrap(req=>{reviewerPrincipal(req);return new ProjectTasks(runLedger()).create(req.params.projectId,req.body);}));

@@ -11,10 +11,10 @@ description: Turns an exploration of a running product into the workspace materi
 
 ## 先说清楚这条 skill 不做什么
 
-**它不会替你去跑一次探索。** v3 的 MCP 工具面里没有 explore：
-探索住在产品层（TestPilot 的 `:5300` / `:5301`，工作流的 `g0-explore` 一步），
-不在 Agent State 里，也不该在——它要驱动真实浏览器、要会话、要视口，
-那些东西不是提示词能进化的。
+**它不在宿主里跑探索。** 探索住在服务端（TestPilot 的 `:5300` / `:5301`）：
+新建运行时 `sourceKind=explore`（宿主工具 `tp_run` 的新建运行），或者项目任务里的定向探索，
+都由服务端开浏览器去做——它要驱动真实浏览器、要会话、要视口，那些不是提示词能替代的。
+宿主能做的是发起它、读它的产物（`exploration/report`、`exploration.md`），而不是自己去点页面。
 
 这条 skill 做三件事：
 
@@ -28,10 +28,10 @@ description: Turns an exploration of a running product into the workspace materi
 
 ## 三条前提
 
-### 1. WAF 机器人挑战
+### 1. 机器人挑战与登录墙
 
-`demo.binance.com` 挡在 AWS WAF 后面（响应头 `x-amzn-waf-action: challenge`）。
-**全新的自动化浏览器过不去**，会被弹到 `accounts.binance.com`——
+有的站点挡在 WAF 或机器人挑战后面（比如响应头里带 `x-amzn-waf-action: challenge`）。
+**全新的自动化浏览器过不去**，会被弹到登录或验证页——
 而探索仍然会「成功」，只是采回来的是登录墙。
 
 **不要绕过它。** 正当路径是把使用者浏览器里已登录的会话导入环境：
@@ -41,8 +41,7 @@ POST /api/environments/:id/set-session
 body: { "raw": "<JSON.stringify(storageState)>" }
 ```
 
-让页面自己 fetch 到 `127.0.0.1:5301`（网关的 `cors()` 是全开的），**凭证不经过第三方**。
-实测是 29 个 cookie（含 `aws-waf-token`）+ 56 个 localStorage 键，AES 加密存在 `sessionEnc`。
+让页面自己 fetch 到 `127.0.0.1:5301`，**凭证不经过第三方**；会话加密存在 `sessionEnc`。
 **会话有有效期，过期要重导。**
 
 诊断：`node server/scripts/probe-session.mjs <envId>`。

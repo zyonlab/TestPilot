@@ -6,8 +6,12 @@ export function availableControlSelectors(selectors:string[]):string[] {
     if(!e)continue;
     const r=e.getBoundingClientRect();
     const x=r.left+r.width/2,y=r.top+r.height/2;
+    if(!(r.width>0&&r.height>0))continue;
+    // 视口外的控件没法做遮挡判定（elementFromPoint 在视口外返回 null），不等于不可用：
+    // 原先直接丢掉，规则包目标于是被记成 not_found，看起来像「没有这个功能」。点击前会滚动并重新核对。
+    if(x<0||y<0||x>=window.innerWidth||y>=window.innerHeight){const st=getComputedStyle(e);if(st.visibility!=='hidden'&&st.display!=='none')available.push(selector);continue;}
     const hit=document.elementFromPoint(x,y);
-    if(r.width>0&&r.height>0&&hit&&(hit===e||e.contains(hit)))available.push(selector);
+    if(hit&&(hit===e||e.contains(hit)))available.push(selector);
   }
   return available;
 }

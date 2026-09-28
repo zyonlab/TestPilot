@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MessagesSquare } from "lucide-react";
 import { Drawer } from "@/components/overlay";
 import { Button } from "@/components/ui";
-import { useT } from "@/lib/prefs";
+import { usePrefs, useT } from "@/lib/prefs";
+import { useExamples, type ExampleInfo } from "@/lib/examples";
 import { API_BASE } from "@/lib/base";
 import { cn } from "@/lib/cn";
 
@@ -57,6 +58,8 @@ export function FieldChatDrawer({
   onClose: () => void;
 }) {
   const t = useT();
+  const lang = usePrefs((s) => s.lang);
+  const examples = useExamples();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -157,7 +160,12 @@ export function FieldChatDrawer({
     }
   };
 
-  const examplePrompt = `${t("field.exampleBase")}\n\n${t(field === "rulePack" ? "field.exampleRules" : field === "domainReference" ? "field.exampleReference" : "field.exampleKnowledge")}`;
+  /** 示例起草提示来自示例清单：开头段落与按字段的补充都是项目数据；清单没写某个字段时用界面的通用说法。 */
+  const examplePrompt = (ex: ExampleInfo) => {
+    const specific = ex.draftPrompts?.[field]?.[lang];
+    const generic = t(field === "domainReference" ? "field.exampleReference" : field === "rulePack" ? "field.exampleRules" : "field.exampleKnowledge");
+    return `${ex.draftPrompts!.base[lang]}\n\n${specific ?? generic}`;
+  };
   const chosen = runs.find((r) => r.runId === runId);
 
   return (
@@ -207,12 +215,13 @@ export function FieldChatDrawer({
       )}
 
       <div className="min-h-0 flex-1 overflow-auto p-3">
-        <details className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
-          <summary className="cursor-pointer text-sm font-medium">{t("field.exampleTitle")}</summary>
+        {examples.filter((ex) => ex.draftPrompts).map((ex) => { const prompt = examplePrompt(ex); return (
+        <details key={ex.id} className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
+          <summary className="cursor-pointer text-sm font-medium">{ex.draftTitle?.[lang] ?? t("field.exampleTitle", { title: ex.title[lang] })}</summary>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t("field.exampleHint")}</p>
-          <p className="my-3 whitespace-pre-wrap text-sm leading-relaxed">{examplePrompt}</p>
-          <Button type="button" size="sm" disabled={busy} onClick={() => setInput(current => current.trim() ? `${current}\n\n${examplePrompt}` : examplePrompt)}>{t("field.exampleUse")}</Button>
-        </details>
+          <p className="my-3 whitespace-pre-wrap text-sm leading-relaxed">{prompt}</p>
+          <Button type="button" size="sm" disabled={busy} onClick={() => setInput(current => current.trim() ? `${current}\n\n${prompt}` : prompt)}>{t("field.exampleUse")}</Button>
+        </details>); })}
         {turns.length === 0 && (
           <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">{t(`field.hint.${field}`)}</p>
         )}

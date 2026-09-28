@@ -292,6 +292,24 @@ export class CharterTracker {
     return undefined;
   }
 
+  /**
+   * 见过、还没试、策略也没拦的规则包目标（只算 ui-only 的 activate/fill）。
+   * 2026-09-24 实测：宿主规划恢复之后，模型自己挑的控件把 8 屏预算带进了弹窗和菜单，
+   * 规则包目标从 7/8 掉到 4/8（持仓、历史没轮到）。有这类目标在，就先回去做它们。
+   */
+  /** 这个规则包目标（spec）是否已经有过一次尝试/观察——同一目标的第二个控件不该先于别的目标。 */
+  specCovered(specId: string): boolean {
+    return this.observations.some(o => o.targetSpecId === specId && ['attempted', 'observed_only', 'skipped_equivalent'].includes(o.status));
+  }
+  pendingSeenTargets(): InteractionTarget[] {
+    const blocked = new Set(this.observations.filter(o => o.status === "blocked").map(o => o.targetId));
+    return this.targets.filter(t => {
+      if (this.attempted.has(t.stableId) || blocked.has(t.stableId)) return false;
+      const spec = this.charter.featureTargets.find(s => s.id === t.targetSpecId);
+      return !!spec && spec.sideEffect === "ui-only" && (spec.action === "activate" || spec.action === "fill");
+    });
+  }
+
   markAttempted(stableId: string): void { this.attempted.add(stableId); }
 
   record(o: Omit<Observation, "id">): Observation {

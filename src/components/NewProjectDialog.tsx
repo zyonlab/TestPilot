@@ -5,7 +5,8 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/overlay";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/store";
-import { useT } from "@/lib/prefs";
+import { usePrefs, useT } from "@/lib/prefs";
+import { useExamples } from "@/lib/examples";
 import type { TargetPlatform } from "@/lib/types";
 
 /**
@@ -31,6 +32,8 @@ export function NewProjectDialog({
 }) {
   const t = useT();
   const createProject = useStore((s) => s.createProject);
+  const lang = usePrefs((s) => s.lang);
+  const examples = useExamples();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("https://");
@@ -75,9 +78,12 @@ export function NewProjectDialog({
       <div className="mb-4 space-y-2 rounded-lg border border-border p-3">
         <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={busy} onClick={() => {setName("");setUrl("https://");}}>{t("example.custom")}</Button>
-          <Button type="button" disabled={busy} onClick={() => {setName("Hyperliquid Testnet");setUrl("https://app.hyperliquid-testnet.xyz/trade");setPlatform("web");setScope("current-url");}}>{t("example.hyperliquid")}</Button>
+          {/* 示例按钮全部来自 examples/*\/example.json 清单（GET /api/examples），代码不认识任何一个示例。 */}
+          {examples.map((ex) => (
+            <Button key={ex.id} type="button" disabled={busy} onClick={() => {setName(ex.project.name);setUrl(ex.project.targetUrl);setPlatform(ex.project.platform);if (ex.project.explorationScope) setScope(ex.project.explorationScope);}}>{ex.label[lang]}</Button>
+          ))}
         </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">{t("example.projectHint")}</p>
+        {examples.map((ex) => ex.projectHint && <p key={ex.id} className="text-xs leading-relaxed text-muted-foreground">{ex.projectHint[lang]}</p>)}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

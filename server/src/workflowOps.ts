@@ -32,6 +32,9 @@ import { cancelWorkflowExecutions } from "./workflowExecution.js";
 import { loadRunInstructions, registeredStageProducts } from "./runStages.js";
 import { StoryBundleSchema } from "@testpilot/harness-testing/casegen";
 import { buildProductModel, charterFromRulePack, describeProductModel, validateRulePack, ContextManifestSchema, ExplorationReportSchema, ProductModelSchema, type ContextManifest, type ExplorationCharter, type ProductRulePack } from "@testpilot/harness-testing/domain";
+import { cancelExplorationPlanner } from "./explorationPlanner.js";
+import { environmentProfileHash } from "./explorationReuse.js";
+import { storyRejection } from "./storyReview.js";
 
 export async function createWebWorkflow(projectId: string, raw: unknown, prepared?: {runId:string;node:string;fresh?:boolean}) {
   const material = z.object({name:z.string().min(1).max(160),text:z.string().min(1).refine(text=>Buffer.byteLength(text,'utf8')<=2_000_000,'material_too_large')});
@@ -104,13 +107,14 @@ export async function createWebWorkflow(projectId: string, raw: unknown, prepare
    * 漏了它们，重跑出来的就是另一种探索——而没有人会知道这一次和上一次的差别在哪。
    * 它们同时也是这次运行**被授权做过什么**的凭证：谁允许探索去点会改状态的东西，记在这里。
    */
-  const params={projectPlanId:input.projectPlanId,projectRunMode:input.projectRunMode,projectLineageId:input.projectLineageId,reuseExperience:input.reuseExperience,knowledgeSelection:input.knowledgeSelection,rulePackSelection:input.rulePackSelection,pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',...(input.workUnits?{workUnits:1}:{})};
+  const params={projectPlanId:input.projectPlanId,projectRunMode:input.projectRunMode,projectLineageId:input.projectLineageId,reuseExperience:input.reuseExperience,knowledgeSelection:input.knowledgeSelection,rulePackSelection:input.rulePackSelection,pageVersion:input.pageVersion,sourceKind:input.sourceKind,sourceUrl:input.sourceUrl,limit:input.limit,outputLanguage:input.outputLanguage,maxScreens:input.maxScreens,explorationScope:input.explorationScope,envRef:input.envRef,stageControlVersion:1,exploreActions:input.exploreActions,exploreWallet:input.exploreWallet,plannerRuntime,launchedBy:'web',environmentProfile:environmentProfileHash(projectId,input.envRef),...(input.workUnits?{workUnits:1}:{})};
   registerWebRun(runId,projectId,models.binding,params);
   for(const knowledge of input.knowledge) ledger.putRevision({projectId,runId,name:`knowledge/${knowledge.name}`,kind:'report',content:{...knowledge,trust:'user-provided',executable:false}}, {kind:'system',id:'web'});
   // 规则包是结构化知识：source 节点用它建 charter，故事/用例/门禁也能引用规则 ID。
   if(!prepared||prepared.fresh)for(const {pack,hash} of packs) bindRulePack(runId,projectId,pack,hash,{kind:'system',id:'web'});
-  // 领域参考：项目当前那一版冻结绑定进这次运行；没有就没有（domainReferences.ts）。
-  if(!prepared&&!input.projectRunMode)bindDomainReference(runId,projectId);
+  // 领域参考：项目当前那一版冻结绑定进这次运行；没有就没有（domainReferences.ts）。它是用户写的项目数据，不是生成的历史资产：
+  // clean / incremental / rebuild 运行计划同样绑定（计划的配置指纹含它，变了要重新规划）。从节点重跑随 knowledge/* 复制，不重绑。
+  if(!prepared||prepared.fresh)bindDomainReference(runId,projectId);
   if(imported)ledger.putRevision({projectId,runId,name:'product/model-candidate',kind:'report',content:imported},{kind:'system',id:'web'});
   if(importedStories)ledger.putRevision({projectId,runId,name:'validated/stories',kind:'stories',content:importedStories},{kind:'system',id:'stage-validator'});
   // Acknowledge creation immediately; the source node owns exploration and its failures.
@@ -269,7 +273,7 @@ export async function cancelProjectWorkflow(runId: string, projectId: string) {
   runLedger().db.prepare("UPDATE wf_runs SET status='cancelled' WHERE id=?").run(runId);
   await cancelPreparation(runId,projectId);
   await cancelSourceSession(runId);
-  cancelRun(runId); cancelNativeRun(runId); cancelClaude(runId); cancelCodex(runId);
+  cancelRun(runId); cancelNativeRun(runId); cancelClaude(runId); cancelCodex(runId); cancelExplorationPlanner(runId);
   await cancelWorkflowExecutions(runId, projectId);
   runLedger().db.prepare("UPDATE wf_runs SET status='cancelled' WHERE id=?").run(runId);
   return { status: "cancelled", changed: true };
@@ -329,7 +333,7 @@ export async function resumeProjectWorkflow(runId: string, projectId: string, ne
 
 /** Fork generation work without rewriting history or transferring execution approval. */
 export async function rerunProjectNode(runId:string,projectId:string,raw:unknown) {
-  const input=z.object({node:z.enum(['source','modules','stories','cases','gate']),idempotencyKey:z.string().min(1).max(160)}).parse(raw);
+  const input=z.object({node:z.enum(['source','modules','stories','cases','gate']),idempotencyKey:z.string().min(1).max(160),planner:z.enum(['claude-code','codex','penguin']).optional()}).parse(raw);
   const l=runLedger(), old=l.requireRun(runId,projectId), row=l.getRun(runId,projectId);
   if(['running','queued','pending'].includes(row.status))throw new LedgerError(409,'请先停止当前运行，再从节点重跑');
   if(old.input.parameters.launchedBy!=='web')throw new LedgerError(409,'该运行需在原宿主重跑');
@@ -343,7 +347,8 @@ export async function rerunProjectNode(runId:string,projectId:string,raw:unknown
   const params=old.input.parameters;
   const nextId='run-'+randomUUID();
   const created=await createWebWorkflow(projectId,{...params,idempotencyKey:'rerun:'+contentHash(runId+':'+input.node+':'+input.idempotencyKey),
-    planner:params.plannerRuntime,workUnits:!!params.workUnits,
+    // 换规划宿主等于新建运行：规划运行时仍在登记时冻结，原运行不改。
+    planner:input.planner??params.plannerRuntime,workUnits:!!params.workUnits,
     materials:input.node==='source'&&params.sourceKind==='explore'?[]:materials,
     rulePacks:knowledge.filter(r=>r.name.startsWith('knowledge/rulepack/')).map(r=>(l.readRevision(r.id,projectId).content as any).rulePack),
   },{runId:nextId,node:input.node});
@@ -358,6 +363,12 @@ export async function rerunProjectNode(runId:string,projectId:string,raw:unknown
     };
     for(const r of knowledge)copy(r);
     l.putRevision({projectId,runId:nextId,name:'report/rerun-origin',kind:'report',content:{parentRunId:runId,fromNode:input.node,mode:'next-node'}},{kind:'system',id:'rerun'});
+    // 被驳回的故事从故事节点（或更早）重跑时，把驳回理由作为审核意见带给新运行的故事规划（2026-09-24）。
+    if(['source','modules','stories'].includes(input.node)){
+      const storiesRev=all.filter(r=>r.name==='validated/stories').at(-1);
+      const rejection=storiesRev?storyRejection(runId,projectId,storiesRev.id):undefined;
+      if(rejection)l.putRevision({projectId,runId:nextId,name:'knowledge/story-review-feedback.md',kind:'report',content:{name:'story-review-feedback.md',text:`上一版候选故事被人工驳回，理由：${rejection.note}\n请按这条意见重新规划故事；不要原样重交上一版。`,roles:['stories'],trust:'user-provided',executable:false},sourceRefs:[storiesRev!.id]},{kind:'system',id:'rerun'});
+    }
     if(input.node!=='source'){
       const inherited=latest.filter(r=>r.name.startsWith('exploration/')||r.name==='product/model-candidate'||r.name==='context/source'||before.filter(n=>n!=='instructions').some(n=>r.name==='validated/'+n));
       for(const id of old.binding.materialRevisions)copy(l.readRevision(id,projectId).revision);
@@ -376,8 +387,9 @@ export async function rerunProjectNode(runId:string,projectId:string,raw:unknown
       }
     }
     if(before.includes('stories'))inheritStoryApproval(runId,nextId,projectId);
-    if(before.includes('stories')&&pauseForStoryReview(nextId,projectId)){stageEvent(nextId,projectId,input.node,'blocked','等待本次运行的候选故事审核；当前节点尚未启动。');return created;}
+    // 断点先设好再看要不要停下等审核：原先等审核时直接返回，批准之后「只跑下一节点」的断点就丢了，会一路跑下去。
     configureNextNode(nextId,projectId,input.node);
+    if(before.includes('stories')&&pauseForStoryReview(nextId,projectId)){stageEvent(nextId,projectId,input.node,'blocked','等待本次运行的候选故事审核；当前节点尚未启动。');return created;}
     const nextParams=l.requireRun(nextId,projectId).input.parameters;
     stageEvent(nextId,projectId,input.node,'queued','正在启动：等待执行器会话就绪');
     if(input.node==='source')void launchSource(nextId,projectId,dataPath('uploads/'+nextId),nextParams).catch(()=>{});

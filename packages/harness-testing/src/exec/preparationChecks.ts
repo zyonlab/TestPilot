@@ -8,6 +8,12 @@ export const PrerequisitePartSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('environment'), fact: EnvironmentFactSchema, expected: z.union([z.string().min(1), z.number(), z.boolean()]) }).strict(),
   z.object({ kind: z.literal('screen'), statement: z.string().min(1).max(2000), oracle: ScreenOracleSchema.optional() }).strict(),
   z.object({ kind: z.literal('unknown'), reason: z.string().min(1).max(2000) }).strict(),
+  /**
+   * 一个由环境绑定的变量（2026-09-24）：用例要一个「由执行准备绑定」的数量或价格，环境画像给了值，
+   * 准备器却没有任何一种判据能说「它已绑定」——只能停在 missing。这一种只证明变量在当前环境里有非空值，
+   * 不证明值合适：合不合适由试跑本身回答。
+   */
+  z.object({ kind: z.literal('binding'), variable: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }).strict(),
 ]);
 export const PrerequisiteCheckSchema = z.object({
   statement: z.string().min(1).max(4000),
@@ -29,10 +35,19 @@ export const SetupRecipeSchema = z.object({
   entryChecks: z.array(PrerequisiteCheckSchema).min(1).max(10),
   steps: z.array(z.string().min(1).max(2000)).min(1).max(15),
   postconditions: z.array(PrerequisiteCheckSchema).min(1).max(10),
-  sideEffects: z.enum(['none', 'ui-only']),
-  // Mutable fixtures need a separate lifecycle contract; this first recipe tier cannot own one.
+  /**
+   * controlled（2026-09-24）：配方为用例建立一个业务前提状态（「平仓」用例要先有持仓），必须声明 provides
+   * （规则包 states 的 id）并带补偿：用例结束后按倒序执行，每一步都有同屏判据。none/ui-only 不能带补偿。
+   */
+  sideEffects: z.enum(['none', 'ui-only', 'controlled']),
+  provides: z.array(z.string().min(1)).max(10).optional(),
+  // Legacy field: recipes never owned free-text cleanup. Controlled recipes use `compensation` with screen checks.
   cleanup: z.array(z.string()).max(0),
-}).strict();
+  compensation: z.array(z.object({ step: z.string().min(1).max(2000), verified: PrerequisiteCheckSchema }).strict()).max(10).optional(),
+}).strict().superRefine((r, ctx) => {
+  if (r.sideEffects === 'controlled' && (!r.provides?.length || !r.compensation?.length)) ctx.addIssue({ code: 'custom', path: ['compensation'], message: 'a controlled recipe declares provides and at least one compensation step with a screen check' });
+  if (r.sideEffects !== 'controlled' && (r.provides?.length || r.compensation?.length)) ctx.addIssue({ code: 'custom', path: ['sideEffects'], message: 'only a controlled recipe may provide states or carry compensation' });
+});
 export type SetupRecipe = z.infer<typeof SetupRecipeSchema>;
 export type RecipeRef = { id: string; version: number };
 export type Preparation = {
@@ -63,6 +78,12 @@ export async function checkPrerequisite(check: PrerequisiteCheck, input: {
       if (fact?.value !== undefined) status = fact.value === expected ? 'pass' : 'fail';
       detail = `${part.fact}: ${status} (expected ${String(expected)}, observed ${String(fact?.value ?? 'unknown')})`;
     } else if (part.kind === 'unknown') detail = part.reason;
+    else if (part.kind === 'binding') {
+      const value = input.resolve('${env.' + part.variable + '}');
+      source = 'runner:environment-variables';
+      status = value && !value.includes('${env.') ? 'pass' : 'fail';
+      detail = `${part.variable}: ${status === 'pass' ? 'bound in the execution environment' : 'not bound in the execution environment'}`;
+    }
     else if (part.oracle) {
       const snap = await input.snapshot();
       const oracle = JSON.parse(JSON.stringify(part.oracle, (_key, value) => typeof value === 'string' ? input.resolve(value) : value));

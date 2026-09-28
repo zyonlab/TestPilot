@@ -20,9 +20,11 @@ export const StorySchema = z.object({
   requirementDraft: z.object({reason:z.string().min(1),questions:z.array(z.string().min(1)).min(1)}).optional(),
   businessTransitions: z.array(z.object({
     transitionId:z.string().min(1), preconditions:z.array(z.string().min(1)).min(1),
-    acceptanceIndexes:z.array(z.number().int().nonnegative()).min(1),
-    failureAcceptanceIndexes:z.array(z.number().int().nonnegative()).min(1),
-  }).strict()).optional(),
+    // 一条故事可以只绑成功一侧或只绑失败一侧（2026-09-24：原先两侧都必填，同一转换没法拆成成功故事与失败故事）；
+    // 两侧都要在这个转换的全部故事里出现，由 businessTransitionIssues 按并集检查。
+    acceptanceIndexes:z.array(z.number().int().nonnegative()),
+    failureAcceptanceIndexes:z.array(z.number().int().nonnegative()),
+  }).strict().refine(b=>b.acceptanceIndexes.length+b.failureAcceptanceIndexes.length>0,'bind at least one success or failure criterion')).optional(),
   observationLinks: z.array(z.object({
     acceptanceIndex: z.number().int().nonnegative(),
     status: z.enum(['observed', 'partial', 'unobserved']),
@@ -367,6 +369,11 @@ export const TextCaseSchema = z.object({
 
   /** 这条用例兑现故事里的哪几条验收标准。 */
   acRefs: z.array(z.string().min(1)).optional(),
+  /**
+   * 这条用例依赖的业务状态（规则包 states 的 id）。steps：它自己的步骤建立（lifecycle 声明资源/设置）；
+   * preparation：执行准备用配方提供，准备好之前 readiness 保持 blocked。
+   */
+  requiresStates: z.array(z.object({ state: z.string().min(1), provided: z.enum(['steps', 'preparation']) }).strict()).max(10).optional(),
   /** 它覆盖哪几个测试条件（先有条件与覆盖项，再有用例）。 */
   conditionRefs: z.array(z.string().min(1)).optional(),
   /** 场景类型，和设计方法分开。见 `ScenarioType`。 */

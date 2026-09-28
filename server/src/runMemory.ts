@@ -45,6 +45,8 @@ export function captureExecutionMemory(ledger: RunLedger, revisionId: string, pr
 export function selectRunMemory(ledger: RunLedger, runId: string, projectId: string, targetUrl: string, enabled = true, now = Date.now()) {
   table(ledger);
   const scopeHash = scope(ledger, runId, projectId, targetUrl);
+  // clean / rebuild 运行（reuseExperience:false）不读历史执行记忆：隔离要做全，不能只挡准备经验。
+  if (ledger.requireRun(runId, projectId).input.parameters?.reuseExperience === false) enabled = false;
   const rows = enabled && scopeHash ? ledger.db.prepare(`SELECT id,sourceRunId,sourceRevision,fact,expiresAt FROM run_memory
     WHERE projectId=? AND scopeHash=? AND sourceRunId<>? AND createdAt<=? AND expiresAt>?
     ORDER BY createdAt DESC,id LIMIT 24`).all(projectId, scopeHash, runId, now, now) as Array<{id:string;sourceRunId:string;sourceRevision:string;fact:Fact;expiresAt:number}> : [];

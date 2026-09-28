@@ -1,4 +1,4 @@
-import {BusinessTransitionSchema} from './businessLifecycle.js';
+import {BusinessTransitionSchema,BusinessStateSchema} from './businessLifecycle.js';
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJSON } from "@testpilot/harness-core/run-contracts";
@@ -227,6 +227,8 @@ export const ProductRulePackSchema = z
      * 表现为四行看起来很正常的 `blocked`。见下面 `target_requires_unprovidable`。
      */
     businessTransitions: z.array(BusinessTransitionSchema).default([]),
+    /** 业务状态词表：转换的 requiresStates / producesStates 引用它。可选、无默认值，不改旧规则包的哈希。 */
+    states: z.array(BusinessStateSchema).optional(),
     externalCapabilities: z.array(z.string()).default([]),
     /**
      * 这个产品特有的**禁点文案**，接在通用默认后面。
@@ -299,10 +301,12 @@ export function validateRulePack(raw: unknown): { ok: true; pack: ProductRulePac
   const sources = uniq(pack.sources, "/sources", errors);
   const modules = uniq(pack.modules, "/modules", errors);
   const features = uniq(pack.features, "/features", errors);
+  const states = uniq(pack.states ?? [], '/states', errors);
   uniq(pack.businessTransitions, '/businessTransitions', errors);
   pack.businessTransitions.forEach((t,i)=>{
     if(!features.has(t.featureId))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/featureId`,message:`feature ${t.featureId} missing`});
     t.sourceRefs.forEach((id,j)=>{if(!sources.has(id))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/sourceRefs/${j}`,message:`source ${id} missing`});});
+    for(const key of ['requiresStates','producesStates'] as const)(t[key]??[]).forEach((id,j)=>{if(!states.has(id))errors.push({code:'dangling_ref',jsonPointer:`/businessTransitions/${i}/${key}/${j}`,message:`state ${id} missing`});});
   });
   const rules = uniq(pack.rules, "/rules", errors);
   uniq(pack.targets, "/targets", errors);

@@ -1,5 +1,5 @@
 import {ProjectDiscoveries} from './projectDiscoveries.js';
-import {storyReviewState,approveStoryRequirements} from './storyReview.js';
+import {storyReviewState,approveStoryRequirements, rejectStoryRequirements} from './storyReview.js';
 import { startPreparation, preparationStep, preparationStatus } from './preparation.js';
 import { controls, setControls, beginStage, stageEvent } from './workflowControls.js';
 import { runRoleSpend } from './roleSpend.js';
@@ -131,6 +131,7 @@ export function runRouter() {
   // Imported output is untrusted content. Only the stage service may validate/finalize it.
   router.get('/:runId/story-requirements',wrap((req,res)=>res.json(storyReviewState(req.params.runId,req.params.projectId))));
   router.post('/:runId/story-requirements/approve',wrap((req,res)=>res.json(approveStoryRequirements(req.params.runId,req.params.projectId,req.body?.revisionId,reviewerPrincipal(req)))));
+  router.post('/:runId/story-requirements/reject',wrap((req,res)=>res.json(rejectStoryRequirements(req.params.runId,req.params.projectId,req.body?.revisionId,req.body?.note,reviewerPrincipal(req)))));
   router.post("/:runId/artifacts", wrap((req, res) => {
     authorizeRun(req.params.runId, req.headers.authorization?.replace(/^Bearer /, ""));
     const { name, kind, content, mediaType, sourceRefs, parentRevision } = req.body;

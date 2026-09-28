@@ -23,8 +23,8 @@ rule 93e0a850  `sourceRefs` names the specification sections this case was
 rule bad5598d  A suite that is all happy path is a bad suite. Cover the ref
 rule 0be8129a  Design at most the number of cases stated as CASE BUDGET in
 rule 6c6015b6  `priority` says how much it costs to ship this broken, not h
-rule 0de90497  Every new case includes lifecycle version 1. Completeness is
-rule 078f0757  `postSteps` puts the product back. If the case creates, edit
+rule 17526ec2  Every new case includes lifecycle version 2. Completeness is
+rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 -->
 
 # TestPilot：为一条故事设计文本用例
@@ -169,21 +169,39 @@ rule 078f0757  `postSteps` puts the product back. If the case creates, edit
 
 用例设计可在未执行时完成。登录、测试数据、控件定位、数值判据等就绪情况单独记录，留给执行准备核验；不能由 unobserved 自动推导 requires-fixture，也不能把它自动改成 ready。执行和报告仍须真实证据，不能为了提高 ready 数量跳过门禁。
 
-## 生命周期义务（版本 1）
+## 生命周期义务（版本 2）
 
-每条新用例给出 `lifecycle`，完整性按业务义务判断，不按固定步数、平均步数或泊松分布判断。
-`version:1`；`mode:read-only|controlled`；`rationale` 说明；`sourceRefs` 引用本用例真实来源；
-`supports` 绑定 `$expected` 或原断言 id；`baseline` 是同屏确定性检查，逐条以原文 statement 覆盖每个 precondition。
+每条新用例给出 `lifecycle`，`version:2`。完整性按业务义务判断，不按固定步数、平均步数或泊松分布判断。
+先分清这条用例**改了什么**，每一类的义务不同：
+
+1. **界面临时状态**（切 Tab、开面板/弹窗/下拉、在不保存的输入框里打字）：没有义务。每条用例都从新打开的入口页开始，
+   **不要**为它写 postSteps；只做这些的用例是 `mode:"read-only"`。
+2. **会话状态**（连接/断开钱包、切网络、登出）：写 `session:"changed"`，执行器用完就丢弃这个浏览器。
+   **不要**写「重新连接」的 postStep。可以仍是只读。
+3. **持久设置**（刷新后还在的偏好或配置：某种模式、档位、产品会保存的默认值）：`mode:"controlled"`，
+   `settings:[{id,sourceRef,name,original,changedAfterStep,observed}]`。`original` 是执行前屏幕上的原值，
+   `observed` 的判据值包含 original；一条 `cleanup{id,settingId,postStep,verified}`，postStep 把它设回**原样的 original**，
+   verified 的判据值包含 original。
+4. **本次创建的业务资源**：`mode:"controlled"`，`resources:[{id,sourceRef,identityKind,identity,establishAfterStep,established,ownership,vacant?}]`，
+   每个资源一条 `cleanup{id,resourceId,postStep,verified}`。`identityKind` 三选一：
+   - `generated`：产品会显示你输入的名字；identity 含字面量 `${env.TP_LIFECYCLE_ID}`。
+   - `attribute`：产品不显示自定义标签，只能靠本次选定的一个可见值认出它（一个特别的数量或价格）；
+     identity 含一个 `${env.NAME}` 变量，由执行准备绑定成那个可见值，步骤里输入的也是同一个变量。
+   - `slot`：同一个键下最多一个（比如每个账户每个标的一个）；identity 就是屏幕上显示的键；
+     `vacant` 是证明该格位执行前为空的同屏判据（清理后也会再核一次）。
+   `establishAfterStep`（从 1 起）那一步和清理 postStep 都要**原样包含 identity**。generated/attribute 的
+   established、ownership、cleanup verified 三处判据都要包含 identity；ownership 同时写出项目提供的账户/上下文。
+5. **不可逆副作用**（手续费、消耗的额度）：列进 `sideEffects`，判据不能要求它们还原。
+
+总是要有：`mode`、`rationale`、`sourceRefs`（本用例真实来源）、`supports`（`$expected` 或断言 id）；
+`baseline` 每条 precondition 一项，statement 与 precondition **逐字相同**，带同屏确定性检查。
+每条 postStep 恰好被一条 cleanup 引用；只读用例 postSteps、resources、settings、cleanup 都为空。
 检查形状是 `{statement,checks:[{kind:"screen",statement,oracle:{kind:"text"|"noText",value}}]}`，
-不得用模型声明代替执行回执，不调用被测接口。
-
-只读或拒绝路径可以很短，使用 `resources:[]`、`cleanup:[]`；拒绝断言必须证明未产生资源。
-受控资源仍在现有 `steps` 建立，在 `postSteps` 清理，不能另造脚本：
-`resources:[{id,sourceRef,identity,establishAfterStep,established,ownership}]`；
-`cleanup:[{id,resourceId,postStep,verified}]`。步骤编号从 1 起。
-`identity` 必须包含字面量 `${env.TP_LIFECYCLE_ID}`（执行器每次生成新值），创建步骤与清理步骤明确引用整个 identity。
-`ownership` 同屏证据要包含该 identity 和项目提供的账户/上下文。每个资源必须有失败补偿；执行器先验证新身份不存在。
-目前仅支持本次执行建立的资源；需要修改共享既有 fixture 而没有隔离身份时，readiness 明确 blocked，不能虚构归属。
+不得用模型声明代替执行回执，不调用被测接口。清理在失败时也作为补偿执行。
+用例需要但**不由它自己建立**的状态（比如关闭或修改某个已有资源之前，要先有这个资源）是前提，不是资源：保留用例，readiness 标 blocked 并写明缺什么前提。
+单元材料里的转换列了 `requiresStates` 时，认领该转换**成功条件**的用例要写 `requiresStates:[{state, provided}]`：
+`provided:"steps"` 是自己的步骤建立它（lifecycle 声明为资源或设置并清理），`provided:"preparation"` 是由执行准备的配方提供（准备好之前不能执行）。
+需要这个状态**不存在**的失败路径用例不写。
 前置、基线、身份、归属和清理依据来自项目材料。准备器不能删改已审核义务或移动其步骤绑定。
 低影响 recipe 仍只允许 none/ui-only；旧产物缺契约为 unknown，不自动补成 verified。
 

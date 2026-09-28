@@ -90,3 +90,16 @@ it("planner tools omit operator decisions and reject forged calls before transpo
   expect(calls).toBe(0);
   await review.handler({ action: "list", params: { projectId: "p", runId: "r" } });
 });
+
+it("planner tools cannot save knowledge library versions (project data is a human decision)", async () => {
+  const { registerHostDomains } = await import("../src/host/tools.js");
+  const registered = new Map<string, { config: any; handler: any }>();
+  let calls = 0;
+  registerHostDomains({ registerTool(name, config, handler) { registered.set(name, { config, handler }); } }, { call: async () => { calls++; return {}; } } as any);
+  expect(actionIndex().get("tp_project.save_knowledge_library")!.spec.operatorOnly).toBe(true);
+  const project = registered.get("tp_project")!;
+  expect(project.config.inputSchema.action.options).not.toContain("save_knowledge_library");
+  expect(project.config.inputSchema.action.options).toContain("knowledge_library");
+  expect((await project.handler({ action: "save_knowledge_library", params: { projectId: "p", kind: "domainKnowledge" }, body: { value: "x" } })).isError).toBe(true);
+  expect(calls).toBe(0);
+});

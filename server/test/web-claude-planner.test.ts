@@ -125,19 +125,49 @@ it("reruns cases with frozen upstream receipts and fresh instruction binding",as
  expect(startWebRun.mock.calls.find(([i])=>i.wfRunId===result.wfRunId)?.[0]).toMatchObject({resumeStage:"cases"});
 });
 
+it("switches planner only by forking a new run; the original keeps its frozen runtime",async()=>{
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec("rerun-switch-planner",{planner:"codex"}));
+ const l=service.runLedger();
+ service.freezeRunMaterials(wfRunId,projectId,join(dir,"uploads",wfRunId));
+ l.db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(wfRunId);
+ const result=await ops.rerunProjectNode(wfRunId,projectId,{node:"source",idempotencyKey:"switch",planner:"claude-code"});
+ expect(l.requireRun(result.wfRunId,projectId).binding.models.runtime).toBe("claude-code");
+ expect(l.requireRun(result.wfRunId,projectId).input.parameters.plannerRuntime).toBe("claude-code");
+ expect(l.requireRun(wfRunId,projectId).binding.models.runtime).toBe("codex");
+ const same=await ops.rerunProjectNode(wfRunId,projectId,{node:"source",idempotencyKey:"keep"});
+ expect(l.requireRun(same.wfRunId,projectId).binding.models.runtime).toBe("codex");
+});
+
+it("a rerun from the stories node carries the human rejection reason into the new run as story feedback",async()=>{
+ const {wfRunId}=await ops.createWebWorkflow(projectId,spec("rerun-after-reject",{planner:"codex"}));
+ const l=service.runLedger(),c=await import("../src/workflowControls.js"),review=await import("../src/storyReview.js");
+ service.freezeRunMaterials(wfRunId,projectId,join(dir,"uploads",wfRunId));
+ l.db.exec("CREATE TABLE IF NOT EXISTS run_stage_receipts (runId TEXT NOT NULL,stage TEXT NOT NULL,revisionId TEXT NOT NULL,json TEXT NOT NULL,PRIMARY KEY(runId,stage))");
+ for(const node of ["modules","instructions"]){const r=l.putRevision({projectId,runId:wfRunId,name:"validated/"+node,kind:"report",content:{files:[]}},{kind:"system",id:"fixture"});l.db.prepare("INSERT INTO run_stage_receipts VALUES (?,?,?,?)").run(wfRunId,node,r.id,JSON.stringify({revisionId:r.id}));c.stageEvent(wfRunId,projectId,node,"done");}
+ c.stageEvent(wfRunId,projectId,"source","done");
+ const stories=l.putRevision({projectId,runId:wfRunId,name:"validated/stories",kind:"stories",content:{stories:[{id:"C1",title:"Candidate",acceptance:["Outcome"],requirementDraft:{reason:"Hypothesis",questions:["Confirm"]}}]}},{kind:"system",id:"fixture"});
+ l.db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(wfRunId);
+ review.rejectStoryRequirements(wfRunId,projectId,stories.id,"范围不对：只关心限价单",{kind:"human",id:"reviewer"});
+ l.db.prepare("UPDATE wf_runs SET status='paused' WHERE id=?").run(wfRunId);
+ const result=await ops.rerunProjectNode(wfRunId,projectId,{node:"stories",idempotencyKey:"after-reject"});
+ const feedback=l.listRevisions(projectId,result.wfRunId).find(r=>r.name==="knowledge/story-review-feedback.md");
+ expect(feedback).toBeTruthy();
+ expect((l.readRevision(feedback!.id,projectId).content as {text:string;roles:string[]})).toMatchObject({roles:["stories"],text:expect.stringContaining("范围不对：只关心限价单")});
+});
+
 it('freezes chosen library versions and honors an explicit empty rule selection',async()=>{
  const lib=await import('../src/knowledgeLibrary.js');
- const first=lib.saveKnowledgeLibrary(projectId,'domainKnowledge',{value:'First selected knowledge'});
+ const first=lib.saveKnowledgeLibrary(projectId,'domainKnowledge',{value:'First selected knowledge'},{kind:'human',id:'local-operator'});
  const example=lib.listKnowledgeLibrary(projectId,'rulePack')[0]!;
  const {wfRunId}=await ops.createWebWorkflow(projectId,spec('library-selected',{planner:'codex',knowledgeSelection:first.id,rulePackSelection:example.id}));
  await new Promise(r=>setTimeout(r,30));
- lib.saveKnowledgeLibrary(projectId,'domainKnowledge',{value:'Later knowledge must not replace the first'});
+ lib.saveKnowledgeLibrary(projectId,'domainKnowledge',{value:'Later knowledge must not replace the first'},{kind:'human',id:'local-operator'});
  const ledger=service.runLedger(),revs=ledger.listRevisions(projectId,wfRunId);
  const content=ledger.readRevision(revs.find(r=>r.name==='knowledge/domain-knowledge.md')!.id,projectId).content as any;
  expect(content.text).toBe('First selected knowledge');expect(content.roles).toContain('source');
  expect(revs.some(r=>r.name.startsWith('knowledge/rulepack/'))).toBe(true);
  expect(ledger.requireRun(wfRunId,projectId).input.parameters.knowledgeSelection).toBe(first.id);
- lib.saveKnowledgeLibrary(projectId,'rulePack',{value:lib.readKnowledgeLibrary(projectId,'rulePack',example.id).value});
+ lib.saveKnowledgeLibrary(projectId,'rulePack',{value:lib.readKnowledgeLibrary(projectId,'rulePack',example.id).value},{kind:'human',id:'local-operator'});
  const empty=await ops.createWebWorkflow(projectId,spec('library-none',{planner:'codex',knowledgeSelection:null,rulePackSelection:null}));
  await new Promise(r=>setTimeout(r,30));
  expect(ledger.listRevisions(projectId,empty.wfRunId).some(r=>r.name.startsWith('knowledge/rulepack/'))).toBe(false);
