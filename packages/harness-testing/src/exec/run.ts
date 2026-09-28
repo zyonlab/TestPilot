@@ -20,6 +20,7 @@ import { capturePerf, type PerfMetrics } from "../baselines/perf.js";
 import { resolveText, redact, withModel, type ResolveContext } from "@testpilot/harness-core";
 import type { ChainAssertion, OracleCheck, StorageState } from "../types.js";
 import { describeOracle, evaluateOracle, type MachineOracle, type PageSnapshot } from "./oracle.js";
+import type { RecordedReadings } from "./decimalEquation.js";
 import { sampleJudge } from "./judge.js";
 import { classifyFailure, isInfraError, type Failure } from "../failure.js";
 import { observeApi } from "./apiOracle.js";
@@ -91,7 +92,9 @@ export interface RunResult {
  * 成功提示几秒后自己消失，重看就会把「下单其实成功了」判成「没有成功提示」。
  * 生命周期核对（释放、收尾、基线）看的是状态，不是提示，两种都重看。
  */
-const SETTLING_KINDS = new Set(["text"]);
+// decimal-equation 也等：表格里的数在成交、改保证金之后才刷新；同一行几列不是同一时刻的价，偶尔对不上，重读一次就对上
+// （docs/v3/15 阶段 4：201 张持仓截图里 1 张 PNL 与 Mark−Entry 正负相反）。真错的重读几次仍然错。
+const SETTLING_KINDS = new Set(["text", "decimal-equation"]);
 const SETTLE_RETRIES = 4, SETTLE_INTERVAL_MS = 1000;
 
 async function snapshotPage(page: { evaluate: (fn: () => unknown) => Promise<unknown>; url: () => string }): Promise<PageSnapshot> {
@@ -254,9 +257,9 @@ export async function executeRun(
    * 屏幕判据不成立时隔一秒再看，最多再看四次；成立就不再等。只对读屏的判据这样做——判官不重采。
    * 2026-09-27 C-POS-04-03：平仓后立刻核对「没有 Positions (」失败，两步后同一个页面已经是「No open positions yet」。
    */
-  const settle = async <T extends { status: string }>(read: () => Promise<T>): Promise<T> => {
+  const settle = async <T extends { status: string }>(read: () => Promise<T>, retryOn = "fail"): Promise<T> => {
     let out = await read();
-    for (let i = 0; i < SETTLE_RETRIES && out.status === "fail"; i++) { await new Promise((r) => setTimeout(r, opts.settleIntervalMs ?? SETTLE_INTERVAL_MS)); out = await read(); }
+    for (let i = 0; i < SETTLE_RETRIES && out.status === retryOn; i++) { await new Promise((r) => setTimeout(r, opts.settleIntervalMs ?? SETTLE_INTERVAL_MS)); out = await read(); }
     return out;
   };
   const lifecycle = lifecycleExecution(opts.lifecycle, opts.postSteps ?? [], {
@@ -612,6 +615,8 @@ export async function executeRun(
     let assertFailed: string | undefined;
     let unobservable: string | undefined;
     let infraError = false;
+    /** 这条用例记下的读数（`reading` 判据），后面步骤的 decimal-equation 按 id 引用。docs/v3/15 阶段 4。 */
+    const readings: RecordedReadings = new Map();
     /**
      * 在第 n 步之后当场判一条断言：机器判据取此刻的快照，没有判据的交给判官，开放问题只记不判。
      * 2026-09-15 Vikunja：两条描述「途经那一屏」的断言在最后一步之后判，页面早已换了，恒红。
@@ -642,10 +647,15 @@ export async function executeRun(
       if (a.oracle && a.oracle.kind !== "none") {
         let snap = await snapshotPage(session!.page);
         if (a.oracle.kind === "judge" && !(await judgeInto(snap, a.oracle))) return;
-        let verdict = evaluateOracle(a.oracle, snap, snapBefore);
+        let verdict = evaluateOracle(a.oracle, snap, snapBefore, readings);
         if (SETTLING_KINDS.has(a.oracle.kind) && verdict.status === "fail") {
           const o = a.oracle;
-          verdict = await settle(async () => { snap = await snapshotPage(session!.page); return evaluateOracle(o, snap, snapBefore); });
+          verdict = await settle(async () => { snap = await snapshotPage(session!.page); return evaluateOracle(o, snap, snapBefore, readings); });
+        }
+        // 记读数：表格那一行常在步骤之后才出来（成交、刷新），读不到先等几轮再算没量到。
+        if (a.oracle.kind === "reading" && verdict.status === "unobservable") {
+          const o = a.oracle;
+          verdict = await settle(async () => { snap = await snapshotPage(session!.page); return evaluateOracle(o, snap, snapBefore, readings); }, "unobservable");
         }
         const detail = redact(verdict.detail, secretVals);
         oracle.push({ assertion: a.statement, status: verdict.status, detail, decidedBy: a.oracle.kind === "judge" ? "judge" : "machine",
@@ -730,7 +740,7 @@ export async function executeRun(
         snapAfter.judge = undefined;
         if (!(await judgeInto(snapAfter, check.oracle))) continue;
       }
-      const verdict = evaluateOracle(check.oracle, snapAfter, snapBefore);
+      const verdict = evaluateOracle(check.oracle, snapAfter, snapBefore, readings);
       /**
        * **判据的 detail 也要抹密钥。**
        *

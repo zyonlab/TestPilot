@@ -23,7 +23,7 @@ it('never derives human identity from __actor and freezes all assertion changes,
 });
 it('routes versioned human edits to a new review revision and detects direct projection tampering', async () => {
   vi.stubEnv('MIDSCENE_MODEL_NAME', 'fixture'); vi.stubEnv('MIDSCENE_MODEL_BASE_URL', 'https://fixture.test/v1'); vi.stubEnv('MIDSCENE_MODEL_API_KEY', 'fixture-key');
-  const runId = service.registerHostRun(projectId, { runtime: 'codex', externalId: 'intent', idempotencyKey: 'intent', materials: [{ name: 'counter.md', text: 'Counter increments from 0 to 1.' }] }).runId;
+  const runId = service.registerHostRun(projectId, { runtime: 'codex', externalId: 'intent', idempotencyKey: 'intent', materials: [{ name: 'counter.md', text: 'Counter increments from 0 to 1. Counter is 1 after one click.' }] }).runId;
   const stages = await import('../src/runStages.js'), approvals = await import('../src/approvedRuns.js'), delivery = await import('../src/decisionDelivery.js');
   stages.loadRunInstructions(runId, projectId); const ref = stages.retrieveRunSpec(runId, projectId, { query: 'Counter', budgetTokens: 2000 }).chunks[0].id;
   const stories = [{ id: 's1', title: 'Counter', acceptance: [] }]; stages.writeRunStage(runId, projectId, 'stories', { stories });

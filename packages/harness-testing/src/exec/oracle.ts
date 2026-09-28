@@ -1,4 +1,4 @@
-import { DecimalEquationSchema, evaluateDecimalEquation } from "./decimalEquation.js";
+import { DecimalEquationSchema, ReadingSchema, evaluateDecimalEquation, evaluateReading, type RecordedReadings } from "./decimalEquation.js";
 import { compareDecimal, compareDecimalChange } from './decimal.js';
 import { z } from "zod";
 
@@ -25,6 +25,7 @@ import { z } from "zod";
 
 export const MachineOracleSchema = z.discriminatedUnion("kind", [
   DecimalEquationSchema,
+  ReadingSchema,
   /**
    * `none`：tier 3 用的那一个——**判决要模型看一眼屏幕**，没有程序能核对的形式。
    *
@@ -179,14 +180,15 @@ export function aggregateJudge(
 export function tierOf(oracle: MachineOracle): 1 | 2 | 3 {
   // judge 是模型判的，只是判得更有章法：它交付的永远是 tier 3。
   if (oracle.kind === "judge") return 3;
-  if (oracle.kind === "delta") return 2;
+  if (oracle.kind === "delta" || oracle.kind === "reading") return 2;
   if (oracle.kind === "api") return oracle.op === "increased" || oracle.op === "decreased" || oracle.op === "unchanged" ? 2 : 1;
   return 1;
 }
 
 export function describeOracle(oracle: MachineOracle): string {
   switch (oracle.kind) {
-    case "decimal-equation": return "同快照十进制公式核验";
+    case "decimal-equation": return oracle.recorded?.length ? `十进制公式核验（引用前面记下的 ${oracle.recorded.join("、")}）` : "同快照十进制公式核验";
+    case "reading": return `记下读数 ${oracle.input.id}：「${oracle.input.label}」${oracle.input.row ? `（${oracle.input.row.key} 那一行）` : ""}`;
     // 明说自己没有机器判据的那一种：执行时由模型看屏幕表态（tier 3）。
     case "none":
       return "由模型看屏幕判定（没有机器判据）";
@@ -304,9 +306,12 @@ export function evaluateOracle(
   oracle: MachineOracle,
   after: PageSnapshot,
   before?: PageSnapshot,
+  /** 这条用例到此为止记下的读数：`reading` 往里写，引用它们的 decimal-equation 从里读。 */
+  readings?: RecordedReadings,
 ): OracleVerdict {
   switch (oracle.kind) {
-    case "decimal-equation": return evaluateDecimalEquation(oracle, after);
+    case "decimal-equation": return evaluateDecimalEquation(oracle, after, Date.now(), readings);
+    case "reading": return evaluateReading(oracle, after, readings ?? new Map());
     /**
      * `none` 不是一个能跑的判据：它宣称的正是「这里没有机器判据」。
      * 交给判屏那条路，而不是在这里假装判过——`skipped` 和 `pass` 不是一回事。

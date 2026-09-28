@@ -114,3 +114,35 @@ describe('one UI action per step', () => {
     expect(rule(kase(['Click the Buy / Long tab', '在 Size 输入 0.01', '点击 Place Order', 'waitFor: the order row shows up, then read it']))).toBeUndefined();
   });
 });
+
+describe('absence asserted on the removal step', () => {
+  // 2026-09-27 C-POS-04-03：关闭后当步核对「没有了」失败，界面还没刷新。
+  const kase = (afterStep: number) => ({ stories: [{ id: 'S1', title: 's', acceptance: ['a'] }], cases: [readOnly({ id: 'C1', storyId: 'S1', title: 't', designMethod: 'equivalence', steps: ['Click the row Cancel button', 'Click the History tab'], postSteps: [], expected: 'Row gone', tier: 1, key: 'k|p|a', priority: 'P1', scenarioType: 'positive', sourceRefs: ['spec#1'], assertions: [{ id: 'A1', afterStep, statement: 'row gone', oracle: { kind: 'noText', value: 'Row 1' } }] })], flows: [] }) as never;
+  it('warns when noText follows the removing step directly, not one step later', () => {
+    expect(runGate(kase(1)).findings.find(x => x.rule === 'absence-same-step')?.args).toEqual({ assertions: 'A1' });
+    expect(runGate(kase(2)).findings.some(x => x.rule === 'absence-same-step')).toBe(false);
+  });
+});
+
+describe('ui literals must come from the materials', () => {
+  // docs/v3/15 2.4b：界面字面值在领域参考与检索材料里都查不到，多半是凭印象写的。
+  const kase = (steps: string[], value: string) => ({ stories: [{ id: 'S1', title: 's', acceptance: ['a'] }], cases: [readOnly({ id: 'C1', storyId: 'S1', title: 't', designMethod: 'equivalence', steps, postSteps: [], expected: 'shown', tier: 1, key: 'k|p|a', priority: 'P1', scenarioType: 'positive', sourceRefs: ['spec#1'], assertions: [{ id: 'A1', statement: 'shown', oracle: { kind: 'text', value } }] })], flows: [] }) as never;
+  const known = 'The order panel has a Place Order button.\nAfter an order: Open Orders (1) tab, toast "Order placed".';
+  it('warns on oracle values and quoted step labels the materials never show', () => {
+    const f = runGate(kase(['点击「Submit Order」', 'Click "Place Order"'], 'Order submitted'), { knownText: known }).findings.find(x => x.rule === 'literal-unsourced');
+    expect(f?.args).toEqual({ literals: 'Order submitted, Submit Order' });
+  });
+  it('matches ignoring case and spacing, and skips variables and bare numbers', () => {
+    expect(runGate(kase(['Click "place  order"', '输入「${env.SIZE}」', '输入「0.001」'], 'open orders (1)'), { knownText: known }).findings.some(x => x.rule === 'literal-unsourced')).toBe(false);
+  });
+  it('does nothing without materials', () => {
+    expect(runGate(kase(['点击「Submit Order」'], 'Order submitted')).findings.some(x => x.rule === 'literal-unsourced')).toBe(false);
+  });
+});
+
+describe('ui literals admitted as unverified', () => {
+  it('stops flagging a literal the case itself names as unverified in readiness.reason', () => {
+    const bundle = { stories: [{ id: 'S1', title: 's', acceptance: ['a'] }], cases: [readOnly({ id: 'C1', storyId: 'S1', title: 't', designMethod: 'equivalence', steps: ['Click "Market Close"'], postSteps: [], expected: 'closed', tier: 1, key: 'k|p|a', priority: 'P1', scenarioType: 'positive', sourceRefs: ['spec#1'], readiness: { design: 'candidate', execution: 'ready', reason: 'Market Close button name is unverified' } })], flows: [] } as never;
+    expect(runGate(bundle, { knownText: 'nothing relevant' }).findings.some(x => x.rule === 'literal-unsourced')).toBe(false);
+  });
+});

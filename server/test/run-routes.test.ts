@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { readOnlyLifecycle } from "./helpers/lifecycle.js";
 let dir: string, url: string, server: Server, projectId: string;
 let database: typeof import("../src/db.js"), service: typeof import("../src/runService.js");
-const input = { externalId: "session-one", idempotencyKey: "session-one", runtime: "codex", materials: [{ name: "counter.md", text: "Count increases once." }] };
+const input = { externalId: "session-one", idempotencyKey: "session-one", runtime: "codex", materials: [{ name: "counter.md", text: "Count increases once. The page shows Count equals 1." }] };
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "tp-run-api-")); vi.stubEnv("TP_DATA_DIR", dir);
   database = await import("../src/db.js"); service = await import("../src/runService.js");

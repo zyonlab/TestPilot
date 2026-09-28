@@ -7,6 +7,8 @@ import { NeedProject } from '@/components/NeedProject';
 import { ExecutionCompare } from '@/components/workbench/ExecutionCompare';
 import { RunReportPanel } from '@/components/workbench/RunReportPanel';
 import { RegressionCandidates } from '@/components/workbench/RegressionCandidates';
+import { FactCandidates } from '@/components/workbench/FactCandidates';
+import { StandardSets } from '@/components/workbench/StandardSets';
 import { TextCaseDetail } from '@/components/workbench/TextCaseDetail';
 import { Button } from '@/components/ui';
 import { WorkflowError, workflowRequestId, workflowBase, workflowHref, workflowRequest as request, type WorkflowRun, type ReviewCase, type Revision, type Execution } from '@/lib/workflowRuns';
@@ -99,6 +101,8 @@ export function RunDetail({ projectId, run, refresh }: { projectId: string; run:
         <ExecutionCompare projectId={projectId} runId={run.id} executionId={executions[executions.length - 1]?.id} />
       </section>}
       {(executions.length > 0 || finalized) && <RegressionCandidates key={`${run.id}-${executions.length}-${run.status}`} projectId={projectId} runId={run.id} hasExecutions={executions.length > 0} />}
+      {(executions.length > 0 || finalized) && <FactCandidates key={`facts-${run.id}-${executions.length}-${run.status}`} projectId={projectId} runId={run.id} />}
+      {executions.length > 0 && <StandardSets key={`std-${run.id}-${executions.length}`} projectId={projectId} runId={run.id} />}
     </>}
     {error && <p role="alert" className="rounded border border-bad/30 p-3 text-sm text-bad">{t('workflow.requestFailed')} <code className="break-all">{error}</code></p>}{message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}
     <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{t('workflow.artifacts')} <span className="font-mono text-muted-foreground">{run.revisions.length}</span></h3><label className="text-xs">{t('workflow.type')} <select className="rounded border border-border bg-background px-2 py-1" value={kind} onChange={e => setKind(e.target.value)}><option value="">{t('workflow.allTypes')}</option>{[...new Set(run.revisions.map(r => r.kind))].map(k => <option key={k} value={k}>{t(`workflow.kind.${k}`)}</option>)}</select></label></div>

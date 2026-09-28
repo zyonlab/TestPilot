@@ -25,11 +25,12 @@ TestPilot takes one of two inputs: a requirement document (spec), or an explorat
 
 How it differs from "let an AI write test scripts":
 
-- **Humans hold two gates.** A person freezes the module tree the model proposes, and approves each text case. Only approved cases are compiled and run.
+- **Humans hold the gates.** A person freezes the module tree the model proposes, approves each text case, and decides regression candidates. Only approved cases are compiled and run. What is learned from data (interface facts, standard sets, a new executor model) is only proposed; a person decides whether it takes effect.
 - **Verdicts come from the screen.** Cases drive the product's UI and judge what the UI shows. They never call the product's own API for a verdict, so "the API said OK but the row never appeared" cannot pass.
 - **Deterministic gates.** Stories, cases and generated code are checked by tools (structure, provenance, oracles, coverage). Scores are computed, not self-reported by the model.
 - **Domain knowledge is project data.** Rule packs, domain references and environment profiles live in the project. You can draft them in a chat drawer or write them yourself. No domain content is hard-coded.
 - **Failures must be explainable.** Every run has an attribution report that assigns problems, by fixed rules, to one of six layers: model, context, tool, workflow, test case, or product. Cases that fail an assertion become regression candidates, and a human decides whether to keep them.
+- **Learns from the runs.** Approved rejection reasons are handed to the next case generation; new interface text met during execution becomes fact candidates; cases that passed real execution can be frozen into a standard set used to compare executor models.
 
 ## Capabilities
 
@@ -42,6 +43,8 @@ How it differs from "let an AI write test scripts":
 | Compile & execute | Approved cases become Midscene actions, run in a browser with a screenshot per step; each case gets visual and performance baselines, and its Midscene report is kept |
 | Run report | Per case: overview, step timeline, checks, visual baseline, performance, raw data, plus a link to the Midscene report |
 | Attribution & regression | See "Failures must be explainable" above |
+| Cross-step readings | `reading` records a value after one step and a later `decimal-equation` compares against it; table cells are read by row key and column header; `compare:"sign"` compares signs only |
+| Learning loop | Counterexamples frozen into each run, interface fact candidates, standard sets, executor evaluation — see "9. Learning from data" below |
 | Export | A standalone Playwright + Midscene project that uses the same oracle implementation as the platform |
 | Host entry | Through an MCP server and plugins, Claude Code (and the experimental Codex and Penguin) can perform what the UI can, except 3 UI-only features (chat drawer, event stream…), enforced by `pnpm check:host-parity` |
 
@@ -132,6 +135,15 @@ The attribution report assigns each problem to one of six layers — model, cont
 Failed verdicts and rejections with a reason become regression candidates, and **approving or dismissing them is a human decision**: an approved defect joins the regression suite and runs from then on, an approved counter-example becomes an evaluation item for the generator.
 
 ![Regression candidates](docs/assets/workflow/13-regression-candidates.png)
+
+### 9. Learning from data: collected automatically, applied only when a person agrees
+
+Run data is not only stored. Collecting and proposing are automatic; anything taking effect is a human decision:
+
+- **Counterexamples**: approved rejection reasons are frozen into the case node's instructions when the next run starts ("this was rejected because…"). A replay of the same run gets the same list; clean and held-out runs get none.
+- **Interface fact candidates**: interface text that preparation or execution mentioned but the domain reference lacks (for example the order button turning into a disabled "Not Enough Margin") becomes a candidate with evidence (present in the recorded screen text, or only reported by the runner). It joins a new domain reference version only after a person writes one sentence on when it appears.
+- **Standard sets**: drafted automatically from cases that passed real execution; only a person can freeze one, after which its content is hashed and never changes.
+- **Executor evaluation**: the current executor model is the baseline; a few candidates each run the frozen set and are scored deterministically by pass rate. Switching the project's executor is a human decision and only affects runs started afterwards.
 
 ## How it fits together
 
@@ -299,6 +311,7 @@ Neither is covered by this release's acceptance.
 | `DENY_HOSTS` | Extra hosts to block | — |
 | `GUARD_STRICT=1` | Block irreversible steps machine-wide | off |
 | `TP_DATA_DIR` | Data directory (to isolate instances) | `server/.data` |
+| Environment vars `TP_RESET_CMD` / `TP_VERIFY_CLEAN_CMD` | Set on the project environment: a reset command before each case; a read-only check run before "resources were left behind, stop the batch" (exit 0 = confirmed clean, keep going) | — |
 
 Model settings saved in a project take precedence over environment variables. See [installation and diagnostics](docs/v3/10-安装与诊断.md) (Chinese) and `server/.env.example`.
 
@@ -327,6 +340,7 @@ plugins/
   testpilot/              source of truth for skills and hooks
   testpilot-claude/       generated Claude Code plugin
   testpilot-codex/        generated Codex plugin (experimental)
+examples/                 built-in examples (Hyperliquid testnet domain reference and rule pack, for new projects)
 fixtures/                 local systems under test and data for tests and evals
 extensions/               Penguin evaluation extension (experimental)
 scripts/                  setup, diagnostics, plugin builds, checks
@@ -358,6 +372,7 @@ The documentation is mostly in Chinese. Start at [docs/README.md](docs/README.md
 - [Goals and handoff guide](docs/v3/09-执行目标与接手指南.md): goals, scope, status, next steps, recent changes
 - [Installation and diagnostics](docs/v3/10-安装与诊断.md)
 - [Claude Code and Codex integration](docs/v3/14-Claude-Code与Codex接入实操.md)
+- [Node prompts, domain knowledge and the learning loop](docs/v3/15-节点提示词与领域知识重构实施.md) (Chinese)
 
 ## Contributing
 
@@ -366,8 +381,9 @@ Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING
 ## Roadmap and known limitations
 
 - This release covers the Web UI and Claude Code; Codex and Penguin are experimental.
-- Self-improvement, an experience / counter-example library, parallel sub-agents, gold sets and scoreboards, and the research track are frozen and not part of this release.
-- The regression suite is a list for now; executions do not pick it up automatically, and new cases are not yet generated from failures or rejection reasons.
+- The first version of the learning loop only evolves the executor model; planner-side candidates (prompts, preparation guidance) are not evaluated yet, since they need the planner to regenerate and prepare cases.
+- Parallel sub-agents, scoreboards and the research track are frozen and not part of this release.
+- The defect regression suite is a list for now; executions do not pick it up automatically, and new cases are not generated from failures (rejection reasons are already handed to generation as counterexamples).
 - Whether repeated `judge` sampling exposes unstable verdicts still needs ambiguous samples to verify.
 - The full list is in [the handoff guide §4](docs/v3/09-执行目标与接手指南.md).
 

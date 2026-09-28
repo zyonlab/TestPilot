@@ -2,6 +2,9 @@ import {projectAssetRouter} from './projectAssetRoutes.js';
 import {askExplorationPlanner} from "./explorationPlanner.js";
 import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
+import { listFactCandidates, decideFactCandidate, mineRunFacts } from "./factCandidates.js";
+import { draftStandardSet, listStandardSets, freezeStandardSet } from "./standardSets.js";
+import { startEvaluation, decideEvaluation, listEvaluations } from "./standardEvaluation.js";
 import {listExamples} from "./examples.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
@@ -783,6 +786,31 @@ app.delete("/api/projects/:id/rule-packs/:hash", (req, res) => {
 /**
  * 项目级领域参考：和规则包一个待遇——按内容哈希存版本、运行开始时冻结绑定、用过的版本不能删。
  */
+/**
+ * 界面事实候选（docs/v3/15 阶段 7）：执行与准备自动记下的、领域参考里还没有的界面字面值。
+ * 确认只能是人，确认时写的那句事实合进领域参考的新版本。
+ */
+app.get("/api/projects/:id/fact-candidates", (req, res) => {
+  try { res.json({ candidates: listFactCandidates(req.params.id, typeof req.query.status === "string" ? req.query.status : undefined) }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
+app.post("/api/projects/:id/fact-candidates/mine", (req, res) => {
+  try { reviewerPrincipal(req); res.json(mineRunFacts(String(req.body?.runId ?? ""), req.params.id)); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) }); }
+});
+app.post("/api/projects/:id/fact-candidates/:candidateId", (req, res) => {
+  try { res.json(decideFactCandidate(req.params.id, req.params.candidateId, req.body, reviewerPrincipal(req))); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) }); }
+});
+/**
+ * 标准测试集与在它上面比执行模型（docs/v3/15 阶段 8～9）。起草是自动的；冻结、发起评估（会真跑、花额度）、换模型都要人。
+ */
+const sendError = (res: express.Response, e: unknown) => res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) });
+app.get("/api/projects/:id/standard-sets", (req, res) => { try { res.json({ sets: listStandardSets(req.params.id), evaluations: listEvaluations(req.params.id) }); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-sets", (req, res) => { try { reviewerPrincipal(req); res.json(draftStandardSet(req.params.id, req.body)); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-sets/:setId/freeze", (req, res) => { try { res.json(freezeStandardSet(req.params.id, req.params.setId, req.body, reviewerPrincipal(req))); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-evaluations", (req, res) => { try { res.status(202).json(startEvaluation(req.params.id, req.body, reviewerPrincipal(req))); } catch (e) { sendError(res, e); } });
+app.post("/api/projects/:id/standard-evaluations/:evaluationId", (req, res) => { try { res.json(decideEvaluation(req.params.id, req.params.evaluationId, req.body, reviewerPrincipal(req))); } catch (e) { sendError(res, e); } });
 app.get("/api/projects/:id/domain-references", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   res.json({ references: listDomainReferences(req.params.id) });

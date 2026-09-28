@@ -13,7 +13,7 @@ rule e2ff0801  "exploratory": the evidence is a charter and what was observed un
 rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
-rule 03eea4fb  For tier 1 and tier 2 you MUST also give `oracle`, the same
+rule 272dfcd0  For tier 1 and tier 2 you MUST also give `oracle`, the same
 rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
@@ -25,6 +25,14 @@ rule 0be8129a  Design at most the number of cases stated as CASE BUDGET in
 rule 6c6015b6  `priority` says how much it costs to ship this broken, not h
 rule 17526ec2  Every new case includes lifecycle version 2. Completeness is
 rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
+rule 67dcfa14  The screen needs time to catch up after an action that remov
+rule 8d917c36  An assertion reads the screen as it is after its step: only
+rule 9eb2efb0  A transient message (a toast, an inline error that fades) mu
+rule 961c187d  A confirmation dialog is its own step: the click that opens
+rule 21141dc1  If the case's own steps can create the resource it needs, cr
+rule cd957936  End the case on the screen where its own resources are visib
+rule 4da874a3  An effect the product cannot undo (a history row, a fee, a n
+rule 83c3d10e  Literal interface text in steps and oracles (labels, button
 -->
 
 # TestPilot：为一条故事设计文本用例
@@ -168,6 +176,21 @@ rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 故事验收条件描述产品应有行为。探索未覆盖时将状态保存在 observationLinks，不得因此追加「【待确认：界面观察不到】」或 requires-fixture。只有产品范围不明、需求冲突才提出需求待确认；纯假设不能冒充需求。
 
 用例设计可在未执行时完成。登录、测试数据、控件定位、数值判据等就绪情况单独记录，留给执行准备核验；不能由 unobserved 自动推导 requires-fixture，也不能把它自动改成 ready。执行和报告仍须真实证据，不能为了提高 ready 数量跳过门禁。
+
+## 执行时会发生什么（每条用例都成立）
+
+这几条和被测产品无关，是执行器读屏与界面刷新的规律。设计时不知道，就只能在执行准备里一轮轮试跑撞出来。
+
+- **点完「撤掉 / 关闭 / 删除 / 保存」这类动作，界面要一点时间才刷新。** 不要在同一步断言它已经没了；放到下一步之后，或者读一个到处都看得见的标签。反例：「点确认后列表里没有这一行」写在点确认的那一步，列表还在刷新时就判失败。
+- **断言读的是这一步之后的屏幕，只看得见当前打开的标签或面板。** 要不依赖当前停在哪个标签，就读一直可见的文字（比如带数量的标签名）；否则先切到那个标签，在切换那步之后断言。
+- **瞬时提示（toast、会淡出的行内错误）要在触发它的那一步断言**，下一步它就没了。
+- **确认框是单独一步**：打开它的那一下和确认的那一下是两步，两步里都不放别的动作。
+- **用例自己的步骤能建出来的资源，就在步骤里建，并在 lifecycle 里登记。** 只有必须在第一步之前就存在的状态才交给执行准备。准备配方去建步骤本来就会建的东西，收尾就翻倍，任一边出错就留下资源。
+- **用例结束时停在看得见自己资源的界面上**，收尾才认得出、撤得掉。收尾核对要能区分「已撤掉」和「还留着」：撤没撤页面上都有的词，证明不了任何事。
+- **产品撤不掉的影响（历史记录、手续费、已发出的通知）写进 `lifecycle.sideEffects`**，不进收尾。
+- **步骤与判据里的界面字面值（标签、按钮名、数值格式）取自给你的规格或观察材料**（领域参考、探索产物）。没在那里见过的字面值不要写；非写不可，就在 `readiness.reason` 里注明未核实。
+
+判据各能判什么、不能判什么，见 `REFERENCE-oracle.md` 末尾的「判据能力表」——写数值、跨步骤比较或拿不准用哪种判据时读它。
 
 ## 生命周期义务（版本 2）
 

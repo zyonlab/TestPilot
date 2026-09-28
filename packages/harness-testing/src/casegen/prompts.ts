@@ -1,3 +1,4 @@
+import { EXECUTION_SEMANTICS } from "./executionSemantics.js";
 import { LIFECYCLE_INSTRUCTIONS, LIFECYCLE_JSON_SCHEMA } from './lifecycleContract.js';
 import { STORY_PLANNING_CONTRACT } from './planningContract.js';
 import { ARTIFACT_WRITING_GUIDELINES } from "./readability.js";
@@ -102,7 +103,8 @@ export const CASES_STABLE = [
   '    {"kind":"url","value":"<part of the address>"}',
   '    {"kind":"count","value":"<a literal>","op":"eq|gte|lte","n":<number>}',
   '    {"kind":"delta","value":"<the label a number sits beside>","direction":"increased|decreased|unchanged","by":<number, optional>}   ← this one is tier 2',
-  '    {"kind":"decimal-equation","scope":{"start":"<unique visible section start>","end":"<unique visible section end>"},"inputs":[{"id":"a","label":"<exact visible label>","unit":"<exact unit>","decimals":2,"rounding":"exact|nearest|truncate"}],"actual":"<result input id>","formula":["a","b","*"],"compare":"eq","maxAgeMs":5000} — inputs name the visible readings (one is enough when comparing to a constant); postfix formula uses input ids, decimal constants (e.g. "0") and +,-,*,/ and must not reference the result; compare is eq (default), gt, gte, lt or lte between the result reading and the formula (e.g. a reading is greater than 0: formula ["0"], compare "gt"); values that the display precision cannot separate are unobservable, not a pass. Only use observed labels and documented rounding; missing evidence blocks execution.',
+  '    {"kind":"decimal-equation","scope":{"start":"<unique visible section start>","end":"<unique visible section end>"},"inputs":[{"id":"a","label":"<exact visible label>","unit":"<exact unit>","decimals":2,"rounding":"exact|nearest|truncate"}],"actual":"<result input id>","formula":["a","b","*"],"compare":"eq","maxAgeMs":5000} — inputs name the visible readings (one is enough when comparing to a constant); postfix formula uses input ids, decimal constants (e.g. "0") and +,-,*,/ and must not reference the result; compare is eq (default), gt, gte, lt, lte or sign (same sign only, e.g. a profit column has the sign of the difference of two price columns) between the result reading and the formula (e.g. a reading is greater than 0: formula ["0"], compare "gt"); values that the display precision cannot separate are unobservable, not a pass. Only use observed labels and documented rounding; missing evidence blocks execution.',
+  '    {"kind":"reading","input":{"id":"before","label":"<column or label>","unit":"<unit>","decimals":0,"rounding":"exact","row":{"key":"<what the row\'s first cell starts with>","keyColumn":"<header of that first column>"}}} — records a reading at its afterStep for a LATER decimal-equation that lists it in "recorded" and uses its id in the formula (a value before vs after a step, an average of two earlier readings). Use "row" to read a table cell by row and column header; "row" works in decimal-equation inputs too. Readings that cannot be read are unobservable, never a pass.',
   "  Quote the literal EXACTLY as the specification writes it. If the outcome cannot be put",
   "  in any of these forms, then it is tier 3 — say so and leave `oracle` out. Claiming",
   "  tier 1 without an oracle is the one thing that makes the label worthless.",
@@ -175,6 +177,10 @@ export const CASES_STABLE = [
   "  every case starts on a fresh page, and session changes are declared in lifecycle.session.",
   "  You MUST give every case a `postSteps` array. A read-only case gets an empty one —",
   "  that is an answer, not a blank. Read-only cases leave it empty.",
+  "",
+  // docs/v3/15 阶段 2：执行语义常驻，单一来源在 executionSemantics.ts。
+  "What happens when the case runs — true for every case, whatever the product:",
+  ...EXECUTION_SEMANTICS.map((rule) => "- " + rule),
   "",
   'Return JSON only: {"cases":[{"title":"...","designMethod":"equivalence","priority":"P1",',
   '"precondition":["..."],"steps":["..."],"postSteps":[],"expected":"...","tier":1,',
@@ -291,8 +297,9 @@ export const ORACLE_STRICT = [
  *
  * 此前这里是一段写死的永续合约不变量，进程内 design.cases 与 MCP run_pipeline 对每个产品都默认发送——
  * Vikunja 那样的待办应用也收到 26 行合约散文。2026-09-15 起它是项目数据：用户在「领域参考」页聊出来
- * 或上传，运行开始时冻结绑定；没绑定就没有这一段。原文现在是评测数据集
- * `benchmark/hyperliquid-testnet/domain-reference.md`。
+ * 或上传，运行开始时冻结绑定；没绑定就没有这一段。原文曾留作评测数据集
+ * `benchmark/hyperliquid-testnet/domain-reference.md`，2026-09-28 随旧数据集删掉（git 历史里还在）；
+ * 现行示例是 `examples/hyperliquid-testnet/domain-knowledge.md`。
  * 这里只留**怎么用**一份领域参考的通用说明，内容一个字都不属于某个领域。
  */
 export function domainReferenceBlock(text: string): string {
@@ -456,6 +463,10 @@ export const storiesSchema = (moduleNames: string[]) => {
   return base;
 };
 
+/** decimal-equation 的一项输入、reading 记的那个读数：同一个形状。`row` 给了就按表格读（列头 = label）。 */
+const READING_INPUT = { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, unit: { type: "string" }, decimals: { type: "integer" }, rounding: { type: "string", enum: ["exact", "nearest", "truncate"] },
+  row: { type: "object", properties: { key: { type: "string" }, keyColumn: { type: "string" } }, required: ["key", "keyColumn"], additionalProperties: false } }, required: ["id", "label", "unit", "decimals", "rounding"], additionalProperties: false };
+
 export const CASES_SCHEMA = {
   type: "object",
   properties: {
@@ -503,12 +514,15 @@ export const CASES_SCHEMA = {
                * text 类 oracle 带着 `"url":"-"` 之类的占位符回来，`casegen/normalizeOracle.ts` 在 zod 之前剥掉。
                * tier 3 用 `kind: "none"`，剥掉后等于没有 oracle。
                */
-              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "decimal-equation", "judge", "none"] },
+              kind: { type: "string", enum: ["text", "noText", "url", "count", "delta", "decimal-equation", "reading", "judge", "none"] },
               scope: { type: "object", properties: { start: { type: "string" }, end: { type: "string" } }, required: ["start", "end"], additionalProperties: false },
-              inputs: { type: "array", items: { type: "object", properties: { id: { type: "string" }, label: { type: "string" }, unit: { type: "string" }, decimals: { type: "integer" }, rounding: { type: "string", enum: ["exact", "nearest", "truncate"] } }, required: ["id", "label", "unit", "decimals", "rounding"], additionalProperties: false } },
+              inputs: { type: "array", items: READING_INPUT },
+              // reading 专用（docs/v3/15 阶段 4）：记下一个读数；decimal-equation 的 recorded 按 id 引用前面记下的读数。
+              input: READING_INPUT,
+              recorded: { type: "array", items: { type: "string" } },
               actual: { type: "string" },
               formula: { type: "array", items: { type: "string" } },
-              compare: { type: "string", enum: ["eq", "gt", "gte", "lt", "lte"] },
+              compare: { type: "string", enum: ["eq", "gt", "gte", "lt", "lte", "sign"] },
               maxAgeMs: { type: "integer" },
               value: { type: "string" },
               op: { type: "string", enum: ["eq", "neq", "gte", "lte", "exists", "absent", "increased", "decreased", "unchanged"] },

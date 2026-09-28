@@ -7,6 +7,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { projectModelConnection } from "./modelProfiles.js";
 import { snapshotExecutor } from "./modelSnapshots.js";
 import { executorConnectionFromEnv } from "@testpilot/harness-core";
+import type { RoleModelConnection } from "@testpilot/harness-core/model-profiles";
 import type {
   DebugSpec,
   ExecResult,
@@ -84,8 +85,9 @@ export async function releaseSessionOnRunners(key: string): Promise<number> {
 /** 谁跑的就写谁：账要去它自己的 Midscene 目录里读（07 T-04）。 */
 export type ExecResultWithRunner = ExecResult & { runnerId: string };
 
-export async function execOnRunner(spec: ExecSpec, control?: { signal?: AbortSignal }): Promise<ExecResultWithRunner> {
-  spec = { ...spec, opts: { ...spec.opts, executorModel: spec.modelSnapshotRunId
+export async function execOnRunner(spec: ExecSpec, control?: { signal?: AbortSignal; executorOverride?: RoleModelConnection }): Promise<ExecResultWithRunner> {
+  // 标准集评估（docs/v3/15 阶段 9）拿候选执行模型跑冻结集：只在这一次派发里换，运行绑定的模型不动。
+  spec = { ...spec, opts: { ...spec.opts, executorModel: control?.executorOverride ? control.executorOverride : spec.modelSnapshotRunId
     ? snapshotExecutor(spec.modelSnapshotRunId, spec.scopeProjectId) : spec.scopeProjectId
     ? projectModelConnection(spec.scopeProjectId, "executor")
     : executorConnectionFromEnv() } };

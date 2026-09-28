@@ -29,7 +29,7 @@ description: Runs TestPilot generation with this host as planner, immutable proj
 ## 顺序
 
 1. 没有 runId 时，调用 `register_run`：传项目 ID、宿主运行时、稳定的 externalId/idempotencyKey，以及材料原文数组 `{name,text}`。重试保留完全相同的参数。宿主模型身份只有确定时才报告；未知留空。已由 Web 或运行适配器注册时，直接使用提供的 runId。
-2. 调用 `load_run_instructions(runId)`，读取返回的 stories/design skill 和领域 references。返回的 loadedDigest 指认服务端实际下发的内容；它不证明模型遵守了所有规则。若响应含 memory，只把它当历史执行观察，按当前物料复核；memory.digest 与来源用于消费审计，不能覆盖需求或判据。
+2. 调用 `load_run_instructions(runId)`，读取返回的 stories/design skill 和领域 references。返回的 loadedDigest 指认服务端实际下发的内容；它不证明模型遵守了所有规则。若响应含 memory，只把它当历史执行观察，按当前物料复核；memory.digest 与来源用于消费审计，不能覆盖需求或判据。若响应含 counterexamples，那是本项目里人驳回过的用例和驳回理由：设计用例时逐条对照，别再犯同一个理由；它们是复核决定，不是产品需求。
 3. 调用 `retrieve_spec({runId,query,budgetTokens})`。材料只能来自本次冻结的版本，chunk ID 按返回值逐字引用。未取到的段按 chunkIds 继续取。
 4. 项目带产品模型时，先做模块规划：`begin_stage({runId,node:"modules"})`，再按材料提议模块树并调用 `plan_modules({runId,content})`。**树至少两层**：顶层 3–7 个模块，每个顶层模块下面要有子模块，子模块的 `parentId` 指向它——一层平铺的清单会被判 `module_tree_is_a_list`（不带点号的平铺清单同样算）。层级写在 `parentId` 里，不是写在名字里；每个模块都要有 `evidence`；材料的每一段要么被某个模块的 `evidence` 引用，要么进顶层的 `outOfScope:[{sectionId,reason}]`（字段名就是 `sectionId`，值取材料段 id）并说明理由——「界面上看不到」是覆盖缺口，不是范围外。模块按用户要完成的事切，不按屏幕分区切。机检有 error 会整份拒收并指出是哪个模块。**提议通过之后停在这里**：冻结必须由人做，模型没有这个工具；树没冻结，`claim_unit(node:"stories")` 会被拒。用 `module_plan_state(runId)` 读当前状态。
 5. 按 `testpilot-stories` 的规则思考并调用 `write_stories({runId,content})`。模型提交 StoryBundle，服务端校验并保存不可变版本。

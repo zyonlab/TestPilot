@@ -1,0 +1,1155 @@
+{
+  "C-MAR-03-02": {
+    "baseRevision": "rev-5a9a2185-26bb-4beb-b1bc-02428db2134b",
+    "content": {
+      "acRefs": [
+        "S-MAR-03/AC-2"
+      ],
+      "assertions": [
+        {
+          "id": "A-MAR-03-02-0",
+          "ruleRefs": [],
+          "statement": "追加前记下 BTC-USDC 持仓行的「Liq. Price」",
+          "afterStep": 1,
+          "oracle": {
+            "kind": "reading",
+            "input": {
+              "id": "liqBefore",
+              "label": "Liq. Price",
+              "unit": "USDC",
+              "decimals": 0,
+              "rounding": "nearest",
+              "row": {
+                "key": "BTC",
+                "keyColumn": "Market"
+              }
+            }
+          }
+        },
+        {
+          "id": "A-MAR-03-02-1",
+          "ruleRefs": [],
+          "statement": "追加后「Liq. Price」低于追加前，离「Mark Price」更远",
+          "afterStep": 5,
+          "oracle": {
+            "kind": "decimal-equation",
+            "scope": {
+              "start": "Positions (1)",
+              "end": "Deposit"
+            },
+            "inputs": [
+              {
+                "id": "liqAfter",
+                "label": "Liq. Price",
+                "unit": "USDC",
+                "decimals": 0,
+                "rounding": "nearest",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              }
+            ],
+            "recorded": [
+              "liqBefore"
+            ],
+            "actual": "liqAfter",
+            "formula": [
+              "liqBefore"
+            ],
+            "compare": "lt",
+            "maxAgeMs": 5000
+          }
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "追加保证金后的强平价",
+        "partitionId": "long-liq-lowered",
+        "predicate": "多头追加保证金后强平价下移",
+        "representative": "BTC-USDC 逐仓多头",
+        "technique": "equivalence",
+        "validity": "valid"
+      },
+      "designMethod": "equivalence",
+      "expected": "追加后该持仓的「Liq. Price」低于追加前的值",
+      "featureRefs": [
+        "margin.add"
+      ],
+      "id": "C-MAR-03-02",
+      "key": "positions->add-margin|btc-isolated-long|liq-price-lowered",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "BTC-USDC"
+                },
+                "statement": "市场头部显示 BTC-USDC"
+              }
+            ],
+            "statement": "当前市场为 BTC-USDC"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "noText",
+                  "value": "No open positions yet"
+                },
+                "statement": "持仓表不是空状态"
+              },
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Isolated"
+                },
+                "statement": "保证金模式按钮显示 Isolated"
+              }
+            ],
+            "statement": "已有逐仓多头持仓"
+          }
+        ],
+        "cleanup": [],
+        "mode": "read-only",
+        "rationale": "用例给准备好的逐仓持仓追加保证金，不创建新资源、不改持久设置；持仓连同追加的保证金由准备配方的补偿平仓，再还原保证金模式",
+        "resources": [],
+        "session": "unchanged",
+        "settings": [],
+        "sideEffects": [],
+        "sourceRefs": [
+          "materials/exploration.md#13",
+          "materials/exploration.md#19"
+        ],
+        "supports": [
+          "$expected",
+          "A-MAR-03-02-1"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "kind": "decimal-equation",
+        "scope": {
+          "start": "Positions (1)",
+          "end": "Deposit"
+        },
+        "inputs": [
+          {
+            "id": "liqAfter",
+            "label": "Liq. Price",
+            "unit": "USDC",
+            "decimals": 0,
+            "rounding": "nearest",
+            "row": {
+              "key": "BTC",
+              "keyColumn": "Market"
+            }
+          }
+        ],
+        "recorded": [
+          "liqBefore"
+        ],
+        "actual": "liqAfter",
+        "formula": [
+          "liqBefore"
+        ],
+        "compare": "lt",
+        "maxAgeMs": 5000
+      },
+      "postSteps": [],
+      "precondition": [
+        "当前市场为 BTC-USDC",
+        "已有逐仓多头持仓"
+      ],
+      "priority": "P1",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 阶段 4：执行器支持「记下读数」（reading）与按行读表格（row），这条的前后比较改成机器判据。 position.isolated 由准备配方在 BTC-USDC 建立（打开 /trade/BTC、保证金模式切到 Isolated、市价买入 ${env.TP_BTC_ORDER_SIZE}、确认），与 C-MAR-03-01 同一套；补偿先平仓、再把保证金模式改回 ${env.TP_ORIGINAL_MARGIN_MODE}、切回 Market 并打开 /trade/HYPE。配方尚未提供。持仓行保证金调整入口（Add 选项、金额框、确认按钮文案）未实测。A-MAR-03-02-1 与 $expected 要比较同一持仓行 Liq. Price 追加前后两次读数：delta 按标签取值，而表格表头与数值不相邻，读不到；需要准备按实测给出按行限定的前后读数（例如在第 1 步后与第 5 步后各读一次 BTC-USDC 行的 Liq. Price）再比较，形式由准备器定。",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-ISOLATED-POSITION",
+            "kind": "fixture",
+            "status": "missing"
+          },
+          {
+            "evidenceRefs": [],
+            "id": "REQ-MARGIN-LOCATOR",
+            "kind": "locator",
+            "status": "missing"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        },
+        {
+          "provided": "preparation",
+          "state": "position.isolated"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "追加保证金后强平价不变，交易者以为风险降低而实际没有",
+        "ruleRefs": []
+      },
+      "ruleRefs": [],
+      "scenarioType": "positive",
+      "sourceRefs": [
+        "materials/exploration.md#13",
+        "materials/exploration.md#19"
+      ],
+      "steps": [
+        "点击页面下半部账户面板标签行里的「Positions」",
+        "在 BTC-USDC 持仓行的「Margin」列点击保证金调整入口",
+        "在弹出的保证金调整界面选择增加（Add）",
+        "在保证金调整界面的金额输入框输入 ${env.TP_MARGIN_ADD}",
+        "点击保证金调整界面的确认按钮"
+      ],
+      "storyId": "S-MAR-03",
+      "tier": 2,
+      "title": "追加保证金后多头持仓的强平价降低"
+    }
+  },
+  "C-MAR-04-02": {
+    "baseRevision": "rev-49eb4443-0ae5-400a-8118-d60bed43f563",
+    "content": {
+      "acRefs": [
+        "S-MAR-04/AC-2"
+      ],
+      "assertions": [
+        {
+          "id": "A-MAR-04-02-0",
+          "ruleRefs": [],
+          "statement": "尝试前记下 BTC-USDC 持仓行的「Margin」",
+          "afterStep": 1,
+          "oracle": {
+            "kind": "reading",
+            "input": {
+              "id": "marginBefore",
+              "label": "Margin",
+              "unit": "$",
+              "decimals": 2,
+              "rounding": "exact",
+              "row": {
+                "key": "BTC",
+                "keyColumn": "Market"
+              }
+            }
+          }
+        },
+        {
+          "afterStep": 5,
+          "id": "A-MAR-04-02-1",
+          "oracle": {
+            "criteria": [
+              "点击确认后，保证金调整界面或页面上出现了说明余额/可用资金不足、追加失败的提示",
+              "页面上没有出现保证金已追加成功的提示"
+            ],
+            "kind": "judge",
+            "samples": 3
+          },
+          "ruleRefs": [],
+          "statement": "页面提示余额不足"
+        },
+        {
+          "id": "A-MAR-04-02-2",
+          "oracle": {
+            "direction": "unchanged",
+            "kind": "delta",
+            "value": "Available to Trade"
+          },
+          "ruleRefs": [],
+          "statement": "「Available to Trade」保持不变"
+        },
+        {
+          "id": "A-MAR-04-02-3",
+          "ruleRefs": [],
+          "statement": "持仓「Margin」保持不变",
+          "afterStep": 5,
+          "oracle": {
+            "kind": "decimal-equation",
+            "scope": {
+              "start": "Positions (1)",
+              "end": "Deposit"
+            },
+            "inputs": [
+              {
+                "id": "marginAfter",
+                "label": "Margin",
+                "unit": "$",
+                "decimals": 2,
+                "rounding": "exact",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              }
+            ],
+            "recorded": [
+              "marginBefore"
+            ],
+            "actual": "marginAfter",
+            "formula": [
+              "marginBefore"
+            ],
+            "compare": "eq",
+            "maxAgeMs": 5000
+          }
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "追加金额相对可交易额",
+        "partitionId": "exceeds-available",
+        "predicate": "追加金额大于 Available to Trade",
+        "representative": "${env.TP_MARGIN_OVER}",
+        "technique": "equivalence",
+        "validity": "invalid"
+      },
+      "designMethod": "negative",
+      "expected": "「Available to Trade」在尝试前后保持不变",
+      "featureRefs": [
+        "margin.add"
+      ],
+      "id": "C-MAR-04-02",
+      "key": "positions->add-margin|amount-exceeds-available|refused-funds-unchanged",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "BTC-USDC"
+                },
+                "statement": "市场头部显示 BTC-USDC"
+              }
+            ],
+            "statement": "当前市场为 BTC-USDC"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "noText",
+                  "value": "No open positions yet"
+                },
+                "statement": "持仓表不是空状态"
+              },
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Isolated"
+                },
+                "statement": "保证金模式按钮显示 Isolated"
+              }
+            ],
+            "statement": "已有持仓；保证金模式支持独立调整（逐仓）"
+          }
+        ],
+        "cleanup": [],
+        "mode": "read-only",
+        "rationale": "预期产品拒绝追加，资金不动；不创建新资源、不改持久设置，持仓由准备配方的补偿平仓，再还原保证金模式",
+        "resources": [],
+        "session": "unchanged",
+        "settings": [],
+        "sideEffects": [],
+        "sourceRefs": [
+          "materials/exploration.md#19",
+          "materials/exploration.md#15"
+        ],
+        "supports": [
+          "$expected",
+          "A-MAR-04-02-1",
+          "A-MAR-04-02-2",
+          "A-MAR-04-02-3"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "direction": "unchanged",
+        "kind": "delta",
+        "value": "Available to Trade"
+      },
+      "postSteps": [],
+      "precondition": [
+        "当前市场为 BTC-USDC",
+        "已有持仓；保证金模式支持独立调整（逐仓）"
+      ],
+      "priority": "P2",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 阶段 4：执行器支持「记下读数」（reading）与按行读表格（row），这条的前后比较改成机器判据。 position.isolated 由准备配方在 BTC-USDC 建立（打开 /trade/BTC、保证金模式切到 Isolated、市价买入 ${env.TP_BTC_ORDER_SIZE}、确认），与 C-MAR-03-01 同一套；补偿先平仓、再把保证金模式改回 ${env.TP_ORIGINAL_MARGIN_MODE}、切回 Market 并打开 /trade/HYPE。配方尚未提供。超额金额用绑定的 TP_MARGIN_OVER=100000（需准备确认测试账户的 Available to Trade 远低于它）。余额不足的提示文案未实测，判据用 judge；保证金调整入口未实测。A-MAR-04-02-3（同一行 Margin 前后不变）要按行限定的前后读数，交给准备器按实测实现。",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-ISOLATED-POSITION",
+            "kind": "fixture",
+            "status": "missing"
+          },
+          {
+            "evidenceRefs": [],
+            "id": "REQ-OVER-AMOUNT",
+            "kind": "fixture",
+            "status": "unverified"
+          },
+          {
+            "evidenceRefs": [],
+            "id": "REQ-MARGIN-LOCATOR",
+            "kind": "locator",
+            "status": "missing"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        },
+        {
+          "provided": "preparation",
+          "state": "position.isolated"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "超额追加若被部分执行，账户可用额会出现负值或对不上",
+        "ruleRefs": []
+      },
+      "ruleRefs": [],
+      "scenarioType": "negative",
+      "sourceRefs": [
+        "materials/exploration.md#19",
+        "materials/exploration.md#15"
+      ],
+      "steps": [
+        "点击页面下半部账户面板标签行里的「Positions」",
+        "在 BTC-USDC 逐仓持仓行的「Margin」列点击保证金调整入口",
+        "在弹出的保证金调整界面选择增加（Add）",
+        "在保证金调整界面的金额输入框输入 ${env.TP_MARGIN_OVER}",
+        "点击保证金调整界面的确认按钮"
+      ],
+      "storyId": "S-MAR-04",
+      "tier": 2,
+      "title": "追加金额超过可交易额时被拒绝，可交易额不变"
+    }
+  },
+  "C-POS-01-02": {
+    "baseRevision": "rev-31fda2c0-7f47-43d7-8c8b-df8346f02a98",
+    "content": {
+      "acRefs": [
+        "S-POS-01/AC-2"
+      ],
+      "assertions": [
+        {
+          "afterStep": 5,
+          "id": "A-POS-01-02-1",
+          "oracle": {
+            "kind": "text",
+            "value": "Positions ("
+          },
+          "ruleRefs": [
+            "R-positions"
+          ],
+          "statement": "第一笔成交后「Positions」出现 BTC-USDC 多头持仓"
+        },
+        {
+          "id": "A-POS-01-02-4",
+          "ruleRefs": [
+            "R-positions"
+          ],
+          "statement": "第一笔成交后记下 BTC-USDC 持仓行的「Size」",
+          "afterStep": 5,
+          "oracle": {
+            "kind": "reading",
+            "input": {
+              "id": "size1",
+              "label": "Size",
+              "unit": "BTC",
+              "decimals": 5,
+              "rounding": "exact",
+              "row": {
+                "key": "BTC",
+                "keyColumn": "Market"
+              }
+            }
+          }
+        },
+        {
+          "id": "A-POS-01-02-2",
+          "ruleRefs": [
+            "R-positions"
+          ],
+          "statement": "第二笔成交后 BTC-USDC 持仓行的「Size」等于第一笔的两倍",
+          "afterStep": 9,
+          "oracle": {
+            "kind": "decimal-equation",
+            "scope": {
+              "start": "Positions (1)",
+              "end": "Deposit"
+            },
+            "inputs": [
+              {
+                "id": "size2",
+                "label": "Size",
+                "unit": "BTC",
+                "decimals": 5,
+                "rounding": "exact",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              }
+            ],
+            "recorded": [
+              "size1"
+            ],
+            "actual": "size2",
+            "formula": [
+              "size1",
+              "2",
+              "*"
+            ],
+            "compare": "eq",
+            "maxAgeMs": 5000
+          }
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "成交前持仓状态",
+        "partitionId": "existing-same-side",
+        "predicate": "成交前已有同方向持仓",
+        "representative": "第一笔买单形成的 BTC-USDC 多头",
+        "technique": "equivalence",
+        "validity": "valid"
+      },
+      "designMethod": "equivalence",
+      "expected": "第二笔成交后 BTC-USDC 持仓的「Size」等于两笔成交数量之和",
+      "featureRefs": [
+        "positions.open",
+        "positions.inspect"
+      ],
+      "id": "C-POS-01-02",
+      "key": "market-buy-fill->positions|btc-usdc-existing-long|size-increased",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Available to Trade"
+                },
+                "statement": "下单面板显示可交易额度标签"
+              }
+            ],
+            "statement": "账户具备交易权限"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "noText",
+                  "value": "Positions ("
+                },
+                "statement": "账户面板的 Positions 标签没有带数量"
+              }
+            ],
+            "statement": "账户没有持仓"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Slippage"
+                },
+                "statement": "下单面板有 Slippage"
+              }
+            ],
+            "statement": "下单面板处于 Market 订单类型"
+          }
+        ],
+        "cleanup": [
+          {
+            "id": "CL-POS-01-02-PA",
+            "postStep": 1,
+            "resourceId": "RES-POS-01-02-P",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "BTC-USDC"
+                  },
+                  "statement": "页面显示 BTC-USDC"
+                },
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Market Close"
+                  },
+                  "statement": "确认框有 Market Close 按钮"
+                }
+              ],
+              "statement": "平仓确认框已打开，BTC-USDC 持仓行仍在"
+            }
+          },
+          {
+            "id": "CL-POS-01-02-PB",
+            "postStep": 2,
+            "resourceId": "RES-POS-01-02-P",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "noText",
+                    "value": "Positions ("
+                  },
+                  "statement": "账户面板的 Positions 标签没有带数量"
+                }
+              ],
+              "statement": "BTC-USDC 持仓已平掉"
+            }
+          },
+          {
+            "id": "CL-POS-01-02-MKT",
+            "postStep": 3,
+            "settingId": "SET-POS-01-02-MKT",
+            "verified": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "HYPE-USDC"
+                  },
+                  "statement": "市场头部显示 HYPE-USDC"
+                }
+              ],
+              "statement": "市场头部恢复为 HYPE-USDC"
+            }
+          }
+        ],
+        "mode": "controlled",
+        "rationale": "本用例自己在 BTC-USDC 市价买入两笔同数量（第一笔建仓、第二笔加仓，并入同一格位），收尾市价平掉整个 BTC-USDC 持仓并打开 /trade/HYPE；订单类型保持原值 Market，不改。",
+        "resources": [
+          {
+            "establishAfterStep": 5,
+            "established": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "Positions ("
+                  },
+                  "statement": "账户面板的 Positions 标签带数量"
+                }
+              ],
+              "statement": "账户出现一笔持仓"
+            },
+            "id": "RES-POS-01-02-P",
+            "identity": "BTC-USDC",
+            "identityKind": "slot",
+            "ownership": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "BTC-USDC"
+                  },
+                  "statement": "市场头部显示 BTC-USDC"
+                }
+              ],
+              "statement": "该持仓在本账户 BTC-USDC 市场"
+            },
+            "sourceRef": "materials/exploration.md#19",
+            "vacant": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "noText",
+                    "value": "Positions ("
+                  },
+                  "statement": "账户面板的 Positions 标签没有带数量"
+                }
+              ],
+              "statement": "账户没有持仓"
+            }
+          }
+        ],
+        "session": "unchanged",
+        "settings": [
+          {
+            "changedAfterStep": 1,
+            "id": "SET-POS-01-02-MKT",
+            "name": "当前交易市场",
+            "observed": {
+              "checks": [
+                {
+                  "kind": "screen",
+                  "oracle": {
+                    "kind": "text",
+                    "value": "HYPE-USDC"
+                  },
+                  "statement": "市场头部显示 HYPE-USDC"
+                }
+              ],
+              "statement": "执行前市场头部显示 HYPE-USDC"
+            },
+            "original": "HYPE",
+            "sourceRef": "materials/exploration.md#19"
+          }
+        ],
+        "sideEffects": [
+          "两笔成交与平仓各产生一笔不可退回的交易手续费",
+          "成交会在 Trade History 与 Order History 留下不可删除的记录"
+        ],
+        "sourceRefs": [
+          "materials/exploration.md#19",
+          "materials/exploration.md#1",
+          "materials/exploration.md#13"
+        ],
+        "supports": [
+          "$expected",
+          "A-POS-01-02-1",
+          "A-POS-01-02-2",
+          "A-POS-01-02-4"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "kind": "decimal-equation",
+        "scope": {
+          "start": "Positions (1)",
+          "end": "Deposit"
+        },
+        "inputs": [
+          {
+            "id": "size2",
+            "label": "Size",
+            "unit": "BTC",
+            "decimals": 5,
+            "rounding": "exact",
+            "row": {
+              "key": "BTC",
+              "keyColumn": "Market"
+            }
+          }
+        ],
+        "recorded": [
+          "size1"
+        ],
+        "actual": "size2",
+        "formula": [
+          "size1",
+          "2",
+          "*"
+        ],
+        "compare": "eq",
+        "maxAgeMs": 5000
+      },
+      "postSteps": [
+        "在 Positions 表 BTC-USDC 行的 Close 列点击 Market 平仓按钮",
+        "点击平仓确认框里的「Market Close」按钮，平掉 BTC-USDC 持仓",
+        "打开 /trade/HYPE"
+      ],
+      "precondition": [
+        "账户具备交易权限",
+        "账户没有持仓",
+        "下单面板处于 Market 订单类型"
+      ],
+      "priority": "P0",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 阶段 4：执行器支持「记下读数」（reading）与按行读表格（row），这条的前后比较改成机器判据。 三轮试跑都卡在同一处：准备器补的 Size decimal-equation 读不出（无法唯一读取：size；公式缺输入），无判据的断言交给判官全部判否。原稿让配方建第一笔、用例加第二笔，配方与用例两头碰同一个持仓；改成用例自己建两笔（controlled，持仓 slot BTC-USDC，收尾两步市价平仓）。数量之和改成确定性 text：下单面板 innerText 实测为「Current Position\\n0.00 HYPE」这种换行格式，BTC 显示 5 位小数（如「0.00100 BTC」），所以判「Current Position\\n${env.TP_BTC_DOUBLE_SIZE_TEXT}」；需要协调者绑定 TP_BTC_ORDER_SIZE_TEXT=「0.00100 BTC」与 TP_BTC_DOUBLE_SIZE_TEXT=「0.00200 BTC」（REQ-SIZE-TEXT）。第二笔前 Size 输入框是否清空未实测，第 6 步照样重新输入。A-POS-01-02-3（Entry Price = 两笔成交价按数量加权）判据留空（REQ-CALC）：两笔成交价只在 Trade History 标签里，与 Positions 的 Entry Price 不在同一屏，现有 decimal-equation 与 judge 都只看一屏，需准备器或人决定怎么判（例如接受「Entry Price 在两笔成交价之间」这种弱判据要改意图）。；2026-09-27 代为复核：加权均价跨两个标签页，现有判据读不了跨屏读数，改为开放问题（记录不判），持仓数量之和仍是主判据；要真判需执行器支持「按行前后读数」（C 类同一缺口）。开放问题（不作为判据）：「Entry Price」应为两笔成交的加权均价。 加权均价仍是开放问题：两笔成交价只在 Trade History，同一行首出现两行时按行读取判为没量到；要判需要先有 Trade History 的实测行格式。",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-WALLET",
+            "kind": "session",
+            "status": "unverified"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        },
+        {
+          "provided": "steps",
+          "state": "position.open"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "加仓后 Size 或均价不正确会让交易者误判盈亏与强平风险",
+        "ruleRefs": [
+          "R-positions"
+        ]
+      },
+      "ruleRefs": [
+        "R-positions"
+      ],
+      "scenarioType": "positive",
+      "sourceRefs": [
+        "materials/exploration.md#19",
+        "materials/exploration.md#13",
+        "materials/exploration.md#1"
+      ],
+      "steps": [
+        "打开 /trade/BTC",
+        "点击下单面板里的「Buy / Long」",
+        "在下单面板「Size」输入框输入 ${env.TP_BTC_ORDER_SIZE}",
+        "点击下单面板里的「Place Order」按钮",
+        "点击「Confirm Order」确认框里的「Buy / Long」按钮，市价买入 BTC-USDC",
+        "在下单面板「Size」输入框输入 ${env.TP_BTC_ORDER_SIZE}",
+        "点击下单面板里的「Place Order」按钮",
+        "点击「Confirm Order」确认框里的「Buy / Long」按钮，加仓 BTC-USDC",
+        "点击页面下半部账户面板标签行里的「Positions」"
+      ],
+      "storyId": "S-POS-01",
+      "tier": 2,
+      "title": "已有 BTC-USDC 多头时再成交同向买单，Size 增加、均价更新"
+    }
+  },
+  "C-POS-02-02": {
+    "baseRevision": "rev-665d9c75-7ad7-49a8-838c-736a6de62b8e",
+    "content": {
+      "acRefs": [
+        "S-POS-02/AC-2"
+      ],
+      "assertions": [
+        {
+          "id": "A-POS-02-02-1",
+          "oracle": {
+            "kind": "decimal-equation",
+            "scope": {
+              "start": "Positions (1)",
+              "end": "Deposit"
+            },
+            "inputs": [
+              {
+                "id": "size",
+                "label": "Size",
+                "unit": "BTC",
+                "decimals": 5,
+                "rounding": "exact",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              },
+              {
+                "id": "mark",
+                "label": "Mark Price",
+                "unit": "USDC",
+                "decimals": 0,
+                "rounding": "nearest",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              },
+              {
+                "id": "entry",
+                "label": "Entry Price",
+                "unit": "USDC",
+                "decimals": 0,
+                "rounding": "nearest",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              },
+              {
+                "id": "pnl",
+                "label": "PNL (ROE %)",
+                "unit": "$",
+                "decimals": 2,
+                "rounding": "nearest",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              }
+            ],
+            "actual": "pnl",
+            "formula": [
+              "size",
+              "mark",
+              "entry",
+              "-",
+              "*"
+            ],
+            "compare": "sign",
+            "maxAgeMs": 5000
+          },
+          "ruleRefs": [
+            "R-positions"
+          ],
+          "statement": "「Mark Price」高于「Entry Price」时「PNL (ROE %)」为正数",
+          "afterStep": 1
+        },
+        {
+          "id": "A-POS-02-02-2",
+          "oracle": {
+            "kind": "decimal-equation",
+            "scope": {
+              "start": "Positions (1)",
+              "end": "Deposit"
+            },
+            "inputs": [
+              {
+                "id": "liq",
+                "label": "Liq. Price",
+                "unit": "USDC",
+                "decimals": 0,
+                "rounding": "nearest",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              },
+              {
+                "id": "entry",
+                "label": "Entry Price",
+                "unit": "USDC",
+                "decimals": 0,
+                "rounding": "nearest",
+                "row": {
+                  "key": "BTC",
+                  "keyColumn": "Market"
+                }
+              }
+            ],
+            "actual": "liq",
+            "formula": [
+              "entry"
+            ],
+            "compare": "lt",
+            "maxAgeMs": 5000
+          },
+          "ruleRefs": [
+            "R-positions"
+          ],
+          "statement": "多头持仓的「Liq. Price」低于「Entry Price」",
+          "afterStep": 1
+        }
+      ],
+      "covers": [],
+      "design": {
+        "inputDimension": "多头持仓的标记价相对开仓价",
+        "partitionId": "mark-above-entry",
+        "predicate": "多头且标记价高于开仓价",
+        "representative": "浮盈中的多头",
+        "technique": "equivalence",
+        "validity": "valid"
+      },
+      "designMethod": "equivalence",
+      "expected": "当「Mark Price」高于「Entry Price」时，该多头持仓的「PNL (ROE %)」为正数",
+      "featureRefs": [
+        "positions.inspect"
+      ],
+      "id": "C-POS-02-02",
+      "key": "positions|long-mark-above-entry|pnl-positive-liq-below-entry",
+      "lifecycle": {
+        "baseline": [
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "BTC-USDC"
+                },
+                "statement": "市场头部显示 BTC-USDC"
+              }
+            ],
+            "statement": "当前市场为 BTC-USDC"
+          },
+          {
+            "checks": [
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Positions ("
+                },
+                "statement": "账户面板 Positions 标签带数量"
+              },
+              {
+                "kind": "screen",
+                "oracle": {
+                  "kind": "text",
+                  "value": "Isolated"
+                },
+                "statement": "下单面板顶部保证金模式按钮显示 Isolated"
+              }
+            ],
+            "statement": "已有一笔逐仓多头持仓"
+          }
+        ],
+        "cleanup": [],
+        "mode": "read-only",
+        "rationale": "只查看准备好的逐仓持仓行；建仓、改逐仓与复原都由准备配方与它的补偿负责",
+        "resources": [],
+        "session": "unchanged",
+        "settings": [],
+        "sideEffects": [],
+        "sourceRefs": [
+          "materials/exploration.md#13"
+        ],
+        "supports": [
+          "$expected",
+          "A-POS-02-02-1",
+          "A-POS-02-02-2"
+        ],
+        "version": 2
+      },
+      "oracle": {
+        "kind": "decimal-equation",
+        "scope": {
+          "start": "Positions (1)",
+          "end": "Deposit"
+        },
+        "inputs": [
+          {
+            "id": "size",
+            "label": "Size",
+            "unit": "BTC",
+            "decimals": 5,
+            "rounding": "exact",
+            "row": {
+              "key": "BTC",
+              "keyColumn": "Market"
+            }
+          },
+          {
+            "id": "mark",
+            "label": "Mark Price",
+            "unit": "USDC",
+            "decimals": 0,
+            "rounding": "nearest",
+            "row": {
+              "key": "BTC",
+              "keyColumn": "Market"
+            }
+          },
+          {
+            "id": "entry",
+            "label": "Entry Price",
+            "unit": "USDC",
+            "decimals": 0,
+            "rounding": "nearest",
+            "row": {
+              "key": "BTC",
+              "keyColumn": "Market"
+            }
+          },
+          {
+            "id": "pnl",
+            "label": "PNL (ROE %)",
+            "unit": "$",
+            "decimals": 2,
+            "rounding": "nearest",
+            "row": {
+              "key": "BTC",
+              "keyColumn": "Market"
+            }
+          }
+        ],
+        "actual": "pnl",
+        "formula": [
+          "size",
+          "mark",
+          "entry",
+          "-",
+          "*"
+        ],
+        "compare": "sign",
+        "maxAgeMs": 5000
+      },
+      "postSteps": [],
+      "precondition": [
+        "当前市场为 BTC-USDC",
+        "已有一笔逐仓多头持仓"
+      ],
+      "priority": "P1",
+      "readiness": {
+        "design": "candidate",
+        "execution": "blocked",
+        "reason": "2026-09-28 阶段 4：执行器支持「记下读数」（reading）与按行读表格（row），这条的前后比较改成机器判据。 试跑 rev-2c0c6dfc 用全仓持仓（Cross 20x、${env.TP_BTC_ORDER_SIZE}）跑过：A-POS-02-02-1 判官 2/3 过，A-POS-02-02-2 0/3——全仓小仓位的 Liq. Price 显示 N/A，断言在全仓下写不成立（产品没错）。按复核意见改为要求 position.isolated：由准备配方在 BTC-USDC 建立（打开 /trade/BTC、点下单面板顶部保证金模式按钮、在「BTC-USDC Margin Mode」弹窗内点「Isolated」选项、点弹窗里的「Confirm」、订单类型点 Market、点 Buy / Long、Size 输入 ${env.TP_BTC_ORDER_SIZE}、Place Order、在「Confirm Order」确认框点「Buy / Long」——必须是多头），补偿依次：Positions 表 BTC-USDC 行 Close 列点「Market」、点确认按钮平仓（No open positions yet）、再把 BTC-USDC 保证金模式改回 ${env.TP_ORIGINAL_MARGIN_MODE}（有持仓时改不了，必须先平仓）、订单类型点 Market、打开 /trade/HYPE。逐仓配方尚未提供，逐仓持仓的 Liq. Price 是否为有限数值也未实测。PNL 正负取决于执行时的行情，judge 判据写成「PNL 正负与 Mark/Entry 高低一致」，行情朝哪边走都能判。与改 BTC-USDC 保证金模式的用例（C-J02-*、C-MAR-01-*）共用账户设置，不能并行。 逐仓小仓位的 Liq. Price 是有限数值（2026-09-26～27 测试网持仓截图：「80,787 … $4.16 (Isolated)」），REQ-ISOLATED-LIQ 已有证据。",
+        "requirements": [
+          {
+            "evidenceRefs": [],
+            "id": "REQ-POSITION",
+            "kind": "fixture",
+            "status": "missing"
+          },
+          {
+            "evidenceRefs": [],
+            "id": "REQ-MARKET-DIRECTION",
+            "kind": "applicability",
+            "status": "unverified"
+          }
+        ]
+      },
+      "requiresStates": [
+        {
+          "provided": "environment",
+          "state": "wallet.connected"
+        },
+        {
+          "provided": "preparation",
+          "state": "position.isolated"
+        }
+      ],
+      "risk": {
+        "impact": "funds-and-exposure",
+        "reason": "盈亏或强平价算反会让交易者在接近强平时误以为安全",
+        "ruleRefs": [
+          "R-positions"
+        ]
+      },
+      "ruleRefs": [
+        "R-positions"
+      ],
+      "scenarioType": "positive",
+      "sourceRefs": [
+        "materials/exploration.md#13"
+      ],
+      "steps": [
+        "点击页面下半部账户面板标签行里的「Positions」（有持仓时标签显示为「Positions (1)」）"
+      ],
+      "storyId": "S-POS-02",
+      "tier": 1,
+      "title": "多头持仓在 Mark Price 高于 Entry Price 时 PNL 为正、强平价低于开仓价"
+    }
+  }
+}

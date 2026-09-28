@@ -57,19 +57,15 @@ tier 1 和 tier 2 **必须**同时给 `oracle`——同一个结果，写成程�
   报告里写着各次采样是否意见不一——**分歧本身就是一个发现**：要么条件写得含糊，要么产品输出不稳定。
 - 它永远是 tier 3，每次判断要调 `samples` 次模型，执行预算照算。
 
-## 第六种：`api`——判决从接口读，不从屏幕读
+## 不要写 `api`：判决从屏幕读
 
-被测对象有机器可读的状态接口时（交易所的清算 / 挂单 / 余额接口），资金与仓位类的结果**必须**写成它：
+`api` 判据（直接问被测站的接口）只为执行 2026-09-12 以前的旧用例留着，**新用例不许写**：这里产出的是端到端 UI 测试，
+接口说成功而屏幕上没有那一行，用例会通过而产品其实是坏的。受限解码的枚举里没有它，门禁 `oracle-offsite` 会点名扣分。
 
-```json
-{"kind":"api","url":"${env.INFO_URL}","method":"POST","body":"{\"type\":\"openOrders\",\"user\":\"${env.ADDRESS}\"}","path":"[coin=BTC].limitPx","op":"eq","value":40000,"settleMs":2500}
-```
-
-- `path` 是点分路径；数组元素**按字段选**（`[coin=BTC]`、`assetPositions[position.coin=BTC].position.szi`），不按下标——下标随账户里有几个仓位而变。
-- `op`：`eq / neq / gte / lte / exists / absent` 是 tier 1；`increased / decreased / unchanged` 是两次读数的关系，tier 2。
-- `settleMs` 给 2–4 秒：接口比界面慢一拍。
-- 接口地址与账户标识走 `${env.*}` 占位符，永远不写字面量。
-- 什么时候用：期望结果是接口会返回的一个数或一条记录（数量、价格、余额）。拒绝类结果仍用 `text`。
+资金、仓位、挂单这类结果照样从屏幕读：
+- 数值关系用 `decimal-equation`（同一屏几个读数之间的算术，`row` 按表格行读格子）；
+- 改动前后比较，先用 `reading` 在改动前那一步记下读数，改动后的 decimal-equation 在 `recorded` 里引用它；
+- 行有没有了用 `text` / `noText` / `count`，读一个在任何标签页都看得见的字（例如标签上的数量）。
 
 **字面量逐字照规格写。** 结果没法写成上面任何一种，那它就是 tier 3：
 就说它是 3，并且不写 `oracle`。
@@ -92,3 +88,31 @@ tier 1 和 tier 2 **必须**同时给 `oracle`——同一个结果，写成程�
 三位以上小数的百分比、千分位大数），但**源头在写断言的这一刻**。
 
 一条必然失败的用例比没有这条用例更糟，因为它会把真实的失败淹掉。
+
+## 判据能力表：各能判什么、不能判什么
+
+| 判据 | 能判 | 不能判 |
+|---|---|---|
+| `text` / `noText` | 这一步之后屏幕上有没有某段字面值 | 比较两个数；看另一个标签页里的内容 |
+| `count` | 某段字面值出现几次（同标签的多行） | 数值大小 |
+| `delta` | 紧挨着某个标签的数，这一步前后的变化 | 表头离数值很远的表格单元格 |
+| `decimal-equation` | 这一屏上几个读数之间的算术关系（逆波兰公式，可写常数，`compare` 支持 eq/gt/gte/lt/lte，`sign` 只比正负）；输入带 `row` 时按表格读一格；`recorded` 引用前面步骤记下的读数 | 这一步屏幕上没有的值 |
+| `reading` | 在它的 `afterStep` 记下一个读数（形状与 decimal-equation 的一项输入相同），给后面的 decimal-equation 用 | 自己不判对错：读到就记下，读不到是没量到 |
+| `judge` | 模型看屏幕回答若干是非题，多次采样 | 稳定性差；只留给没有别的办法判的生成内容 |
+
+**读不了这一步屏幕上没有的值。** 检查需要另一个屏幕上的值时，在 `readiness.reason` 里写明缺什么，不要硬塞一个 judge。
+
+### 跨步骤读数：前后比较、均值
+
+「改完之后某个数比改之前大 / 小 / 不变」「两次操作之后的某个数等于前两次读数的均值」这类检查，要拿前一步的读数和后一步比。
+做法是两条断言：先在改动之前的那一步用 `reading` 记下读数，再在改动之后用 decimal-equation 引用它。
+
+```json
+{"id":"A1","afterStep":2,"statement":"记下改动前那一行的读数","oracle":{"kind":"reading","input":{"id":"before","label":"<列头>","unit":"<单位>","decimals":0,"rounding":"exact","row":{"key":"<那一行第一格的开头>","keyColumn":"<第一列的列头>"}}}}
+{"id":"A2","afterStep":5,"statement":"改动后同一行的读数更小","oracle":{"kind":"decimal-equation","scope":{"start":"<范围起点>","end":"<范围终点>"},"inputs":[{"id":"after","label":"<列头>","unit":"<单位>","decimals":0,"rounding":"exact","row":{"key":"<同上>","keyColumn":"<同上>"}}],"recorded":["before"],"actual":"after","formula":["before"],"compare":"lt","maxAgeMs":5000}}
+```
+
+- `row`：表格里一格一格离表头很远，`label: 值` 的读法读不到。`key` 是那一行第一格的开头，`keyColumn` 是第一列的表头，`label` 是要读那一列的表头——三样都照材料里的原文抄。同一个 `key` 出现两行就是没量到。
+- 记读数的那一步必须在改动之前，引用它的断言在改动之后；顺序不对门禁报 `reading-order`。
+- 读不到（占位符、那一行还没出现）不是失败，是没量到；后面引用它的判据也跟着没量到。
+- 同一行几列不一定是同一时刻算出来的：一列由另两列算出来时，用 eq 核对大小会偶尔对不上。只要求正负一致时用 `compare:"sign"`，不要用 eq。
