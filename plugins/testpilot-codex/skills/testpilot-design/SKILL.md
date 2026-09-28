@@ -13,7 +13,7 @@ rule e2ff0801  "exploratory": the evidence is a charter and what was observed un
 rule e8b6bb79  `expected` is ONE concrete, checkable outcome. Name the obse
 rule 9abe8c9d  Quote interface text EXACTLY as the specification writes it.
 rule 8cf8194e  `tier` says how hard the verdict is: 1 = a program can settl
-rule 03eea4fb  For tier 1 and tier 2 you MUST also give `oracle`, the same
+rule 272dfcd0  For tier 1 and tier 2 you MUST also give `oracle`, the same 
 rule 3d28fc7b  `oracle` is ALWAYS present as an object. For tier 3 write {"
 rule f56688bf  Steps are short, concrete, end-agnostic actions. No selector
 rule f4b69bfb  Never put credentials in a step. Use ${env.NAME} and ${secre
@@ -26,13 +26,13 @@ rule 6c6015b6  `priority` says how much it costs to ship this broken, not h
 rule 17526ec2  Every new case includes lifecycle version 2. Completeness is
 rule fdd6fff8  `postSteps` puts the product back. If the case creates a res
 rule 67dcfa14  The screen needs time to catch up after an action that remov
-rule 8d917c36  An assertion reads the screen as it is after its step: only 
+rule 8d917c36  An assertion reads the screen as it is after its step: only
 rule 9eb2efb0  A transient message (a toast, an inline error that fades) mu
-rule 961c187d  A confirmation dialog is its own step: the click that opens 
+rule 961c187d  A confirmation dialog is its own step: the click that opens
 rule 21141dc1  If the case's own steps can create the resource it needs, cr
 rule cd957936  End the case on the screen where its own resources are visib
 rule 4da874a3  An effect the product cannot undo (a history row, a fee, a n
-rule 83c3d10e  Literal interface text in steps and oracles (labels, button 
+rule 83c3d10e  Literal interface text in steps and oracles (labels, button
 -->
 
 # TestPilot：为一条故事设计文本用例

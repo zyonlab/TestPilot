@@ -38,7 +38,8 @@ export const ORACLE_CAPABILITIES = [
   "- text / noText: a literal on the screen after the step. Cannot compare two numbers, cannot see another tab.",
   "- count: how many times a literal appears. Use for rows that share a label.",
   "- delta: a number printed right beside a label, before vs after the step. Cannot read table cells whose header is far from the value.",
-  "- decimal-equation: arithmetic over readings taken from ONE screen snapshot (formula in RPN, constants allowed, compare eq/gt/gte/lt/lte). Cannot use a reading from an earlier step.",
+  "- decimal-equation: arithmetic over readings on one screen (formula in RPN, constants allowed, compare eq/gt/gte/lt/lte, or sign when only the sign must agree — columns of one row are not always priced at the same instant). An input with row {key, keyColumn} reads a table cell: the row whose first cell starts with key, the column whose header is the label.",
+  "- reading: records one reading (same shape as a decimal-equation input) after its step. A later decimal-equation lists the id in recorded and uses it in the formula — this is how a value before a step is compared with the value after it, or two earlier readings are averaged.",
   "- judge: a model looks at the screen and answers yes/no statements, sampled several times. Unstable; use only for generated content nothing else can decide.",
-  "- None of them compares a reading from one step with a reading from a later step, or reads a value from another screen. If the check needs that, say so in readiness.reason instead of forcing a judge.",
+  "- None of them reads a value that is not on the screen at that step. If the check needs that, say so in readiness.reason instead of forcing a judge.",
 ].join("\n");

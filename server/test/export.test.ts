@@ -323,3 +323,17 @@ it('executes all legacy exported cleanup steps, attaches unknown receipts and pr
  await callback({page:{goto:async()=>{},isClosed:()=>false},aiAction:async(text:string)=>{actions.push(text);},aiAssert:async()=>{}});
  expect(attachments[0].map((r:any)=>r.status)).toEqual(['unknown','unknown']);
 });
+
+it('exports cross-step readings with one readings map per case, and ships the decimal-equation module oracle-core imports', () => {
+  const row = { key: 'BTC', keyColumn: 'Market' };
+  const c = {...kase({ title: 'margin-liq', steps: [{ order: 1, text: 'Open Positions' }, { order: 2, text: 'Add margin' }], expected: 'liq lower' }), assertions: [
+    { id: 'a', statement: 'record', afterStep: 1, oracle: { kind: 'reading' as const, input: { id: 'liqBefore', label: 'Liq. Price', unit: 'USDC', decimals: 0, rounding: 'exact' as const, row } } },
+    { id: 'b', statement: 'lower', afterStep: 2, oracle: { kind: 'decimal-equation' as const, scope: { start: 'Positions', end: 'Deposit' }, inputs: [{ id: 'now', label: 'Liq. Price', unit: 'USDC', decimals: 0, rounding: 'exact' as const, row }], recorded: ['liqBefore'], actual: 'now', formula: ['liqBefore'], compare: 'lt' as const, maxAgeMs: 5000 } },
+  ] };
+  const files = buildExportFiles(project, [c as never]);
+  const spec = files['tests/_/margin-liq.spec.ts'];
+  expect(spec.match(/const readings = new Map\(\);/g)).toHaveLength(1);
+  expect(spec.match(/, readings\);/g)).toHaveLength(2);
+  expect(files['tests/oracle-core.ts']).toContain('./decimalEquation.js');
+  expect(files['tests/decimalEquation.ts']).toContain('export function evaluateReading');
+});

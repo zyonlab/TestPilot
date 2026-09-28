@@ -43,7 +43,7 @@ export const GUIDES = {
   numeric: {
     when: "a prerequisite or an oracle needs a number: equal to, greater than, or a relation between readings",
     text: [
-      "Use a deterministic screen oracle for numeric checks. decimal-equation accepts decimal constants and compare eq/gt/gte/lt/lte — a reading greater than 0 is formula [\"0\"] with compare \"gt\". Implement numeric oracles from observed data (the per-step screen text in probeResult.observations).",
+      "Use a deterministic screen oracle for numeric checks. decimal-equation accepts decimal constants and compare eq/gt/gte/lt/lte/sign — a reading greater than 0 is formula [\"0\"] with compare \"gt\". A value before a step compared with the value after it is a reading assertion (afterStep before the change) plus a later decimal-equation that lists it in recorded; a table cell is an input with row {key, keyColumn}. Implement numeric oracles from observed data (the per-step screen text in probeResult.observations).",
       "Every screen check and probeCheck is a declarative statement that should hold, never a question or a request to record a value; to read a value, look at probeResult.observations.",
       ORACLE_CAPABILITIES,
     ].join("\n"),

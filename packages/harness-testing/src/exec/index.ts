@@ -16,3 +16,4 @@ export * from "./preparationChecks.js";
 
 export * from './lifecycle.js';
 export * from "./browserRegistry.js";
+export { tableCell, type RecordedReadings, type DecimalInterval } from "./decimalEquation.js";

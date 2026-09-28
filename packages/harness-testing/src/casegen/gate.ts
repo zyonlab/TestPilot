@@ -196,7 +196,8 @@ export function caseUiLiterals(c: Pick<TextCase, 'steps' | 'oracle' | 'assertion
   const fromOracle = (o: MachineOracle | undefined) => {
     if (!o) return;
     if (o.kind === 'text' || o.kind === 'noText' || o.kind === 'count' || o.kind === 'delta') take(o.value);
-    if (o.kind === 'decimal-equation') { take(o.scope.start); take(o.scope.end); for (const i of o.inputs) take(i.label); }
+    if (o.kind === 'decimal-equation') { take(o.scope.start); take(o.scope.end); for (const i of o.inputs) { take(i.label); take(i.row?.keyColumn); } }
+    if (o.kind === 'reading') { take(o.input.label); take(o.input.row?.keyColumn); if (o.scope) { take(o.scope.start); take(o.scope.end); } }
   };
   fromOracle(c.oracle);
   for (const a of c.assertions ?? []) fromOracle(a.oracle);
@@ -287,6 +288,25 @@ export function runGate(bundle: CaseBundle, opts: GateOptions = {}): GateReport 
       const admitted = normalizeLiteral(c.readiness?.reason ?? '');
       const unsourced = caseUiLiterals(c).filter((lit) => !knownCorpus.includes(normalizeLiteral(lit)) && !admitted.includes(normalizeLiteral(lit)));
       if (unsourced.length) add('literal-unsourced', `ui_literal_unsourced: ${unsourced.map((l) => `"${l}"`).join(', ')} appear in neither the domain reference nor the retrieved materials — copy the label exactly as the materials show it (retrieve_spec with the label), or read something the materials do record; if the label is right but unrecorded, name it in readiness.reason as unverified`, c.id, 'warn', { field: 'steps', args: { literals: unsourced.join(', ') } });
+    }
+    /**
+     * 跨步骤读数（docs/v3/15 阶段 4）：`reading` 要在某一步之后记，且有后面的 decimal-equation 用它；
+     * decimal-equation 的 `recorded` 要在它之前的步骤记过。顺序不对，执行时只会是「没量到」。
+     */
+    {
+      const at = (a: { afterStep?: number }) => a.afterStep ?? c.steps.length + 1;
+      const all = [...(c.assertions ?? []).map((a) => ({ id: a.id, step: at(a), oracle: a.oracle })), ...(c.oracle ? [{ id: 'oracle', step: c.steps.length + 1, oracle: c.oracle }] : [])];
+      const recordedAt = new Map<string, number>();
+      for (const a of all) if (a.oracle?.kind === 'reading') recordedAt.set(a.oracle.input.id, Math.min(a.step, recordedAt.get(a.oracle.input.id) ?? Infinity));
+      const problems: string[] = [];
+      for (const a of all) if (a.oracle?.kind === 'decimal-equation') for (const id of a.oracle.recorded ?? []) {
+        const step = recordedAt.get(id);
+        if (step === undefined) problems.push(`${a.id} uses ${id}, which no reading records`);
+        else if (step >= a.step) problems.push(`${a.id} uses ${id}, recorded at or after the step it is checked on`);
+      }
+      const used = new Set(all.flatMap((a) => (a.oracle?.kind === 'decimal-equation' ? a.oracle.recorded ?? [] : [])));
+      for (const a of all) if (a.oracle?.kind === 'reading' && !used.has(a.oracle.input.id)) problems.push(`${a.id} records ${a.oracle.input.id} but no decimal-equation uses it`);
+      if (problems.length) add('reading-order', `reading_order: ${problems.join('; ')} — record a reading with {kind:"reading"} in an assertion with afterStep BEFORE the step that changes it, and list its id in the later decimal-equation's recorded`, c.id, 'warn', { field: 'steps', args: { problems: problems.join('; ') } });
     }
     if (!c.expected.trim())
       add("structure", "no expected outcome: nothing to pass or fail on", c.id, "warn", { field: "expected" });
