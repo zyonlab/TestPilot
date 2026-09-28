@@ -1,13 +1,13 @@
 <h1 align="center">TestPilot</h1>
 
 <p align="center">
-  <b>Turn requirement documents, or an exploration of a live site, into human-reviewed end-to-end UI tests whose verdicts are read from the screen.</b>
+  <b>A vertical harness agent for end-to-end UI testing: the model proposes; programs, the screen and people decide.</b>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
   <img alt="Node >= 22" src="https://img.shields.io/badge/node-%3E%3D22-339933.svg">
-  <img alt="pnpm workspace" src="https://img.shields.io/badge/pnpm-workspace-F69220.svg">
+  <img alt="tests" src="https://img.shields.io/badge/tests-1%2C878%20passing-brightgreen.svg">
   <img alt="Status: early" src="https://img.shields.io/badge/status-early%20(0.1)-orange.svg">
 </p>
 
@@ -17,384 +17,277 @@
 
 ---
 
-> **Status**: early release (0.1). The full pipeline has been run end to end against the Hyperliquid testnet. Data formats and APIs may still change; check the recent changes in the [handoff guide](docs/v3/09-执行目标与接手指南.md) (Chinese) before upgrading.
+**The 30-second version**
 
-## What it is
+- **It has run against a real system; it is not a demo.** On the Hyperliquid testnet (a perpetual-futures exchange with real matching), one run produced 89 human-reviewed test cases. Execution preparation took three days and 13 batches, going from 25 to **70/89 cases verified**. The test account was checked at the end: no positions, no open orders, account value 984.02 → 979.90 (fees and slippage), nothing left behind.
+- **Scores are computed by tools, never written by the model.** Gates, oracles, scoring and execution verdicts are deterministic code. The model may propose; it may not grade itself. When an agent once submitted forged run metadata (`provider` where `baseUrl` belongs, and a thinking flag reported the wrong way), provenance checking rejected it on the spot (it is now the adversarial fixture `fixtures/eval-cases/meta-forgery.json`).
+- **Verdicts are read from the screen.** Cases drive the real UI and judge what the UI shows; asking the product's own API for a verdict is not allowed. "The API said OK but the row never appeared" cannot pass.
+- **Every failure leaves evidence and feeds the next round.** Failures are attributed by fixed rules to one of six layers (model, context, tool, workflow, test case, product). Approved rejection reasons and newly seen interface facts flow back into the next generation automatically, but only take effect after a person agrees.
 
-TestPilot takes one of two inputs: a requirement document (spec), or an exploration of a running site (explore). It builds a product model and a module tree, then writes user stories and text test cases, compiles them into [Midscene](https://midscenejs.com/) actions, runs them in a real browser, and can export a Playwright project.
+> I have built this alone since July 2026: 353 commits, about 118k lines of TypeScript including tests, 1,878 automated tests passing.
+> Every number below names its source (run id, report, commit) so you can check it; what failed or is not done yet is written down in [the honest part](#the-honest-part-what-failed-and-what-is-not-done).
 
-How it differs from "let an AI write test scripts":
+---
 
-- **Humans hold the gates.** A person freezes the module tree the model proposes, approves each text case, and decides regression candidates. Only approved cases are compiled and run. What is learned from data (interface facts, standard sets, a new executor model) is only proposed; a person decides whether it takes effect.
-- **Verdicts come from the screen.** Cases drive the product's UI and judge what the UI shows. They never call the product's own API for a verdict, so "the API said OK but the row never appeared" cannot pass.
-- **Deterministic gates.** Stories, cases and generated code are checked by tools (structure, provenance, oracles, coverage). Scores are computed, not self-reported by the model.
-- **Domain knowledge is project data.** Rule packs, domain references and environment profiles live in the project. You can draft them in a chat drawer or write them yourself. No domain content is hard-coded.
-- **Failures must be explainable.** Every run has an attribution report that assigns problems, by fixed rules, to one of six layers: model, context, tool, workflow, test case, or product. Cases that fail an assertion become regression candidates, and a human decides whether to keep them.
-- **Learns from the runs.** Approved rejection reasons are handed to the next case generation; new interface text met during execution becomes fact candidates; cases that passed real execution can be frozen into a standard set used to compare executor models.
+## Contents
 
-## Capabilities
+1. [The problem](#the-problem)
+2. [How I understand harness agents, and how that shows up here](#how-i-understand-harness-agents-and-how-that-shows-up-here)
+3. [Architecture](#architecture)
+4. [Module design](#module-design)
+5. [Results and evidence](#results-and-evidence)
+6. [Datasets and process data usable for training](#datasets-and-process-data-usable-for-training)
+7. [What comes next](#what-comes-next)
+8. [Quick start](#quick-start)
+9. [Documentation](#documentation)
 
-| Capability | What it does |
-|---|---|
-| Product model & module tree | Features and rules from the material or exploration; the model proposes modules, a human freezes them |
-| Stories & text cases | Generated per module; each case carries its risk, covered acceptance criteria, test data, design evidence (equivalence, boundary, decision table…) and oracles |
-| Oracle tiers | Tier 1 text / count / URL checked by a program; tier 2 a relation between two readings; tier 3 judged by a model looking at the screen. Generated content (images, summaries, captions) uses a `judge` oracle: yes/no criteria, sampled several times, decided statistically |
-| Design gate | Structure, provenance, vague or volatile oracles, negative-case ratio, acceptance coverage |
-| Compile & execute | Approved cases become Midscene actions, run in a browser with a screenshot per step; each case gets visual and performance baselines, and its Midscene report is kept |
-| Run report | Per case: overview, step timeline, checks, visual baseline, performance, raw data, plus a link to the Midscene report |
-| Attribution & regression | See "Failures must be explainable" above |
-| Cross-step readings | `reading` records a value after one step and a later `decimal-equation` compares against it; table cells are read by row key and column header; `compare:"sign"` compares signs only |
-| Learning loop | Counterexamples frozen into each run, interface fact candidates, standard sets, executor evaluation — see "9. Learning from data" below |
-| Export | A standalone Playwright + Midscene project that uses the same oracle implementation as the platform |
-| Host entry | Through an MCP server and plugins, Claude Code (and the experimental Codex and Penguin) can perform what the UI can, except 3 UI-only features (chat drawer, event stream…), enforced by `pnpm check:host-parity` |
+---
 
-## What a run looks like
+## The problem
 
-Follow this line once and you have seen all of TestPilot. The screenshots come from a real run against the [Hyperliquid testnet](https://app.hyperliquid-testnet.xyz/trade): planned by the locally signed-in Claude Code, started from an exploration, producing 34 user stories and 115 text cases, 9 of which were executed. The UI is shown in Chinese; English and Japanese are available from the language switch.
+Letting an LLM write E2E tests usually ends in "all green, nothing proven". Before building this I measured three kinds of problem:
+
+| Problem | What it looks like | What this project does about it |
+|---|---|---|
+| **Fake green** | Self-healing retries until it passes; a judge model glances at a screenshot and says "fine". The same four cases, run three times, passed a different one each time (recorded in the design notes of `exec/oracle.ts`) | Tiered oracles: whatever a program can decide, a program decides; a model's verdict needs several samples and a statistical rule; "unobservable" is kept apart from pass and fail |
+| **Broken provenance** | 66 cases quoted 12 pieces of UI text; only 4 could be found in the requirement material ([measurement](docs/archive/spec/01-设计依据与实测数据.md)) | Every case carries `sourceRefs` pointing at source chunks the server actually delivered; UI text the materials never mention gets flagged by the gate |
+| **The model grades itself** | Eval scores written into a file by the agent, never recomputed | Scoring, gates and verdicts are deterministic code; the run's models, skill version and materials hash are frozen in the ledger, and a run missing any of them is not scored |
+
+---
+
+## How I understand harness agents, and how that shows up here
+
+My definition of a harness: **everything outside the model that decides whether the agent can be trusted.** I split it into six runtime responsibilities (after the survey [arXiv 2606.20683](https://arxiv.org/pdf/2606.20683)), plus the two cells a vertical domain adds and that are hardest: **grounding** and **artifact reuse**. General agent frameworks give you the skeleton of the first six; the last two you have to build.
+
+| Responsibility | Question | How TestPilot does it | Code |
+|---|---|---|---|
+| **Observation** | How is the system under test perceived | Two inputs: requirement material (spec), or exploration in a real browser driven by a rule-pack charter (explore), recording controls, state transitions and page text screen by screen | `harness-testing/src/exec/interactive.ts`, `domain/charter.ts` |
+| **Context** | What reaches the model, when, how much | Materials frozen at run start; retrieval delivered within a budget and **every delivery audited** (replacing blind token trimming); run-wide material sent once; execution semantics always on, guides read on demand, one level deep | `server/src/retrievalAudit.ts`, `runStages.ts::loadRunInstructions`, `preparationGuidance.ts` |
+| **Control** | Who decides the next step | A server-side stage machine; **the server splits work units, the planner may only claim them**; budgets, pause, resume, cancel; freezing the module tree and reviewing cases are human-only gates | `workUnits.ts`, `workflowControls.ts`, `moduleStage.ts` |
+| **Action** | How tools are called and outputs produced | The planner writes artifacts through MCP tools, every write schema-checked; the runner performs one UI action per step; a deny-list guard covers every request, redirect and new window | `packages/testpilot-mcp`, `exec/run.ts`, `guard.ts` |
+| **State** | How long-horizon information survives | **The run ledger**: every artifact is an immutable, content-addressed revision with provenance references and an author (human / agent / system); the run's model, skill and material bindings are frozen at registration | `server/src/runLedger.ts` |
+| **Verification** | On what grounds is it done, and right | Design gate, code gate, tiered oracles (text / count / decimal equation / cross-step readings / sampled judge), lifecycle cleanup checks, human review | `casegen/gate.ts`, `exec/oracle.ts`, `exec/decimalEquation.ts`, `exec/lifecycle.ts` |
+| **Grounding** *(vertical)* | Can every output point back to a source | A case's `sourceRefs` must be chunks retrieved in this run; the `literal-unsourced` gate rule checks UI text against the domain reference and materials | `workUnits.ts`, `gate.ts` |
+| **Reuse** *(vertical)* | Can outputs be kept, reused, parameterised | Preparation recipes become reusable only after two independent cases verify them; export to a standalone Playwright project; standard sets; counterexamples and interface facts flow back | `preparationExperience.ts`, `export.ts`, `standardSets.ts` |
+
+Five principles run through all of it:
+
+1. **The loop lives in the host; the scale lives in the tools.** Planning loops run in a mature host agent (Claude Code / Codex); scoring, gates and verdicts stay in deterministic code the host cannot touch.
+2. **Verdicts come from the screen.** This is E2E testing, not API testing; the constrained-decoding oracle enum has no "ask the API" option at all.
+3. **People sign the decisions that matter.** Freezing the module tree, approving or rejecting cases (rejection needs a reason), deciding regression candidates, accepting interface facts, freezing standard sets, switching the executor model — the server requires `human`, and host tools cannot even register these actions.
+4. **Domain knowledge is data, not code.** Exchange rules and interface facts live in the project's rule pack and domain reference; `check:domain-neutral` keeps every domain word out of product code.
+5. **Three honest outcomes.** Pass, fail and unobservable are recorded separately; infrastructure failures are not product failures; leftover resources stop the batch rather than pretend the account is clean.
+
+---
+
+## Architecture
+
+### The pipeline of one run
 
 ```mermaid
 flowchart TD
-  S["(1) Spec documents"] --> PM["Product model"]
-  E["(1) Explore a live site"] --> PM
-  PM --> MT["(2) Module tree"]
-  MT --> FZ{{"Human freezes the tree"}}
-  FZ --> ST["(3) User stories"]
-  ST --> TC["(4) Text cases"]
-  TC --> G1{"Design gate<br/>structure · provenance · oracles · negatives"}
-  G1 -- fails --> TC
-  G1 -- passes --> RV{{"(5) Human review: approve / reject / edit"}}
-  RV --> CG["(6) Compile to Midscene actions<br/>(no model involved)"]
-  CG --> EX["(7) Run in a real browser<br/>verdict read from the screen"]
-  EX --> RP["(8) Run report · attribution · regression"]
+  S["Requirement material (spec)"] --> PM["Product model"]
+  E["Explore the target site<br/>rule-pack charter"] --> PM
+  PM --> MT["Module tree<br/>machine-checked: structure · refs · cycles"]
+  MT --> FZ{{"👤 A person freezes the tree"}}
+  FZ --> ST["User stories<br/>split into work units, claimed one by one"]
+  ST --> SR{{"👤 If rules carry unconfirmed hypotheses: a person reviews candidate stories"}}
+  SR --> TC["Text cases<br/>with provenance · oracles · lifecycle"]
+  TC --> G1{"Design gate (deterministic score)"}
+  G1 -- "fail: reopen the named units" --> TC
+  G1 -- pass --> RV{{"👤 Human review: approve / reject (with reason) / edit"}}
+  RV --> PR["Execution preparation<br/>probe → trial → repair; recipes set up and compensate"]
+  PR --> EX["Formal execution<br/>real browser, verdicts from the screen"]
+  EX --> RP["Report · six-layer attribution · regression candidates"]
   EX --> PW["Export a Playwright project"]
-  RP --> RG{{"Human decides regression candidates"}}
+  RP --> LR["Learning loop<br/>counterexamples · interface facts · standard sets · executor evaluation"]
+  LR -.->|"👤 takes effect only when a person agrees"| TC
 ```
 
-The pipeline stops for a human at **freezing the module tree, reviewing cases, and deciding regression candidates**; when a story's rules carry an unconfirmed hypothesis, the candidate stories wait for a person first too. Everything else is driven stage by stage by the server, and every stage's output is recorded in the run ledger as an immutable revision.
-
-The workbench is that line: eight stages with their state and artifacts — green is done, red is failed or waiting.
-
-![Workbench](docs/assets/workflow/01-bench.png)
-
-### 1. Start a run: give it documents, or let it look for itself
-
-Choose spec or explore, set the target URL, domain knowledge, rule pack and output language, and the planning is done by the project's chosen local, signed-in host (Claude Code or Codex, chosen once per project). Once the run is registered, the materials, rule pack, domain reference and planner runtime are frozen to it.
-
-![New run form](docs/assets/workflow/02-new-run.png)
-
-### 2. Module tree: the model proposes, a human freezes
-
-The model cuts a tree at least two levels deep from the materials or the exploration, and the server machine-checks it (structure, references, cycles). **Freezing is a human decision**: until the tree is frozen, no work unit can be claimed for stories. After freezing, press "continue" and the planner picks up where it left off.
-
-![Product structure](docs/assets/workflow/04-module-tree.png)
-
-### 3. User stories: one work unit per module
-
-Each story carries Given/When/Then acceptance criteria, the features and rules it refers to, and its provenance (which passage of which material). Every module shows its story count, highlighted when it is zero — so a module nobody covered is visible at a glance.
-
-![User stories](docs/assets/workflow/05-stories.png)
-
-### 4. Text cases and the design gate
-
-Cases hang off acceptance criteria and carry the risk they address, test data, the design technique behind them (equivalence classes, boundaries, decision tables…) and their oracles. The gate checks structure, provenance, whether an oracle is vague or reads a volatile value, the share of negative cases, and whether every criterion is covered. When it fails, the affected work units are reopened for another pass. The score is computed by tooling, never by the model itself.
-
-### 5. Review: approve or reject, one case at a time
-
-The list on the left filters, searches and handles cases in bulk; the panel on the right shows everything behind a case: why it is worth testing, which criterion it covers, preconditions, test data, steps and checks. You can edit a case, which invalidates its approval and sends it back to review. **Only approved cases go any further**, and a rejection with a reason becomes a counter-example candidate.
-
-![Review](docs/assets/workflow/07-review.png)
-
-### 6. Compile: no model involved
-
-Approved steps become Midscene actions (`aiAction` / `aiWaitFor` / `aiAssert`) one by one, then pass a code gate. This step is deterministic: the same set of approvals must compile to the same artifact, and execution recompiles and compares before it starts — a mismatch is refused.
-
-![Execution scope and compile](docs/assets/workflow/08-execute.png)
-
-### 7. Execution: real clicks in a real browser, verdicts read from the screen
-
-Every case gets a fresh browser session. Each step keeps a screenshot of the page under test, whether the locator hint matched, and whatever is checked after that step. Below is the passing case `C-MKT-BOOK-05` ("the trades list is newest first", 35.1s):
-
-![Execution steps](docs/assets/workflow/14-exec-timeline.png)
-
-Midscene's own report replays the run frame by frame, including where each click landed:
-
-![Midscene report](docs/assets/workflow/16-midscene-report.png)
-
-Those screenshots also become the visual baseline compared step by step on the next run; performance gets a baseline the same way.
-
-### 8. Reports: a failure has to say whose fault it is
-
-In the run report every case opens into overview, steps, checks, visual baseline, performance and raw data, with links straight to the Midscene report or back to review.
-
-![Run report](docs/assets/workflow/09-report.png)
-
-The attribution report assigns each problem to one of six layers — model, context, tooling and environment, workflow, case, product — by fixed rules, each with the rule that fired and the evidence behind it. In the run above, 5 of 9 cases failed and the report is explicit: one never ran because of the environment (not a verdict), one had a step that never landed on the UI (locating or decomposition failed), and one was failed by a programmatic oracle with no baseline to separate "just broke" from "always been broken".
-
-![Attribution report](docs/assets/workflow/12-attribution.png)
-
-Failed verdicts and rejections with a reason become regression candidates, and **approving or dismissing them is a human decision**: an approved defect joins the regression suite and runs from then on, an approved counter-example becomes an evaluation item for the generator.
-
-![Regression candidates](docs/assets/workflow/13-regression-candidates.png)
-
-### 9. Learning from data: collected automatically, applied only when a person agrees
-
-Run data is not only stored. Collecting and proposing are automatic; anything taking effect is a human decision:
-
-- **Counterexamples**: approved rejection reasons are frozen into the case node's instructions when the next run starts ("this was rejected because…"). A replay of the same run gets the same list; clean and held-out runs get none.
-- **Interface fact candidates**: interface text that preparation or execution mentioned but the domain reference lacks (for example the order button turning into a disabled "Not Enough Margin") becomes a candidate with evidence (present in the recorded screen text, or only reported by the runner). It joins a new domain reference version only after a person writes one sentence on when it appears.
-- **Standard sets**: drafted automatically from cases that passed real execution; only a person can freeze one, after which its content is hashed and never changes.
-- **Executor evaluation**: the current executor model is the baseline; a few candidates each run the frozen set and are scored deterministically by pass rate. Switching the project's executor is a human decision and only affects runs started afterwards.
-
-## How it fits together
+### Processes and data
 
 ```mermaid
 flowchart LR
-  subgraph B["Browser"]
-    W["Web UI :5300"]
-  end
-  subgraph S["API server :5301"]
-    API["Stage services · review · execution · guard"]
-    LG[("Run ledger workflows.db<br/>immutable revisions + events")]
-    DB[("Main DB testpilot.db<br/>case board · run records · baselines")]
-  end
-  H["Planner host<br/>claude -p subprocess"]
-  M["MCP server<br/>stage tools + host tools"]
-  R["runner subprocess<br/>Midscene + puppeteer"]
-  T["Site under test"]
-  W <--> API
-  API --- LG
-  API --- DB
-  API -->|"one workspace per run<br/>single-use write credential"| H
-  H --> M
-  M -->|"HTTP, the same API the UI uses"| API
-  API -->|"one case at a time"| R
-  R -->|"click · type · read the screen"| T
-  R -->|"screenshots · verdicts · usage"| API
+  W["Web UI :5300"] <--> API["API server :5301<br/>stages · review · preparation · execution · guard"]
+  API --- LG[("Run ledger<br/>immutable revisions + blobs")]
+  API --- DB[("Main DB<br/>run records · baselines · project data")]
+  API -->|"one workspace per run<br/>one-time token"| H["Planner host<br/>Claude Code / Codex"]
+  H --> M["MCP server<br/>stage tools + host tools"]
+  M -->|"HTTP, same API as the UI<br/>requests tagged as agent"| API
+  API -->|"RPC, one case at a time"| R["runner process<br/>Midscene + browser"]
+  R -->|"click · type · read the screen"| T["Target site"]
 ```
 
-Two model roles, neither standing in for the other:
+Two models, each with its own job: **planning** uses the host's own model (a signed-in local Claude Code / Codex); **execution** uses a vision model driven by Midscene (configured per project, swappable, evaluable). Once a run is registered, both are frozen together with its materials, rule pack and domain reference.
 
-| Role | Provided by | Does |
+### Seven layers
+
+| Layer | Directory | Responsibility |
 |---|---|---|
-| Planner | The host's own model (by default the locally signed-in Claude Code) | Product model, module tree, stories, cases |
-| Executor | Midscene, using the vision model configured in `server/.env` | Locating elements, acting, reading the screen, judging tier 3 oracles |
+| Web UI | `src/` | Renders runs, revisions, reviews and executions from the ledger; hosts the human decisions |
+| API server | `server/src/` | Stage machine, ledger, work units, gates, review, preparation, execution scheduling, learning loop |
+| Processes | `apps/agent`, `apps/runner` | Supervised child processes: planning orchestration, browser execution |
+| Domain package | `packages/harness-testing` | Case schema and gate, oracles, runner, exploration, codegen, retrieval |
+| Core | `packages/harness-core` | Model profiles and clients, process supervision and RPC, observability, eval statistics, run contracts |
+| Host integration | `packages/testpilot-mcp`, `plugins/testpilot` | stdio MCP, skills and hooks; plugin copies are generated |
+| Data | `server/.data/` | Main DB, run ledger and blobs, events, screenshots and reports |
 
-What every stage reads and writes, which error codes reject it, the run state machine and sequence diagrams for six key operations are in [Workflows](docs/v3/02-工作流-横向与纵向.md) (Chinese).
+Which file and function implements each feature, and how one run crosses the seven layers: [layered implementation](docs/v3/04-分层功能实现.md) (Chinese).
+
+---
+
+## Module design
+
+| Module | Responsibility | Key design |
+|---|---|---|
+| **Run ledger** `runLedger.ts` | Single source of truth for all artifacts | Immutable content-addressed revisions; provenance refs must point at existing revisions; authors are human / agent / system; a finalized run is never re-judged by today's rules |
+| **Work-unit loop** `workUnits.ts` | Hands big jobs to the planner in pieces | The server splits units from the frozen module tree; the planner can only claim; a failed gate reopens exactly the named units, and the rejection says what to change |
+| **Design gate** `casegen/gate.ts` | Deterministic scoring of case quality | A dozen-plus rules: vague or volatile oracles, several actions in one step, provenance, negative-case ratio, UI-text provenance, cross-step reading order… the score is a product of two ratios, so it collapses when either half does |
+| **Tiered oracles** `exec/oracle.ts` · `decimalEquation.ts` · `judge.ts` | Verdicts | Text / count / URL (tier 1); before/after relations, `reading` values carried across steps, table cells read by row (tier 2); a sampled judge with a statistical rule (tier 3). Interval arithmetic: what display precision cannot separate is "unobservable", never a pass |
+| **Runner** `exec/run.ts` | Runs one case in a browser | One action per step; step-bound assertions checked on the spot; re-read when the UI lags; persistent overlays dismissed and retried; screenshot and page text for every step |
+| **Lifecycle** `exec/lifecycle.ts` | What a case creates must be removed | Read-only vs controlled; resource identity, sessions, persisted settings (original → restore → on-screen check); unverified cleanup records a leftover and stops the batch, optionally re-checked by an environment read-only command |
+| **Execution preparation** `preparation.ts` | Makes approved cases actually runnable | Admission verdict (impossible prerequisites stopped up front); probe → trial → repair; recipes set up prerequisites and compensate in reverse; only a runner receipt can mark a case verified |
+| **Planner hosts** `claudecode.ts` · `plannerHost.ts` | Starts Claude Code / Codex as the planner | One workspace and one-time token per run; plugin with hooks; requests from the host process are tagged as agent and cannot reach human gates |
+| **Learning loop** `regressionCandidates.ts` · `factCandidates.ts` · `standardSets.ts` · `standardEvaluation.ts` | Lets data feed back automatically | Rejection reasons become counterexamples frozen into the next run; new UI text becomes evidence-backed fact candidates; cases that passed real execution are frozen into standard sets; executor models are compared on a frozen set. **Collection is automatic; taking effect is human** |
+| **Consistency checks** `scripts/check-*` | Rules that don't rely on discipline | Two prompt sources claimed rule by rule (drift), host coverage can only go up (host-parity), no domain words in code (domain-neutral), three-language UI copy (i18n), frozen runs re-scored bit for bit (replay) |
+
+---
+
+## Results and evidence
+
+### Results on a real system
+
+Target: **Hyperliquid testnet** (`app.hyperliquid-testnet.xyz`, real matching engine; mainnet is on the deny list — the same wallet holds real money there, so it is never allowed).
+
+| Result | Numbers | Source |
+|---|---|---|
+| Reviewed cases from one run | 89 (P0 trading main line 38 / P1 margin and leverage 24 / P2 history and account 27) | run `run-03387545`; [final report](docs/reports/testnet-preparation-final-2026-09-27.md) |
+| Cases verified by execution preparation, 13 batches over three days | 25 → 33 → 41 → 51 → 54 → 58 → 62 → **70 / 89** | [preparation baseline](docs/reports/prep-baseline-2026-09-28.md); commit `b6d0836` |
+| Why the other 19 did not pass | 11 need preconditions the testnet cannot give (partial fills, fault injection, a second account) — **blocking them is correct**; the rest are oracle wording, product decisions waiting for a person, and design conflicts | same report §2 |
+| Account after real trading | no positions, no open orders; 984.02 → 979.90 (fees and slippage) | same report, top |
+| Lifecycle contract v2 | same stories, gate score **0 → 0.857** | [handoff guide §7 · 2026-09-24](docs/v3/09-执行目标与接手指南.md) |
+| Module-planning contract completed | planner reading product source 15 → **0** times, turns 48 → 37, self-reported cost $6.39 → $3.29 (confounded: the baseline included exploration) | [handoff log 2026-09-16](docs/v3/history/09-交接日志-至2026-09-16.md) |
+| Preparation node's always-on prompt | 9,011 → **3,325** characters (the rest moved to six on-demand guides; every rejection carries a fix) | [implementation doc §8](docs/v3/15-节点提示词与领域知识重构实施.md) |
+| Cross-step reading oracle | validated on **201 real position-table screenshots** from the ledger: isolated "liq. price < entry price" held 52/52; found that the PNL and Mark columns are not priced at the same instant (9/201 disagree), hence a sign-only comparison | commit `67f18ec` |
+| UI-text provenance gate | replayed offline on the 89 cases: 21 flagged against the materials of the time, 5 after adding measured interface facts | commit `1a9cea3` |
+| Judge oracle | golden set 9 × 2 passes, 18/18 correct, zero disagreement across 54 samples | handoff guide §7; `fixtures/judge-golden/` |
+
+### What you can check yourself
+
+```bash
+pnpm install --frozen-lockfile
+pnpm typecheck && pnpm test      # 1,878 tests: harness-core 228 · harness-testing 834 · mcp 112 · agent 1 · runner 4 · server 699
+pnpm test:hooks                  # 26 hook subprocess tests
+node scripts/replay.mjs          # deterministic re-scoring of a frozen run, bit for bit
+pnpm check:drift && pnpm check:domain-neutral && pnpm check:host-parity && pnpm check:i18n
+```
+
+- The full commit history is public (353 commits since 2026-07-04); recent commit messages state what failed first, then what changed, with sourced numbers.
+- `fixtures/eval-cases/` holds **adversarial fixtures** — an honest run, forged metadata, poisoned material — to confirm the gates reject what they should and pass what they should.
+- Screenshots are from the 2026-09-16 testnet run (34 stories, 115 cases):
+
+| Workbench | Review | Attribution |
+|---|---|---|
+| ![Workbench](docs/assets/workflow/01-bench.png) | ![Review](docs/assets/workflow/07-review.png) | ![Attribution](docs/assets/workflow/12-attribution.png) |
+
+### The honest part: what failed and what is not done
+
+- **Formal execution did not finish.** Of the 70 prepared cases, 24 have passed formal execution so far; the rest are stuck on executor-model free quota — three free tiers hit 402/429 one after another, and quotas reset weekly. That is infrastructure, not the cases or the product. Probing the executor's quota before a run starts was added because of this.
+- **The first-trial pass rate was only 50.7%.** The largest failure class (18/51) was "a prerequisite needs a resource and the case does not say where it comes from". Execution semantics are now always on in the case node; the replay comparison after that change has not been run, so there is no number yet for how much it helped.
+- **Early paired evaluations were not significant.** A discrimination experiment gave p = 0.375 (stage acceptance table at commit `f40b5ca`); judge-vs-human agreement was only κ = 0.235, with the judge systematically stricter (post-mortem in `harness-core/src/eval/semantic.ts`). That is where the "let a program decide whatever it can" principle comes from.
+- **Only one target product so far.** Domain neutrality is enforced by a check script, but has not been proven on a second product.
+
+---
+
+## Datasets and process data usable for training
+
+### Datasets
+
+| Dataset | Size | Purpose | Who may change it |
+|---|---|---|---|
+| `benchmark/casegen/` | frozen gold 16 items (4 held out) + replay fixture | deterministic scoring and replay of case generation | gold, held-out and rubric are human-only and never enter a prompt |
+| Standard sets (project data) | 24 cases can be drafted from `run-03387545` | compare executor models and other candidates on the same really-passed cases | drafted automatically, **frozen only by a person**, hashed and immutable once frozen |
+| `fixtures/judge-golden/` | 9 items | calibrating the judge oracle | human |
+| `fixtures/eval-cases/` | honest / forged / poisoned | adversarial evaluation of agent runs | human |
+| `examples/hyperliquid-testnet/` | domain reference + rule pack (measured interface facts with evidence) | starting domain knowledge for a new project | human (takes effect once saved into a project) |
+
+### Process data: every step is kept, already in a trainable shape
+
+The run ledger stores every step of the pipeline as immutable revisions — **inputs, actions, observations, verdicts and human feedback** — linked to each other by provenance references:
+
+| Data | Contents | Where | Possible use |
+|---|---|---|---|
+| Planning trajectories | per work unit: the frozen context (materials, retrieval deliveries, execution semantics, counterexamples) → model output → schema and gate verdicts → revisions after reopening | `context/*`, `units/*`, `validated/*`, `retrieval/*` revisions | supervised fine-tuning of the planner; gate verdicts as process rewards |
+| Human preferences | approve / reject / edit events per case, every rejection with a reason; story review, regression and fact decisions | `case_approval_events`, `review/case/*`, `regression_suite`, `fact_candidates` | preference pairs (approved vs rejected + reason) |
+| Execution trajectories | every preparation probe and trial: plan, step actions, **page text for every step**, screenshots, oracle results, lifecycle receipts | `preparation/<batch>/<case>/{probe-N,round-N}/{plan,result}`, `artifacts/` | training UI grounding and action models; oracle results as verifiable outcome rewards |
+| Model calls | role, model, usage, latency and status of every call | `modelRequests` in results, run records | cost and stability analysis; model comparison |
+| Failures and attribution | six-layer attribution signals, failure classes, reasons for "unobservable" | report revisions, execution results | failure classifiers; hard-example mining |
+| Host sessions | the planner host's (Claude Code) full conversation and tool calls | local Claude Code session directory | tool-use trajectories; server rejections and how they were fixed |
+
+For `run-03387545` alone: 13 preparation batches, 292 probes and 185 trials, each with step-by-step page text and verdicts.
+
+**Boundaries**: gold, held-out data and rubrics never go into training or prompts. Secrets and wallet addresses of the target must be redacted; all data comes from the testnet. The script that exports this as training JSONL is not written yet — see the next section.
+
+---
+
+## What comes next
+
+In priority order:
+
+1. **Finish formal execution and the controlled comparisons.** Run the remaining 46 cases of `run-03387545` on an executor with quota; replay the stage-0 baseline before and after "execution semantics always on" and "preparation prompt slimming", compare first-trial pass rates and rejection counts, and roll back what did not help.
+2. **Export the process data.** Write `export-trajectories`: ledger → JSONL as input → action → observation → verdict → human feedback, with redaction, held-out exclusion and a data card.
+3. **Extend the learning loop to the planner side.** Today only the executor model evolves; next, prompt and preparation-guide candidates compete on the frozen standard set, with a person still deciding what ships.
+4. **A second target product**, to show "domain knowledge is data" holds without code changes.
+5. **Visible execution progress.** Per-case results are written only when a batch ends, so a batch cut off by quota shows only failed batches in the UI.
+6. **Run the defect regression suite automatically**, and generate new cases from failure reasons (rejection reasons already reach generation as counterexamples).
+7. **Authentication for local review.** A raw HTTP request with the agent header deliberately stripped can still impersonate the local operator.
+8. **Readiness checks that look at the project's chosen planner host.** Today they can be all green while creating a run still fails.
+9. **Ambiguous judge samples.** All 9 golden items are clear-cut, so "sampling exposes instability" has not been tested on data.
+10. **Turn CI on.** All acceptance runs locally today.
+
+The fuller list is in [handoff guide §4](docs/v3/09-执行目标与接手指南.md) and the [known gaps](docs/v3/02-工作流-横向与纵向.md) (§10), both in Chinese.
+
+---
 
 ## Quick start
 
-### Prerequisites
-
-- Node.js 22 or newer (install and run with the same major version)
-- pnpm 9 or 10
-- The [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI, signed in (`claude` on PATH, or set `TP_CLAUDE_BIN`)
-- An OpenAI-compatible endpoint serving a vision model with visual grounding, for Midscene (see [Midscene's model setup](https://midscenejs.com/model-common-config))
-
-### 1. Install
+Prerequisites: Node.js 22+, pnpm 9/10, a signed-in [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (or Codex), and an OpenAI-compatible endpoint for a vision model that can locate elements, for Midscene.
 
 ```bash
 git clone https://github.com/zyonlab/TestPilot.git testpilot && cd testpilot
 pnpm install --frozen-lockfile
+cp server/.env.example server/.env        # at least MIDSCENE_MODEL_BASE_URL / _API_KEY / _NAME
+node scripts/testpilot-setup.mjs doctor   # lists what is missing
+pnpm build:claude-plugin                  # builds the Claude Code plugin (Web-started runs load it automatically)
+node scripts/testpilot-setup.mjs start    # API :5301 + Web :5300
 ```
 
-This is a pnpm workspace; `server/`, `packages/*` and `apps/*` are installed together.
+Open http://localhost:5300: create a project, set the target URL and environment profile, choose the planner host, then start a run from the workbench.
+You can also drive the whole flow from your own Claude Code session through the plugin. Installation, plugins, configuration and troubleshooting: [install and diagnostics](docs/v3/10-安装与诊断.md) and [Claude Code and Codex integration](docs/v3/14-Claude-Code与Codex接入实操.md) (Chinese).
 
-### 2. Configure the executor model
+> Only run it against environments you are allowed to test. Exploration and execution really click, submit and delete. The global deny list is `guard.denyHosts` in `server/harness.config.ts`; local review has no authentication, so do not expose the service to the internet.
 
-```bash
-cp server/.env.example server/.env
-```
-
-Edit `server/.env` and set at least:
-
-```bash
-MIDSCENE_MODEL_BASE_URL=http://127.0.0.1:8000/v1   # legacy OPENAI_BASE_URL also works
-MIDSCENE_MODEL_API_KEY=...                         # legacy OPENAI_API_KEY also works
-MIDSCENE_MODEL_NAME=your-vl-model
-```
-
-Check the environment:
-
-```bash
-node scripts/testpilot-setup.mjs doctor      # lists what is missing; --help shows every command
-```
-
-> Use `node scripts/testpilot-setup.mjs …`, not `pnpm setup` / `pnpm doctor`: pnpm has built-in commands with those names that run first, and `pnpm setup` edits your shell configuration.
-
-### 3. Start
-
-```bash
-node scripts/testpilot-setup.mjs start       # API server (:5301) and Web UI (:5300) together
-# or in two terminals: pnpm server:dev and pnpm dev
-```
-
-Open http://localhost:5300 .
-
-### 4. Install the Claude Code plugin
-
-The plugin provides the MCP stage tools, ten skills and the gate hooks. It is generated from the source of truth in `plugins/testpilot/` and refers to the MCP server and hook scripts in this repository, so **install it from your local checkout**, not straight from the GitHub URL.
-
-Generate the plugin directory first (and again after every pull):
-
-```bash
-pnpm build:claude-plugin          # writes plugins/testpilot-claude/
-```
-
-That is all you need for runs started from the Web UI: the server launches `claude` with `--plugin-dir` pointing at it. To use TestPilot in your own Claude Code sessions, pick one of:
-
-**Option A: install as a plugin (recommended, available in every session)**
-
-`.claude-plugin/marketplace.json` at the repository root declares this checkout as a local plugin marketplace:
-
-```bash
-claude plugin marketplace add /path/to/testpilot     # absolute path of this checkout
-claude plugin install testpilot@testpilot
-claude plugin list                                   # should show testpilot@testpilot  ✔ enabled
-```
-
-Or, inside Claude Code: `/plugin marketplace add /path/to/testpilot`, then `/plugin install testpilot@testpilot`. Restart the session; `/mcp` should list `plugin:testpilot:testpilot` as connected.
-
-- Update: after pulling, rerun `pnpm build:claude-plugin`, then `claude plugin marketplace update testpilot` and `claude plugin update testpilot@testpilot`.
-- Uninstall: `claude plugin uninstall testpilot@testpilot`, then `claude plugin marketplace remove testpilot`.
-- Moving or deleting the checkout breaks the plugin; install it again.
-
-**Option B: load it for one session (development)**
-
-```bash
-claude --plugin-dir plugins/testpilot-claude
-```
-
-**Option C: install into a workspace (no hooks)**
-
-```bash
-node scripts/testpilot-setup.mjs install --entry claude-code --workspace <your-workspace>
-node scripts/testpilot-setup.mjs uninstall --workspace <your-workspace>   # removes only files you have not modified
-```
-
-This writes the MCP server into `.mcp.json`, the skills into `.claude/skills/`, plus a `.testpilot/` directory. It installs no hooks; only the server-side gates apply.
-
-All three use the same API server (`http://127.0.0.1:5301` by default, override with `TP_SERVER_URL`), which must be running. See [Claude Code and Codex integration](docs/v3/14-Claude-Code与Codex接入实操.md) (Chinese) for details.
-
-## Usage
-
-### From the Web UI
-
-The flow, and what each step looks like, is [walked through above](#what-a-run-looks-like). Two things come first:
-
-1. Create a project, set the target URL, configure the environment profile (login flow, viewport, wallet injection…) and choose the planner host (a signed-in local Claude Code or Codex).
-2. Add domain knowledge where you need it, in "rule packs" and "domain references", or by talking it out in the chat drawer.
-
-Then start a run from the workbench. Local review needs no sign-in; the origin and version of every action are recorded.
-
-### From Claude Code
-
-Keep the API server (:5301) running and install the plugin as [described above](#4-install-the-claude-code-plugin).
-
-Describe your goal in the session, for example "use TestPilot to generate tests for this project". The host goes through modules → stories → cases → gate and hands off to human review; the artifacts are the same ones you see in the Web UI. See [Claude Code and Codex integration](docs/v3/14-Claude-Code与Codex接入实操.md) (Chinese) for details.
-
-### Experimental runtimes
-
-- **Codex**: can be the planner host for Web-started runs; as a host entry, `pnpm build:codex-plugin` generates `plugins/testpilot-codex/`, or install per project with `install --entry codex`.
-- **Penguin**: needs Node 24 and a running Penguin service; install with `install --entry penguin --agent-id <id>`, the Web form cannot select it; it plans only runs created directly through the API with `TP_AGENT_RUNTIME=penguin`.
-
-Neither is covered by this release's acceptance.
-
-## Configuration
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `MIDSCENE_MODEL_BASE_URL` / `MIDSCENE_MODEL_API_KEY` / `MIDSCENE_MODEL_NAME` | Executor model | required |
-| `TP_AGENT_RUNTIME` | Default planner for runs created directly through the API: `claude-code` or `penguin` (the Web form uses the project's chosen host) | `claude-code` |
-| `TP_CLAUDE_BIN` | Path to the `claude` executable | `claude` on PATH |
-| `TP_PLANNER_*` | Planner model; only for Penguin or the internal pipeline mode | — |
-| `TP_EXECUTOR_MAX_CALLS` / `TP_RUN_MAX_MS` | Per-run model-call and wall-time budget | see `.env.example` |
-| `DENY_HOSTS` | Extra hosts to block | — |
-| `GUARD_STRICT=1` | Block irreversible steps machine-wide | off |
-| `TP_DATA_DIR` | Data directory (to isolate instances) | `server/.data` |
-| Environment vars `TP_RESET_CMD` / `TP_VERIFY_CLEAN_CMD` | Set on the project environment: a reset command before each case; a read-only check run before "resources were left behind, stop the batch" (exit 0 = confirmed clean, keep going) | — |
-
-Model settings saved in a project take precedence over environment variables. See [installation and diagnostics](docs/v3/10-安装与诊断.md) (Chinese) and `server/.env.example`.
-
-## Safety
-
-- Only run against systems you are allowed to test, ideally a test environment. Exploration and execution really click, submit and delete.
-- There is one global deny list: `guard.denyHosts` in `server/harness.config.ts` (`DENY_HOSTS` can only add to it). Listed hosts are never allowed, in any environment.
-- Irreversible steps such as delete, complete or clean up are **allowed by default**, because they are the features under test. To block them machine-wide, set `GUARD_STRICT=1`; the rule pack's `sideEffectLabels` then take effect.
-- Local review has no authentication and is meant for a single machine. Do not expose the server to the internet.
-
-To report a vulnerability, see [SECURITY.md](SECURITY.md).
-
-## Repository layout
-
-```
-src/                      Web UI (React + Rsbuild, :5300)
-server/                   API server (Express + SQLite, :5301), runtime adapters, export
-  harness.config.ts       concurrency, budgets, guard
-packages/
-  harness-core/           model calls, config, run contracts, observability
-  harness-testing/        domain modelling, case generation and gates, oracles, codegen, executor
-  testpilot-mcp/          stdio MCP server that host agents use to call TestPilot
-apps/
-  agent/  runner/         run orchestration and browser execution processes
-plugins/
-  testpilot/              source of truth for skills and hooks
-  testpilot-claude/       generated Claude Code plugin
-  testpilot-codex/        generated Codex plugin (experimental)
-examples/                 built-in examples (Hyperliquid testnet domain reference and rule pack, for new projects)
-fixtures/                 local systems under test and data for tests and evals
-extensions/               Penguin evaluation extension (experimental)
-scripts/                  setup, diagnostics, plugin builds, checks
-docs/                     documentation (start at docs/README.md)
-```
-
-## Development
-
-```bash
-pnpm typecheck && pnpm test     # tsc and vitest for every package
-pnpm test:hooks                 # hook subprocess tests
-pnpm check:drift                # prompts and skills match rule by rule; plugin copies match the source
-pnpm check:host-parity          # every new UI route is classified; host coverage may not drop
-pnpm check:domain-neutral       # no hard-coded domain content in product code or skills
-pnpm check:i18n                 # every UI string exists in Chinese, English and Japanese
-```
-
-After changing `plugins/testpilot/skills/**` or `packages/harness-testing/src/casegen/prompts.ts`, bump the matching `skillVersions` entry in `plugins/testpilot/plugin.json`, regenerate the plugins (`pnpm build:claude-plugin`, `pnpm build:codex-plugin`) and make sure `pnpm check:drift` passes.
-
-CI is currently switched off by hand (the reason is written in `.github/workflows/ci.yml`); please run the checks above locally before sending a PR.
+---
 
 ## Documentation
 
-The documentation is mostly in Chinese. Start at [docs/README.md](docs/README.md):
+Start at [docs/README.md](docs/README.md); the current docs are mostly in Chinese:
 
-- [Architecture](docs/v3/00-架构.md): processes, packages, pipeline stages, ledger and guard, with code locations
-- [Data contracts](docs/v3/01-数据契约.md): the schema source of truth for every artifact
-- [Workflows](docs/v3/02-工作流-横向与纵向.md): the end-to-end flow, the run state machine and sequence diagrams for the key operations (Chinese)
-- [Goals and handoff guide](docs/v3/09-执行目标与接手指南.md): goals, scope, status, next steps, recent changes
-- [Installation and diagnostics](docs/v3/10-安装与诊断.md)
-- [Claude Code and Codex integration](docs/v3/14-Claude-Code与Codex接入实操.md)
-- [User stories](docs/v3/03-用户故事.md) (Chinese): epics and stories derived from the code, each with its code location
-- [Layered implementation](docs/v3/04-分层功能实现.md) (Chinese): what each of the seven layers does, in which functions, and one run traced through them
-- [Node prompts, domain knowledge and the learning loop](docs/v3/15-节点提示词与领域知识重构实施.md) (Chinese)
+| To learn | Read |
+|---|---|
+| What the product does for whom (43 user stories, each with its code location) | [03 · user stories](docs/v3/03-用户故事.md) |
+| Which layer and function each feature lives in | [04 · layered implementation](docs/v3/04-分层功能实现.md) |
+| Processes, packages, pipeline, ledger, guard | [00 · architecture](docs/v3/00-架构.md) |
+| Schema source of truth for every artifact | [01 · data contracts](docs/v3/01-数据契约.md) |
+| How a run flows, where it waits for people, known gaps | [02 · workflows](docs/v3/02-工作流-横向与纵向.md) |
+| Execution semantics, preparation guides, cross-step oracles, the learning loop — implementation and acceptance | [15 · implementation](docs/v3/15-节点提示词与领域知识重构实施.md) |
+| Goals, status, next steps, and a handoff record for every change | [09 · handoff guide](docs/v3/09-执行目标与接手指南.md) |
 
-## Contributing
-
-Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first, and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Roadmap and known limitations
-
-- This release covers the Web UI and Claude Code; Codex can be the Web planner host and a host entry, Penguin is experimental.
-- The first version of the learning loop only evolves the executor model; planner-side candidates (prompts, preparation guidance) are not evaluated yet, since they need the planner to regenerate and prepare cases.
-- Parallel sub-agents, scoreboards and the research track are frozen and not part of this release.
-- The defect regression suite is a list for now; executions do not pick it up automatically, and new cases are not generated from failures (rejection reasons are already handed to generation as counterexamples).
-- Whether repeated `judge` sampling exposes unstable verdicts still needs ambiguous samples to verify.
-- The full list is in [the handoff guide §4](docs/v3/09-执行目标与接手指南.md).
+`docs/v3/history/` holds early experiment reports, ledgers and design proposals, kept only for provenance; code comments that cite `docs/v3/history/NN §x` point there.
 
 ## Acknowledgements
 
-- [Midscene.js](https://midscenejs.com/): vision-driven browser actions and assertions
-- [React Flow (@xyflow/react)](https://reactflow.dev/): workbench and module graphs
-- [Playwright](https://playwright.dev/): runtime of the exported projects
-- [Model Context Protocol](https://modelcontextprotocol.io/): host agent integration
+[Midscene.js](https://midscenejs.com/) (vision-driven browser actions and assertions) · [Model Context Protocol](https://modelcontextprotocol.io/) (host integration) · [Playwright](https://playwright.dev/) (exported projects) · [React Flow](https://reactflow.dev/) (workbench)
 
 ## License
 
