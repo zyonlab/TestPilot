@@ -585,6 +585,24 @@
   },
   {
    "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/fact-candidates/:candidateId",
+   "uiOnly": "只有人能把界面事实并进领域参考（human_review_required）"
+  },
+  {
+   "source": "index.ts",
+   "method": "POST",
+   "path": "/api/projects/:id/fact-candidates/mine",
+   "uiOnly": "补挖要操作员身份，和确认同属人对项目数据的操作"
+  },
+  {
+   "source": "index.ts",
+   "method": "GET",
+   "path": "/api/projects/:id/fact-candidates",
+   "uiOnly": "界面事实候选只服务于人确认：并进领域参考是人对项目数据的决定（docs/v3/15 阶段 7）"
+  },
+  {
+   "source": "index.ts",
    "method": "GET",
    "path": "/api/projects/:id/flakiness",
    "host": "tp_report.flakiness"
@@ -988,6 +1006,12 @@
   {
    "source": "runRoutes.ts",
    "method": "POST",
+   "path": "/api/projects/:projectId/workflow-runs/:runId/models/executor/rebind",
+   "uiOnly": "运营方给暂停中的运行换执行模型（凭据属于服务端配置），规划宿主不该能换掉自己的执行器"
+  },
+  {
+   "source": "runRoutes.ts",
+   "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/modules/freeze",
    "uiOnly": "人工审核与基线决定仅通过 Web 操作，规划器工具不注册此动作"
   },
@@ -1188,12 +1212,6 @@
    "method": "POST",
    "path": "/api/projects/:projectId/workflow-runs/:runId/story-requirements/reject",
    "uiOnly": "人工驳回候选故事是人把关的决定；规划模型不能自行驳回"
-  },
-  {
-   "source": "runRoutes.ts",
-   "method": "POST",
-   "path": "/api/projects/:projectId/workflow-runs/:runId/models/executor/rebind",
-   "uiOnly": "运营方给暂停中的运行换执行模型（凭据属于服务端配置），规划宿主不该能换掉自己的执行器"
   },
   {
    "source": "runRoutes.ts",

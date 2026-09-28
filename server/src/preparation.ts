@@ -26,6 +26,7 @@ import { execOnRunner } from './exec.js';
 import { getProject, resolveEnvironment, getSecretValues, ARTIFACT_DIR } from './db.js';
 import { caseEntryUrl, caseStartsLoggedOut } from './caseEntry.js';
 import { guardRun, runEnvReset, verifyCleanEnvironment } from './executionPolicy.js';
+import { recordFactCandidates } from './factCandidates.js';
 import { config } from './procs.js';
 import { boundRulePack, currentRulePack } from './rulePacks.js';
 import { admissionIssues, statesNeedingRecipe } from './preparationAdmission.js';
@@ -347,6 +348,8 @@ async function trial(b:Batch,u:Unit,plan:TextCase,probe=false,probePreparation?:
   approved(current,item);
   const receipt=put(current,`${u.caseId}/${probe?'probe-'+u.probeRound:'round-'+u.round}/result`,{...result,observation:readExecutionObservation(result.observation),serviceObservation:observer.data},[probe?u.probePlan!:u.plan!]).id;
   if(probe)item.probeResult=receipt;else item.result=receipt;
+  // 经验沉淀（docs/v3/15 阶段 7）：领域数据里没有、模型或核对说到的界面字面值记成候选，人确认才进领域参考。
+  recordFactCandidates({projectId:b.projectId,runId:b.runId,caseId:u.caseId,receipt,result,caseText:JSON.stringify([plan.steps,plan.postSteps,plan.oracle,plan.assertions])});
   for(const line of (result.logs??[]).slice(-40)) log(current,`${u.caseId} · 第 ${u.round} 轮 · ${line}`);
   // 停批之前先让环境的只读核对命令复核（docs/v3/15 阶段 5.4）：确认账户里没有这些资源，就只是收尾核对写得不对——照常修，不隔离、不停批。
   const residue=result.lifecycle?.pendingResources?.length?verifyCleanEnvironment(env?.vars?.TP_VERIFY_CLEAN_CMD,result.lifecycle.pendingResources,Object.values(context.secrets).map(String)):null;

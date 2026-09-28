@@ -23,6 +23,7 @@ import {selectExplorationContext,dispatchedEnvironment} from "./explorationReuse
 import { runEnvReset, verifyCleanEnvironment, guardRun } from "./executionPolicy.js";
 import { LedgerError, contentHash } from "./runLedger.js";
 import { captureExecutionMemory } from './runMemory.js';
+import { recordFactCandidates } from './factCandidates.js';
 
 interface ExecutionRow { id: string; runId: string; projectId: string; codeRevision: string; status: string; requestHash: string; environmentHash: string; environmentEnc: string; resultRevision: string | null; startedAt: string }
 const active = new Map<string, string>();
@@ -267,6 +268,8 @@ async function perform(row: ExecutionRow) {
       result = { ...result, modelRequests: caseUsageComplete ? attemptRequests : undefined };
       active.delete(row.id);
       results.push({ caseId: kase.id, entryUrl: caseEntryUrl(kase.precondition,env.url), ...result, ...(cancelled()?{status:"cancelled"}:{}), attempts });
+      // 经验沉淀（docs/v3/15 阶段 7）：失败原因里说到、领域数据里没有的界面字面值记成候选。
+      recordFactCandidates({ projectId: row.projectId, runId: row.runId, caseId: kase.id, receipt: row.id, result: result as never, caseText: JSON.stringify([kase.steps, kase.postSteps, kase.oracle, kase.assertions]) });
       /**
        * 落一条运行记录，顺带立/比视觉与性能基线。
        *

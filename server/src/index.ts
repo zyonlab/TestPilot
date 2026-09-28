@@ -2,6 +2,7 @@ import {projectAssetRouter} from './projectAssetRoutes.js';
 import {askExplorationPlanner} from "./explorationPlanner.js";
 import {hostStatus,selectHost} from "./plannerHost.js";
 import {knowledgeLibraryRouter} from "./knowledgeLibrary.js";
+import { listFactCandidates, decideFactCandidate, mineRunFacts } from "./factCandidates.js";
 import {listExamples} from "./examples.js";
 import {artifactComparisonRouter} from "./artifactComparisons.js";
 import {explorationEnvironment} from './explorationReuse.js';
@@ -783,6 +784,22 @@ app.delete("/api/projects/:id/rule-packs/:hash", (req, res) => {
 /**
  * 项目级领域参考：和规则包一个待遇——按内容哈希存版本、运行开始时冻结绑定、用过的版本不能删。
  */
+/**
+ * 界面事实候选（docs/v3/15 阶段 7）：执行与准备自动记下的、领域参考里还没有的界面字面值。
+ * 确认只能是人，确认时写的那句事实合进领域参考的新版本。
+ */
+app.get("/api/projects/:id/fact-candidates", (req, res) => {
+  try { res.json({ candidates: listFactCandidates(req.params.id, typeof req.query.status === "string" ? req.query.status : undefined) }); }
+  catch (e) { res.status((e as { status?: number }).status ?? 500).json({ error: String((e as Error).message) }); }
+});
+app.post("/api/projects/:id/fact-candidates/mine", (req, res) => {
+  try { reviewerPrincipal(req); res.json(mineRunFacts(String(req.body?.runId ?? ""), req.params.id)); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) }); }
+});
+app.post("/api/projects/:id/fact-candidates/:candidateId", (req, res) => {
+  try { res.json(decideFactCandidate(req.params.id, req.params.candidateId, req.body, reviewerPrincipal(req))); }
+  catch (e) { res.status((e as { status?: number }).status ?? 400).json({ error: String((e as Error).message), ...((e as { hint?: string }).hint ? { hint: (e as { hint?: string }).hint } : {}) }); }
+});
 app.get("/api/projects/:id/domain-references", (req, res) => {
   if (!getProject(req.params.id)) return res.status(404).json({ error: "project not found" });
   res.json({ references: listDomainReferences(req.params.id) });
