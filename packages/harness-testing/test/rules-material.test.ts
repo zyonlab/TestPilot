@@ -6,7 +6,7 @@ import { buildIndexFromDocs, retrieve, hashMaterials } from "../src/retrieve/ind
 import { SPEC_FENCE } from "../src/retrieve/fence.js";
 
 /** 07 T-11：规则进材料——检索得到、哈希算进去、围栏包得住。 */
-const RULES = resolve(__dirname, "../../../benchmark/hyperliquid-testnet/materials/rules.md");
+const RULES = resolve(__dirname, "fixtures/hyperliquid-testnet-rules.md");
 const text = readFileSync(RULES, "utf8");
 
 describe("rules.md 当材料", () => {

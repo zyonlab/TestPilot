@@ -25,7 +25,7 @@ it('rebuilding a report does not multiply gaps or remove uncovered targets',()=>
  const a=buildExplorationReport(input),b=buildExplorationReport({...input,unknowns:a.unknowns});expect(b.unknowns).toEqual(a.unknowns);expect(b.assessment?.scope.denominator).toBe(1);expect(b.completion).toBe('partial');
 });
 it('updated trading rule pack validates and recognizes both observed account-mode labels without authorizing trades',()=>{
- const v=validateRulePack(JSON.parse(readFileSync(new URL('../../../materials/hyperliquid-testnet-2026-09-20/rule-pack.json',import.meta.url),'utf8')));expect(v.ok,v.ok?'':JSON.stringify(v.errors)).toBe(true);if(!v.ok)return;
+ const v=validateRulePack(JSON.parse(readFileSync(new URL('./fixtures/hyperliquid-testnet-rules-2026-09-20.json',import.meta.url),'utf8')));expect(v.ok,v.ok?'':JSON.stringify(v.errors)).toBe(true);if(!v.ok)return;
  const mode=v.pack.targets.find(t=>t.id==='T-account-mode')!;
  for(const label of ['Manual','Unified'])expect(matchTarget(control(label),mode,'/trade')).toBe(true);
  expect(v.pack.targets.every(t=>t.sideEffect!=='state-change')).toBe(true);

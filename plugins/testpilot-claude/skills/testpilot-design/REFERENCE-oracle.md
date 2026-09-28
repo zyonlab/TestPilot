@@ -57,19 +57,15 @@ tier 1 和 tier 2 **必须**同时给 `oracle`——同一个结果，写成程�
   报告里写着各次采样是否意见不一——**分歧本身就是一个发现**：要么条件写得含糊，要么产品输出不稳定。
 - 它永远是 tier 3，每次判断要调 `samples` 次模型，执行预算照算。
 
-## 第六种：`api`——判决从接口读，不从屏幕读
+## 不要写 `api`：判决从屏幕读
 
-被测对象有机器可读的状态接口时（交易所的清算 / 挂单 / 余额接口），资金与仓位类的结果**必须**写成它：
+`api` 判据（直接问被测站的接口）只为执行 2026-09-12 以前的旧用例留着，**新用例不许写**：这里产出的是端到端 UI 测试，
+接口说成功而屏幕上没有那一行，用例会通过而产品其实是坏的。受限解码的枚举里没有它，门禁 `oracle-offsite` 会点名扣分。
 
-```json
-{"kind":"api","url":"${env.INFO_URL}","method":"POST","body":"{\"type\":\"openOrders\",\"user\":\"${env.ADDRESS}\"}","path":"[coin=BTC].limitPx","op":"eq","value":40000,"settleMs":2500}
-```
-
-- `path` 是点分路径；数组元素**按字段选**（`[coin=BTC]`、`assetPositions[position.coin=BTC].position.szi`），不按下标——下标随账户里有几个仓位而变。
-- `op`：`eq / neq / gte / lte / exists / absent` 是 tier 1；`increased / decreased / unchanged` 是两次读数的关系，tier 2。
-- `settleMs` 给 2–4 秒：接口比界面慢一拍。
-- 接口地址与账户标识走 `${env.*}` 占位符，永远不写字面量。
-- 什么时候用：期望结果是接口会返回的一个数或一条记录（数量、价格、余额）。拒绝类结果仍用 `text`。
+资金、仓位、挂单这类结果照样从屏幕读：
+- 数值关系用 `decimal-equation`（同一屏几个读数之间的算术，`row` 按表格行读格子）；
+- 改动前后比较，先用 `reading` 在改动前那一步记下读数，改动后的 decimal-equation 在 `recorded` 里引用它；
+- 行有没有了用 `text` / `noText` / `count`，读一个在任何标签页都看得见的字（例如标签上的数量）。
 
 **字面量逐字照规格写。** 结果没法写成上面任何一种，那它就是 tier 3：
 就说它是 3，并且不写 `oracle`。

@@ -47,8 +47,10 @@
 - 非通用的部分**不许写进代码**（也不许写成 `if (某个领域)`）：只能是项目数据，由用户用对话抽屉聊出来或自己指定。
   载体三个：**规则包**（`actionVocabulary` / `sideEffectLabels` / `volatileReadings` 等）、**领域参考**（「领域参考」页，
   按版本存、运行开始时冻结绑定）、**环境画像**（前提名 `capabilities`、`injectWallet`）。
-- `benchmark/hyperliquid-testnet/domain-reference.md` 是评测数据集，只给 `evals/domain-perp.json` 按路径绑定
-  （消融开关叫 `domain-reference`），不出现在界面，也不导入新项目。没有「预设」，不做旧数据兼容。
+- 仓库里的 Hyperliquid 测试网数据只有**内置示例** `examples/hyperliquid-testnet/`（领域参考、规则包，新建项目时可参考，存进项目才生效）。
+  2026-09-28 删掉了旧评测数据集 `benchmark/hyperliquid-testnet/`、`evals/domain-perp.json`、`materials/hyperliquid-testnet-2026-09-20/`
+  （草稿金标未复核、用的是已禁的接口判据、`domain-perp` 指向从没有过的 `gold.json` 跑不起来；git 历史里都在）。
+  测试要的真实样本留成夹具：`packages/harness-testing/test/fixtures/hyperliquid-testnet-*`。没有「预设」，不做旧数据兼容。
 - `pnpm check:domain-neutral` 必须绿：产品源码非注释代码与 skill 里不许有写死的领域词。
 
 ## 初步交付：开源发布（2026-09-16 用户决定）
@@ -88,10 +90,13 @@ node scripts/cost-report.mjs         # 每条用例的账（跑过用例之后�
 - `plugins/testpilot/` skills（纯数据）+ hooks（脚本）；`hooks/lib/tp.mjs::deny` 记 holds
 - `server/src/runtimes.ts` runtime 注册；`penguin.ts` / `claudecode.ts` 已有适配，`codex.ts` 原生适配已按 N-11 完成
 - `benchmark/<capability>/` gold · human-labels · statement · rubric · held-out · scoreboard.yaml。
-  现在只剩两个：`casegen`（自举，仓库里唯一有冻结 gold、能打分的）与 `hyperliquid-testnet`（领域材料，只有草稿）
-- `server/src/evolution/` 与 `extensions/penguin-evaluation/`：配套评估 UI、固定预算沙箱、版本/CAS、只读冻结运行 release adapter
-- `evals/*.json` 评测定义：两臂只差一件事，`expect` 跑之前写。现在只剩 `domain-perp`（领域参考消融）与 `runtime-compare`（换规划运行时）
-- `fixtures/` 只剩五个：`hyperliquid-testnet`（执行层降本的被测对象，8 条 P0、全接口判据、旧口径）、
+  现在只剩 `casegen`（自举，仓库里唯一有冻结 gold、能打分的，catalog 标归档）。测试网的尺子是项目里的**标准测试集**（`server/src/standardSets.ts`，人冻结），不在 `benchmark/`
+- 学习回路（docs/v3/15 阶段 6～9）：`regressionCandidates.ts::selectCounterexamples`（反例随运行冻结下发）、`factCandidates.ts`（界面事实候选，人确认进领域参考）、
+  `standardSets.ts`（标准测试集，人冻结）、`standardEvaluation.ts`（执行模型在冻结集上比，人决定换）。
+- `server/src/evolution/` 与 `extensions/penguin-evaluation/`：独立进程的旧评估沙箱（玩具任务、版本/CAS、release adapter），没接进上面的回路
+- `evals/*.json` 评测定义：两臂只差一件事，`expect` 跑之前写。现在只剩 `runtime-compare`（换规划运行时）
+- `fixtures/` 只剩六个：`hyperliquid-testnet`（执行层降本的被测对象，8 条 P0、全接口判据、旧口径）、
+  `export-contract-v1`（2026-09-20 证据研究的组件任务，`server/src/evidenceStudy/runner.ts` 按路径读它——下面「产品代码不许读 fixtures」的唯一例外，没改）、
   `hyperliquid-mainnet`（Hyperliquid 规则包与材料，`server/scripts/` 的几个真跑脚本按路径读它）、
   `judge-golden`（判官金标）、`eval-cases`（评测用例加载器的伪造/投毒夹具）、
   `sample-spec`（合成规格 Acme Portal，G1 假模型测试用）。

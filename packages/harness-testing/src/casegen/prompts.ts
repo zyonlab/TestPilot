@@ -297,8 +297,9 @@ export const ORACLE_STRICT = [
  *
  * 此前这里是一段写死的永续合约不变量，进程内 design.cases 与 MCP run_pipeline 对每个产品都默认发送——
  * Vikunja 那样的待办应用也收到 26 行合约散文。2026-09-15 起它是项目数据：用户在「领域参考」页聊出来
- * 或上传，运行开始时冻结绑定；没绑定就没有这一段。原文现在是评测数据集
- * `benchmark/hyperliquid-testnet/domain-reference.md`。
+ * 或上传，运行开始时冻结绑定；没绑定就没有这一段。原文曾留作评测数据集
+ * `benchmark/hyperliquid-testnet/domain-reference.md`，2026-09-28 随旧数据集删掉（git 历史里还在）；
+ * 现行示例是 `examples/hyperliquid-testnet/domain-knowledge.md`。
  * 这里只留**怎么用**一份领域参考的通用说明，内容一个字都不属于某个领域。
  */
 export function domainReferenceBlock(text: string): string {

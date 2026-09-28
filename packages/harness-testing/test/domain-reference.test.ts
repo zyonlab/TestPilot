@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ABLATABLE, FakeModel } from "@testpilot/harness-core";
 import { CASES_SCHEMA, ORACLE_STRICT, domainReferenceBlock } from "../src/casegen/prompts.js";
 import { designCasesNode } from "../src/casegen/nodes.js";
 import { MachineOracleSchema } from "../src/exec/oracle.js";
-import { runGate } from "../src/casegen/gate.js";
 
 /**
  * 领域参考是**这次运行绑定的项目数据**，不是代码里的一段。
  * 钉三件事：没绑定就没有领域段；绑定了就只多出那一段；消融开关只去掉那一段。
  */
-const DATASET = resolve(__dirname, "../../../benchmark/hyperliquid-testnet/domain-reference.md");
+// 按路径绑定用的领域参考：临时写一份。原来读的 benchmark/hyperliquid-testnet/domain-reference.md 随旧数据集删了（2026-09-28，
+// git 历史里还在）；现行领域参考是项目数据，示例在 examples/hyperliquid-testnet/domain-knowledge.md。
+const DATASET = join(mkdtempSync(join(tmpdir(), "tp-domainref-")), "domain-reference.md");
+writeFileSync(DATASET, "# 领域参考\n\n- 列表里的每一行都要显示创建时间。\n");
 const bundle = {
   origin: "docs/a.md",
   specText: "一个页面：列表 / 新建按钮。",
@@ -47,17 +50,6 @@ describe("领域参考（domain-reference）", () => {
   it("按路径绑定（评测臂用）读的是同一份文件", async () => {
     const byPath = await stableOf(params({ domainReferencePath: DATASET }));
     expect(byPath).toContain(domainReferenceBlock(readFileSync(DATASET, "utf8")));
-  });
-
-  it("评测数据集里每条示例判据都合法、没有一条问接口、没有一条钉在易变读数上", () => {
-    const md = readFileSync(DATASET, "utf8");
-    const examples = [...md.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => JSON.parse(m[1]!) as { expected: string; oracle: unknown });
-    expect(examples.length).toBeGreaterThanOrEqual(4);
-    for (const ex of examples) expect(MachineOracleSchema.safeParse(ex.oracle).success).toBe(true);
-    expect(examples.map((e) => (e.oracle as { kind: string }).kind)).not.toContain("api");
-    const cases = examples.map((e, i) => ({ id: `R-${i + 1}`, storyId: "S-1", title: `R-${i + 1}`, steps: ["do"], expected: e.expected, tier: 1, covers: [] }));
-    const report = runGate({ stories: [{ id: "S-1", title: "s", acceptance: ["x"] }], cases } as never);
-    expect(report.findings.filter((f) => f.rule === "oracle-volatile")).toEqual([]);
   });
 
   it("ORACLE_STRICT 教的是「判决从屏幕读」；受限解码的枚举里没有 api，其余每一种 kind 都在", () => {

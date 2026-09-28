@@ -15,6 +15,7 @@ These documents are kept in sync with the code; when they disagree, the code win
 | [09 · 执行目标与接手指南](v3/09-执行目标与接手指南.md) | 目标、当前阶段、现状、下一步、验收命令、交接记录格式与最近变更 | Goals, current scope and status, next steps, verification commands, and the latest change log |
 | [10 · 安装与诊断](v3/10-安装与诊断.md) | 前置条件、安装、`doctor` 检查项、守卫与本机数据 | Installation, the `doctor` checks, guard and local data |
 | [14 · Claude Code 与 Codex 接入实操](v3/14-Claude-Code与Codex接入实操.md) | 宿主接入：从 Web 发起、插件目录、项目级安装、工具顺序、实验性运行时、排障 | Host integration: Web-started runs, plugin directory, per-project install, tool order, experimental runtimes, troubleshooting |
+| [15 · 节点提示词、领域知识与学习回路](v3/15-节点提示词与领域知识重构实施.md) | 执行语义常驻、准备说明按需读、跨步骤读数判据、停批前复核；反例回流、界面事实候选、标准测试集、执行模型评估（阶段 0～9，带验收记录） | Node prompts and domain knowledge: execution semantics, on-demand preparation guides, cross-step reading oracles; the learning loop (counterexamples, interface fact candidates, standard sets, executor evaluation) |
 
 ## 仓库级文档 · Repository
 
