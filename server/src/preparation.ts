@@ -25,7 +25,7 @@ import { stageEvent } from './workflowControls.js';
 import { execOnRunner } from './exec.js';
 import { getProject, resolveEnvironment, getSecretValues, ARTIFACT_DIR } from './db.js';
 import { caseEntryUrl, caseStartsLoggedOut } from './caseEntry.js';
-import { guardRun, runEnvReset } from './executionPolicy.js';
+import { guardRun, runEnvReset, verifyCleanEnvironment } from './executionPolicy.js';
 import { config } from './procs.js';
 import { boundRulePack, currentRulePack } from './rulePacks.js';
 import { admissionIssues, statesNeedingRecipe } from './preparationAdmission.js';
@@ -348,7 +348,11 @@ async function trial(b:Batch,u:Unit,plan:TextCase,probe=false,probePreparation?:
   const receipt=put(current,`${u.caseId}/${probe?'probe-'+u.probeRound:'round-'+u.round}/result`,{...result,observation:readExecutionObservation(result.observation),serviceObservation:observer.data},[probe?u.probePlan!:u.plan!]).id;
   if(probe)item.probeResult=receipt;else item.result=receipt;
   for(const line of (result.logs??[]).slice(-40)) log(current,`${u.caseId} · 第 ${u.round} 轮 · ${line}`);
-  item.status= !probe && result.lifecycle?.pendingResources?.length ? 'blocked' : probe?'planning':result.status==='passed'&&(!plan.lifecycle || result.lifecycle?.status==='pass' && result.lifecycle.pendingResources.length===0)&&!result.infraError&&Array.isArray(result.modelRequests)&&result.oracle?.length>0&&preparedChecksPassed(preparation,result)?'verified':item.round>=current.maxRounds?'exhausted':'repair';item.reason=`执行器：${result.status} · ${result.failureReason??result.unobservableReason??''}`;item.experienceContext=undefined;
+  // 停批之前先让环境的只读核对命令复核（docs/v3/15 阶段 5.4）：确认账户里没有这些资源，就只是收尾核对写得不对——照常修，不隔离、不停批。
+  const residue=result.lifecycle?.pendingResources?.length?verifyCleanEnvironment(env?.vars?.TP_VERIFY_CLEAN_CMD,result.lifecycle.pendingResources,Object.values(context.secrets).map(String)):null;
+  const confirmedClean=residue?.status==='clean';
+  if(residue)log(current,`${u.caseId} · 环境复核（TP_VERIFY_CLEAN_CMD）：${residue.status==='clean'?'账户里没有留下的资源':residue.status==='dirty'?'确认留下了资源':'复核没有结论'}${residue.output?` · ${residue.output.slice(-200)}`:''}`);
+  item.status= !probe && result.lifecycle?.pendingResources?.length && !confirmedClean ? 'blocked' : probe?'planning':result.status==='passed'&&(!plan.lifecycle || result.lifecycle?.status==='pass' && result.lifecycle.pendingResources.length===0)&&!result.infraError&&Array.isArray(result.modelRequests)&&result.oracle?.length>0&&preparedChecksPassed(preparation,result)?'verified':item.round>=current.maxRounds?'exhausted':'repair';item.reason=`执行器：${result.status} · ${result.failureReason??result.unobservableReason??''}`;item.experienceContext=undefined;
   if(preparation.recipe)recordRecipeEvidence(store(),currentScope(current,item),current.id,item.caseId,preparation.recipe,receipt,!probe&&item.status==='verified');
   save(current);log(current,`${u.caseId} · 第 ${u.round} 轮 · ${item.status}`, 'running',receipt);
   /**
@@ -357,7 +361,7 @@ async function trial(b:Batch,u:Unit,plan:TextCase,probe=false,probePreparation?:
    * 准备预算就这样耗尽了。先清理、再续跑。
    */
   const pending=(result.lifecycle?.pendingResources??[]) as Array<{id:string;identity?:string;reason?:string}>;
-  if(pending.length&&current.status==='running'){
+  if(pending.length&&current.status==='running'&&!confirmedClean){
    // 这一条留下过没清理的资源：隔离它，续跑时不再自动重试，等人看过（2026-09-26：J02-03 连续四次开仓没平掉，每次都要人工清理）。
    item.status='needs_review';item.leftResources=pending.map(p=>p.identity??p.id);
    item.reason=`留下过没清理的资源（${item.leftResources.join('、')}）：已隔离，续跑不再自动重试，需人复核配方的建立与补偿`;save(current);

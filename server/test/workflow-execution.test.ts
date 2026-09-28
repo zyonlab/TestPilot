@@ -212,6 +212,16 @@ it('never retries a potentially dirty attempt despite a retryable infrastructure
  const artifact=service.runLedger().readRevision(row(started.executionId).resultRevision,projectId).content as any;
  expect(artifact.results[0].lifecycle.pendingResources[0].id).toBe('r1');expect(artifact.results[0].attempts).toHaveLength(1);
 });
+it('keeps going when the environment verify command confirms the account is clean (docs/v3/15 5.4)',async()=>{
+ service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
+ db.upsertEnvironment({projectId,name:'verify-clean',baseUrl:'http://127.0.0.1:9876',vars:{TP_VERIFY_CLEAN_CMD:'exit 0'}});
+ runner.run.mockResolvedValueOnce({status:'failed',infraError:false,modelRequests:[],oracle:[],logs:[],pngPaths:[],lifecycle:{version:1,status:'fail',checks:[],cleanup:[],pendingResources:[{id:'r1',identity:'run-resource',reason:'Cleanup check never held'}],safeToRetry:false}});
+ const started=execution.startWorkflowExecution(runId,projectId,{codeRevision,idempotencyKey:'verify-clean',envRef:'verify-clean'});
+ await vi.waitFor(()=>expect(row(started.executionId).status).not.toBe('running'));
+ const artifact=service.runLedger().readRevision(row(started.executionId).resultRevision,projectId).content as any;
+ expect(row(started.executionId).status).not.toBe('infra_error');
+ expect(artifact.results[0].residueCheck).toMatchObject({status:'clean'});
+});
 it('old execution snapshots without locator context still dispatch and never revive raw hints',async()=>{
  service.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(runId);
  const vault=await import('../src/vault.js'),decrypt=vault.decryptSecret;

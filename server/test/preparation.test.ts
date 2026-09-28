@@ -287,6 +287,22 @@ it('stops the whole batch when a run leaves an uncleaned resource behind',{timeo
  expect(prep.preparationStatus(run,project)?.units[0].status).toBe('needs_review');
  await prep.cancelPreparation(run,project);await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
 });
+it('does not stop or isolate when the environment verify command confirms nothing was left (docs/v3/15 5.4)',{timeout:20000},async()=>{
+ await prep.cancelPreparation(run,project).catch(()=>{});await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+ db.upsertEnvironment({projectId:project,name:'verify-clean',baseUrl:'http://localhost:9876',isDefault:true,vars:{TP_VERIFY_CLEAN_CMD:'exit 0'}} as never);
+ try{
+  const b=await prep.startPreparation(run,project,{revisionIds:[revision],maxRounds:2,mode:'all'});
+  fake.run.mockReset();fake.run.mockResolvedValue({...result(),lifecycle:{version:1,status:'fail',checks:[],cleanup:[],pendingResources:[{id:'case:r',identity:'row-1',reason:'Cleanup check never held'}],safeToRetry:false}});
+  await step(b.batchId,{action:'trial',caseId:'c1',content:original,reason:'trial'});
+  await vi.waitFor(()=>expect(prep.preparationStatus(run,project)?.units[0].status).toBe('repair'),{timeout:8000,interval:200});
+  expect(prep.preparationStatus(run,project)?.status).toBe('running');
+  expect(prep.preparationStatus(run,project)?.units[0].leftResources).toBeUndefined();
+ }finally{
+  db.upsertEnvironment({projectId:project,name:'verify-clean',baseUrl:'http://localhost:9876',isDefault:false,vars:{}} as never);
+  await prep.cancelPreparation(run,project).catch(()=>{});await svc.runLedger().db.prepare("UPDATE wf_runs SET status='waiting_review' WHERE id=?").run(run);
+  fake.run.mockReset();fake.run.mockResolvedValue(result());
+ }
+});
 it('reads a guide on demand, records the read, and attaches a fix to a rejection (docs/v3/15 阶段 3)',async()=>{
  const b=await start();
  const g:any=await step(b.batchId,{action:'guide',guide:'recipe'});

@@ -20,7 +20,7 @@ import { encryptSecret, decryptSecret } from "./vault.js";
 import { execOnRunner, cancelExecution } from "./exec.js";
 import { recordWorkflowCaseRun } from "./workflowRunRecord.js";
 import {selectExplorationContext,dispatchedEnvironment} from "./explorationReuse.js";
-import { runEnvReset, guardRun } from "./executionPolicy.js";
+import { runEnvReset, verifyCleanEnvironment, guardRun } from "./executionPolicy.js";
 import { LedgerError, contentHash } from "./runLedger.js";
 import { captureExecutionMemory } from './runMemory.js';
 
@@ -129,7 +129,7 @@ export function startWorkflowExecution(runId: string, projectId: string, raw: un
   const snapshot = { budget: caseRunBudget(selected.length), caseIds: input.caseIds, url, context, login, overlays: env?.login?.overlays ?? [], authentication: env?.login?.authRequired ? { sessionChecks: env.login.sessionChecks, injectedSessionCheck: env.login.injectedSessionCheck } : undefined, storageState: session,
     // 见下面 execOnRunner 里的注释：带钱包探索出来的用例，执行时也要带钱包。
     injectedWallet: runParams?.exploreWallet === true, headers: { ...resolveMap(env?.headers ?? {}, context), ...(session?.headers ?? {}) },
-    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
+    query: resolveMap(env?.query ?? {}, context), viewport: env?.viewport, reset: env?.vars?.TP_RESET_CMD, verifyClean: env?.vars?.TP_VERIFY_CLEAN_CMD, locatorContexts:Object.fromEntries(selected.map(c=>[c.id,selectExplorationContext(ledger(),runId,projectId,caseEntryUrl(c.precondition,url),caseStartsLoggedOut(c.precondition),dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true))])), locatorEnvironmentHash:dispatchedEnvironment(env,context.secrets,runParams?.exploreWallet===true), locatorPageVersion:ledger().requireRun(runId,projectId).input.parameters?.pageVersion??null, locatorMaterialsHash:ledger().requireRun(runId,projectId).binding.materialsHash, visualThresholdPct: env?.visualThresholdPct };
   // 不可逆步骤默认放行；额外词来自这次运行绑定的规则包，只有整机打开 GUARD_STRICT 时才生效。
   /**
    * **占位符没解析就不要跑。**
@@ -285,7 +285,13 @@ async function perform(row: ExecutionRow) {
       if (!usageComplete) throw new LedgerError(409, "executor_usage_unavailable");
       validatedBundle();
       if (controller.signal.aborted || result.modelRequests?.some(r => r.error === "BUDGET_EXHAUSTED")) { status = "budget_exhausted"; break; }
-      if(result.lifecycle?.pendingResources.length){status='infra_error';break;}
+      if(result.lifecycle?.pendingResources.length){
+        // 停批之前先让环境的只读核对命令复核一次：确认账户里没有这些资源，就只是收尾核对写得不对，不停批。
+        const check=verifyCleanEnvironment(env.verifyClean,result.lifecycle.pendingResources,Object.values(env.context?.secrets??{}).map(String));
+        if(check) (results[results.length-1] as Record<string,unknown>).residueCheck=check;
+        if(check?.status!=='clean'){status='infra_error';break;}
+        phase(row,"running",undefined,`${kase.id} 收尾没核实，环境复核确认没有留下资源，继续`);
+      }
       if (result.infraError) { status = "infra_error"; break; }
       if (result.status === "unobservable") status = status === "failed" ? status : "unobservable";
       else if (result.status === "failed") status = "failed";
